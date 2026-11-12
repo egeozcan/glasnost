@@ -140,17 +140,17 @@ fn a_killing_hit_gives_the_same_anger_whatever_stays_in_play() {
     );
 }
 
-// spec: S-0302 claims 11 and 15 (the hit takes the cyborg's health, then it is crippled at ⌊S / 4⌋ = 250) and S-0309 claim 16 (d is the damage dealt, 200 here: 200 / 1000 × 500 = 100; negative only for a healing hit)
+// spec: S-0302 claims 11 and 15 (the hit takes the cyborg's health, then it is crippled at ⌊S / 4⌋ = 250) and S-0309 claim 16 and F8 (d is the damage dealt, 125 here: conv(125 / 1000 × 500) = conv(62.5) = 62, every step exact; negative only for a healing hit)
 #[test]
 fn crippling_a_cyborg_gives_the_anger_of_the_health_taken() {
     let mut w = testkit::game_with(&rules(), SIZE, 1);
     let h = wh(&w, "PLAIN");
     let a = put(&mut w, Kind::Vehicle, "BOX", ALPHA, -8);
     let t = put(&mut w, Kind::Infantry, "BORG", BETA, 0);
-    w.obj_mut(t).unwrap().health = 200;
+    w.obj_mut(t).unwrap().health = 125;
     w.houses[usize::from(BETA)].combat.anger[usize::from(ALPHA)] = 100;
     let res = damage::apply(&mut w, t, by(a, 2000, h));
     assert_eq!(res, HitResult::NowRed);
     assert_eq!(w.obj(t).unwrap().health, 250);
-    assert_eq!(anger(&w), 200, "100 before, 100 from the hit");
+    assert_eq!(anger(&w), 162, "100 before, 62 from the hit");
 }

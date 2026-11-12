@@ -494,15 +494,26 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
     let s = strength(w, target);
     let h = o.health;
     let mut lost = 0;
+    // spec: S-0309 claim 16 and F8 (#173: S and C are the victim's as the hit reaches it, taken before the kill handling can remove or change it)
+    let mut share = AngerShare {
+        owner: o.owner,
+        strength: s,
+        cost: crate::combat::acquire::type_cost(w, target),
+        dealt: 0,
+    };
     let result = if m < 0 {
         // spec: S-0302 F4 (m < 0: H′ = min(H − m, S); the result is unaffected)
         let h2 = (i64::from(h) - i64::from(m)).min(i64::from(s)) as i32;
         set_health(w, target, h2);
+        // spec: S-0309 claim 16 (d is negative only for a healing hit: the health it restored)
+        share.dealt = h - h2;
         HitResult::Unaffected
     } else {
         // spec: S-0302 F4 (m′ = min(m, H), H′ = H − m′)
         let mp = m.min(h);
         lost = mp;
+        // spec: S-0309 claim 16 and F8 (#173: d is the damage dealt, m′, whatever the kill handling then leaves of the victim, a cyborg crippled by S-0302 claim 15 included)
+        share.dealt = mp;
         let h2 = h - mp;
         let res = threshold(w, s, h, m, mp, h2);
         set_health(w, target, h2);
@@ -545,8 +556,18 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         warhead: hit.warhead,
         health: (h, w.obj(target).map_or(0, |o| o.health)),
     });
-    reactions(w, target, &hit, h, result);
+    reactions(w, target, &hit, h, result, share);
     result
+}
+
+/// What a hit gives towards the victim owner's anger (S-0309 claim 16,
+/// F8), taken before the hit's kill handling (#173).
+#[derive(Clone, Copy)]
+struct AngerShare {
+    owner: Option<HouseId>,
+    strength: i32,
+    cost: i32,
+    dealt: i32,
 }
 
 /// The reactions that follow a berserk hit which took effect (S-0302 r43
@@ -754,18 +775,26 @@ fn building_fires(w: &mut World, id: ObjectId) {
 /// no-threat fall-back (S-0215 claim 16), request B of S-0208 claim 15 and
 /// fear (S-0107 claim 16) for infantry. The crush response (S-0215 claim
 /// 39) follows in `apply`.
-fn reactions(w: &mut World, id: ObjectId, hit: &Hit, health_before: i32, result: HitResult) {
+fn reactions(
+    w: &mut World,
+    id: ObjectId,
+    hit: &Hit,
+    health_before: i32,
+    result: HitResult,
+    share: AngerShare,
+) {
     use crate::combat::acquire::Retaliation;
+    // spec: S-0215 r118 claim 16, Order within the hit (Q-2586 answered: the change of health, then anger, then retaliation, then the scatter from damage, then the no-threat test, then fear)
+    // spec: S-0309 claim 16 (#173: a killing hit angers the victim's owner too, whether or not the victim is still in the world)
+    if share.dealt != 0
+        && let Some(a) = hit.attacker
+    {
+        crate::combat::acquire::anger_of(w, share.owner, share.strength, share.cost, a, share.dealt);
+    }
     // The actor as the hit left it, before its reactions: the target and destination it had
     // when hit (S-0208 claim 15; S-0215 claim 16, Order within the hit).
     let Some(o) = w.obj(id).cloned() else { return };
     let dealt = health_before - o.health;
-    // spec: S-0215 r118 claim 16, Order within the hit (Q-2586 answered: the change of health, then anger, then retaliation, then the scatter from damage, then the no-threat test, then fear)
-    if dealt != 0
-        && let Some(a) = hit.attacker
-    {
-        crate::combat::acquire::anger(w, id, a, dealt);
-    }
     let retaliation = match hit.attacker {
         Some(a) if dealt > 0 && o.health > 0 && result != HitResult::Unaffected => {
             crate::combat::acquire::retaliate(w, id, a)

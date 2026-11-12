@@ -58,10 +58,24 @@ pub fn rho3(w: &World, a: ObjectId, b: ObjectId) -> i64 {
 /// the victim owner's anger towards the attacker's owner grows by
 /// conv((d / S) × C), then the enemy house is worked out again.
 pub fn anger(w: &mut World, victim: ObjectId, attacker: ObjectId, dealt: i32) {
-    let (Some(vo), Some(ao)) = (
-        w.obj(victim).and_then(|o| o.owner),
-        w.obj(attacker).and_then(|o| o.owner),
-    ) else {
+    let owner = w.obj(victim).and_then(|o| o.owner);
+    let s = crate::combat::damage::strength(w, victim);
+    let c = type_cost(w, victim);
+    anger_of(w, owner, s, c, attacker, dealt);
+}
+
+/// [`anger`] with the victim's owner, strength `s` and type cost `c` taken
+/// by the caller, for a victim that the hit's kill handling may have
+/// removed or changed before the anger step (#173).
+pub fn anger_of(
+    w: &mut World,
+    victim_owner: Option<HouseId>,
+    s: i32,
+    c: i32,
+    attacker: ObjectId,
+    dealt: i32,
+) {
+    let (Some(vo), Some(ao)) = (victim_owner, w.obj(attacker).and_then(|o| o.owner)) else {
         return;
     };
     // spec: S-0216 claim 8 (Removal before the groups: no house treats an idle test house as an enemy; design)
@@ -69,8 +83,6 @@ pub fn anger(w: &mut World, victim: ObjectId, attacker: ObjectId, dealt: i32) {
         return;
     }
     let mode = w.rules().mode;
-    let s = crate::combat::damage::strength(w, victim);
-    let c = type_cost(w, victim);
     // spec: S-0309 F8 (Δ = conv((d / S) × C), each a double-precision step)
     let delta = F64::from_i64(i64::from(dealt), mode)
         .div(F64::from_i64(i64::from(s), mode), mode)
