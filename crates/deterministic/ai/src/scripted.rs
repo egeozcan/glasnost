@@ -824,7 +824,11 @@ impl PlaceMemo {
     /// The answer `field` keeps for the current think, else `make`'s, kept
     /// for the rest of the think when one runs. No borrow is held while
     /// `make` runs, so it may ask the memo itself.
-    fn keep<T: Clone>(&self, field: fn(&mut Kept) -> &mut Option<T>, make: impl FnOnce() -> T) -> T {
+    fn keep<T: Clone>(
+        &self,
+        field: fn(&mut Kept) -> &mut Option<T>,
+        make: impl FnOnce() -> T,
+    ) -> T {
         let kept = self.0.borrow_mut().as_mut().and_then(|m| field(m).clone());
         if let Some(v) = kept {
             return v;

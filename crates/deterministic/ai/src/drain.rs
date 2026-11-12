@@ -404,6 +404,9 @@ mod filter_tests {
                 }
             }
         }
-        assert!(with > 0 && without > 0, "{with} with drainers, {without} without");
+        assert!(
+            with > 0 && without > 0,
+            "{with} with drainers, {without} without"
+        );
     }
 }
