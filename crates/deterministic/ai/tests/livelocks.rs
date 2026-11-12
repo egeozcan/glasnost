@@ -146,6 +146,38 @@ fn an_intruder_out_of_reach_is_not_attacked_every_tick() {
     );
 }
 
+/// Runs `w` on to the next tick `brain` thinks at.
+fn to_think(w: &mut World, brain: &Brain) {
+    while !brain.thinks_at(w.tick) {
+        testkit::run(w, 1);
+    }
+}
+
+// design: own AI (#28) and S-0212 claim 4 (reach regions): an idle tank on the shore within the engage radius of an enemy on an island, which it can neither drive to nor fire at from its own land, is not ordered to attack it (the wave pick asked whether the unit reaches the enemy; the engage pick did not, and the tank was pinned there).
+#[test]
+fn an_idle_unit_is_not_sent_at_an_enemy_it_cannot_reach() {
+    let map = lake_map();
+    let mut w = yard_up(&map);
+    let l = lake_centre();
+    let enemy = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, l, 0);
+    let shore = CellXY::new(l.x, l.y + 10);
+    let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, shore, 0);
+    testkit::run(&mut w, 1);
+    let mut brain = Brain::with_plan(&w, &map, HouseId(0), fixture::plan());
+    to_think(&mut w, &brain);
+    glasnost_sim::econ::shroud::area_reveal(&mut w, HouseId(0), Pos::centre(l, 0), 3);
+    let orders = brain.think(&w);
+    let sent = orders.iter().any(|o| {
+        matches!(o, Order::Behaviour {
+            actor,
+            behaviour: Behaviour::Attack,
+            target: Some(Target::Object(e)),
+            ..
+        } if *actor == tank && *e == enemy)
+    });
+    assert!(!sent, "the tank is sent at the island enemy: {orders:?}");
+}
+
 /// [`fixture::map`] with a one-cell island south of start 0's ore field,
 /// in a lake three cells wide around it.
 fn islet_map() -> Map {
