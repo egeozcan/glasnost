@@ -524,6 +524,12 @@ pub struct World {
     /// calls, so neither saved nor hashed.
     #[serde(skip)]
     pub locomotion_under_way: Vec<ObjectId>,
+    /// The death-weapon detonations nesting inside the killing hit under
+    /// way, and those listed past their depth (#218,
+    /// [`crate::combat::death::DEATH_WEAPON_DEPTH`]). Empty between calls,
+    /// so neither saved nor hashed.
+    #[serde(skip)]
+    pub death_chain: crate::combat::death::DeathChain,
     /// The movement trace of the pathing-report tool (M8 A4): off unless
     /// switched on, never saved, hashed, cloned or read by the simulation.
     #[serde(skip)]

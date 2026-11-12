@@ -549,6 +549,7 @@ pub fn new_game(
         regions: Default::default(),
         scratch: Default::default(),
         locomotion_under_way: Vec::new(),
+        death_chain: Default::default(),
         trace: Default::default(),
         pathfinder: Default::default(),
     };
