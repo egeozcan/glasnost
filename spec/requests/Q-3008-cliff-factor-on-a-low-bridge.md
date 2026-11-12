@@ -1,9 +1,9 @@
 ---
 id: Q-3008
 title: Does the cliff factor's "unit on a bridge" row cover a unit on a low bridge?
-status: open
+status: answered
 related: [S-0102, S-0211]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need
