@@ -2,13 +2,13 @@
 id: S-0319
 title: Bouncing animations (sprite debris and meteors): motion, landing and end
 topic: combat
-revision: 26
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-28
+approved-on: 2026-11-12
 measurements: []
-requests: [Q-1762, Q-1846, Q-1847]
+requests: [Q-1762, Q-1846, Q-1847, Q-2996]
 supersedes: []
 ---
 
@@ -23,8 +23,9 @@ flight under gravity, what counts as landing (ground, high-bridge deck, building
 rebound that decides between an impact and a stopping landing, the effects of the landing and of
 the end that follows at once, the new resource a landing makes, the ends without a landing, the
 behaviour off the map, and the draws all of these take. It also gives the trailer animation that
-any animation type can name, since moving bouncing animations are its main users. It answers
-Q-1762, Q-1846 and Q-1847; the points left open are listed under Open questions.
+any animation type can name, since moving bouncing animations are its main users, and what
+animation types do whose trailer, spawned, bounce or expiry animations lead back to them. It
+answers Q-1762, Q-1846, Q-1847 and Q-2996; the points left open are listed under Open questions.
 
 Debris pieces with voxel models are not animations of this kind: S-0317 owns
 them. The two share one flight and contact rule. This spec states it in full for sprite
@@ -74,6 +75,17 @@ In addition:
   cell.
 - **High cell.** In the cliff turn (claim 7, F7), a cell whose height level is at least the level
   of the cell of the old position plus 2.
+- **Animation link.** A link from an animation type A to a type B, of one of five kinds: B is A's
+  trailer animation (claim 12), A's bounce animation (claim 7), A's expiry animation (claim 8),
+  A's spawn type when A's spawn count is above 0 (claim 9), or A's follow-up type (S-0109 claim
+  15). The first four make an animation of B, and a follow-up link makes none. Links are taken
+  from every type, whatever its flags, since a bouncing animation that switches to a follow-up
+  type uses that type's fields (claim 11).
+- **Link on a loop.** An animation link from A to B lies on a loop when A can be reached from B
+  by animation links, B = A included.
+- **Looped animation.** An animation made through a link on a loop. It stays looped for the rest
+  of its life, through every follow-up switch. Whether an animation is looped is part of the
+  saved state of a game.
 
 ## Behaviour
 
@@ -459,21 +471,23 @@ In addition:
 
    Then the animation leaves play. It does not advance its stage, make a trailer or switch to its
    follow-up type in that turn. The landing makes no sound, scorch mark or crater of its own:
-   such effects come only from the animations it makes, by S-0109. The area damage's own effects
-   follow their rules: the warhead's particle system when it names one (S-0303 claim 20), owned by
-   no house, and an exploding overlay in the centre cell (S-0303 claim 19). The projectile-only
-   effects of S-0303 claims 21 and 22 are not made: no explosion animation from the warhead's
-   animation list, no warhead debris and no nullify animation, as for S-0317 claim 11. The meteor
-   test of the water rows uses the type the animation has at the landing (claim 11). A trigger-played animation (S-0109 Terms) deals the hits of
-   claim 7 and the area damage of this claim like any other. With an empty splash list the water
-   rows make no splash animation and the importer warns: a **departure** with the same result as
-   S-0317 claim 11's, since the original's result is undefined.
+   such effects come only from the animations it makes, by S-0109. Bounce, expiry and spawned
+   animations of a type that leads back to the landing type are claim 15's case. The area
+   damage's own effects follow their rules: the warhead's particle system when it names one
+   (S-0303 claim 20), owned by no house, and an exploding overlay in the centre cell (S-0303
+   claim 19). The projectile-only effects of S-0303 claims 21 and 22 are not made: no explosion
+   animation from the warhead's animation list, no warhead debris and no nullify animation, as
+   for S-0317 claim 11. The meteor test of the water rows uses the type the animation has at the
+   landing (claim 11). A trigger-played animation (S-0109 Terms) deals the hits of claim 7 and
+   the area damage of this claim like any other. With an empty splash list the water rows make no
+   splash animation and the importer warns: a **departure** with the same result as S-0317 claim
+   11's, since the original's result is undefined.
    - Backing: `measurable` (scenario BA2 for the first row, BA3 for the water rows, BA4 for the
-     deck test in cells that a high bridge marks, BA2 part d for the absence of damage without an expiry animation and for no
-     scorch mark or crater of the landing's own, BA2 part g for the warhead's particle system and
-     the missing projectile-only effects, BA2 part f for no source object and no house, BA2 part
-     k for resources affected, BA9 for no trailer in the landing turn, BA11 for the order of the
-     effects)
+     deck test in cells that a high bridge marks, BA2 part d for the absence of damage without an
+     expiry animation and for no scorch mark or crater of the landing's own, BA2 part g for the
+     warhead's particle system and the missing projectile-only effects, BA2 part f for no source
+     object and no house, BA2 part k for resources affected, BA9 for no trailer in the landing
+     turn, BA11 for the order of the effects)
    - Backing for the trigger-played case: `measurable` (BA2 part e)
    - `unmeasured`: that the deck-height test needs no high-bridge mark. An end at deck height in
      a cell that no high bridge marks needs a landing point at least 416 leptons above that
@@ -505,7 +519,8 @@ In addition:
    integer that wraps, as for a meteor piece (S-0317 claim 12): when *c* > 1073741823 the two
    draws can add up to more than 2147483647, the wrapped sum is then negative, and no animation is
    made (the two draws are still taken). A spawn count of 2147483647 gives each draw the span of
-   S-0202 claim 5, and the importer warns for it as that claim requires.
+   S-0202 claim 5, and the importer warns for it as that claim requires. A spawn type that leads
+   back to the landing type is claim 15's case.
    - Backing: `measurable` (scenario BA7, part b for a meteor animation). The wrapped sum is `unmeasured`: it needs a spawn
      count above 1073741823 and a pair of draws whose sum passes 2147483647, which a run meets
      only by chance.
@@ -687,17 +702,17 @@ In addition:
 12. **Trailer animation.** Every animation whose type names a trailer animation, bouncing or not,
     makes one in each of its turns that a landing does not end, while it is in play, after its
     motion step and before its stage update. An attached animation whose owner has been removed
-    makes none at the update that deletes it (S-0109 claim 22). It does this on ticks
-    whose tick number is divisible by the type's trailer separation *s*, or on every tick when
-    *s* = 1. The trailer is made at the animation's position in play after the motion step, with
-    an initial loop delay of 1 update, repeat factor 1 and no reverse request, the settings
-    S-0109 claim 29 gives a projectile's trailer. A negative *s* acts as its magnitude. The
-    first update and the updates of a loop delay are such turns too: in them the trailer is made
-    on the same tick-number cadence as in any other turn. A separation of 0, the
-    absent-key default, makes the original stop with a program error at the first such turn
-    (S-0205 claim 3). This is a **departure**: our engine treats a separation of 0 as 1, so a
-    trailer is made in every such turn, and the importer warns for a type that names a trailer and
-    no separation or a separation of 0.
+    makes none at the update that deletes it (S-0109 claim 22). It does this on ticks whose tick
+    number is divisible by the type's trailer separation *s*, or on every tick when *s* = 1. The
+    trailer is made at the animation's position in play after the motion step, with an initial
+    loop delay of 1 update, repeat factor 1 and no reverse request, the settings S-0109 claim 29
+    gives a projectile's trailer. A negative *s* acts as its magnitude. The first update and the
+    updates of a loop delay are such turns too: in them the trailer is made on the same
+    tick-number cadence as in any other turn. A separation of 0, the absent-key default, makes
+    the original stop with a program error at the first such turn (S-0205 claim 3). This is a
+    **departure**: our engine treats a separation of 0 as 1, so a trailer is made in every such
+    turn, and the importer warns for a type that names a trailer and no separation or a
+    separation of 0. A trailer that leads back to the animation's type is claim 15's case.
     - Backing: `measurable` (scenario BA9, its third run for a negative separation; BA8 part e for
       the first update and a loop delay)
       The owner-removal case is `unmeasured`, for S-0109 claim 22's reason: that last update cannot
@@ -755,6 +770,96 @@ In addition:
       design rule, not an oracle value.
     - Confidence: high for the horizontal span. Medium for the vertical span until BA12 part b
       runs.
+
+15. **Types that lead back to themselves.** An animation type can lead back to itself through
+    animation links (Terms): it can be its own trailer, two types can name each other, or a
+    bouncing type's spawn, bounce or expiry animation can be a type that leads back to it,
+    directly or through follow-up types.
+    - **At load.** The original neither refuses nor changes such data: the types load and play as
+      claims 1 to 14 and S-0109 say. S-0004 claim 15's long-name case, in which a name reference
+      creates types at load, is S-0004's and is not this claim's subject.
+    - **Number of animations.** No limit of the original's own on the number of animations in
+      play is known: it makes each new one for as long as the program can get room for it, and
+      what happens when it cannot is open (Open questions). An animation made during the turn
+      pass is added after every object already in the update order and takes its first turn later
+      in the same pass (S-0203 claim 4), unless a removal costs it that turn (S-0203 claim 10).
+    - **Trailer loops within one tick.** An animation's first turn reaches claim 12's trailer
+      test, and whether a trailer is due depends only on the tick number and the type's
+      separation, so an animation made on a tick on which its type is due makes its own trailer
+      in its first turn, in that same pass. When a type's trailer is the type itself, or when
+      every type of a loop of trailer links is due on a tick, each new animation of the loop
+      makes the next in the same pass, the pass never ends and the game stops responding. On a
+      tick on which some type of the loop is not due, the chain stops at an animation of that
+      type. A bouncing animation of such a loop breaks it when its first turn is a landing, which
+      makes no trailer (claim 8). A follow-up switch never comes in an animation's first turn
+      (S-0109 claim 5), so a follow-up link does not close a loop within one tick.
+    - **Landing loops within one tick.** A bouncing animation made by a landing, or as the
+      trailer of a bouncing animation, lands in its own first turn when its first move makes a
+      contact (claim 6) or is a stopping step (claim 7: a motion measure *S* below 2.5, formed by
+      S-0317 F6 from the velocity and the height that the step leaves), with or without a
+      contact. Two sufficient cases of a contact, each for a surface that is the same everywhere
+      within reach of the first move, are these. For a falling animation made at a landing point
+      on level ground with no other ground height, water or deck within reach of its first move,
+      or on a deck away from its edges, a first vertical speed below −8.6 leptons per tick, since
+      its flight starts 10 leptons above the point (claim 2) and its first move is that speed
+      less 1.4 (claim 4); claim 2's draws give such a speed only with a lower vertical limit
+      below −8.6, or with claim 2's raw value −2147483648 while
+      `quirks.random_magnitude_overflow` is on. For one made at a landing point on a building
+      cell of a building on flat ground, whose height claim 6 puts at the ground height, a first
+      move that stays in a building cell with a first vertical speed below 141.4. Elsewhere claim
+      6's heights at the new position decide whether the first move makes a contact. A stopping
+      step without a contact can also end the first turn, at other speeds. A landing that makes
+      an animation of a type that leads back to the landing type can therefore make the next
+      landing in the same pass. Each landing ends its animation, a counting removal of S-0203
+      claim 10, so while `quirks.update_order_removal_skip` is on it costs the object directly
+      after it its turn in that tick, and when the landing animation stands last that object is
+      the first animation it has just made. A loop that makes one animation per landing (for
+      example an expiry animation of the landing's own type, landing on a building cell)
+      therefore does not keep a pass going: from its second landing in a tick on, each new
+      animation follows its maker directly and misses its turn, and the loop goes on at about one
+      landing per tick for as long as its landings come. A loop that makes more than two
+      animations per landing on average, each landing in its first turn, can keep a pass going
+      without end, depending on the spawn-count draws (claim 9). With the switch off, any loop
+      whose animations each land in their first turn and make at least one animation of the loop
+      keeps the pass going.
+    - **Across ticks.** A loop whose animations each make more than one animation of the loop
+      over their lives on average, for example a spawn loop with a spawn count of 2 or more, or a
+      trailer loop that a follow-up switch closes, can grow the number of animations in play
+      without bound, tick after tick.
+    - **Our engine: a departure, with no switch.** A looped animation (Terms) makes nothing
+      through a link on a loop: no trailer, bounce animation or expiry animation through such a
+      link, and no spawned animations through a spawn link on a loop. It takes none of the draws
+      of a creation it does not make: neither the animation's creation draws (S-0202 claim 10)
+      nor, for a spawn link, the two spawn-count draws of claim 9. The rest of its turn is
+      unchanged: a landing whose expiry animation is not made still makes claim 8's area damage
+      and light flash, which depend on the type naming an expiry animation, and an impact landing
+      whose bounce animation is not made still makes claim 7's hits. Every other creation is
+      unchanged, a looped animation's creations through links on no loop included, and the
+      animations those make are not looped. A follow-up switch is unchanged, and the animation
+      stays looped through it. The importer warns once for each loop: each largest group of types
+      that all lead to one another through animation links (a group that no further type can
+      join), a type with a link to itself and no other such type counting as a group. So a type
+      on a loop, made by anything other than an animation link (a warhead, a debris list, a
+      trigger), makes one generation through each link on the loop and no more: a type that is
+      its own trailer makes one trailer per due tick, and those trailers make none. This departs
+      from the original also for loops that the original can run, such as an expiry animation of
+      the landing's own type, which the original keeps making for as long as its landings come.
+    - Backing: `measurable` (scenario BA14 for trailer loops, BA15 for landing loops and the
+      per-tick counts, both for the load). `unmeasured` for the absence of a limit on the number
+      of animations, as S-0317 claim 1 rates the same for pieces: no finite scenario shows every
+      count, BA14 and BA15 included. The departure is a design rule (decided at the
+      delegated sign-off, 2026-11-12), not an oracle value. `unmeasured`: whether a never-ending
+      pass would end once the program can get no room for a further animation, since the original
+      then makes none, and what the game would do then. A run is stopped from outside long
+      before.
+    - Confidence: at load, medium for the absence of any check until BA14 and BA15 load such
+      data. Number of animations: medium for the absence of a limit, and low for what happens
+      when no room is left (both `unmeasured`). Trailer loops within one tick: medium that a new
+      animation's first turn reaches the trailer test in its creation tick, as claim 12 rates
+      that test until BA8 part e runs; high for the due test by tick number; medium for the
+      never-ending pass until BA14 runs. Landing loops within one tick: medium for the first-turn
+      landing conditions and the removal-skip consequence until BA15 runs. Across ticks: medium
+      for the growth. Our engine: high for the departure, a design rule.
 
 ## Formulas
 
@@ -901,7 +1006,7 @@ components have the signs of the two changes (claim 7's departure). Units: lepto
 
 | State | Event | Result |
 |---|---|---|
-| Created | creation | placed (falling: creation point, meteor: start position), except at (0, 0, 0) (claim 11); creation draws (claim 13) |
+| Created | creation | placed (falling: creation point, meteor: start position), except at (0, 0, 0) (claim 11); creation draws (claim 13); looped when made through a link on a loop (claim 15) |
 | Flying | turn with no landing | motion step; trailer when due (claim 12); stage update by S-0109 |
 | Flying | turn with a stopping landing | motion step; end (claim 8); leaves play |
 | Flying | turn with an impact landing | motion step; bounce animation and hits (claim 7); end (claim 8); leaves play |
@@ -1003,6 +1108,10 @@ update.
 - **An empty splash list** is a departure (claim 8).
 - **A move of more than one cell at a cliff** (claim 7, F7) and **a place past the overlay list**
   (claim 10) are departures.
+- **Types that lead back to themselves** (claim 15) are a departure, with no switch: a looped
+  animation makes nothing through a link on a loop and takes no draws for it. Where the original
+  never ends the pass, its result has no use in play. The departure also bounds loops that the
+  original can run.
 
 ## Import mapping
 
@@ -1024,19 +1133,18 @@ update.
 
 The loop count, follow-up type and the other playback keys are S-0109's. Backing of the defaults:
 `measurable` for the horizontal limit and the lower vertical limit (BA1 run with those keys
-absent: F1's ranges, BA1 part c), and for the trailer
-separation's fault (BA12 part c). The elasticity default is `unmeasured`: a landing's kind under claim 7 does not fix its exact
-value. The damage, radius and warhead defaults are `unmeasured`: with any of them absent a
-landing deals no hit that a run can see, so no run tells the stated default from another value
-that also deals nothing. Confidence: high for the read and unread keys. Medium for the
-horizontal and lower vertical defaults until BA1 part c runs, and for the `unmeasured`
-defaults.
+absent: F1's ranges, BA1 part c), and for the trailer separation's fault (BA12 part c). The
+elasticity default is `unmeasured`: a landing's kind under claim 7 does not fix its exact value.
+The damage, radius and warhead defaults are `unmeasured`: with any of them absent a landing deals
+no hit that a run can see, so no run tells the stated default from another value that also deals
+nothing. Confidence: high for the read and unread keys. Medium for the horizontal and lower
+vertical defaults until BA1 part c runs, and for the `unmeasured` defaults.
 
-Two further importer warnings come with departures. A type whose first horizontal speed can
-reach a magnitude of 256 or more by claim 7's bound *H*, from its horizontal speed limit, gets one
-(claim 7's move of more than one cell). So does a type whose resource spawn
-overlay type has fewer than three entries after it in the overlay list (claim 10's place past
-the list).
+Three further importer warnings come with departures. A type whose first horizontal speed can
+reach a magnitude of 256 or more by claim 7's bound *H*, from its horizontal speed limit, gets
+one (claim 7's move of more than one cell). So does a type whose resource spawn overlay type has
+fewer than three entries after it in the overlay list (claim 10's place past the list). Each loop
+of animation links gets one (claim 15).
 
 ## Measurement scenarios
 
@@ -1548,6 +1656,57 @@ the legal map at another height than 0, a water end off it, resource or resource
 germinable neighbour, or a meteor animation with a start off the legal map that never appears,
 never moves or takes fewer creation draws.
 
+**BA14. Trailer loops (claim 15).** *Setup:* a named test art layer with test animation types
+that have neither flag, each with a few image frames, a loop count that keeps it in play for at
+least 10 ticks (parts a and b) and no follow-up type unless stated, each played at a waypoint of
+a small test map by a trigger at a known tick. *(a)* Type X names X as its trailer, separation 1.
+*(b)* X names Y and Y names X as trailers, separations 2 and 3. *(c)* X names Y as its trailer,
+separation 10, and Y names no trailer and has X as its follow-up type. X keeps an animation in
+play for at least 70 ticks, whether played or reached by a follow-up switch, with a loop count
+below 256 as S-0109 claim 15 needs, and Y switches to X from 1 to 8 ticks after its creation as a
+trailer, never in the tick that makes it. A pre-check confirms both lengths: X played alone, and
+the run of part c with Y given no follow-up type, recording the ticks from each Y's creation to
+its end. X is played on a tick whose number leaves 1 when divided by 10. *Procedure:* one run per
+part, in a fresh session each. Record per tick the number of animations of the test types in play
+with the read-only recorder, for 60 ticks from the trigger's tick or until the tick count stops
+advancing, and whether loading reaches play. Stop a run from outside when its tick count has not
+advanced for 60 seconds. Do not wait for resource exhaustion. *Expected:* every part loads and
+reaches play. In part a the tick in which X is played does not complete normally. In part b the
+ticks before the first tick number divisible by 6 on which an animation of the loop is in play
+complete, with counts growing, and that tick does not complete normally. In part c every tick
+completes, and the 60 ticks hold six ticks whose number is divisible by 10. In the window no
+animation of the loop ends: X outlives the window, and a Y does not end but switches to X before
+the next such tick. On each such tick every X in play makes one Y (claim 12), and a Y made on one
+such tick is an X by the next, so the k-th such tick doubles the number of X. The count of X and
+Y in play is 1 until the first such tick, 2ᵏ from the k-th to the next, and 64 at the window's
+end. *Falsifier:* a load refusal or a changed type, a completed tick in part a, a stop in part b
+at another tick, or in part c a stop or a count of X and Y in play other than 2ᵏ after the k-th
+tick divisible by 10, k from 1 to 6, or other than 1 before the first. Our engine: in part a X
+makes one trailer per tick and the trailers make none; in part b and part c the loop's second
+generation makes nothing through the loop's links, so in part c the count is k + 1 after the k-th
+tick divisible by 10; every tick completes, and the importer warns once per part.
+
+**BA15. Landing loops (claim 15).** *Setup:* a named test art layer with a falling test type X
+(bouncer flag, elasticity 0, a horizontal speed limit of 1, looping for ever). *(a)* X names X as
+its spawn type with a spawn count of 2 and a lower vertical limit of 20, played at a waypoint on
+flat open ground, 10 seeds. *(b)* X names X as its expiry animation, played at a waypoint on a
+cell of an ordinary test building, with no lower vertical limit key (the default of the Import
+mapping). *(c)* As part a with a spawn count of 3, on that building cell, 10 seeds. *Procedure:*
+as BA14, 60 ticks per run. Record per tick the number of animations of X in play and each landing
+with its tick, and the draws with the random-state recorder. *Expected:* every part loads and
+reaches play. In part a no spawned X lands in its creation tick, each landing makes the number of
+X that its two logged spawn-count draws give, and the count goes on from landing to landing,
+growing in the seeds whose draws do not end it. In part b about one landing per tick, each in the
+turn after its maker's, for the whole run, and every tick completes. In part c landings in the
+creation tick of the animations that land, each making the number of X that its logged
+spawn-count draws give. Whether a tick of part c fails to complete is recorded per seed as an
+observation, set beside that seed's logged draws; it depends on them (claim 15), so it has no
+falsifier. *Falsifier:* a load refusal or a changed type, a spawned X landing in its creation
+tick in part a, a stop in part b, or in part c no landing in a creation tick in any of the 10
+seeds, or a landing that makes another number of X than its logged draws give. Our engine: the X
+played at the waypoint makes its spawned or expiry animations, and those make none and take no
+spawn-count draws, so every run ends with no X in play after the second generation lands.
+
 ## Changes for other specs
 
 - **S-0109 Terms, *bouncing type*:** "the specs of projectiles and debris own both" should name
@@ -1576,14 +1735,17 @@ never moves or takes fewer creation draws.
   takes its draws and leaves the cell germinable. S-0401 claim 10 can note this for S-0319's
   offers, beside its own rule that trees do not prevent a cell from being germinable. This spec
   does not cover S-0401's own new resource cells (its claims 9 and 11, scenario E8).
+- **S-0109 claim 15:** an animation stays looped through a follow-up switch, by S-0319 claim 15,
+  and S-0109 claim 16 can point to S-0319 claim 15 for follow-up types that lead back to a type
+  whose animations make the first.
 
 ## Open questions
 
-Q-1762, Q-1846 and Q-1847 are answered. Q-1762's question 1 leaves the elasticity, damage,
-radius and warhead defaults stated but `unmeasured` (Import mapping). Several answers rest on
-`unmeasured` claims, each rated where it is stated: the condition that a vertical speed of 0
-takes and the line at −0.0002 (claim 6), the landing point of an undone first move (claim 6) and the rest of the hits' listing
-walk (claim 7). Two points are left open:
+Q-1762, Q-1846, Q-1847 and Q-2996 are answered. Q-1762's question 1 leaves the elasticity,
+damage, radius and warhead defaults stated but `unmeasured` (Import mapping). Several answers
+rest on `unmeasured` claims, each rated where it is stated: the condition that a vertical speed
+of 0 takes and the line at −0.0002 (claim 6), the landing point of an undone first move (claim 6)
+and the rest of the hits' listing walk (claim 7). Four points are left open:
 
 - Which killing hits take their object out of the cell's ground layer within the hit, and so end
   the remaining impact hits of claim 7. A destroyed vehicle that neither crashes nor sinks does,
@@ -1599,3 +1761,11 @@ walk (claim 7). Two points are left open:
   debris piece whose placement point is exactly (0, 0, 0) is not placed; this entry concerns
   sprite animations, which S-0317 does not cover. Our engine's rule there is claim 11's design
   rule, so the entry does not affect an implementation.
+- Loops that pass through links of another family (for example a landing whose area damage
+  destroys an object whose debris list makes the landing type, or a debris piece whose end shows
+  an animation of a type that makes that piece) are not covered by claim 15's rule. Whether they
+  can close within one pass is not established.
+- Whether a never-ending pass of claim 15 would end once the program can get no room for a
+  further animation, and what the game would then do. Low and `unmeasured` (claim 15). Our
+  engine's departure keeps every pass of claim 15's loops finite, so the entry does not affect an
+  implementation.
