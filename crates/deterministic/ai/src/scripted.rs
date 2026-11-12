@@ -2292,9 +2292,23 @@ impl Script {
             let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
                 continue;
             };
+            // design: own AI (#28): only an enemy the unit can fire at from where it stands, or reaches (its reach region, or its weapon's range from a cell of it, S-0212 claim 4) as the wave asks; an attack it could not carry out pinned it where it stood
+            let mut region: Option<Option<u32>> = None;
             let near = enemies
                 .iter()
-                .filter(|&&(e, c)| dist2(c, at) <= ENGAGE * ENGAGE && can_attack(w, id, e))
+                .filter(|&&(e, c)| {
+                    dist2(c, at) <= ENGAGE * ENGAGE
+                        && can_attack(w, id, e)
+                        // spec: S-0215 claim 37 (b) (the range test of S-0307 with the weapon chosen for the target)
+                        && (glasnost_sim::approach::in_range(w, id, Target::Object(e))
+                            || self.reaches(
+                                w,
+                                id,
+                                *region.get_or_insert_with(|| self.reach_region(w, id)),
+                                e,
+                                c,
+                            ))
+                })
                 .min_by_key(|&&(_, c)| dist2(c, at));
             if let Some(&(e, _)) = near {
                 out.push(Order::Behaviour {
