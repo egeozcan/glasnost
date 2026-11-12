@@ -11,6 +11,8 @@
 //! [`Uses::prisms`], [`Uses::overpowerables`] and [`Uses::charges`] count
 //! the orders it gave.
 
+use std::collections::BTreeMap;
+
 use glasnost_sim::econ::{TypeRef, production, tech};
 use glasnost_sim::linked;
 use glasnost_sim::orders::Order;
@@ -79,6 +81,28 @@ fn count(w: &World, house: HouseId, t: TypeRef) -> usize {
     on_map + queued
 }
 
+/// The chargers aimed at each of the house's overpowerable buildings: the
+/// registered ones (S-0518 claim 12) or, when more, its own chargers whose
+/// target the building is (on their way, not yet registered).
+fn aimed_at(w: &World, own: &[ObjectId]) -> BTreeMap<ObjectId, i32> {
+    let mut coming: BTreeMap<ObjectId, i32> = BTreeMap::new();
+    for &c in own {
+        if linked::charger_type(w, c)
+            && let Some(Target::Object(b)) = w.obj(c).and_then(|o| o.target)
+        {
+            *coming.entry(b).or_insert(0) += 1;
+        }
+    }
+    own.iter()
+        .copied()
+        .filter(|&b| linked::overpowerable(w, b))
+        .map(|b| {
+            let n = linked::chargers(w, b).max(coming.get(&b).copied().unwrap_or(0));
+            (b, n)
+        })
+        .collect()
+}
+
 impl Special {
     /// Linked weapons (S-0518): orders a prism building while the house
     /// has fewer than [`PRISMS_WANTED`], its building line is free and it
@@ -111,7 +135,10 @@ impl Special {
         // A house with a charger and no overpowerable building of its own
         // orders one, as a person who built the charger would.
         if !ordered
-            && own.iter().any(|&id| linked::charger_type(w, id))
+            // spec: S-0518 claim 11 (only an infantry firer registers): a vehicle charger is no reason to build one
+            && own.iter().any(|&id| {
+                linked::charger_type(w, id) && w.obj(id).is_some_and(|o| o.kind == Kind::Infantry)
+            })
             && let Some(t) = overpowerable_type(w, house)
         {
             let have: usize = (0..w.rules().buildings.len())
@@ -133,8 +160,15 @@ impl Special {
                 self.count_overpowerable();
             }
         }
+        // design: own AI (#14): the chargers aimed at each building: those
+        // registered (S-0518 claim 12), or more, the house's own units whose
+        // target it is (on their way, not yet registered), and those sent
+        // in this think, so that no more than three go at one building
+        let mut aimed: Option<BTreeMap<ObjectId, i32>> = None;
         for &id in own {
+            // spec: S-0518 claim 11 (a firer that is not infantry registers nothing): only infantry is sent to charge
             if !linked::charger_type(w, id)
+                || w.obj(id).is_none_or(|o| o.kind != Kind::Infantry)
                 || !scripted::idle(w, id)
                 || !targeting::selectable(w, id)
             {
@@ -143,6 +177,7 @@ impl Special {
             let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
                 continue;
             };
+            let aimed = aimed.get_or_insert_with(|| aimed_at(w, own));
             let best = own
                 .iter()
                 .copied()
@@ -154,10 +189,11 @@ impl Special {
                                 && o.health > 0
                                 && dist2(o.pos.cell(), at) <= CHARGE_REACH * CHARGE_REACH
                         })
-                        && linked::chargers(w, b) < 3 // spec: S-0518 Constants (3 chargers overpower whatever the power)
+                        && aimed.get(&b).copied().unwrap_or(0) < 3 // spec: S-0518 Constants (3 chargers overpower whatever the power)
                 })
                 .min_by_key(|&b| (w.obj(b).map_or(i64::MAX, |o| dist2(o.pos.cell(), at)), b));
             let Some(b) = best else { continue };
+            *aimed.entry(b).or_insert(0) += 1;
             out.push(Order::Behaviour {
                 actor: id,
                 behaviour: Behaviour::Attack,
