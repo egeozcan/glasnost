@@ -513,6 +513,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         let facing_error = crate::combat::behave::vehicle_step(w, id);
         // The turret's target at the end of the tick (S-0206 claim 9), after the movement.
         turret::tick(w, id, facing_error);
+        // spec: S-0206 r19 claim 16 (the test at the end of each turn the vehicle takes, after its movement and its firing check)
+        crate::combat::behave::track_body_stop(w, id);
     }
     if kind == Kind::Infantry && w.obj(id).is_some() {
         let in_progress = occupancy::in_progress(w, id);
