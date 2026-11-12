@@ -189,7 +189,7 @@ pub fn recheck_distance(w: &World, firer: ObjectId, target: Target) -> i32 {
     };
     let (dx, dy) = (i64::from(s.x - m.x), i64::from(s.y - m.y));
     // spec: S-0615 claim 14 (the vertical difference is 0 when the firer is airborne in S-0308's sense)
-    let dz = if crate::combat::weapon::in_air(w, firer) {
+    let dz = if crate::combat::weapon::airborne(w, firer) {
         0
     } else {
         i64::from(s.z - m.z)
