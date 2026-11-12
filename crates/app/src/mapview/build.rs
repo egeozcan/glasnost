@@ -2307,10 +2307,12 @@ impl<'a> Builder<'a> {
                 self.drop_object("terrain object without art");
                 continue;
             };
-            let Some(cell) = self.map.cells.get(t.cell).copied() else {
+            if self.map.cells.get(t.cell).is_none() {
                 continue;
-            };
-            let z = LEVEL_LEPTONS * i32::from(cell.level);
+            }
+            // spec: S-0102 claim 23 (the centre of its cell at the terrain height: the surface height there, S-0106 claim 2, so a slope raises it)
+            let (x, y) = cell_centre(t.cell.x, t.cell.y);
+            let z = self.terrain_height(x, y);
             let light = self.p.lights.get(t.cell).copied();
             let spawns = rule_bool(
                 self.import,
@@ -2333,7 +2335,6 @@ impl<'a> Builder<'a> {
                 )
             };
             // spec: S-0102 claim 23 (the centre of its cell at the terrain height; an ore spawner 16 rows higher)
-            let (x, y) = cell_centre(t.cell.x, t.cell.y);
             let point = project_lifted(x, y, z);
             let p = if spawns {
                 (point.0, point.1 - ORE_SPAWNER_RAISE)
