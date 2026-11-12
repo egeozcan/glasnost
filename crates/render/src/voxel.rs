@@ -890,7 +890,7 @@ pub fn rocket_body_local(body_facing: u16, pitch: f32, quirks: &VoxelQuirks) -> 
 /// The pose of a rocket missile's body and its shadow (S-0105 claim 41):
 /// the body *V · Rz(θ_body) · Ry(−p)*, the shadow transform *V · Rz(θ_body)*
 /// on flat ground whatever the pitch. `turret` and `barrel` are the body's
-/// transform; [`turret_on_body`] places them on [`rocket_body_local`].
+/// transform: a rocket, an aircraft, draws neither (claim 45).
 pub fn rocket_body_pose(body_facing: u16, pitch: f32, quirks: &VoxelQuirks) -> VehiclePose {
     let v = view(quirks);
     let body = v.then(&rocket_body_local(body_facing, pitch, quirks));
@@ -989,8 +989,8 @@ pub fn flying_body_local(heading: u16, a: &FlightAttitude, quirks: &VoxelQuirks)
 /// The pose of a flying body and its shadow (S-0105 claim 42): the body
 /// *V · D*, the shadow *V · Rz(θ_flight)* on flat ground, never the pitch or
 /// bank. `heading` is the flight drawing heading: the aiming facing.
-/// `turret` and `barrel` are the body's transform; [`turret_on_body`]
-/// places them on [`flying_body_local`].
+/// `turret` and `barrel` are the body's transform: an aircraft draws neither
+/// (claim 45).
 pub fn flying_body_pose(heading: u16, a: &FlightAttitude, quirks: &VoxelQuirks) -> VehiclePose {
     let v = view(quirks);
     let body = v.then(&flying_body_local(heading, a, quirks));
@@ -1039,8 +1039,8 @@ pub fn crashing_body_local(heading: u16, roll: f32, pitch: f32, quirks: &VoxelQu
 /// drawing heading, the shadow *V · Rz(θ_flight)* on flat ground, as for
 /// level flight. At zero or negative height the caller draws the heading
 /// alone ([`flying_body_pose`] with [`FlightAttitude::LEVEL`]). `turret`
-/// and `barrel` are the body's transform; [`turret_on_body`] places them on
-/// [`crashing_body_local`].
+/// and `barrel` are the body's transform: an aircraft draws neither (S-0105
+/// claim 45).
 pub fn crashing_body_pose(
     heading: u16,
     roll: f32,
@@ -4069,8 +4069,9 @@ mod tests {
     }
 
     /// spec: S-0105 claims 8 and 10 (T = D · X(d) · Rz(θ_rel), B = T · Ry(φ) on the body's D):
-    /// on the flat-ground D the turret and barrel are vehicle_parts' own; on a flying body's D
-    /// they lean with it, and the body and shadow stay as given (#82)
+    /// on the flat-ground D the turret and barrel are vehicle_parts' own; on a tilted D (here a
+    /// pitched and banked one, as a rocking body's is) they lean with it, and the body and shadow
+    /// stay as given
     #[test]
     fn turret_on_body_builds_on_the_given_d() {
         let (body, turret, offset, elevation) = (raw32(5), raw32(9), 40, 14336);
