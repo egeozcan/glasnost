@@ -757,6 +757,36 @@ fn does_not_reorder_an_engineer_that_did_not_take_the_order() {
     assert_eq!(brain.special_uses().engineers, 2);
 }
 
+// design: own AI (#19) and S-0213 claim 2 (an order issued while the house's pending list is full is dropped): an engineer's order that the full list dropped is not remembered as one the engineer did not take; it is given again at the next think.
+#[test]
+fn an_order_dropped_by_the_pending_limit_is_not_given_up() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = engineer_scene(&g);
+    assert!(w.rules().quirks.pending_order_limit);
+    // The house's pending list full (a stop leaves the behaviour as it is).
+    for _ in 0..glasnost_sim::orders::PENDING_LIMIT {
+        assert!(glasnost_sim::orders::issue(
+            &mut w,
+            HouseId(0),
+            Order::Stop { actor: unit }
+        ));
+    }
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+    for o in orders {
+        assert!(
+            !glasnost_sim::orders::issue(&mut w, HouseId(0), o),
+            "the list is full"
+        );
+    }
+    run_to_think(&mut w, 1);
+    let again = brain.think(&w);
+    assert!(garrison_orders(&again, unit, target), "{again:?}");
+    assert_eq!(brain.given_up(), 0);
+}
+
 // PLAN §4.7 (memory): an engineer that gave up one building is sent at another it can see.
 #[test]
 fn an_engineer_that_gave_up_a_building_goes_for_another() {
