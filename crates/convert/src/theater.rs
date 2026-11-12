@@ -319,8 +319,16 @@ impl Catalogue {
                     .value(b"AllowBurrowing")
                     .and_then(value::boolean)
                     .unwrap_or(true),
-                shadow_caster: false,
-                shadow_tiles: 0,
+                // spec: S-0010 Import mapping (`ShadowCaster`, boolean, absent: no)
+                shadow_caster: section
+                    .value(b"ShadowCaster")
+                    .and_then(value::boolean)
+                    .unwrap_or(false),
+                // spec: S-0010 Import mapping (`ShadowTiles`, integer, absent: 0)
+                shadow_tiles: section
+                    .value(b"ShadowTiles")
+                    .and_then(value::integer)
+                    .unwrap_or(0),
             });
             first = first.saturating_add(count.max(0));
         }

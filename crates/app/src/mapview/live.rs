@@ -3430,11 +3430,13 @@ impl Live {
             .collect();
         let (lambda, lambda_air) = object_levels(&self.world);
         self.painter.set_object_levels(lambda, lambda_air);
-        // spec: S-0104 Terms (a shadowed cell: an intact high bridge marks the cells it spans, the mark cleared when it is destroyed), taken as S-0211 claim 15's high-bridge cells; no tile marks a cell yet (Q-3006)
+        // spec: S-0104 claim 19 (the marks of intact high bridges and of shadow-casting tiles, from the terrain the game holds now: a mark holds while its overlay or tile lies in its cell)
+        let terrain = |c| self.world.cells.cell(c).map(|cell| (cell.tile, cell.overlay));
+        let position = |t| super::shadowing::casting_position(inputs.catalogue, t);
         let shadowed: BTreeSet<glasnost_map::CellXY> = mobiles
             .iter()
             .map(|m| glasnost_map::CellXY::new(m.pos.0 / 256, m.pos.1 / 256)) // spec: S-0204 claim 2 (the cell holding a position)
-            .filter(|c| self.world.high_bridge(*c))
+            .filter(|&c| super::shadowing::cell_shadowed(c, &terrain, &position))
             .collect();
         self.painter.set_shadowed_cells(shadowed);
         // spec: S-0104 claims 3 and 5 (the tintable tables show the tint of the last global choice)

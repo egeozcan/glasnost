@@ -9,21 +9,81 @@ use glasnost_map::CellXY;
 /// overlay index.
 pub type CellTerrain = (i32, u8);
 
+/// The high-bridge overlay indices and their marking directions *d* as
+/// cell steps: 24 and 237 mark along map north, 25 and 238 along map west.
+// spec: S-0211 claim 15, Constants (high-bridge overlay indices and marking directions); S-0104 claim 19 (Bridge marks)
+const HIGH_BRIDGE_OVERLAYS: [(u8, (i32, i32)); 4] =
+    [(24, (0, -1)), (237, (0, -1)), (25, (-1, 0)), (238, (-1, 0))];
+
+/// The steps *j* along *d* of the cells a high-bridge overlay marks,
+/// *o* + *j*·*d* from its own cell *o*.
+fn bridge_steps(d: (i32, i32)) -> &'static [i32] {
+    if d.0 == 0 {
+        // spec: S-0104 claim 19 (map north: one step against d, its own cell, one and two steps along d)
+        &[-1, 0, 1, 2]
+    } else {
+        // spec: S-0104 claim 19 (map west: those four and the cell two steps against d)
+        &[-2, -1, 0, 1, 2]
+    }
+}
+
+/// The displacements (*dx*, *dy*) a shadow-casting tile at position `p`
+/// marks from its cell (S-0104 claim 19, table T).
+fn tile_marks(p: i32) -> &'static [(i32, i32)] {
+    // spec: S-0104 claim 19 (table T; any other position, 40 and above included, marks nothing)
+    match p {
+        20 | 21 => &[(0, -1), (-1, -2)],
+        22..=24 => &[(-1, -3), (0, -3)],
+        25 => &[(0, -3)],
+        26 => &[(0, -3), (1, -3), (-1, -3), (-2, -3)],
+        27 => &[(0, -3), (-1, -3), (-2, -3), (-3, -2)],
+        28 | 29 => &[(0, -3), (-1, -3), (-2, -3)],
+        30 | 31 => &[(-2, -3)],
+        32 => &[(0, -3)],
+        _ => &[],
+    }
+}
+
+/// The positions table T lists.
+const MARKING_POSITIONS: std::ops::RangeInclusive<i32> = 20..=32;
+
 /// The position of the tile stored as `stored` in its tileset when that
 /// tileset casts shadows (S-0104 claim 19, S-0010 claim 18), else `None`.
-pub fn casting_position(_catalogue: &Catalogue, _stored: i32) -> Option<i32> {
-    None
+pub fn casting_position(catalogue: &Catalogue, stored: i32) -> Option<i32> {
+    // spec: S-0009 claim 8 (the tile a cell shows: the marker and numbers beyond the tile count are the clear tile)
+    let t = catalogue.art_tile(stored)?;
+    let (set, ordinal) = catalogue.locate(t)?;
+    // spec: S-0104 claim 19 and S-0010 Terms (the position: the tile number minus its tileset's first tile); S-0010 claim 18
+    set.casts_shadows().then_some(ordinal - 1)
 }
 
 /// Whether cell `c` is shadowed (S-0104 claim 19), with `cell` the terrain
 /// of a cell of the map (`None` outside it) and `position` the
 /// shadow-casting position of a stored tile number ([`casting_position`]).
+///
+/// Each mark that could cover `c` is looked for from `c` back to the cell
+/// it would come from; a mark whose cell is outside the map marks nothing.
 pub fn cell_shadowed(
-    _c: CellXY,
-    _cell: &dyn Fn(CellXY) -> Option<CellTerrain>,
-    _position: &dyn Fn(i32) -> Option<i32>,
+    c: CellXY,
+    cell: &dyn Fn(CellXY) -> Option<CellTerrain>,
+    position: &dyn Fn(i32) -> Option<i32>,
 ) -> bool {
-    false
+    // spec: S-0104 claim 19 (shadowed while at least one mark covers it; a mark outside the map marks nothing)
+    let bridge = HIGH_BRIDGE_OVERLAYS.iter().any(|&(overlay, d)| {
+        bridge_steps(d).iter().any(|&j| {
+            let from = CellXY::new(c.x - j * d.0, c.y - j * d.1);
+            // spec: S-0104 claim 19 (while its bridge is intact: a destroyed bridge's overlay is gone, S-0511)
+            cell(from).is_some_and(|(_, o)| o == overlay)
+        })
+    });
+    bridge
+        || MARKING_POSITIONS.into_iter().any(|p| {
+            tile_marks(p).iter().any(|&(dx, dy)| {
+                let from = CellXY::new(c.x - dx, c.y - dy);
+                // spec: S-0104 claim 19 (Tile marks: from each cell of a shadow-casting tile, at (x + dx, y + dy), whatever else the cells hold)
+                cell(from).is_some_and(|(tile, _)| position(tile) == Some(p))
+            })
+        })
 }
 
 #[cfg(test)]
