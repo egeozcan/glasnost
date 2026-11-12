@@ -129,9 +129,9 @@ fn run_d25(n: usize) -> (usize, bool, Option<(usize, usize)>) {
     let dead = |id: ObjectId| w.obj(id).is_none_or(|o| o.health <= 0);
     let path_dead = ids.iter().filter(|&&id| dead(id)).count();
     let killed_at = |who: ObjectId| {
-        w.effects.iter().position(|e| {
-            matches!(e, Effect::Hit { id, result: HitResult::NowDead, .. } if *id == who)
-        })
+        w.effects.iter().position(
+            |e| matches!(e, Effect::Hit { id, result: HitResult::NowDead, .. } if *id == who),
+        )
     };
     let last = *ids.last().unwrap();
     let order = killed_at(last).zip(killed_at(s));

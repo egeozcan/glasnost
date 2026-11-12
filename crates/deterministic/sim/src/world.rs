@@ -524,10 +524,10 @@ pub struct World {
     /// calls, so neither saved nor hashed.
     #[serde(skip)]
     pub locomotion_under_way: Vec<ObjectId>,
-    /// The death-weapon detonations nesting inside the killing hit under
-    /// way, and those listed past their depth (#218,
-    /// [`crate::combat::death::DEATH_WEAPON_DEPTH`]). Empty between calls,
-    /// so neither saved nor hashed.
+    /// The death-weapon chain under way inside one killing hit (S-0312
+    /// claim 33): the kept rests of the steps stopped at a death weapon and
+    /// the death weapon to set off next. Empty between calls, so neither
+    /// saved nor hashed.
     #[serde(skip)]
     pub death_chain: crate::combat::death::DeathChain,
     /// The movement trace of the pathing-report tool (M8 A4): off unless

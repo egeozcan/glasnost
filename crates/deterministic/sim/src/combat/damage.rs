@@ -7,6 +7,7 @@ use glasnost_map::CellXY;
 use glasnost_num::{F64, Rounding};
 
 use crate::combat::data::{Ability, WarheadId, WeaponId};
+use crate::combat::death::{Flow, Frame};
 use crate::combat::veterancy::{has_ability, type_combat};
 use crate::rules::Kind;
 use crate::world::{HouseId, ObjectId, World};
@@ -356,25 +357,70 @@ fn inside_factory(w: &World, id: ObjectId) -> bool {
 /// (claims 12 to 16; S-0107 claim 16; S-0309 claim 16; S-0311 claims 7 to
 /// 10; S-0312 when it kills), then the crush response (S-0215 claim 39).
 pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
+    apply_in(w, target, hit, false).done_or(HitResult::NowDead)
+}
+
+/// [`apply`]; with `chain` (S-0312 claim 33) a killing hit that reaches a
+/// death weapon keeps the rest of the hit as a frame and returns suspended.
+pub(crate) fn apply_in(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<HitResult> {
     // spec: S-0216 claim 8 (Removal before the groups: no object damages an idle test house's objects; design)
     if w.of_idle_house(target) {
-        return HitResult::Unaffected;
+        return Flow::Done(HitResult::Unaffected);
     }
-    let result = apply_hit(w, target, hit);
+    let Flow::Done(result) = apply_hit(w, target, hit, chain) else {
+        // A killing hit: its result is now dead, so no crush response follows.
+        return Flow::Suspended;
+    };
     // spec: S-0215 claim 39 (a hit that has been applied and has not killed the vehicle, unaffected and unchanged included, berserk hits too; now dead and post-mortem give none; after every other effect of the same hit)
     if !matches!(result, HitResult::NowDead | HitResult::PostMortem) {
         crate::crush::respond_to_hit(w, target, hit.attacker);
     }
-    result
+    Flow::Done(result)
+}
+
+/// The rest of a killing hit kept at a death weapon of a chain (S-0312
+/// claim 33): the hit event and the reactions, with what they read of the
+/// victim as the hit reached it.
+#[derive(Clone, Debug)]
+pub(crate) struct ApplyRest {
+    target: ObjectId,
+    hit: Hit,
+    of: crate::econ::TypeRef,
+    owner: Option<HouseId>,
+    pos: crate::world::Pos,
+    /// Its health before the hit.
+    health: i32,
+    share: AngerShare,
+}
+
+/// Resumes a killing hit kept at a death weapon: its result is now dead.
+pub(crate) fn apply_rest(w: &mut World, rest: ApplyRest) {
+    hit_done(w, &rest, HitResult::NowDead);
+}
+
+/// The end of a hit: the hit event, then the reactions.
+fn hit_done(w: &mut World, r: &ApplyRest, result: HitResult) {
+    // A presentation event for the sound reactions (S-0701 claim 20); no state, no draw.
+    w.effects.push(crate::combat::effects::Effect::Hit {
+        id: r.target,
+        of: r.of,
+        owner: r.owner,
+        pos: r.pos,
+        result,
+        attacker: r.hit.attacker,
+        warhead: r.hit.warhead,
+        health: (r.health, w.obj(r.target).map_or(0, |o| o.health)),
+    });
+    reactions(w, r.target, &r.hit, r.health, result, r.share);
 }
 
 /// [`apply`] without the crush response.
-fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
+fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<HitResult> {
     let Some(o) = w.obj(target).cloned() else {
-        return HitResult::Unaffected;
+        return Flow::Done(HitResult::Unaffected);
     };
     if o.kind == Kind::Terrain {
-        return terrain_hit(w, target, hit);
+        return Flow::Done(terrain_hit(w, target, hit));
     }
     // spec: S-0504 claim 10 (sinking is no immunity: damage delivered to a sinking vessel takes the ordinary rules)
     // spec: S-0315 claims 6 and 7 and S-0614 claim 12 (a hit on a host counts before it changes the host's health, stopped hits included; not inside the vehicle factory)
@@ -418,7 +464,7 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         // spec: S-0302 claim 8 (stage 1: the target is being erased, + and − hits; the leaving stage of S-0513 claim 39, the temporal beam is S-0514's seam) and S-0302 r40 claim 8 (a superweapon warp member whose beam was locked before the departure is not being erased from its departure update and takes ordinary hits, up to a later lock, from which this protection applies again: S-0513 claim 39a, in `being_erased`)
         || (crate::econ::power::being_erased(w, target) && !ign);
     if stage1 {
-        return HitResult::Unaffected;
+        return Flow::Done(HitResult::Unaffected);
     }
     // The amount after the defences of claim 5 (d₀ for a hit that ignores defences or heals).
     let prone = o.kind == Kind::Infantry && o.infantry.as_ref().is_some_and(|s| s.prone);
@@ -455,13 +501,13 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
             && penetrates == Some(true))
             || (crate::structures::bunker::bunkered(w, target) && penetrates == Some(false)));
     if stage2 || bunker_row {
-        return HitResult::Unaffected;
+        return Flow::Done(HitResult::Unaffected);
     }
     // spec: S-0302 claim 10 (stage 3: a berserk warhead changes no health); claim 8, *Hits without a warhead* (a hit without one has no berserk effect)
     if let Some(h) = wh.as_ref().filter(|h| h.psychedelic) {
         let house_allied = hit.house.is_some_and(|hh| w.allied(o.owner, Some(hh)));
         if house_allied || tc.immune_psionics || building {
-            return HitResult::Unaffected;
+            return Flow::Done(HitResult::Unaffected);
         }
         // spec: S-0302 Formulas (berserk duration: F3's cases at r = 0 with d after the defences, or d₀ ignoring them)
         let class = tc.armour;
@@ -479,7 +525,7 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         if crate::psychic::enter(w, target, t) {
             berserk_reactions(w, target, &hit, falls);
         }
-        return HitResult::Unchanged;
+        return Flow::Done(HitResult::Unchanged);
     }
     // spec: S-0302 claim 6 (the modified amount)
     let m0 = modified(w, &hit, d3, hit.distance, tc.armour);
@@ -506,7 +552,7 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         damage_effect_reaction(w, target, HitResult::Unaffected, hit.warhead);
         // spec: S-0516 claim 12 (a surviving hit that reports unaffected, the final amount 0 or the armour among them, uncloaks)
         crate::cloak::machine::hit_taken(w, target, HitResult::Unaffected, 0);
-        return HitResult::Unaffected;
+        return Flow::Done(HitResult::Unaffected);
     }
     let s = strength(w, target);
     let h = o.health;
@@ -536,8 +582,27 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         set_health(w, target, h2);
         res
     };
+    let rest = ApplyRest {
+        target,
+        hit,
+        of: crate::econ::TypeRef {
+            kind: o.kind,
+            index: o.type_index,
+        },
+        owner: o.owner,
+        pos: o.pos,
+        health: h,
+        share,
+    };
     let result = if result == HitResult::NowDead {
-        killing_hit(w, target, &hit, &tc)
+        match killing_hit(w, target, &hit, &tc, chain) {
+            Flow::Done(r) => r,
+            Flow::Suspended => {
+                // spec: S-0312 claim 33 (the death weapon nests inside this killing hit: the hit event and the reactions come once it is complete)
+                crate::combat::death::keep(w, Frame::Apply(Box::new(rest)));
+                return Flow::Suspended;
+            }
+        }
     } else {
         result
     };
@@ -559,27 +624,13 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
             ob.combat.hostile_hit = true;
         }
     }
-    // A presentation event for the sound reactions (S-0701 claim 20); no state, no draw.
-    w.effects.push(crate::combat::effects::Effect::Hit {
-        id: target,
-        of: crate::econ::TypeRef {
-            kind: o.kind,
-            index: o.type_index,
-        },
-        owner: o.owner,
-        pos: o.pos,
-        result,
-        attacker: hit.attacker,
-        warhead: hit.warhead,
-        health: (h, w.obj(target).map_or(0, |o| o.health)),
-    });
-    reactions(w, target, &hit, h, result, share);
-    result
+    hit_done(w, &rest, result);
+    Flow::Done(result)
 }
 
 /// What a hit gives towards the victim owner's anger (S-0309 claim 16,
 /// F8), taken before the hit's kill handling (#173).
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct AngerShare {
     owner: Option<HouseId>,
     strength: i32,
@@ -926,9 +977,10 @@ fn killing_hit(
     id: ObjectId,
     hit: &Hit,
     tc: &crate::combat::data::TypeCombat,
-) -> HitResult {
+    chain: bool,
+) -> Flow<HitResult> {
     let Some(o) = w.obj(id).cloned() else {
-        return HitResult::NowDead;
+        return Flow::Done(HitResult::NowDead);
     };
     let rules = w.rules_arc();
     let mode = rules.mode;
@@ -950,7 +1002,7 @@ fn killing_hit(
             let p = o.pos;
             crate::combat::effects::anim(w, &name, p);
         }
-        return HitResult::NowRed;
+        return Flow::Done(HitResult::NowRed);
     }
     let delay = hit
         .warhead
@@ -995,7 +1047,7 @@ fn killing_hit(
         if !again || rules.quirks.delay_kill_credited_again {
             credit(w, id, hit);
         }
-        return HitResult::PostMortem;
+        return Flow::Done(HitResult::PostMortem);
     }
     // spec: S-0504 claim 13 and S-0312 claim 32 (a further killing hit on a sinking vessel takes the ordinary path: destruction
     // registered again and the death effects; claim 10's conditions leave it at 1 health, otherwise 0 health, still sinking)
@@ -1005,8 +1057,10 @@ fn killing_hit(
         credit(w, id, hit);
     }
     let _ = tc;
-    crate::combat::death::kill(w, id, hit);
-    HitResult::NowDead
+    match crate::combat::death::kill_in(w, id, hit, chain) {
+        Flow::Done(()) => Flow::Done(HitResult::NowDead),
+        Flow::Suspended => Flow::Suspended,
+    }
 }
 
 /// Whether a killed object is dead and no longer takes part as a living
