@@ -492,10 +492,9 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
             let d = half_in_air(w, id, d);
             // spec: S-0303 claim 15 (an object of any kind in the centre cell, alive, raw distance below 85 leptons; R plays no part)
             if small && c == centre && curtain_trigger(w, id, raw) {
+                // spec: S-0303 claim 9 and S-0504 claim 10 (alive: a sinking vessel that keeps health is alive; #172)
                 let alive = w.obj(id).is_some_and(|o| {
-                    o.health > 0
-                        && o.on_map
-                        && !(o.combat.killed && o.combat.delay_kill_until.is_none())
+                    o.health > 0 && o.on_map && !crate::combat::damage::dead(o)
                 });
                 if alive {
                     nullified = true;
@@ -525,8 +524,8 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
         }
         // spec: S-0303 claim 9 (not alive, health 0 or less, not on the map: no hit, judged at the moment of the hit)
         let Some(o) = w.obj(cand.id) else { continue };
-        // spec: S-0302 claim 16 (a building in a delayed-kill countdown keeps 1 health and takes the later hits of the detonation)
-        let dead = o.combat.killed && o.combat.delay_kill_until.is_none();
+        // spec: S-0302 claim 16 (a building in a delayed-kill countdown keeps 1 health and takes the later hits of the detonation); S-0504 claim 10 and S-0302 claim 8 (a sinking vessel with health left takes applicable area damage; #172)
+        let dead = crate::combat::damage::dead(o);
         if o.health <= 0 || !o.on_map || dead {
             continue;
         }
