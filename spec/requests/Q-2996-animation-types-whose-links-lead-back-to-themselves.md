@@ -1,8 +1,9 @@
 ---
 id: Q-2996
 title: What does an animation type do whose trailer, spawn, bounce or expiry animation leads back to itself?
-status: open
+status: answered
 related: [S-0109, S-0319, S-0203]
+answered-by: [S-0319]
 ---
 
 ## Need
