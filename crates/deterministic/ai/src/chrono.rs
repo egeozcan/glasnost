@@ -2,7 +2,9 @@
 //! erases a target over time, the faster the more attackers join and the
 //! more the target is worth, so a person sends every erasing unit against
 //! the costliest enemy it can erase, joining a lock already made. The brain
-//! does the same with every idle unit that has a beam.
+//! does the same with every idle unit whose own type supplies a beam and
+//! that still has it. A gunner vehicle that holds a beam only through its
+//! passenger is not sent by this step (#48: the doc follows the code).
 //!
 //! It reads only what a person in the house's seat sees (the enemy objects
 //! on cells the house has explored) and gives its orders through
@@ -34,8 +36,9 @@ fn erasable(w: &World, e: ObjectId) -> bool {
 }
 
 impl Special {
-    /// Chrono weapons (S-0514): every idle unit with a temporal beam that
-    /// holds none is sent against the costliest seen enemy it may attack
+    /// Chrono weapons (S-0514): every idle unit whose type supplies a
+    /// temporal beam, that has it and holds no lock, is sent against the
+    /// costliest seen enemy it may attack
     /// and that can be erased (the nearest on equal cost), with the attack
     /// order a person gives.
     pub(crate) fn chrono(

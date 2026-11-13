@@ -28,12 +28,16 @@ use crate::special::Special;
 /// How far, in cells, from its place the AI looks for a clean cell.
 const ESCAPE_REACH: i32 = 8; // nocite: tuning of our own opponent
 
-/// Whether radiation would hurt the unit where it stands: a mobile unit
-/// that is on the map and not immune (S-0525 claim 8).
+/// Whether radiation would hurt the unit where it stands: an infantry
+/// unit, vehicle or aircraft that is on the map, not airborne and not
+/// immune (S-0525 claim 8).
 fn hurt_by_radiation(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
+    // spec: S-0525 claim 8 (infantry, vehicles and aircraft; on the map, not airborne (Terms: S-0307's height test, the in-the-air answer for aircraft), not immune)
+    // design: own AI (#48): the code follows the doc and the spec; a unit hovering above a field got a needless move order
     o.on_map
-        && matches!(o.kind, Kind::Infantry | Kind::Vehicle)
+        && matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)
+        && !glasnost_sim::combat::weapon::airborne(w, id)
         && type_combat(w, id).is_some_and(|tc| !tc.immune_radiation)
 }
 

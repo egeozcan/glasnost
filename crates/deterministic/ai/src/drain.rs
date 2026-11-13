@@ -9,8 +9,9 @@
 //! foundation or either side goes (claims 12 to 16). A person who knows
 //! this:
 //!
-//! - **sends idle drainers at the enemy's economy.** An idle drainer that
-//!   drains nothing is sent by the attack click at a seen enemy building
+//! - **sends drainers at the enemy's economy.** A drainer that drains
+//!   nothing and is not on its way to drain, idle or not, is sent by the
+//!   attack click at a seen enemy building
 //!   it could drain now: of a drainable type, not drained already and not
 //!   refused by the firing check with the weapon the drainer would choose
 //!   against it, which is then the draining one (S-0308 table P row 8). A
@@ -163,8 +164,9 @@ fn rank(w: &World, b: ObjectId) -> u8 {
 }
 
 impl Special {
-    /// Drainers: idle ones that drain nothing are sent at a seen enemy
-    /// building they could drain.
+    /// Drainers: every one that drains nothing and is not on its way to
+    /// drain, idle or not, is sent at a seen enemy building it could drain
+    /// (#48: the doc follows the code).
     pub(crate) fn drainers(
         &mut self,
         script: &Script,

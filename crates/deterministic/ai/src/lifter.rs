@@ -178,9 +178,9 @@ fn liftable(w: &World, l: ObjectId, e: ObjectId) -> bool {
 
 impl Special {
     /// Magnetic lifters: drops over killing cells first, then lift orders
-    /// at enemy vehicles, then idle lifters back home. Returns the drop
-    /// orders apart: the brain issues them after its filter of orders to
-    /// holding lifters.
+    /// at enemy vehicles, then idle lifters back home, all pushed onto
+    /// `out` (#48: the doc follows the code). A drop is a move to the
+    /// lifter's own cell, which [`keeps_order`] keeps for a holding lifter.
     pub(crate) fn lifters(
         &mut self,
         script: &Script,
