@@ -4446,6 +4446,10 @@ fn a_strafer_whose_destination_object_is_removed_does_not_steer_to_the_origin() 
         step(&mut w);
         ticks += 1;
         let o = w.obj(a).unwrap();
+        if o.dest != Some(d) {
+            // The next processing has replaced the destination.
+            break;
+        }
         assert_eq!(
             o.body.target,
             requested,

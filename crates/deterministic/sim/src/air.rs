@@ -1428,8 +1428,14 @@ fn flight_target(w: &World, id: ObjectId) -> Option<Target> {
         // spec: S-0501 claim 7 (r146, Q-2676: the survivor's movement updates treat a flight point at the origin point as no flight point for claim 5's calculation of the target fraction and for guidance, claim 42; no movement update hands its destination to its flight again, with a destination kept or with none, until it is given a destination, claim 8)
         return None;
     }
-    if o.dest.is_some() {
-        return o.dest;
+    if let Some(d) = o.dest {
+        if let Target::Object(x) = d
+            && w.obj(x).is_none()
+        {
+            // spec: S-0501 claim 24 (a destination that is gone leaves the aircraft none) and claim 32 (it keeps flying in its current stage until its next processing); Q-3041 (interim: a destination naming an object no longer in play gives the movement updates no flight point; the destination stays until that processing) (#160)
+            return None;
+        }
+        return Some(d);
     }
     if a.own_point {
         // spec: S-0501 claim 6 (r120, Q-2507: landing where it is, the flight flies to the new flight point with no destination object)
