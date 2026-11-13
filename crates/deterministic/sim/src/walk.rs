@@ -751,7 +751,12 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
 fn stationary_friendly(w: &mut World, id: ObjectId, next: CellXY) {
     let Some(o) = w.obj(id).cloned() else { return };
     let r = w.rules_arc();
-    if let Some(dest) = path::heading_point(w, id) {
+    // spec: S-0209 claim 8 and F1 (the walker's locomotor destination) and S-0208 claim 18 and F9 (a cell destination's height: 414 leptons above the terrain on a high-bridge cell, whatever the walker's layer)
+    let destination = match o.dest {
+        Some(Target::Cell(c)) => Some(Pos::centre(c, cell_destination_height(w, id, c))),
+        _ => path::heading_point(w, id),
+    };
+    if let Some(dest) = destination {
         let dx = i64::from(dest.x - o.pos.x);
         let dy = i64::from(dest.y - o.pos.y);
         let dz = i64::from(dest.z - o.pos.z);
