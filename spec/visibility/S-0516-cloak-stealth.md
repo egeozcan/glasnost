@@ -2,13 +2,13 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 13
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-13
 measurements: []
-requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796]
+requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796, Q-3060]
 supersedes: []
 ---
 
@@ -614,10 +614,31 @@ Two kinds of rule are kept apart throughout.
 
 23. **Sensor-array buildings.** A building whose type is a sensor array adds the sensor disc of
     radius *R* (its sensors-sight) for its owner.
-    - **Activation.** It does so only at its first placement, and only if it is in operation at that
-      moment.
-    - **Power.** Power changes never add or remove the coverage afterwards. An array that is placed
-      unpowered never senses, even after power returns
+    - **Activation.** It does so only at its grand opening (S-0108 claim 11), and only if it is in
+      operation (S-0405 claim 8) at that moment. Nothing later adds the disc.
+      - An array that enters play under construction (a place order, a deploy under S-0415
+        claim 6, or a restored replacement under S-0524 claim 15) has its grand opening at its
+        handover (S-0406 claim 15), unless its owner changes first (below). The handover queues
+        *guard* only after the opening effects, so *construction* is still its current behaviour
+        at the opening: it is not in operation, whatever its power, and it never adds the disc.
+      - An array that a trigger action creates in play has its grand opening at once (S-0108
+        claim 11), which gives no order between that opening and the queueing of *construction*.
+        This spec infers that *construction* is already queued, with no current behaviour, at the
+        opening (medium, as an inferred order), so it fails in the same way.
+      - An array that the map places at game set-up passes the behaviour condition at its grand
+        opening (S-0405 claim 8). It adds the disc if every other condition of that test holds
+        at that moment.
+      - An array whose owner changes during its build-up has its grand opening inside the
+        change (S-0309 claim 31), for its new owner, after the change's *guard* request. If
+        *construction* was still queued, that request has replaced it, so the behaviour read is
+        *guard*. If *construction* was current, the read is *guard* when the request's
+        readiness-dependent immediate start (S-0215 claim 7) made *guard* current, which needs the
+        array's ready mark at the request (S-0406 claim 17 gives the build-up turns that set it),
+        and *construction* otherwise. With *guard* read, the array passes the behaviour condition
+        and adds the disc for its new owner if every other condition holds; with *construction*
+        read, it fails.
+    - **Power.** Power changes never add or remove the coverage afterwards. An array that is not in
+      operation at its grand opening never senses, even after power returns
       (`quirks.sensor_building_activation_once`).
     - **Removal.** When the array leaves play (sale, destruction, removal), the game decrements its
       *current* owner's counts:
@@ -625,11 +646,45 @@ Two kinds of rule are kept apart throughout.
         (`quirks.sensor_array_removal_radius`)
       - with no floor, so counts can fall below 0 (`quirks.sensor_count_negative`).
 
-      A cell left at −1 needs two later sensors before it is sensed again.
-    - **Capture.** The old owner keeps the coverage. The new owner gets none, and the array's later
-      removal decrements the new owner's counts.
-    - Backing: `measurable` (CS12, parts c to e)
-    - Confidence: high
+      A cell left at −1 needs two later sensors before it is sensed again. The decrement applies
+      whether or not the array ever added its disc, so an array that entered play under
+      construction lowers its owner's counts by 1 over the whole cloak-radius disc when it leaves
+      play, so a cell of that disc whose count was 0 is left at −1.
+    - **Capture.** When an array that has already had its grand opening is captured, the old owner
+      keeps the coverage. The new owner gets none, and the array's later removal decrements the
+      new owner's counts. An array whose owner changes before its grand opening follows the
+      build-up bullet above instead.
+    - Backing: `measurable` (CS12 parts c to f) for the activation at the grand opening (no part
+      separates it from entry, see Confidence), the place-order, deploy and trigger-created
+      arrays, power that returns adding nothing (part c, when a run reaches its case),
+      the removal radius and the count below 0 (parts d and e) and the new owner getting no
+      coverage at the capture of an array that has had its grand opening (part e, which has no
+      control for the array's coverage before the capture). `unmeasured` for:
+      - the restored replacement: no part produces one, and when its handover falls rests on
+        S-0524 claim 15, at medium
+      - the owner change during the build-up: no part times a change-owner action inside a
+        placed array's build-up
+      - the old owner keeping its coverage at the capture of an opened array or after the sale,
+        and a depowering
+        removing nothing: *K*'s coverage is seen only through its shooter's fire, a hit makes
+        the witness start uncloaking (claim 12), so fire after the first hit does not show kept
+        coverage, and no witness first exposed after the capture or the depowering is
+        established here.
+    - Confidence: high (no disc for an array placed by a place order or a deploy; the removal
+      radius and count); medium (the new owner getting none at the capture of an array that has
+      had its grand opening: part e has no control showing that *K*'s set-up array added coverage
+      before the capture, which rests on the medium item below; if it never added any, the human
+      not sensing the witness after the capture would also fit a rule that moves the old owner's
+      coverage to the new owner; activation only at the grand opening rather than at entry: for a
+      placed or deployed array both moments fail the behaviour condition, for a set-up or
+      trigger-created array they coincide, and the owner change during the build-up, which would
+      separate them, is `unmeasured`; power that returns adding nothing: part c reaches its case
+      only if *K*'s set-up array is out of operation at its grand opening, which rests on the
+      medium item below, so a run may never reach it; the trigger-created array, which rests on
+      an inferred order of opening and queueing; the restored
+      replacement; the owner change during the build-up, both of its outcomes; the old owner
+      keeping its coverage and a depowering removing nothing; which other conditions a set-up
+      array meets at its grand opening)
 
 ### Hidden objects: game state
 
@@ -846,10 +901,24 @@ Two kinds of rule are kept apart throughout.
     - **(c) Others.** Otherwise, *V* is shown the disguise when the unit is disguised and *V* has no
       detector coverage on its cell. Allies of the owner see the disguise too.
 
-    The disguise is drawn in its disguise house's colours. A unit disguised as an overlay or terrain
-    object is lit like that object.
-    - Backing: `measurable` (CS16)
-    - Confidence: high
+    The disguise is drawn in its disguise house's colours. The exception is an object of a type
+    with a named palette, within the scope of S-0103 claim 16: it is drawn with that named palette
+    at its real owner's colour definition instead, unless `quirks.named_palette_true_owner`
+    (S-0103 Edge cases) is off. A unit disguised as an overlay or terrain object is lit like that
+    object.
+    - Backing: `measurable` (CS16), except:
+      - the detector-coverage condition of (c) is `unmeasured`: the viewing house must be the
+        human player, and no part here gives a human house building detector coverage in a
+        skirmish (S-0009 claim 27 drops its set-up buildings; claims 23 and 40 give none to a
+        built, deployed or trigger-created one, none at the capture of one that has had its grand
+        opening, and none to a mobile detector; the one route left, an owner change inside a
+        detector's build-up, is timed by no part),
+      - the named-palette exception carries S-0103 claim 16's backing for its disguise rule:
+        S-0103 scenario PQ part C for infantry, `unmeasured` for aircraft, buildings and vehicles
+        drawn as sprites without a turret, as S-0103 gives.
+    - Confidence: high ((a), (b), (c) without detector coverage, the disguise house's colours for
+      a type without a named palette, the lighting); medium (the detector-coverage condition of (c); the named-palette exception, at
+      S-0103 claim 16's level for its disguise rule)
 
 38. **Radar colour.** For viewing house *V*, a disguised unit appears on the radar in its owner's
     colour when its owner allies *V*, including when *V* is the owner. Otherwise it appears in the
@@ -870,13 +939,33 @@ Two kinds of rule are kept apart throughout.
 
 40. **Disguise detection.** A building whose type detects disguises adds the sensor disc of radius
     equal to its disguise-detection range to its owner's detector coverage.
-    - The activation, power and capture rules of claim 23 apply.
-    - Removal uses the detection range, with no floor (`quirks.sensor_count_negative`).
+    - The activation, power and capture rules of claim 23 apply. A detector building placed by a
+      place order, deployed, restored as a replacement or created by a trigger action therefore
+      never adds detector coverage, unless its owner changes during its build-up as claim 23
+      gives.
+    - Removal uses the detection range, with no floor (`quirks.sensor_count_negative`), whether
+      or not the building ever added its coverage.
     - Detector coverage serves only claims 35 and 37. It does not reveal cloaked objects.
     - A mobile unit whose type detects disguises gives no coverage; it only changes its own target
       acquisition (S-0309 claim 12, table C).
-    - Backing: `measurable` (CS15, part b)
-    - Confidence: high
+    - Backing: `measurable` (CS15 part b) for the coverage of a detector placed at set-up and its
+      detection range. `unmeasured` for a detector that entered play under construction or that a
+      trigger action created: its coverage would be observed by its owner's units acquiring a
+      disguised enemy, which needs the human's detector and infantry of a computer house disguised
+      as the human's, and no set-up or scripted means of giving a computer house's infantry such
+      a disguise is established here. The rule rests on claim 23's activation rule, which CS12
+      part f measures for arrays. Removal: `unmeasured` here. A count left below 0 would show
+      where the removed detector's disc overlaps a set-up detector of the same owner, whose
+      coverage would end there; no part runs this, and the rule rests on claim 23's removal
+      rule, which CS12 parts d and e measure for arrays. Capture after the grand opening:
+      `unmeasured`: *K*'s units already
+      hold the disguiser when the capture happens, a search never replaces a kept target (S-0309
+      claim 4), and whether lost coverage drops a held target is not established here, so
+      acquisition that goes on after the capture does not show kept coverage.
+    - Confidence: high (the coverage of a detector placed at set-up and the detection range),
+      medium (a detector placed by a place order, deployed, restored or created by a trigger
+      action never detects; the owner change during the build-up; removal and capture, by
+      claim 23's rules)
 
 ### Underwater vessels
 
@@ -1093,11 +1182,15 @@ F6, owner's disguise cycle (integers):
 
   Fixed behaviour: uncloaking also advances one stage per tick when its stage is positive.
 - **`quirks.sensor_building_activation_once`** (default on). Sensor arrays and disguise detectors:
-  - their coverage is set at first placement only, if powered
+  - their coverage is set at their grand opening only, if they are in operation then, so one whose
+    grand opening is at its handover or at its creation by a trigger action never gains it
+    (claim 23)
   - power changes do nothing afterwards
-  - capture leaves coverage with the old owner.
+  - the capture of one that has had its grand opening leaves coverage with the old owner.
 
-  Fixed behaviour: coverage follows *in operation* and moves to the new owner on capture.
+  Fixed behaviour: coverage follows *in operation* and moves to the new owner on capture, so a
+  built array or detector that is in operation gains its coverage once its construction has
+  ended.
 - **`quirks.sensor_array_removal_radius`** (default on). A sensor array's removal decrements over
   its cloak-radius disc instead of its sensors-sight disc. Fixed behaviour: it decrements over the
   same disc it added.
@@ -1198,6 +1291,34 @@ unchanged. All named test subjects below are CS-fixture roles, not assertions ab
 type's settings. Explicitly configure each role's required cloak sources, sensor range,
 disguise flags and weapon properties. Where a source must be absent, clear it in the fixture
 and provide no field or crate granting it. Remove all overrides afterwards.
+
+**Coverage of sensor-array and detector buildings.** Of the ways the parts here bring such a
+building into play (placement by the map at game set-up, a place order, a deploy, a trigger
+action, each with no owner change during a build-up), placement by the map at game set-up is the
+one that adds coverage (claims 23 and 40), and in a skirmish a structure placed at set-up for a
+human player's house is dropped (S-0009 claim 27). A part that needs active building coverage
+therefore gives the building to a computer player *K*, placed at set-up, unless the part says
+otherwise; a building that a part has the human place, deploy or get from a trigger is the
+human's. *K*'s coverage is observed through *K*'s own objects, not through *K*'s view:
+- **Sensing.** A fully cloaked human-owned witness on a cell that *K* senses is acquired and fired
+  at by *K*'s **shooter**; on a cell that *K* does not sense it is not (S-0309 table C, row
+  "cloak"; claim 24). The shooter is an armed defence building of *K*, placed at set-up, of a
+  CS-fixture type with no needs-power flag that is not a sensor, with the witness inside its
+  weapon range and outside every adjacency reveal (claim 13). The witness has CS-fixture-raised
+  health, so that it survives the observed span. Only the shooter's first fire at a witness
+  decides a part: a hit makes the witness start uncloaking (claim 12), so later fire does not
+  show coverage.
+- **Detection.** Human-owned infantry disguised as one of *K*'s infantry types is acquired by *K*'s
+  armed units only on cells where *K* has detector coverage (claim 35; S-0309 table C, disguise
+  row).
+- **Later sensors.** Mobile sensors that a part adds for *K* after set-up are unarmed CS-fixture
+  types created by map triggers, so that no order of *K*'s is needed.
+- **Route control.** Each such part has a run without *K*'s array or detector, in which the
+  shooter does not fire at the witness and *K*'s units do not acquire the disguised infantry. A
+  run whose route control fails is void.
+
+*K*'s start units, its base and its other activity are kept outside the observed area under the
+glossary's void rule. Inside it, *K* owns only the objects a part names.
 
 Use tick-stamped screen and sound capture, scripted input and a read-only recorder. Repeat each
 deterministic sub-test three times. Record target lines, selection, radar pixels, images, sound
@@ -1349,19 +1470,57 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
     adjacency distance, with no viewer-owned sensor there. Expected: the viewer has no
     sensed count and cannot see/attack it; the sensor's owner can. Shared coverage
     falsifies owner-only sensing.
-  - **(c)** Place an array out of operation, restore power, and probe its disc with the
-    witness. Expected: no coverage before or after restoration. Compare an array placed
-    operational and then depowered: its coverage remains. Activation on restoration or
-    loss on later depowering falsifies the once-only rule.
-  - **(d)** Give an array a cloak radius larger than its sensor sight in CS-fixture. Sell
-    it, then cover a cell in the excess removal annulus with one mobile sensor and then
-    two. Expected: the count is −1 after sale, 0 with one added sensor and 1 with two.
-    Only the last reveals the still-cloaked witness. A different count or visibility
-    boundary falsifies the removal-radius/negative-count rules.
-  - **(e)** Capture an activated array. Expected: coverage stays with the old owner, none
-    is added for the new owner. Remove it and record both houses' counts: only the new
-    owner's counts are decremented. Transfer at capture or old-owner subtraction on
-    removal falsifies claim 23.
+  - **(c)** *K*'s array is placed at set-up while *K*'s output is below its drain, with the
+    witness in its disc and inside the shooter's weapon range from the start; a map trigger later
+    gives *K* a power plant that ends the low power. The trigger fires no earlier than twice the
+    longest targeting-timer interval that S-0215 F6 allows the shooter after the shooter stands in
+    *guard* with the witness in range, so that at least one of its automatic searches (S-0309
+    claim 1) runs before the restoration with the witness a candidate in every other respect.
+    Expected: the shooter fires at the witness neither before nor after the restoration. A run in
+    which it fires before the restoration is inconclusive for this half (the array was in
+    operation at its grand opening, claim 23's medium on set-up conditions); so is one whose
+    trigger fires earlier than that. Firing that starts after the restoration falsifies the
+    once-only rule. A depowering is not tested here (claim 23,
+    its backing).
+  - **(d)** Give *K*'s array a cloak radius larger than its sensor sight in CS-fixture, and put
+    the witness on a cell of the annulus between the two discs, which no other sensor of *K*
+    covers. A map trigger destroys the array. A later trigger creates one mobile sensor of *K*
+    whose disc covers the witness's cell, and a later one a second. Expected: the shooter does
+    not fire at the witness after the array's removal, nor with one added sensor, and fires once
+    the second covers the cell (counts −1, 0 and 1 there). Route control for the count: in a run
+    without the array, one added sensor is enough. Firing with one sensor after the removal, or
+    no firing with two, falsifies the removal-radius and negative-count rules.
+  - **(e)** A human engineer captures *K*'s array, placed and in operation at set-up. A witness
+    owned by *K* and fully cloaked stands on a cell that lies in both the array's sensor disc and
+    its cloak-radius disc, and that no other sensor of the human covers. Expected: the human does
+    not see *K*'s witness and cannot attack it after the capture (none is added for the new
+    owner). The human then sells the array. Expected: in the human's view, *K*'s witness is
+    revealed by two mobile sensors of the human moved over its cell, not by one. Sight of the
+    witness after the capture and before any mobile sensor arrives, or a reveal with one
+    sensor, falsifies claim 23. Whether the old owner keeps its coverage is not tested here
+    (claim 23, its backing).
+  - **(f)** The human house, with output well above its drain, places an array by a place order,
+    a fully cloaked witness of *K* waits inside the array's sensor disc, and an armed vehicle of
+    the human stands in *guard* with the witness in its weapon range. The human's base comes from
+    a construction vehicle that the map places for it and that it deploys in the first ticks, and
+    its power from plants it then places by place orders (S-0009 claim 27 drops structures placed
+    at set-up for a human house). Each witness of this part, the control's included, stays on its
+    cell throughout, so it has no cell-arrival update and no adjacency reveal (claim 13), by the
+    human's objects or any other; a run in which one changes cell, or starts uncloaking before any
+    fire at it, is void. Record in the human's view,
+    from the handover onward, whether the witness is drawn, whether a forced attack on it is
+    accepted, and whether the vehicle fires at it. Repeat with an array of a CS-fixture vehicle
+    type that the human deploys into it, and with an array that a map trigger creates in play for
+    the human house. Then sell the placed array and move one mobile sensor of the human over a
+    cell of its cloak-radius disc that no other sensor of the human covered, then a second,
+    while the witness stands in that cell. Control: an array of *K* placed at set-up with *K*'s
+    output above its drain, with a human witness in its disc: the shooter fires at it (with its
+    route control). Expected: no built, deployed or trigger-created array of the human ever
+    senses the witness, power notwithstanding; after the sale, only two mobile sensors reveal it.
+    Sensing after the handover, or after the trigger creation, falsifies claim 23's activation rule (the trigger-created run
+    separates S-0405 claim 8's queued reading from a current-only one, as S-0405 scenario W6 part j
+    does for a placed building before *construction* becomes current); a reveal with one mobile
+    sensor after the sale falsifies its removal rule.
 - **CS13, disguise acquisition.**
   - **(a)** Give a fixture infantry disguiser an unobstructed legal infantry target across
     the map. Configure its weapon with unlimited range and a disguise-making warhead. Record
@@ -1390,11 +1549,16 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
 - **CS15, appears disguised.**
   - **(a)** Fixture infantry disguised as an infantry unit of house *E* is not auto-targeted by *E*'s
     vehicles. *E*'s allies are not fooled when the disguiser's owner is their ally.
-  - **(b)** A powered detector building of the enemy makes its units acquire it within the range.
+  - **(b)** A detector building of *K*, placed at set-up with *K*'s output above its drain, makes
+    *K*'s armed units acquire human-owned infantry disguised as one of *K*'s infantry types within
+    the detection range (with its route control). A capture is not tested here (claim 40, its
+    backing).
   - **(c)** With the auto-crush rule enabled in CS-fixture, put a crushable enemy infantry
     disguiser within crush range of an idle crusher, disguised as the crusher's house and
     without detector coverage. Record automatic movement and the infantry's survival. Expected:
-    no automatic crush choice. Repeat with building detector coverage: it is chosen and crushed.
+    no automatic crush choice. Repeat with building detector coverage, the crusher and the
+    detector building then belonging to *K* and the disguiser to the human house: it is chosen
+    and crushed.
     Separately order the crusher along a route through the still-disguised infantry's cell to a
     cell beyond it. Confirm passage through the crush radius with the disguise still effective.
     Expected: the ordered drive-through crushes it. Automatic choice while fooled, or survival
@@ -1405,11 +1569,14 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
     acquisition, without damage, motion or firing. Expected: disguise image at cycle
     phases 8–55, real image otherwise, with the exact translucencies of Table B.
     Any wrong image, band boundary or cycle period falsifies claims 37 and F6.
-  - **(b)** Record the same unit as mutual ally and enemy, with no fake blink or detector
-    coverage. Expected: both see its disguise in the disguise house's colours. Add each
-    viewer's building detector coverage in separate runs: that viewer sees the real
-    unit without clearing its disguise. An ally-only real image, wrong colours or a
-    disguise cleared by detection falsifies the corresponding rule.
+  - **(b)** Record the same unit, of a type without a named palette, as mutual ally and enemy,
+    with no fake blink or detector coverage. Expected: both see its disguise in the disguise
+    house's colours. An ally-only real image or wrong colours falsifies the corresponding rule. A
+    disguiser of a type with a named palette is not part of this scenario (claim 37's exception,
+    its backing). A viewing house with building
+    detector coverage is not part of this scenario: the viewer is the human player, and no part
+    here gives a human house such coverage in a skirmish (claim 37's backing; mobile detectors
+    give none, claim 40).
   - **(c)** Use three houses with distinct radar colours: viewer *V*, unit owner *O* and disguise
     house *D*. Have an infantry disguiser of *O* copy infantry of *D* before observing its stable
     radar pixel from *V*, on explored ground with radar available, no overlapping radar object,
@@ -1447,8 +1614,8 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 14, 24–26 | Retain own-house, sensed-enemy and unsensed-enemy targeters at the mobile start/completion. Repeat on a building. Select a sensed non-owned object before it cloaks. Try positive-damage force fire on a hidden own target and healing on a hidden ally. | Unsensed enemies drop at both mobile moments, buildings only at the start. Non-owner selection is lost at cloak start even with sensors. Positive mean weapon damage is refused; nonpositive mean passes the cloak test for an own or allied target, independently of the selected weapon's sign. |
 | 18 | Put sensor infantry in the foundation/border, with candidate-control occupants. Compare own/allied/enemy and veterancy-only sensors. Lose the field during cloaking, then restore it during uncloaking and change sensor coverage. Watch levels and particles. Use one named test building type whose natural-smoke displacement is (0, 0, 0), and one whose displacement is not (0, 0, 0); both are named test data, removed after the run. | Foreign type-flag sensors, allies included, block. Interrupted cloaking completes before uncloaking. Field re-evaluation can reverse uncloaking at its current level. Natural smoke is removed at once at 15; a new system appears at 0 only when the building has none and the natural-smoke displacement is not (0, 0, 0). |
 | 19, 20 | Witness the circle boundary. Power, disable, sell, destroy and capture a generator separately. Test allied witnesses. With two generators cut one's power, then separately sell it. Repeat with a nearby other-owner generator. | F5's candidate circles, interrupted growth/shrinking and immediate removal hold. Allies are not covered. Overlaps can lose coverage; a full idle neighbouring generator restarts irrespective of owner. |
-| 21–23, 40 | Observe detection across a mobile sensor's movement, capture and removal. Compare a type flag alone with a range alone. Toggle array/detector power after placement, and remove an initially unpowered building. Compare mobile and building disguise detectors. | Coverage is owner-only and does not lift shroud. Mobile range supplies coverage. Building power changes do not toggle coverage, and capture leaves it with the old owner. Mobile disguise detectors supply no shared coverage. |
-| 23, 40 | Make the array's cloak radius larger than its sensor sight. After removal, cover an affected outer cell with one sensor, then two. For detectors test the detection-radius disc after an initially unpowered building is removed. | A formerly −1 cell needs two additions. Array removal uses cloak radius; detector removal uses detection radius. |
+| 21–23, 40 | Observe detection across a mobile sensor's movement, capture and removal. Compare a type flag alone with a range alone. Restore *K*'s power after placing its array at set-up under low power (CS12 c). Capture *K*'s array (CS12 e). Compare mobile and building disguise detectors. | Coverage is owner-only and does not lift shroud. Mobile range supplies coverage. Restored power adds no array coverage, and capture adds none for the new owner. Mobile disguise detectors supply no shared coverage. |
+| 23, 40 | Make the array's cloak radius larger than its sensor sight. After removal, cover an affected outer cell with one sensor, then two. Detector removal is not tested here (claim 40). | A formerly −1 cell needs two additions. Array removal uses cloak radius. |
 | 27–29 | Compare owner, mutual-ally and enemy views on explored ground with/without own sensors. Record clicks, shadow, radar and images every tick. Include a stage count reaching fraction 255. | Claim 28 bands hold. Unsensed allies see the cloak image but cannot click or list it on radar. Fading vehicles have no shadow. Fraction 255 is not drawn for non-owners. |
 | 30–32 | Copy undisguised/disguised infantry, disguised/undisguised vehicles, rock overlays and terrain objects. Create permanent disguisers with each side default. Remove the disguise house. Observe image, colour, health and acquisition. | Claim 31 copies and rejected kinds hold, without target damage. Defaults have the owner's house and do not fool enemy logic. Cleared permanent infantry resets to default; a vehicle clears outright. |
 | 33, 34 | Move temporary infantry/vehicle disguisers; introduce neighbours on all 8 tick phases, ground/bridge layers, contact and lockout. Compare damage on permanent/temporary types. Try transport entry and capture. For undeployment, use S-0517's P8 (b) fixture and record disguise at the first undeploy processing and at completion, with and without a deploying presentation. | Only temporary vehicles lose disguise while moving. Adjacent checks skip ticks divisible by 8. An eligible still vehicle draws once. Damage follows S-0302 claim 12. The listed non-removal events preserve disguise. Undeployment clears disguise at the first step, before animated completion, or at the immediate step without a presentation; a disguise lost before the step makes that trial inconclusive. |

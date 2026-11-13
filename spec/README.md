@@ -76,7 +76,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0110](rendering/S-0110-shroud-rendering.md) | Shroud and fog rendering | rendering | 12 | approved | — |
 | [S-0701](ui/S-0701-sound-selection.md) | Sound selection | ui | 36 | approved | — |
 | [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 106 | approved | — |
-| [S-0511](structures/S-0511-bridges.md) | Bridges (destruction, collapse, falling and repair) | structures | 8 | approved | — |
+| [S-0511](structures/S-0511-bridges.md) | Bridges (destruction, collapse, falling and repair) | structures | 13 | approved | — |
 | [S-0407](production/S-0407-tech-tree.md) | Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs) | production | 29 | approved | — |
 | [S-0417](structures/S-0417-factory-unloading.md) | Factory unloading (doors, exit movement and rally destinations) | structures | 79 | approved | — |
 | [S-0411](ui/S-0411-sidebar-behaviour.md) | Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement) | ui | 60 | approved | — |
@@ -104,9 +104,9 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0303](combat/S-0303-area-damage.md) | Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects) | combat | 32 | approved | — |
 | [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 137 | approved | — |
 | [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 24 | approved | — |
-| [S-0309](combat/S-0309-target-acquisition.md) | Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching) | combat | 133 | approved | — |
+| [S-0309](combat/S-0309-target-acquisition.md) | Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching) | combat | 140 | approved | — |
 | [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 58 | approved | — |
-| [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 51 | approved | — |
+| [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 57 | approved | — |
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 6 | approved | — |
 | [S-0607](combat/S-0607-magnetic-lift.md) | Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall) | combat | 39 | approved | — |
 | [S-0518](combat/S-0518-linked-weapons.md) | Linked weapons (prism support beams, charging of overpowerable buildings, beam drawing) | combat | 6 | approved | — |
@@ -114,7 +114,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0616](combat/S-0616-particle-systems.md) | Particle systems (smoke, fire, spark, railgun) | combat | 29 | approved | — |
 | [S-0611](combat/S-0611-mutation.md) | Mutation | combat | 4 | approved | — |
 | [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 12 | approved | — |
-| [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 46 | approved | — |
+| [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 52 | approved | — |
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 50 | approved | — |
 | [S-0007](rules-import/S-0007-art-lookup.md) | Art lookup (image indirection, sprite or voxel, companion files, theater substitution) | rules-import | 15 | approved | — |
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 32 | approved | — |
@@ -127,7 +127,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 106 | approved | — |
 | [S-0613](combat/S-0613-gas-clouds.md) | Gas clouds | combat | 13 | approved | — |
 | [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 122 | approved | — |
-| [S-0516](visibility/S-0516-cloak-stealth.md) | Cloak and stealth (cloaking, cloak fields, sensors, disguise) | visibility | 13 | approved | — |
+| [S-0516](visibility/S-0516-cloak-stealth.md) | Cloak and stealth (cloaking, cloak fields, sensors, disguise) | visibility | 20 | approved | — |
 | [S-0615](combat/S-0615-special-hit-effects.md) | Special-hit effects (death-kind animations, the burning walker and the disc laser) | combat | 4 | approved | — |
 | [S-0301](combat/S-0301-firing-cycle.md) | Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check) | combat | 76 | approved | — |
 | [S-0103](rendering/S-0103-palettes-house-colour.md) | Palettes and house colour | rendering | 25 | approved | — |

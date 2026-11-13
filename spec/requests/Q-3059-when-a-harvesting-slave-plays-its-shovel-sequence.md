@@ -1,9 +1,9 @@
 ---
 id: Q-3059
 title: When does a harvesting slave start its shovel sequence, and which slave states count as harvesting for its loop?
-status: open
+status: answered
 related: [S-0107, S-0402, S-0401]
-answered-by: []
+answered-by: [S-0107]
 ---
 
 ## Need

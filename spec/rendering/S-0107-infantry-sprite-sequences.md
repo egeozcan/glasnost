@@ -2,13 +2,13 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 46
+revision: 52
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-06
+approved-on: 2026-11-13
 measurements: [M-0008]
-requests: [Q-0087, Q-0212, Q-1525, Q-1715, Q-2566, Q-2616]
+requests: [Q-0087, Q-0212, Q-1525, Q-1715, Q-2566, Q-2616, Q-3059]
 supersedes: []
 ---
 
@@ -274,8 +274,12 @@ used by this spec only:
    cannot crawl asks for *go-prone*. When the record changes, the type's enter-water sound plays
    (dry to wet) or its leave-water sound (wet to dry), at the unit's position. A freshly created
    unit has no record yet, so its first request plays no sound.
-   - Backing: `measurable` (scenarios M1, M5 with M5(b) for a fresh unit's first request, M6, M17)
-   - Confidence: high
+   - Backing: `measurable` (scenarios M1, M5 with M5(b) for a fresh unit's first request, M6, M17), and
+     `unmeasured` (that an enslaved unit walking back to its master before it is full shows *walk*:
+     its master is deployed while it harvests, so S-0213 table T3 part (h)'s recall, which needs a
+     mobile master, does not apply, and S-0402 claim 28's pack-up recall depends on the group's
+     state, so no part here sends one back early)
+   - Confidence: high (medium for that case)
 
 8. **Looping and completion.** A sequence is **complete** once its stage has reached *C*.
    Completion is detected on every tick, including the tick on which the stage first reaches *C*.
@@ -664,7 +668,9 @@ used by this spec only:
 16. **How damage raises fear.** When a living infantry unit takes damage and survives it, its new
     fear level is given by this table. A unit is *fearless* here when its type is fearless or it
     has the fearless veterancy ability. Which scatter requests the hit sends, and whether the unit
-    acts on them, belong to S-0208 (claims 15 and 11); this claim only sets the fear level.
+    acts on them, belong to S-0208 (claims 15 and 11); this claim only sets the fear level. Its
+    place within the hit, after the no-threat fall-back, is S-0215 claim 16's to give, at the level
+    and backing that claim gives it; this claim's Confidence does not cover that order.
 
     | Known attacker | Fear before the hit | Fraidycat | Fearless | New fear level |
     |---|---|---|---|---|
@@ -922,14 +928,14 @@ used by this spec only:
     own, which also say when: *deploy* and *undeploy* (deployment, which also plays the type's
     deploy and undeploy sounds when those kinds start), *deployed* (deployment and claim 11),
     *cheer* (the celebration order and successful slave-release transfers under S-0312 claims 30
-    and 31), *parachute* (paradrops, forced), *shovel* (harvesting),
+    and 31), *parachute* (paradrops, forced), *shovel* (harvesting; claim 21a gives when),
     *air-death-start* (the jumpjet locomotor) and *air-death-end* (the end of an air death, forced).
     *idle-a* and *idle-b* can also be started by scripted idle orders. Their timing (claims 4 and 5)
     and their completion (State and ordering) are given here. *air-death-fall* is started only by
     the completion of *air-death-start*. It has no completion rule of its own, so when it completes
     the general follow-up rows apply (`quirks.air_death_fall_generic_follow_up`).
     - Backing: `measurable` for deploy/undeploy starts (M7(b)), parachute starts (M7(c)), and
-      harvesting starts of shovel (M7(c), M17(a)), and slave-release cheer requests (M19).
+      harvesting starts of shovel (M21), and slave-release cheer requests (M19).
       `unmeasured` for the air-death starts and
       follow-up: no controlled scenario is known that starts these kinds through the jumpjet
       locomotor. Celebration-order cheer starts, scripted idle orders and the deployment sounds are
@@ -940,6 +946,120 @@ used by this spec only:
       triggers have been measured.
     - Confidence: high (that these mechanics start these kinds), medium (the *air-death-fall*
       follow-up)
+
+21a. **Shovel while harvesting (Q-3059).** These rules hold for every infantry unit whose
+    behaviour is *harvest*, a harvesting slave or not: none of them tests whether the unit is
+    enslaved. S-0402 says which infantry units get *harvest*, and when their processings of it
+    fall (claims 14 and 26, loading interval *h*).
+    - **Start.** At each processing of *harvest* at which the unit's type has a storage capacity
+      other than 0, its cell is a resource cell and it is not full (S-0402 claim 16), the unit asks
+      for *shovel*, not forced, unless *shovel* is already its current sequence. The three tests
+      are made before that processing's load step, so a processing whose load step empties the
+      cell or fills the unit still asks for *shovel*. So a unit first asks for *shovel* at its
+      first processing of *harvest* that passes these three tests, on the tick of its first load
+      step on that cell, whether or not that step adds a bale (the step that empties a cell adds
+      none, S-0401 claim 3), and it starts *shovel* on that tick unless claim 6 turns the request
+      down (**Not forced**, below). Arrival on the cell alone asks for nothing. With
+      `quirks.slave_negative_capacity_stalls` on, its default (S-0402 claim 26), a unit of a
+      negative storage capacity stays in *harvest* on an unchanged cell; it passes the tests too,
+      and asks for *shovel* while it takes nothing. With that switch off it leaves *harvest* as
+      S-0402 claim 26 gives, and this sentence does not apply.
+    - **Not forced.** Claim 6 applies to the request as to any request that is not forced: it is
+      turned down while a sequence that is not interruptible plays (for example *go-prone*,
+      *get-up* or *cheer*) and when the *shovel* entry has no image frames. A turned-down request
+      is made again only at a later processing of *harvest* that passes the three tests.
+    - **No restart.** While *shovel* is current, a processing of *harvest* that passes the three
+      tests of **Start** makes no request at all: a bale taken while *shovel* plays leaves its stage
+      running, and claim 7's water record is not updated by that processing. A processing that
+      fails one of them asks for *stand* whether or not *shovel* is current, and claim 6 decides
+      that request, water record included (**What ends shovel before it completes**, below). As with any kind whose follow-up is itself (claims 6, row 4,
+      and 8), the stage of a *shovel* that stays current is never set back to 0, at a completion
+      or at a load step; it only grows, and the image frame shown wraps.
+    - **Harvesting.** In the follow-up table (State and ordering), "the unit is harvesting" means
+      that its current behaviour is *harvest*, or that it has no current behaviour and its queued
+      behaviour is *harvest*. Nothing else is tested: not its cell, its load or its capacity. A
+      unit that has just taken its last bale, or whose cell has just run out, therefore still loops
+      *shovel* at a completion while it is harvesting. A behaviour that is only queued behind a
+      current *harvest*, such as the *guard* that its own processing queues (S-0402 claim 26),
+      does not count until it becomes current (S-0215 claims 8 and 11).
+    - **What ends shovel before it completes.** *shovel* is interruptible (Constants, table T1),
+      so any request of another kind that claim 6 accepts replaces it at once, forced or not.
+      Among them:
+      - a processing of *harvest* at which the unit's cell is not a resource cell, the unit is full,
+        or its type's storage capacity is 0 (or negative with
+        `quirks.slave_negative_capacity_stalls` off, which S-0402 claim 26 treats as 0): the unit
+        asks for *stand*, not forced, and the processing queues *guard* (S-0402 claim 26),
+      - the movement rule (claim 10), on the first tick on which the unit is moving now: the
+        request claim 10 gives for moving, if any, after claim 7's substitutions. A slave's walk back to its miner, its walk
+        to a new cell and any walk its group's orders cause all end *shovel* this way,
+      - the fear rules (claim 15) and death (claim 17).
+
+      A change of behaviour alone does not start another kind at once: a unit that has stopped
+      harvesting (in the sense of **Harvesting** above) and that is not moving now keeps *shovel*
+      until a completion check (claim 8) finds it complete while the unit is not harvesting, and
+      that check starts *stand* (forced). Once the stage has reached *C*, every check finds it
+      complete, so this is the first check after the change; before that, it is the check on the
+      tick on which the stage reaches *C*. A slave goes inside its miner only after walking back
+      to the unloading cell (S-0402 claim 14, **Delivery**), so, when claim 6 accepts the movement
+      rule's request, the movement rule has already replaced *shovel* by then. Claim 6 can turn
+      that request down (for example, when the *walk* entry has no image frames), and
+      *shovel* can then still be current when the slave is taken inside. Being taken inside needs
+      no rule of its own here.
+    - **Same tick.** In a unit's update, the processing of its behaviour comes before the
+      completion test (claim 8) and the movement rule. A *shovel* that a processing starts on a
+      tick on which the unit is moving now is therefore replaced on that same tick when claim 6
+      accepts the movement rule's request (claim 10), and is then not drawn; it is asked for again
+      at the next processing that passes the three tests.
+    - Backing: `measurable` (scenario M21: part a for the start at the first load step on a
+      resource cell while not full, part b for the stage never set back while *shovel* stays
+      current, at a load step made while the stage is at least 1, part c, on any trip with such a completion, for the loop while the unit is
+      harvesting and, on any trip on which they come first, for the endings by movement and by the
+      *stand* of an emptied cell or a full unit; M7(c)
+      for the facing kept at a *shovel* completion). `unmeasured`:
+      - that the request is not forced: a forced and an unforced request differ only while a
+        sequence that is not interruptible plays at a processing of *harvest*, and no scenario
+        reliably holds a harvesting unit in such a sequence at a processing at rest,
+      - that the three tests come before the load step: this differs from the other order only at
+        a processing whose load step empties the cell or fills the unit while *shovel* is not
+        already current, and no M21 part ensures such a processing,
+      - the ending at a completion check after the unit stops harvesting while at rest: no M21
+        part ensures a trip on which a slave stops harvesting at rest without a processing that
+        asks for *stand*, and the recall that could cause one at a deployed miner comes with its
+        packing up (S-0402 claims 22 and 28), which no M21 part brings about on purpose,
+      - the queued-only reading of "the unit is harvesting": a unit has no current behaviour only
+        until its next per-tick start (S-0215 claim 1), and no scenario puts a *shovel* completion
+        inside that span,
+      - units that are not slaves: M21 uses only the slaves of a slave miner, and which other
+        infantry units get *harvest* is S-0402's,
+      - the capacity tests (a storage capacity of 0, and a negative one under
+        `quirks.slave_negative_capacity_stalls`): no M21 slave type has such a capacity,
+      - that a processing that passes the three tests makes no request while *shovel* is current,
+        rather than a request that claim 6 row 4 turns down: the two differ only in claim 7's
+        water record of an amphibious type, and M21's slaves are not of one,
+      - the fear and death endings, and the same-tick order: M21 has no fear or death run, and
+        its recorder does not separate the processing from the movement rule within a tick.
+      Part c decides the loop, and part b the stage kept at a completion, only on a trip with a
+      *shovel* completion while the slave is harvesting on a resource cell while not full, and no
+      M21 part ensures one: a *shovel* that is replaced before its stage reaches *C* passes both.
+      Part b also decides the stage kept at a load step only at a load step made while the stage
+      is at least 1: a restart while the stage is still 0 leaves it at 0. Whether the stage reaches
+      1 between two load steps depends on the *shovel* stage delay (claim 5) against the spacing of
+      the processings of *harvest* (S-0402), and no M21 part ensures it.
+    - Confidence: high (the start at the first load step on a resource cell while not full, not on
+      arrival, for a load step that neither empties the cell nor fills the unit); medium (the loop
+      while the unit is harvesting on a resource cell while not full, and the stage not set back
+      at a completion: no M21 part ensures such a completion; the stage never set back at a load
+      step while *shovel* stays current: no M21 part ensures a load step made while the stage is
+      at least 1; the loop after the unit is full or its cell has run out: on
+      such a tick part c cannot tell a completion check's *stand* from a processing's; the endings
+      by movement and by the *stand* of an emptied cell or a full unit: part c decides each on the
+      trips on which it comes first, and no M21 part ensures which ending comes first; the request
+      not being forced; the three tests before the load step; the ending at a completion check
+      after the unit stops harvesting; the queued-only reading of
+      "the unit is harvesting"; units that are not slaves; the capacity tests; no request rather
+      than a turned-down one; the fear and death endings; the same-tick order of processing and
+      movement rule; that a slave whose movement request claim 6 accepts is not taken inside its
+      miner with *shovel* current, which rests on the walk back of S-0402 claim 14)
 
 22. **Limits of the sequence data.** Three rules of reading the sequence data (Import mapping) have
     effects that can be seen:
@@ -1127,7 +1247,7 @@ loops. "Not moving" in this table means: no movement in progress, or a speed fra
 | undeploy | always | *stand* (forced). The unit becomes crushable again, same condition |
 | air-death-start | always | *air-death-fall* (forced) |
 | parachute | always | none here. Separately, on every tick, a unit whose current sequence is *parachute* and that is no longer falling asks for *stand* (forced) |
-| shovel | the unit is harvesting | *shovel* (forced), which loops |
+| shovel | the unit is harvesting (claim 21a) | *shovel* (forced), which loops |
 | shovel | otherwise | *stand* (forced) |
 | secondary-fire, secondary-fire-prone | no movement in progress (whatever the speed fraction), designating an airstrike, and has a target | *secondary-fire-prone* (forced) when prone, otherwise *secondary-fire* (forced); the attack state ends. Asking for the current kind loops it |
 | any other kind (and the two above otherwise) | not moving, and the completed kind is *deployed*, *deployed-fire* or *deployed-idle* | *deployed* (forced) |
@@ -1998,9 +2118,8 @@ whose …") means any stock type with that property; the property is a precondit
   - (a) Carrying. Use an infantry type with a non-zero storage capacity that works enslaved to a
     master, and whose *carry* entry has image frames. Log a unit of it through several harvesting
     trips. Expected: it shows *carry* image frames while it walks back to its master full, and
-    *walk* image frames while it walks out empty. Then order one away before it is full. Expected:
-    *walk*. Falsified by *walk* on a full return trip, or by *carry* when it is not full.
-    Runs: five trips, and two early recalls.
+    *walk* image frames while it walks out empty. Falsified by *walk* on a full return trip, or by
+    *carry* when it is not full. Runs: five trips.
   - (b) Hovering. Use a jumpjet infantry type. Test art gives its *hover* entry *C* ≥ 2 and a
     start image frame of 1 or more. Let a unit of it stop in the air. Expected: *hover* image frames
     while it is stopped in the air. Repeat with
@@ -2098,6 +2217,42 @@ whose …") means any stock type with that property; the property is a precondit
     only one image frame. Expected: no shadow at any height above 0. Falsified by any shadow
     during the fall.
   - Runs: one drop per part and case; no random draw is involved in the drawing.
+- **M21 (claim 21a, Q-3059).** Common setup, with a purpose-made test map: one house owns a slave
+  miner whose slave type's *shovel*, *walk*, *carry* and *stand* entries have image frames,
+  deployed beside a small field of one
+  tiberium type, out of reach of every other unit. A test rules file gives the slave type a storage
+  capacity of at least 3, so that a trip on a cell holding at least that many bales makes at least
+  two load steps there. One field
+  cell holds fewer bales than a slave's capacity. A recorder logs, on every tick and for each slave: its sequence kind and stage, its
+  cell, whether it is moving now, its current and queued behaviour, its load, and the bale count
+  of its cell. Every load step in this setup takes one bale (S-0402 claim 16: the slave type's
+  capacity is positive and the slave is not full), so it either adds a bale to the load or empties
+  the cell (S-0401 claim 3). A tick counts as a slave's load step when its own load rises, or when
+  its cell is emptied on a tick on which no other slave stands on that cell. A part decides nothing
+  at a tick on which the slave's cell loses a bale or is emptied while another slave stands on it,
+  since that step can be the other slave's.
+  - (a) Start. Expected: on each trip, the first tick on which *shovel* is current is a tick on
+    which the slave makes a load step, and no *shovel* starts on a tick without a load step.
+    Falsified by *shovel* starting on arrival before any load step, or by a load step at rest
+    that neither empties its cell nor fills the slave, at the end of whose tick neither *shovel*
+    is current nor a sequence that is not interruptible plays.
+  - (b) No restart. Decided on every pair of consecutive ticks on both of which *shovel* is
+    current, load steps and completion ticks included (every tick once the stage has reached *C*,
+    claim 8). A tick on which *shovel* starts is never the later tick of such a pair, since a start
+    needs *shovel* not current. Expected: the stage on the later tick of each pair is not lower
+    than on the earlier. Falsified by a pair whose later stage is lower. A restart at a load step
+    shows only when the stage was at least 1 on the tick before it; claim 21a rates the stage kept
+    at a load step to match.
+  - (c) Loop and end. Expected: while the slave is harvesting (its current behaviour is *harvest*,
+    or it has none and its queued behaviour is *harvest*), *shovel* stays current through every
+    completion check, and it ends at the first tick on which the slave is moving now (*walk* or
+    *carry*) or at a processing that finds the cell empty or the slave full (*stand*), whichever
+    comes first. How it ends when the slave stops harvesting at rest before either is not decided
+    here (claim 21a rates it medium). Falsified by *stand* starting, when *shovel* was current on
+    the tick before, on a tick on which the slave is harvesting and not moving now while it is not
+    full and its cell is still a resource cell, or by *shovel* still current at the end of the first tick on which the slave is moving now
+    when *shovel* was current on the tick before.
+  - Runs: five full trips per slave, of which at least one empties the short cell.
 
 **Cross-spec scenario alignment confirmed.** S-0202 scenarios R5(a) and R6(a) count the
 behaviour-processing delay draws (S-0215 claims 6 and 24), and R5(a) distinguishes idle-timer

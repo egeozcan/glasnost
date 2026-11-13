@@ -2,13 +2,13 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 51
+revision: 57
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-13
 measurements: [M-0005]
-requests: [Q-0180, Q-0224, Q-0276, Q-1503, Q-1505, Q-1710]
+requests: [Q-0180, Q-0224, Q-0276, Q-1503, Q-1505, Q-1710, Q-3060]
 supersedes: []
 ---
 
@@ -296,34 +296,72 @@ house's own update in a tick, which comes after the turn pass and before orders 
    | powered | its type has the needs-power flag and a base drain above 0, its house has low power, and *n*<sub>c</sub> < 2 |
    | no blackout | its type has the special-power flag and its house has a blackout in force (a timed blackout running, or a drain blackout at its last working-out) |
    | manned when required | its type has the needs-engineer flag and it is not manned (S-0515 claim 2) |
-   | not building or selling | its current behaviour is *construction* or *selling* |
+   | not building or selling | its behaviour, read as below (current, or queued while none is current), is *construction* or *selling* |
 
    A needs-engineer building placed for a house is never in operation until its first ownership
-   change; own-engineer entry does not man it (S-0515 claim 2).
-   The last row reads the building's current behaviour only, not its queued behaviour. A building
-   whose sale has been ordered is in operation until the selling behaviour becomes its current
-   behaviour (at the sale's first processing, S-0408 claim 6) and is not in operation from then on,
-   including while the build-down waits for docked units. The state of the build-up or build-down
-   sprite does not enter the test. An erasing lock switches the building off (S-0514 claim 4),
-   so it fails the switch condition unless it has two or more chargers; with those chargers it
-   must still pass every other condition. Being erased is not a separate condition of this
-   test; its output and drain are nevertheless 0 (claims 1 and 2). When the last attacker lets
-   go before completion, the building is switched on regardless of its pre-lock state
-   (S-0514 claim 10). S-0514 owns `quirks.erasure_release_switches_on`, default original.
-   With it off, release restores the pre-lock switch state. The power condition reads the
-   house's totals as they stand (claim 7). Two consequences: a
-   building of a type with the needs-power flag but no base drain never stops for low power; and a
-   building with two or more chargers passes the switch and power conditions even under low
-   power or when switched off, but must still pass every other condition. The test is the same for every house; no rule of it depends on whether the owner is human-
-   or computer-controlled.
+   change; own-engineer entry does not man it (S-0515 claim 2). The last row reads the building's
+   behaviour under S-0215 claim 1's general rule: its current behaviour, or its queued behaviour
+   while it has no current one. While a behaviour is current, the queued one is not read. A building
+   that enters play under construction (S-0406 claim 17) therefore fails this row while
+   *construction* is its current behaviour, or its queued one with none current. For a building that
+   reaches its handover (S-0406 claim 15: one placed by a place order, deployed or restored), its
+   grand opening (S-0108 claim 11) is part of that handover. The handover queues *guard* only after
+   the opening effects, and *construction* became current before the handover (S-0406 claim 17), so
+   it follows from that order that *construction* is still current at the opening: a rule that asks
+   the test then finds the building not in operation, whatever its power. A building that a trigger
+   action creates in play has its grand opening at its creation instead (S-0108 claim 11), which
+   gives no order between that opening and the queueing of *construction*. This spec infers that
+   *construction* is already queued, with none current, at the opening, so such a building fails
+   the row in the same way (medium, as an inferred order). The exception is a
+   building whose owner changes during its build-up: its grand opening is inside the change instead,
+   after the change's *guard* request (S-0309 claim 31). The row then reads *guard* when that
+   request replaced a queued *construction* or, with *construction* current, started *guard* at once
+   (S-0215 claim 7, which needs the building's ready mark), and *construction* otherwise (S-0516
+   claim 23). A building placed at game set-up has *guard* queued and no current behaviour at its
+   grand opening (S-0215 claim 1), so it passes this row then. Output and drain do not ask this
+   test: a building adds both from its entry, under construction or not (claims 1 to 3). A sell
+   order that starts a sale makes *selling* the building's current behaviour at once, whatever
+   behaviour was current before, not only its queued one. This is this spec's reading of S-0408
+   claim 4, which says that "the building's behaviour becomes *selling*". So a sell order never
+   leaves *selling* only queued, and the building is not in operation from the order on, including
+   while the build-down waits for docked units. The state of the build-up or build-down sprite does
+   not enter the test. An erasing lock switches the building off (S-0514 claim 4), so it fails the
+   switch condition unless it has two or more chargers; with those chargers it must still pass every
+   other condition. Being erased is not a separate condition of this test; its output and drain are
+   nevertheless 0 (claims 1 and 2). When the last attacker lets go before completion, the building
+   is switched on regardless of its pre-lock state (S-0514 claim 10). S-0514 owns
+   `quirks.erasure_release_switches_on`, default original. With it off, release restores the
+   pre-lock switch state. The power condition reads the house's totals as they stand (claim 7). Two
+   consequences: a building of a type with the needs-power flag but no base drain never stops for
+   low power; and a building with two or more chargers passes the switch and power conditions even
+   under low power or when switched off, but must still pass every other condition. The test is the
+   same for every house; no rule of it depends on whether the owner is human- or
+   computer-controlled.
    - Backing: `measurable` (scenario W6, parts a to f and j; S-0515 scenarios TB3 and TB8 for
      manned state; scenario W4, part a for the blackout row; S-0514 scenario E7 for erasure's
      switch changes); `unmeasured` for operation with two or more chargers while being erased
      (erasure has disabling effects of its own, so no scenario here separates the operation
      result from those effects); `unmeasured` for the health-0 row (no scenario here keeps a destroyed building
-     available to test its operation separately), and for the distinction between queued and
-     current construction or selling behaviour (W6 tests current behaviour only).
-   - Confidence: high (switch, low power, construction and selling behaviours), medium (chargers,
+     available to test its operation separately); S-0516 scenario CS12 part f, its
+     place-order and deploy runs, for the failure at the grand opening of a building placed by a
+     place order or deployed; for the queued behaviour read while none is current, two runs that
+     separate the two readings of the last row: CS12 part f's trigger-created run, and scenario W6 part j
+     through claim 13's transitions up to *C* (at a place-order, deploy or restored-replacement
+     grand opening *construction* is current under either reading); `unmeasured` for the restored
+     replacement (no part here produces one,
+     and when its handover falls rests on S-0524 claim 15, at medium), for the owner change
+     during the build-up (no part times a change-owner action inside a build-up) and for the row
+     failing from the sell order rather than from the sale's first processing, with *selling*
+     current at once whatever behaviour was current before (no part records the test or the
+     behaviour between the two).
+   - Confidence: high (switch, low power, construction and selling behaviours, failure at the
+     grand opening of a building placed by a place order or deployed), medium (the queued
+     behaviour read while none is current: W6 part j shows it only through claim 13's
+     transitions, which are medium there, and the trigger-created case rests on an inferred order
+     of opening and queueing, at the level S-0516 claim 23 gives it; the restored replacement's
+     failure; the owner change during the
+     build-up, both of its outcomes; the row failing from the sell order, with *selling* current
+     at once; chargers,
      pulse, blackout, manned state, the charger exception during erasure); high (erasure's
      switch changes)
 
@@ -927,7 +965,7 @@ is implementer design, not a further game-state rule. No formula here prescribes
 | power due | the house's update | *O*, *D* worked out (claims 4, 5); production periods worked out again (claim 11); a change of low-power state checks superweapon suspension and resumption under S-0512 claim 6, with claim 15's exceptions |
 | full power | worked out with *D* > 0 and *O* < *D* | low power: needs-power buildings with a base drain above 0 and fewer than 2 chargers stop being in operation (claim 8) |
 | low power | worked out with *O* ≥ *D* or *D* = 0 | full power: the power condition no longer prevents operation; claim 8's other conditions still apply |
-| in operation | the building's current behaviour becomes *selling* (sale's first processing) | not in operation at once (claim 8); output and drain unchanged (claim 3) |
+| in operation | the building's current behaviour becomes *selling* (at the sell order, S-0408 claim 4) | not in operation at once (claim 8); output and drain unchanged (claim 3) |
 | no blackout | spy entry selects claim 6's blackout effect, at tick *t*₀, with *d* > 0 | timed blackout running until the house update of tick *t*₀ + *d* − 1 (claim 6) |
 | no blackout | the same, with *d* ≤ 0 | house due; no blackout runs (claim 6) |
 | not an active control centre | the building's first turn in which it is in operation | active control centre (Terms; claim 13) |
@@ -1169,10 +1207,20 @@ switched off the house has full power (W3's second pair).
   - (g) at low power, watch the factory.
   - (h) F takes over an enemy vehicle at full power; then the house is brought to low power.
   - (i) at full power, a sell order on R.
-  - (j) at full power with no other control centre, place K; during its build-up order an X vehicle
-    to a cell with no building; read whether the vehicle stops, and read it again when the build-up
-    ends. In the same runs, place a second defence A together with K and watch whether it fires
-    during its own build-up and after it.
+  - (j) at full power with no other control centre, place K. An X vehicle of a type that does not
+    hover stands where the map placed it, on a cell without a building, and has not moved since the
+    start. During K's second build-up run, no earlier than the tick after the build-up animation
+    has restarted at stage 0 (S-0406 claim 17: tick *C*), order the X vehicle to a nearby cell that
+    it reaches before the build-up ends, along a route with no building, read whether it moves and
+    where it stops, and read it again when the build-up ends. In the same runs, place a second
+    defence A together with K and watch whether it fires during its own second build-up run and
+    after its build-up. The X vehicle separates the two readings of claim 8's last row through
+    claim 13's transitions. Under a current-only reading K would be in operation from its entry
+    until *construction* becomes current on tick *R*, and the 1-to-0 transition when it stops, by
+    its turn on *C* at the latest, would disable the X vehicle before the order. Under this spec's
+    reading K is not in operation before its handover, so neither transition happens and the X
+    vehicle is enabled when the order is given. The second A's firing is read only from *C* on,
+    where *construction* is current under either reading.
   - (k) G at full power: read, from the enemy's side, whether cells inside the gap field are hidden,
     then bring the house to low power and read again.
 - *Runs:* three per part, except (h) and (i), whose tick-level timing is run twenty times with the
@@ -1186,17 +1234,24 @@ switched off the house has full power (W3's second pair).
   the transfer, its first ownership change, remaining manned without an engineer inside; (g) progress advances,
   more slowly; (h) the vehicle returns to its owner's control 1 tick after the tick in which the
   recorder first reads low power; (i) R's working animation (its fill-level slot, S-0108 claim 15) is drawn
-  from the sale's first processing (S-0408 claim 6) and, when a hold arises, keeps advancing while
+  on every tick from the sale's first processing (S-0408 claim 6) until the build-down (claim 8's
+  change at the sell order does not hide it, since R has neither the needs-power nor the
+  special-power flag, S-0108 claim 28) and, when a hold arises, keeps advancing while
   the harvester holds the sale,
   the building stays on the map, sprite unchanged, until the harvester has left, and the animation
   is hidden from the first tick of the build-down (the reading of S-0108 claim 10 under Changes for
   other specs); the refinery's unloading
-  animations, which belong to the docking role, are not this part's observable; (j) the X vehicle is disabled during the build-up and enabled again in the
-  tick after the build-up ends (the building's first turn in operation); the second A does not fire
-  during its build-up and does after it; (k) the gap hides cells at full power and stops hiding
+  animations, which belong to the docking role, are not this part's observable; (j) the X
+  vehicle obeys the order, leaves its cell and is disabled at its first arrival in a cell without
+  a building (claim 13), which falls in the second build-up run, and stays
+  disabled until it is enabled again in the tick after the build-up ends (the building's first
+  turn in operation); the second A does not fire during its second build-up run and does after
+  its build-up; (k) the gap hides cells at full power and stops hiding
   them one tick after the house's low-power update.
 - *Falsified if:* any state, animation or firing result differs from the expectation, or any
-  timed result is outside its stated tick interval; in (i), in particular, R's working animation
+  timed result is outside its stated tick interval. In (j), an X vehicle that does not move after
+  the order, as under a current-only reading of claim 8's last row, falsifies that row's queued
+  reading; in (i), in particular, R's working animation
   is not drawn on the tick of the sale's first processing, stops or freezes before the build-down,
   or is still drawn after the build-down starts. Every run tells the animation drawn until the
   build-down from one hidden for the whole sale, since the build-down starts at least 1 tick after
@@ -1583,6 +1638,42 @@ switched off the house has full power (W3's second pair).
   that reading.
   This spec's claim 9, W6 part (i) and W15 part (k) rest on this reading. Backing and confidence:
   as claim 9 gives them (W6 part i for a sale, W15 part k for a pack-up; medium).
+
+- **S-0408 claim 6.** "The building is not in operation from the start of the sale" should read
+  "from the sell order (claim 4)". Reason: claim 4 makes *selling* the building's behaviour at
+  the order, and claim 8's last row here reads it from then. Backing and confidence: as claim 8
+  gives them for that timing (`unmeasured`, medium).
+- **S-0407 Terms, *queued to be sold*.** The example "after a sell order (S-0213, claim 12) whose
+  sale has not yet started" should read as a building that is *being sold* whose sale has not yet
+  started. Reason: the sell order makes *selling* current at once (S-0408 claim 4, claim 8 here), so
+  a sell order never leaves *selling* only queued. S-0404 claim 8's two-factory case (Q-0190), with
+  Y queued to be sold, has the same outcome with Y being sold, since both count in no test there.
+  Backing and confidence: as claim 8 gives them for that timing (`unmeasured`, medium).
+- **S-0108 claim 28, the *not building or selling* bullet.** "The building stops being in
+  operation at the sale's first processing" should read "at the sell order (S-0405 claim 8)",
+  and claims 13 and 14 there then apply to that change in the building's next update after the
+  order.
+  Reason: the sell order makes *selling* current at once (claim 8 here). Backing and confidence:
+  as claim 8 gives them for that timing (`unmeasured`, medium).
+- **S-0404 scenario P8, runs 11 and 12.** Run 11's second run (the sale "only queued", the sell
+  order given while the factory is busy with another behaviour) and run 12's queued selling of Y
+  cannot be set up, since a sell order makes *selling* current at once whatever behaviour was
+  current (claim 8 here). Run 11's second run is then the same as its first. Run 12 should read
+  "Y's sale ordered and Y still on the map" in place of "Y's queued selling behaviour and that
+  its sale has not begun", and its void clause "if Y starts selling" should read "if Y leaves
+  the map". The expected results stand, since a factory being sold counts in no test of S-0404
+  claim 8, as a queued one would. Backing and confidence: as claim 8 gives them for that timing
+  (`unmeasured`, medium).
+- **S-0411 scenario S2, the queued-sale run.** Its condition, *selling* queued and not current for
+  at least one due step, is never met after a sell order, even during an uninterruptible
+  construction state (claim 8 here), so every such run is inconclusive by its own clause. The run
+  should be dropped, or read with the factory being sold. Backing and confidence: as claim 8 gives
+  them for that timing (`unmeasured`, medium).
+- **Other statements about a building queued to be sold** stay true as written: the glossary,
+  S-0403's edge cases, S-0404's Terms and claim 8's events, S-0406 claim 1, S-0407 claims 1 and
+  8, the `unmeasured` queued-selling items of S-0409 and S-0410, S-0411's Summary, Terms and
+  claims 2, 4 and 14, and S-0518 scenario PS2. They exclude, allow for or record a state that a
+  sell order does not produce, and need no change.
 
 ## Open questions
 

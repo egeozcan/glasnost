@@ -1,9 +1,9 @@
 ---
 id: Q-3061
 title: What does a revert give back when the put-aside target left the game while it was put aside?
-status: open
+status: answered
 related: [S-0309, S-0215, S-0301, S-0307]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need

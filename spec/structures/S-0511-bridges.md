@@ -2,13 +2,13 @@
 id: S-0511
 title: Bridges (destruction, collapse, falling and repair)
 topic: structures
-revision: 8
-sources-class: [decomp]
+revision: 13
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-11-14
 measurements: []
-requests: [Q-0676, Q-0677, Q-0678, Q-0710, Q-0712, Q-0713, Q-0714, Q-0715, Q-0716, Q-0717, Q-0718, Q-0719]
+requests: [Q-0676, Q-0677, Q-0678, Q-0710, Q-0712, Q-0713, Q-0714, Q-0715, Q-0716, Q-0717, Q-0718, Q-0719, Q-3046]
 supersedes: []
 ---
 
@@ -48,6 +48,9 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
   bridges running along cell x and cell y respectively. Its spans run from a start piece toward
   increasing x (east) or increasing y (south), as in S-0010 claim 25. The *start side* of a piece is
   the side toward decreasing x (or y), and the *far side* the side toward increasing x (or y).
+  A *line across the bridge* is the set of cells at one position along the axis (one x for a
+  bridge along x, one y for a bridge along y); a *line along the bridge* is the set of cells at one
+  position across it.
 - **Section.** One high-bridge overlay together with the four cells it marks (S-0211 claim 15). The
   overlay's own cell is the *section cell*. The cells along the bridge's line that hold sections
   form a row of sections. A section's *neighbours* are the cells one step from its section cell
@@ -69,19 +72,26 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
   tile the far end of one span and the start of the next.
   - *Pier state k:* 0 intact, 1 chipped on the start side, 2 chipped on the far side, 3 damaged,
     4 collapsed.
-  - *Reference cell:* the pier's cell at sub-tile 4 (bridges along x) or 2 (along y).
+  - *Reference cell:* the pier's cell at sub-tile *r* = 4 (bridges along x) or *r* = 2 (along y).
+    For a direct attempt at a pier cell of sub-tile *s*, whose placed tile is *w* cells wide, it is
+    the cell at sub-tile *r* of that placed tile (column *t* mod *w* along x and row ⌊*t* / *w*⌋
+    along y for sub-tile *t*, S-0010): the cell (*r* mod *w*) − (*s* mod *w*) cells from the
+    attempted cell along x and ⌊*r* / *w*⌋ − ⌊*s* / *w*⌋ cells from it along y, positive toward
+    increasing x or y (claim 6).
   - *Pier column:* the reference cell and its two neighbours across the bridge.
 
-  A pier's state is its tile. For a state replacement, its affected tile cells are the
-  eight-neighbour-connected component containing the reference cell whose cells have exactly
-  that cell's pre-change tile number. Sub-tile numbers and placed-tile origins do not restrict
-  this set. A different tile laid over part of a pier is not changed, and can disconnect cells
-  from the affected component. Adjacent copies of the same tile can belong to one component.
+  A pier's state is its tile. For a state replacement by a direct attempt, its affected tile cells
+  are the eight-neighbour-connected component containing the reference cell whose cells have
+  exactly that cell's pre-change tile number. For one by a notice or a repair, they are the same
+  kind of component around the cell the notice arrives at (claim 6) or the repair selects
+  (claims 18 and 19) instead. Sub-tile numbers and placed-tile origins do not restrict this
+  set. A different tile laid over part of a pier is not changed, and can disconnect cells from
+  the affected component. Adjacent copies of the same tile can belong to one component.
   For direct attempts, a tile position in both non-collapsed pier ranges takes the x
   interpretation: test x states 0 to 3 before y states 0 to 3. An x match only at collapsed
   state 4 does not override a non-collapsed y match. Repair's start-piece selection instead
   requires the axis-specific sub-tile in claim 18, and span repair uses its selected axis.
-  Claims 6 and 19 own the height effects, separately from this tile replacement.
+  Claims 6 and 19 own the height effects.
 - **Ramp.** A tile at a start-ramp or far-ramp position. Ramps are never removed. They only change
   look.
 - **Destroy attempt.** One application of this spec's destruction rules at one cell. It *succeeds*
@@ -161,7 +171,7 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
    |---|---|
    | The cell holds a low piece that is not in the destroyed class | The low strip is affected (claim 13). |
    | The cell is a high-bridge cell and a family qualifies as described below | Its responsible section is affected (claim 3). |
-   | The cell's tile is a pier of either family in state 0 to 3, and its sub-tile is even along x or at most 4 along y | The pier is affected (claim 6). Other pier cells without a deck take no effect. |
+   | The cell's tile is a pier of either family in state 0 to 3, and its sub-tile is even along x or at most 4 along y | The pier is affected through its reference cell (claim 6), when that cell holds the attempted cell's own tile; otherwise nothing happens and the attempt fails. Other pier cells without a deck take no effect. |
    | None of the above | Nothing happens and the attempt fails. |
    The responsible section is the cell itself when it retains the section-cell marking,
    even if a later section also marks it. Otherwise it is the last section to mark it as a
@@ -242,27 +252,66 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
    | 3 damaged | collapse; succeeds | 3 | 3 | collapse | collapse |
    | 4 collapsed | not attempted | 4 | 4 | 4 | 4 |
 
-   A pier's notices go from its reference cell to the neighbours across its two sides along the
-   axis.
-   - **Direct collapse:** the pier becomes state 4, and every cell of its tile has the
-     reference cell's pre-collapse height level minus 4. Its column receives claim 9's
-     blow-ups at pre-collapse heights. Deaths and explosion draws occur in decreasing-cross-
-     coordinate, reference, increasing-cross-coordinate order: y across an x bridge, x across
-     a y bridge. These effects precede losses caused by the pier's loss notices. Far-side
-     losses precede start-side losses. After the tile replacement and both notices, claim 7
-     searches from two named loss cells, start-side neighbour before far-side neighbour.
+   A direct attempt sends the pier's notices from its reference cell to the neighbours across
+   its two sides along the axis.
+   - **Direct collapse:** the pier becomes state 4 on its affected tile cells (Terms), and the
+     height drop follows that replacement: each of those cells takes the reference cell's
+     pre-collapse height level minus 4. Its column receives claim 9's blow-ups at pre-collapse
+     heights. Deaths and explosion draws occur in decreasing-cross-coordinate, reference,
+     increasing-cross-coordinate order: y across an x bridge, x across a y bridge. These effects
+     precede losses caused by the pier's loss notices. Far-side losses precede start-side
+     losses. After the tile replacement and both notices, claim 7 searches from two named loss
+     cells, start-side neighbour before far-side neighbour.
      These are not guaranteed to select the two former adjacent spans: the collapsed pier is
      no longer an endpoint for either search. The first selected check completes before the
      second, including all band raises. Subsequent routes reflect claim 12's connectivity,
      naming the reference cell.
-   - **Collapse from a notice:** the loss propagates onward on the side away from the sender.
+   - **Collapse from a notice:** the loss propagates onward on the side away from the sender,
+     sent from the cell the notice arrived at.
      Collapses further along that direction produce their blow-up effects before this pier does.
      This pier's three blow-ups then occur in centre, decreasing-y, increasing-y order along x,
-     or decreasing-x, centre, increasing-x order along y. Its tile and height change as above,
-     but it starts no span check or connectivity update of its own.
-   - Backing: `measurable` (B4 for direct stages, collapse, height drop and notice states,
-     B14 for collapse-effect order, B15 for connected tile cells and span selection)
-   - Confidence: medium (direct stages, collapse, height drop); low (the notice table)
+     or decreasing-x, centre, increasing-x order along y. Its tile and height change as the
+     bullet *A received notice uses no reference cell* gives, and it starts no span check or
+     connectivity update of its own.
+   - **A reference cell that does not hold the pier (Q-3046).** A direct attempt acts on the pier
+     only when its reference cell (Terms) holds the attempted cell's own tile, at sub-tile *r*: the
+     same family, axis and state. Then every effect above uses that cell, so the pier's state is
+     the attempted cell's state. Otherwise the attempt changes nothing, fails and sends no notice,
+     and our engine warns. This covers a reference position painted over with another tile, and a
+     part of the pier cut off from the reference cell's component (Terms) whose state differs from
+     the reference cell's. A cut-off part in the reference cell's state acts on the pier like any
+     other pier cell.
+     DECIDED (autonomy, 2026-11-13), not a quirk: the original's outcome here (Edge cases,
+     *Malformed responsibility and cycles*) needs map data that paints over a pier, and can hang
+     the game.
+   - **A received notice uses no reference cell.** Where a notice is received, it reads the state
+     of the cell it arrives at and replaces that cell's component (Terms), so a cut-off part
+     changes only through notices that arrive at its own cells, and the rest of the pier only
+     through notices that arrive at theirs. A collapse from a notice takes its blow-up cells and
+     its height from a centre cell: the arriving cell itself when its sub-tile is even (along x) or
+     below 5 (along y), and otherwise the cell one step from it toward the start side. The three
+     cells that blow up are the centre cell and its two neighbours across the bridge, and every
+     cell of the replaced component takes the centre cell's height level minus 4. Along y, this
+     rule states no relation between the reference cell and the centre cell for an arriving
+     sub-tile of 5 or more. The onward notice also goes from the arriving cell, in a cut-off part
+     as elsewhere.
+   - Backing and confidence, item by item:
+     - Direct stages, collapse and height drop: `measurable` (B4, with B14 for collapse-effect
+       order and B15 for connected tile cells and span selection). Medium.
+     - The notice table: `measurable` (B4). Low.
+     - The original's outcomes with a reference cell that does not hold the pier (Edge cases,
+       *Malformed responsibility and cycles*): `measurable` (B17). Medium for B17 a and b; low for
+       B17 a2 and a3, whose expected results rest on the notice table. Whether those attempts
+       fail or succeed, and a3's blow-ups: `unmeasured`, because B17 records neither. Medium.
+       The pier's own cells after a3's attempt: `unmeasured`, because B17 a3 does not record
+       them. Low.
+     - A cut-off part in the reference cell's state acting like any other pier cell: `unmeasured`,
+       because B17 b attempts the cut-off part only after the main part has collapsed. Medium.
+     - That a received notice uses no reference cell and sends onward from the arriving cell, and
+       the centre cell of a collapse from a notice: `unmeasured`, because no test map here sends a
+       notice into a cut-off part or outside the reference cell's line along the bridge (a notice
+       arrives in its sender's line along the bridge, and which lines the neighbouring pieces send
+       from is not settled here). Medium.
 
 7. **The span check: isolated runs fall.** After each successful direct attempt on a high bridge, the
    checked extent is selected by the searches below. A collapsed pier can join two former
@@ -657,14 +706,16 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
 
        Intervening non-bridge cells and cells of other bridges do not disqualify the candidate
        (`quirks.repair_walk_unbounded`). Only that nearest qualifying start piece is selected.
-    - **Repair extent.** A selected start ramp loses its alternate look and its span has
-      claim 19's repaired state. A selected pier is restored under claim 19, together with the
-      bridge selected by this claim from the cell two steps toward its start side and its own
-      far-side span. For several selected piers, restored states extend toward the start side
-      before the far-side spans receive sections. Any occupant or trigger observations during
-      repair therefore see the start-side repairs before the far-side ones.
-    - Backing: `measurable` (scenario B12)
-    - Confidence: medium
+    - **Repair extent.** A selected start ramp loses its alternate look and its span has claim
+      19's repaired state. A selected pier is restored under claim 19 only if it is collapsed, and
+      otherwise keeps its state. Either way, the bridge selected by this claim from the cell two
+      steps toward its start side and the pier's own far-side span are repaired. For several
+      selected piers, restored states extend toward the start side before the far-side spans
+      receive sections. Any occupant or trigger observations during repair therefore see the
+      start-side repairs before the far-side ones.
+    - Backing: `measurable` (scenario B12), except that a start-piece pier in state 1 to 3 keeps
+      its state: `unmeasured`, because B12 repairs no such pier
+    - Confidence: medium, for both parts
 
 19. **High-bridge repair.** The repair endpoint is the nearest far ramp at sub-tile 4 along x,
     or 2 along y, within 29 cell steps in the span's direction.
@@ -680,14 +731,19 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
       bridge-body mark (S-0010 claim 25).
     - A cell whose slope shape (S-0010 claim 6) is greater than 4 receives no replacement overlay.
       Nothing is blown up.
-    - **Restoring a pier.** The pier's tile goes back to state 0 on all its cells, whatever state it
-      was in. If it was collapsed (state 4), the reference cell and its two neighbours across the
-      bridge each rise by 4 height levels. Other cells of the pier's tile are not raised
-      (`quirks.pier_repair_partial_height`).
-    - **Connectivity.** Each restored pier, and the far ramp, name a cell for S-0212 claim 3. So
-      does the cell one step before the far ramp. Then connectivity is updated.
+    - **Restoring a pier.** The pier's tile goes back to state 0 on its affected tile cells
+      (Terms), from any state within a span, and only from collapsed at a start piece (claim
+      18). If it was collapsed (state 4), three cells each rise by 4 height levels: the selected
+      cell within a span, or the cell one step toward the start side from a start piece, and that
+      cell's two neighbours across the bridge. Other cells of the pier's tile are not raised
+      (`quirks.pier_repair_partial_height`). This rule assumes the start piece's tile cells are
+      not painted over; other layouts are not settled here (Edge cases).
+    - **Connectivity.** Each restored pier names a cell for S-0212 claim 3: the selected cell
+      within a span, or the cell one step toward the start side from a start piece. So do the far
+      ramp and the cell one step before it. Then connectivity is updated.
     - **Objects.** No object is harmed or moved by a high-bridge repair.
-    - Backing: `measurable` (scenario B12)
+    - Backing: `measurable` (scenario B12) for collapsed piers, `unmeasured` for restoring a
+      span pier from states 1 to 3, because B12 repairs only collapsed piers
     - Confidence: medium (low for the pier height rule)
 
 20. **Low-bridge repair.** From the piece found by claim 18, the centre row is found as in claim 13.
@@ -897,9 +953,10 @@ cited above. Passenger escape from a destroyed transport remains unresolved here
 - `quirks.repair_consumes_engineer_always` (default on): an engineer entering a hut whose bridge
   needs no repair is used up (claim 17). Off: the engineer is refused entry when claim 18 would
   repair nothing.
-- `quirks.pier_repair_partial_height` (default on): a collapse lowers every cell of the pier's tile
-  to the reference cell's level − 4, but repair raises only the pier column. Off: repair restores
-  every cell of the pier's tile to the level it had before the collapse.
+- `quirks.pier_repair_partial_height` (default on): a collapse lowers every affected tile cell
+  (claim 6), but repair raises only the three cells claim 19
+  names. Off: repair restores every cell of the pier's tile to the level it had before the
+  collapse.
 - `quirks.low_strip_regress` (default on): re-evaluation can turn a D₀ strip back into an
   intact edge look I₅ or I₄ when *s* is 1 or 4 respectively (claim 14). This is not known to be reachable from
   stock play, only from pieces placed damaged by a map. Off: re-evaluation never moves a strip from
@@ -912,8 +969,33 @@ cited above. Passenger escape from a destroyed transport remains unresolved here
   without that endpoint and inspect the first qualifying endpoint link instead; no such link
   means no repair cursor. This changes exceptional mixed-bridge maps, not ordinary huts.
 - **Malformed responsibility and cycles.** An absent remembered responsible section refuses
-  an attempt and warns (claim 2). A repeated cursor traversal cell refuses repair and warns,
-  rather than allowing a nonterminating search. These are safe malformed-data departures,
+  an attempt and warns (claim 2). A direct pier attempt whose reference cell does not hold the
+  attempted cell's own tile does nothing and warns (claim 6). The original's outcomes, by map
+  layout:
+  - The reference position painted with a one-cell clear tile, the pier's other cells in that
+    line across the bridge left as placed: the first direct attempt at any of them stops the game
+    from responding (B17 a, medium).
+  - The reference position painted with a cell of another tile whose sub-tile is *r*: an attempt
+    at a pier cell in that line acts on the painted cell as if it were the reference cell, with the
+    attempted cell's state. The painted tile's whole eight-neighbour-connected set of identical
+    cells becomes the damaged pier tile when the attempted cell is in state 0 to 2, and the attempt
+    fails. In state 3 it becomes the collapsed pier tile at the painted cell's level minus 4 after
+    blow-ups in the painted cell's column (claim 6's direct collapse, with the painted cell in the
+    reference cell's place), and the attempt succeeds. The pier's own cells then change only
+    through the notices the painted cell sends, by claim 6's notice rows and its bullet *A
+    received notice uses no reference cell* for the cell each notice arrives at (B17 a2 and a3,
+    low; in state 3 the pier's own cells low and `unmeasured`, because B17 a3 does not record
+    them; the failure or success and the blow-ups medium and `unmeasured`, because B17 records
+    neither).
+  - A part in state 0 to 2 cut off as in B17 b, the main part collapsed: an attempt at the cut-off
+    part turns the main part back to its damaged tile without changing any height, and fails. The
+    cells turned back are the component of the reference cell's collapsed tile (Terms, direct
+    attempt), so that replacement leaves the cut-off part unchanged. A
+    later attempt at the main part collapses it again, 4 height levels lower still (B17 b,
+    medium; the failure medium and `unmeasured`, because B17 does not record it).
+
+  Other painted layouts are not settled here. A repeated cursor traversal cell refuses repair and
+  warns, rather than allowing a nonterminating search. These are safe malformed-data departures,
   not new configurable bridge settings.
 - **Empty lists.** With an empty metallic-debris list and *u*₄ < 0.5, the original reads outside
   the list. Our engine takes the draw and creates no debris animation. The same holds for an empty
@@ -980,7 +1062,8 @@ warns when a required bound type is missing or is not a bridge piece. Backing: `
 All scenarios use stock data except for the explicitly named test-data variants below,
 with no engine add-on and no mods (the named test files of a scenario excepted). Named overrides are removed after their sub-test.
 The bridge-destruction option is on unless stated, at any fixed, recorded game speed. Except for the ion-cannon warhead, attempts
-from area damage need a chance draw (S-0303 claim 18), so scenarios never count ordinary shots. They fire until the bridge's
+from area damage need a chance draw (S-0303 claim 18), so scenarios other than B17 never count
+ordinary shots. They fire until the bridge's
 look changes and record each change, with its tick, in order. The harness should record per tick:
 the overlay position and data value of every watched cell, the tile and height level of watched
 cells, object deaths with their tick, object heights, trigger raises, and, where a scenario says
@@ -1310,10 +1393,10 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     second receive F4 choices, and the last remain unchanged without a piece-choice draw.
     Any other transition or extra choice draw falsifies the corresponding row.
   - *Pier and cap variants:* collapse a pier and record every tile-cell height before collapse,
-    after collapse and after repair. Only the three column cells rise by 4 on repair. Any other
-    raised cell, or an unchanged column cell, falsifies claim 19. Repeat on a span with the far
-    ramp at distance 29 and then 30: the latter places no sections, although piers restored before
-    that distance stay restored. Contrary overlay placement falsifies the cap.
+    after collapse and after repair. Only the three cells claim 19 names rise by 4 on repair. Any
+    other raised cell, or one of those three left unraised, falsifies claim 19. Repeat on a span
+    with the far ramp at distance 29 and then 30: the latter places no sections, although piers
+    restored before that distance stay restored. Contrary overlay placement falsifies the cap.
   - *Search variants:* named test maps place candidate bridges on several of the hut's eight
     search rays at distances 1 to 3, and low bridges in several cells of its search block. Record
     which bridge changes. The first candidate by claims 16 and 18 must win, with low pieces
@@ -1392,7 +1475,7 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
   same-tile eight-neighbour component, not a catalogue rectangle or sub-tile match. Replaced
   map cells and disconnected components stay unchanged, touching same-state copies change
   together, and the different state does not join. Collapse sets every changed cell's height
-  to the reference height minus 4; repair raises only the three column cells as claim 19 says.
+  to the reference height minus 4; repair raises only the three cells claim 19 names.
   In a named theater-data test make the non-collapsed pier ranges overlap: a direct attempt
   uses x. Also test an x-collapsed/y-live overlap: the live y range wins.
   Tag both former adjacent spans repeatably and arrange gaps without tag actions that
@@ -1431,6 +1514,49 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
   Compare states after each preceding occupant death, since a death may free a later
   occupant's entry test. Three runs per case, both families and axes.
 
+- **B17 (claim 6; Q-3046).** Use test maps, each with a high bridge over a pier, one along x
+  and one along y. Each map sets some pier cells to cells of another tile, cell by cell, and keeps
+  the bridge's other pieces as placed. Attempts are direct attempts (claim 1, a wall-damaging
+  warhead) at pier cells that claim 2's pier row covers, as B4 does for the reference cell. The
+  firing weapon is named test data: it hits the cell it targets, and its damage amount exceeds
+  the game-wide bridge strength, so that each shot at a pier cell in state 0 to 3 makes one
+  attempt (S-0303 claim 18).
+  - *Setup a (painted-over reference position):* set the reference cell to a one-cell clear tile.
+  - *Setup a2:* set the reference cell instead to a cell of another multi-cell tile at that
+    tile's own reference sub-tile number (4 along x, 2 along y), and give a block of cells beside
+    the bridge, touching that cell, the same tile. Place the pier in state 0. *Setup a3:* as a2,
+    with the pier placed in its damaged state (state 3).
+  - *Setup b (cut-off part):* in the reference cell's line across the bridge, choose the
+    attemptable pier cell farthest from the reference cell toward increasing y (bridge along x) or
+    toward increasing x (bridge along y). Set the pier cells that join it to the rest of the pier
+    to cells of another tile whose sub-tile number there is greater than the reference sub-tile,
+    so that the chosen cell lies in a separate component (Terms). The sub-tile condition makes
+    this the layout that Edge cases settles for the original: with painted sub-tiles of *r* or
+    less the original's outcome is not settled here. Collapse the main part with two shots at the
+    reference cell, so that the cut-off part stays in state 0. Then fire one shot at the chosen
+    cell, and after that one at a main-part cell.
+  - *Procedure:* in a, a2 and a3, fire one shot at one attemptable pier cell; in b, fire the
+    shots b gives. Once each shot has detonated, record the tile and height of every cell where
+    the pier's tile was placed (in a3, of the painted cell only) and, in a2 and a3, of every cell
+    of the painted tile's connected set of identical cells, and whether the game keeps running
+    (a run whose game time has not advanced for 60 seconds of wall time counts as stopped). The
+    bridge's other pieces, which notices and span checks also change, are not recorded.
+  - *Expected (the original):* a: the game stops. a2: the
+    game keeps running, and every cell of the painted tile's connected set of identical cells
+    holds the damaged pier tile at an unchanged height. a3: as a2, but with the collapsed pier
+    tile at the painted cell's level minus 4. In a2 the pier's own cells end as the notices the
+    painted cell sends make them (Edge cases, *Malformed responsibility and cycles*). b: after
+    the shot at the cut-off cell, the main part (the component of the reference cell's collapsed
+    tile) holds the damaged pier tile at its collapsed heights. After the shot at a main-part
+    cell, it holds the collapsed pier tile 4 height levels below its first collapse. Neither of
+    these two shots changes any other recorded cell of b.
+    *Falsified* by any recorded result, once a shot that has an expected result above has
+    detonated, other than that expected result.
+  - *Expected (our engine):* every attempt in a, a2, a3 and b's attempt at the cut-off cell
+    changes nothing, fails and warns. b's shot at a main-part cell then finds that cell
+    collapsed, and nothing happens (claim 2).
+  - Runs: in a, a2 and a3, one per setup, axis and attemptable pier cell; in b, one per axis.
+
 ## Open questions
 
 - Whether a raise other than an object's arrival carries a cell into the destroy-attached-objects
@@ -1446,3 +1572,10 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
 - No safe oracle fixture has yet been established for a cyclic malformed cursor-link chain.
   Claim 21 describes ordinary terminating chains; our engine refuses a repeated traversal
   cell with a warning rather than hanging.
+
+## Changes for other specs
+
+- **S-0212:** claim 3's "High-bridge repair names each restored pier's reference cell" becomes
+  "High-bridge repair names, for each restored pier, the cell named in S-0511 claim 19's
+  Connectivity rule". For a start-piece pier that is the cell one step toward the start side,
+  which is the reference cell only for some tile widths.
