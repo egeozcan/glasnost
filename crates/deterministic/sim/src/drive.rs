@@ -162,6 +162,14 @@ fn supplied_point(w: &World, id: ObjectId, dest: Target) -> Option<Pos> {
     }
 }
 
+/// The move destination (S-0207 Terms), which braking (claim 10) and the
+/// give-up test (claim 15) measure to: the point the current move order
+/// leads to, at the deck's height when its cell is a high-bridge cell.
+fn move_destination(w: &World, id: ObjectId) -> Option<Pos> {
+    // spec: S-0207 Terms (Move destination: on a high-bridge destination cell its height is the deck's height, the surface plus 416 leptons as for the supplied point of claim 25)
+    supplied_point(w, id, w.obj(id)?.dest?)
+}
+
 /// The locomotor takes the order-level destination just assigned (S-0207
 /// claim 25): an accepted instruction with a point installs it at once,
 /// before any path search, even in the vehicle's own cell; one with no
@@ -508,7 +516,8 @@ fn update_rho(w: &mut World, id: ObjectId, u: &UnitRules) {
         (d.rho, d.rho_t)
     } else {
         let v = F64::from_i64(i64::from(u.speed), mode);
-        let dm = path::heading_point(w, id).map(|p| {
+        // spec: S-0207 claim 10 and Terms (dₘ measures to the move destination)
+        let dm = move_destination(w, id).map(|p| {
             let dx = i64::from(p.x - o.pos.x);
             let dy = i64::from(p.y - o.pos.y);
             let dz = i64::from(p.z - o.pos.z);
@@ -1167,7 +1176,8 @@ pub fn nearest_distance(w: &World, x: i32, y: i32) -> u64 {
 pub(crate) fn give_up_test(w: &World, id: ObjectId, contact: bool) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let r = w.rules();
-    let Some(dest) = path::heading_point(w, id) else {
+    // spec: S-0207 claim 15 and Terms (the give-up test measures to the move destination)
+    let Some(dest) = move_destination(w, id) else {
         return false;
     };
     let dx = i64::from(dest.x - o.pos.x);
