@@ -3,7 +3,7 @@ id: Q-3060
 title: Is a sensor-array or disguise-detector building placed under construction "in operation" at its first placement?
 status: answered
 related: [S-0516, S-0405, S-0406, S-0215, S-0415]
-answered-by: [S-0405]
+answered-by: [S-0405, S-0516]
 ---
 
 ## Need
