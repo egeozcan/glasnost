@@ -45,6 +45,8 @@ fn hoverer(w: &mut World, name: &str, kind: Kind, dx: i32, dy: i32) -> ObjectId 
     js(w, u).dest = Some(d);
     js(w, u).moving = true; // the commitment of a completed flight (the own-cell order itself is not accepted, claim 23)
     js(w, u).order = Some(Target::Cell(at(dx, dy)));
+    // spec: S-0502 claim 23 (r24, Q-3043: an infantry unit's own-cell assignment above changes nothing, so the order-level destination is set as an order given elsewhere leaves it once the flight arrives)
+    w.obj_mut(u).unwrap().dest = Some(Target::Cell(at(dx, dy)));
     u
 }
 
@@ -58,6 +60,8 @@ fn descender(w: &mut World, name: &str, kind: Kind, dx: i32, dy: i32, height: i3
     jump::start_in_flight(w, u, Phase::Descending, height);
     js(w, u).dest = Some(Pos::centre(at(dx, dy), 0));
     js(w, u).order = Some(Target::Cell(at(dx, dy))); // as the order itself would have left it
+    // spec: S-0502 claim 23 (r24, Q-3043: an infantry unit's own-cell assignment above changes nothing, so the order-level destination is set as an order given elsewhere leaves it)
+    w.obj_mut(u).unwrap().dest = Some(Target::Cell(at(dx, dy)));
     js(w, u).ht = 0;
     u
 }
@@ -740,6 +744,8 @@ fn claim_21_neighbour_step_at_the_end_of_an_ascent() {
     jump::start_in_flight(&mut w, u, Phase::Ascending, 499);
     js(&mut w, u).dest = Some(Pos::centre(at(2, 0), 0));
     js(&mut w, u).order = Some(Target::Cell(at(2, 0)));
+    // spec: S-0502 claim 23 (r24, Q-3043: the own-cell assignment above changes nothing, so the order-level destination is set as an order given elsewhere leaves it)
+    w.obj_mut(u).unwrap().dest = Some(Target::Cell(at(2, 0)));
     // Move the climber over the held slot's cell.
     let p = pos(&w, u);
     w.obj_mut(u).unwrap().pos =
