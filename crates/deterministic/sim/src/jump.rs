@@ -120,6 +120,10 @@ pub struct JumpState {
     /// The order-level destination the point was taken from: a change of it
     /// is a new order.
     pub order: Option<Target>,
+    /// The order-level destination the own-cell filter (claim 23) last
+    /// ignored: the locomotor does not take it later (Q-3043 interim).
+    #[serde(default)]
+    pub filtered: Option<Target>,
     /// The current speed *v*<sub>c</sub> (leptons per tick).
     pub vc: F64,
     /// The maximum speed *v*<sub>m</sub>.
@@ -160,6 +164,7 @@ impl JumpState {
             moving: false,
             dest: None,
             order: None,
+            filtered: None,
             vc: F64::ZERO,
             vm: F64::ZERO,
             ht: 0,
@@ -660,6 +665,15 @@ pub fn placement_qualifies(w: &World, id: ObjectId) -> bool {
     h.r < LISTING_HEIGHT || h.adjusted == 0
 }
 
+/// Whether a unit with jumpjet movement evaluates to the ground render
+/// layer (S-0102 *State and ordering*): the same two-height test as the
+/// listing predicate of claim 4.
+pub fn in_ground_layer(w: &World, id: ObjectId) -> bool {
+    let h = layer_heights(w, id);
+    // spec: S-0102 State and ordering (a unit with jumpjet movement is in the ground layer when r < 208 leptons or r′ = 0 leptons) and S-0502 claim 4 (the same 208-lepton test on r)
+    h.r < LISTING_HEIGHT || h.adjusted == 0
+}
+
 /// The two heights of S-0502 claim 4's exact height predicate, which are
 /// also those of S-0102's jumpjet layer rule (*State and ordering*): *r*,
 /// the height above the surface, and the bridge-adjusted *r*′.
@@ -797,10 +811,15 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
     if let Some(t) = dest
         && own_cell_filtered(w, id, t)
     {
-        // spec: S-0502 claim 23 and S-0213 claim 21 (outside an ion storm, a jumpjet-type infantry unit ignores a nonempty destination assignment whose cell equals its current cell, before any movement-point search, also while grounded; the order's other effects stand; the locomotor keeps its preceding order and point)
+        // spec: S-0502 claim 23 and S-0213 claim 21 (outside an ion storm, a jumpjet-type infantry unit ignores a nonempty destination assignment whose cell equals its current cell, before any movement-point search, also while grounded; the order's other effects stand; the locomotor keeps its preceding order and point); Q-3043 (interim: the ignored destination is recorded so the locomotor does not take it later, #190)
+        upd(w, id, |j| j.filtered = dest);
         return;
     }
-    upd(w, id, |j| j.order = dest);
+    upd(w, id, |j| {
+        j.order = dest;
+        // Q-3043 (interim: an assignment that passes the filter ends the record, #190)
+        j.filtered = None;
+    });
     match dest {
         Some(t) => {
             // spec: S-0207 claim 27 and S-0502 claim 27 (the one-application suppression skips this nonempty movement point; the order-level destination changes without it)

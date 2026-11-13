@@ -133,20 +133,24 @@ fn attackers(l: &Lock) -> Vec<ObjectId> {
 }
 
 /// The render-layer test of S-0102 claim 3 for delivery (S-0514 claim 1):
-/// a flying or jumpjet unit above the ground, or a rocket, is not in the
-/// ground layer.
+/// a flying unit above the ground, a jumpjet at or above the listing height
+/// (S-0102's two-height test), or a rocket, is not in the ground layer.
 pub fn ground_layer(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     if o.rocket.is_some() {
         return false;
+    }
+    if crate::jump::is_jumpjet(w, id) {
+        // spec: S-0514 claim 1 (the object must be in the ground render layer, S-0102 claim 3) and S-0102 State and ordering (a unit with jumpjet movement: ground when r < 208 leptons or r′ = 0, not whenever it is above height 0); S-0607 claim 5 (a seized unit moves with the jumpjet locomotor) (#213)
+        return crate::jump::in_ground_layer(w, id);
     }
     let fly = w
         .rules()
         .unit(o.kind, o.type_index)
         .is_some_and(|u| u.locomotor == crate::rules::Locomotor::Fly);
     let in_air = w.height_above_surface(id) > 0;
-    // spec: S-0102 State and ordering (flying and jumpjet movement are in the ground layer on the ground, and in another above it; every other kind is in the ground layer when not in the air) and S-0607 claim 5 (a seized unit moves with the jumpjet locomotor)
-    !(in_air && (o.kind == Kind::Aircraft || fly || crate::jump::is_jumpjet(w, id)))
+    // spec: S-0102 State and ordering (flying movement is in the ground layer on the ground, and in another above it; every other kind is in the ground layer when not in the air)
+    !(in_air && (o.kind == Kind::Aircraft || fly))
 }
 
 /// A temporal detonation (S-0514 claims 1 to 4): the firer and the shot's
@@ -210,11 +214,13 @@ fn refusal(w: &World, firer: ObjectId, target: ObjectId) -> bool {
     if crate::superweapons::protected(w, target) {
         return true;
     }
-    // spec: S-0514 claim 3 (a vehicle still standing in the cell of the vehicle factory it is in contact with)
+    // spec: S-0514 claim 3 (a vehicle still standing in the cell of the vehicle factory it is in contact with; contact with any other building, a repair depot for one, is no refusal) (#214)
     if let Some(o) = w.obj(target)
         && o.kind == Kind::Vehicle
-        && let Some(b) = o.contact.and_then(|c| w.obj(c))
+        && let Some(c) = o.contact
+        && let Some(b) = w.obj(c)
         && b.kind == Kind::Building
+        && crate::econ::release::vehicle_factory(w, c)
         && crate::econ::placement::foundation_cells(w, b.type_index, b.pos.cell())
             .contains(&o.pos.cell())
     {

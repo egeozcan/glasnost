@@ -352,6 +352,12 @@ pub fn heading_point_with(w: &World, dest: Target, moving_point: bool) -> Option
             if let Some(p) = o.walk.as_ref().and_then(|s| s.target) {
                 return Some(p);
             }
+            // spec: S-0506 claim 14 and S-0503 Terms (a moving hovering vehicle's heading point is its locomotor's point P) (#191); Q-3044 (interim: only while it is powered; a settled switched-off hover that keeps P is aimed at its position)
+            if let Some(p) = o.hover.as_ref().and_then(|h| h.point)
+                && crate::hover::powered(w, x)
+            {
+                return Some(p);
+            }
             Some(o.pos)
         }
     }

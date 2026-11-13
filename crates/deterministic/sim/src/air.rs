@@ -1428,8 +1428,14 @@ fn flight_target(w: &World, id: ObjectId) -> Option<Target> {
         // spec: S-0501 claim 7 (r146, Q-2676: the survivor's movement updates treat a flight point at the origin point as no flight point for claim 5's calculation of the target fraction and for guidance, claim 42; no movement update hands its destination to its flight again, with a destination kept or with none, until it is given a destination, claim 8)
         return None;
     }
-    if o.dest.is_some() {
-        return o.dest;
+    if let Some(d) = o.dest {
+        if let Target::Object(x) = d
+            && w.obj(x).is_none()
+        {
+            // spec: S-0501 claim 24 (a destination that is gone leaves the aircraft none) and claim 32 (it keeps flying in its current stage until its next processing); Q-3041 (interim: a destination naming an object no longer in play gives the movement updates no flight point; the destination stays until that processing) (#160)
+            return None;
+        }
+        return Some(d);
     }
     if a.own_point {
         // spec: S-0501 claim 6 (r120, Q-2507: landing where it is, the flight flies to the new flight point with no destination object)
@@ -1970,9 +1976,6 @@ fn pad_cell(w: &World, k: ObjectId, id: ObjectId) -> bool {
 fn dock(w: &mut World, id: ObjectId, k: ObjectId) {
     // spec: S-0501 claim 24 (docking by landing never applies the docking position: it rests where it touched down, short of that position if the horizontal difference was not used up) and S-0404 claim 15 (its contact place)
     let (_, place) = crate::econ::release::pad_position(w, k, id);
-    let facing = landing_facing(w, id);
-    let t = w.tick;
-    let keeps = w.rules().quirks.set_facing_keeps_target;
     if let Some(o) = w.obj_mut(id) {
         o.contact = Some(k);
         o.econ.exit = Some(crate::econ::release::Exit {
@@ -1980,10 +1983,8 @@ fn dock(w: &mut World, id: ObjectId, k: ObjectId) {
             tethered: false,
             place,
         });
-        // Claim 25's application time is open (Open question 4): applied at touchdown.
-        o.body.set(facing, t, keeps);
-        o.turret.set(facing, t, keeps);
     }
+    // spec: S-0501 claim 24 (r134, Q-2649: neither the report after a touchdown nor the pad's answer to it requests a facing) and claim 25 (the landing direction's one named use is claim 42's aiming request) (#162)
     report_entered(w, id, k);
 }
 
@@ -2291,7 +2292,8 @@ fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
 /// [`AirState::ignored`].
 fn ignores(w: &World, id: ObjectId, d: Target) -> bool {
     let Some(a) = st_opt(w, id) else { return false };
-    if !a.landing || a.flying_to == Some(d) {
+    // spec: S-0501 claim 8 (the test is made at each hand-over, at each processing of move that gives a destination, claim 40, so also for the destination the flight already holds) (#159)
+    if !a.landing {
         return false;
     }
     // spec: S-0501 claim 8 (r120, Q-2507: the point it is landing at is its flight point, claim 40, the one its cleared destination gave it when it lands where it is, claim 6, not its position; with no flight point there is no such point)
