@@ -1644,8 +1644,8 @@ pub(crate) fn qualifies(
         return false;
     }
     let r = w.rules_arc();
-    // spec: S-0212 claim 25 (enterable by class, a bridge cell judged on its deck)
-    if !crate::passability::enterable_by_class(&r, w, c, class, zone, deck && deck_mode) {
+    // spec: S-0212 claim 25 (enterable by class, a bridge cell judged as entered on its deck, in deck mode or not: its land type is not consulted)
+    if !crate::passability::enterable_by_class(&r, w, c, class, zone, deck) {
         return false;
     }
     // spec: S-0212 claim 25 (the occupancy record is empty as a whole)
