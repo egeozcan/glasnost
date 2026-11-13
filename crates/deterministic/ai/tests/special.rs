@@ -39,6 +39,7 @@ fn rules() -> Arc<SimRules> {
         "SPYB".to_string(),
         "DERR".to_string(),
         "LAB".to_string(),
+        "BANK".to_string(),
     ]);
     r.registries
         .entry("countries".into())
@@ -122,6 +123,18 @@ fn rules() -> Arc<SimRules> {
     };
     spyb.econ.power = Some(100);
     r.sim.buildings.insert("SPYB".into(), spyb);
+    // spec: S-0510 claim 3 (E5: a building with storage above 0 gives the cash row)
+    r.sim.buildings.insert(
+        "BANK".into(),
+        BuildingType {
+            strength: Some(400),
+            foundation: Some([2, 2]),
+            spyable: Some(true),
+            storage: Some(1000),
+            tech_level: Some(99),
+            ..Default::default()
+        },
+    );
     r.sim.buildings.insert(
         "CAPT".into(),
         BuildingType {
@@ -1042,4 +1055,98 @@ fn an_engineer_for_a_tech_building_takes_an_escort() {
         assert_eq!(escort, escorted, "{dx}: {orders:?}");
         assert_eq!(brain.special_uses().escorts, u32::from(escorted));
     }
+}
+
+/// Cloaks building `b` fully (S-0516 Terms: a building at fade level 11 to
+/// 15 is hidden) and checks it is hidden from house 0.
+fn cloak(w: &mut World, b: ObjectId) {
+    let o = w.obj_mut(b).expect("the building");
+    o.cloak.state = glasnost_sim::cloak::CloakState::Cloaked;
+    o.cloak.stage = 15;
+    assert!(glasnost_sim::cloak::hidden_from(w, b, Some(HouseId(0))));
+}
+
+// design: own AI (#36) and S-0516 Terms (a fully cloaked building not sensed by the house is hidden from it): an engineer is not sent at a cloaked enemy building, and none is ordered for it.
+#[test]
+fn an_engineer_does_not_go_for_a_cloaked_building() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = engineer_scene(&g);
+    cloak(&mut w, target);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!garrison_orders(&orders, unit, target), "{orders:?}");
+    glasnost_sim::objects::remove(&mut w, unit);
+    w.houses[0].credits = 5000;
+    let home = home_of(&w);
+    testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "PILL",
+        0,
+        glasnost_map::CellXY::new(home.x + 5, home.y),
+        0,
+    );
+    run_to_think(&mut w, 20);
+    cloak(&mut w, target);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!orders_engineer(&w, &orders), "{orders:?}");
+}
+
+// design: own AI (#36) and S-0516 Terms: no engineer is ordered for a cloaked tech building that pays.
+#[test]
+fn no_engineer_is_ordered_for_a_cloaked_tech_building() {
+    let mut g = game_with_neutral(5);
+    ready(&mut g);
+    let (mut w, derricks) = derrick_scene(&g, 1);
+    cloak(&mut w, derricks[0]);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!orders_engineer(&w, &orders), "{orders:?}");
+}
+
+/// A world copy with an idle spy of house 0 and a building `name` of house
+/// 1 in its sight; also returns the objects.
+fn spy_scene(g: &Game, name: &str) -> (World, ObjectId, ObjectId) {
+    let mut w = g.world.clone();
+    let home = home_of(&w);
+    let target = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        name,
+        1,
+        glasnost_map::CellXY::new(home.x + 7, home.y + 7),
+        0,
+    );
+    let unit = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "SPYU",
+        0,
+        glasnost_map::CellXY::new(home.x + 5, home.y + 5),
+        0,
+    );
+    reveal(&mut w, 0, glasnost_map::CellXY::new(home.x + 7, home.y + 7));
+    run_to_think(&mut w, 2);
+    (w, target, unit)
+}
+
+// design: own AI (#36) and S-0516 Terms: a spy is not sent into a cloaked enemy building.
+#[test]
+fn a_spy_does_not_go_for_a_cloaked_building() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = spy_scene(&g, "SPYB");
+    cloak(&mut w, target);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!garrison_orders(&orders, unit, target), "{orders:?}");
+}
+
+// design: own AI (#36): the house does not know the victim's credits, so a spy goes for a building with the cash row (S-0510 claim 3, E5) whatever the victim holds.
+#[test]
+fn a_spy_goes_for_cash_whatever_the_victim_holds() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = spy_scene(&g, "BANK");
+    w.houses[1].credits = 0;
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
 }
