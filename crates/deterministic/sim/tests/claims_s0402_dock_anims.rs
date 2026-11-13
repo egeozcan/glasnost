@@ -103,7 +103,10 @@ fn docked(w: &mut World, building: &str, load: Vec<i32>) -> (ObjectId, ObjectId)
 
 /// The names of the building's running modelled slot animations.
 fn playing(w: &World, b: ObjectId) -> Vec<String> {
-    depot_anim::draws(w, b).into_iter().map(|d| d.name).collect()
+    depot_anim::draws(w, b)
+        .into_iter()
+        .map(|d| d.name)
+        .collect()
 }
 
 fn plays(w: &World, b: ObjectId, name: &str) -> bool {
@@ -165,13 +168,25 @@ fn claim_11_docking_payment_and_unloading_animations() {
     let (b, h) = docked(&mut w, "REFN", vec![2, 0]);
     assert!(playing(&w, b).is_empty(), "nothing plays before unloading");
     until(&mut w, 100, |w| harvest::state_of(w, h).unloading).expect("unloading");
-    assert!(plays(&w, b, "DOCK"), "the docking animation: {:?}", playing(&w, b));
+    assert!(
+        plays(&w, b, "DOCK"),
+        "the docking animation: {:?}",
+        playing(&w, b)
+    );
     let c0 = w.houses[0].credits;
     until(&mut w, 100, |w| w.houses[0].credits != c0).expect("the payment");
-    assert!(plays(&w, b, "PAY"), "the payment animation: {:?}", playing(&w, b));
+    assert!(
+        plays(&w, b, "PAY"),
+        "the payment animation: {:?}",
+        playing(&w, b)
+    );
     assert!(!plays(&w, b, "UNLD"));
     until(&mut w, 100, |w| harvest::state_of(w, h).finishing).expect("finishing");
-    assert!(plays(&w, b, "UNLD"), "the unloading animation: {:?}", playing(&w, b));
+    assert!(
+        plays(&w, b, "UNLD"),
+        "the unloading animation: {:?}",
+        playing(&w, b)
+    );
 }
 
 // spec: S-0402 claim 11 (the empty-load row stops the payment animation if playing; a payment while it plays does not start it again)
@@ -185,12 +200,23 @@ fn claim_11_payment_animation_kept_then_stopped() {
     let (b, h) = docked(&mut w, "REFN", vec![2, 3]);
     let c0 = w.houses[0].credits;
     until(&mut w, 100, |w| w.houses[0].credits != c0).expect("first payment");
-    let first = w.obj(b).unwrap().depot.slots.get(&DepotSlot::Special1).copied();
+    let first = w
+        .obj(b)
+        .unwrap()
+        .depot
+        .slots
+        .get(&DepotSlot::Special1)
+        .copied();
     assert!(first.is_some(), "the payment animation plays");
     let c1 = w.houses[0].credits;
     until(&mut w, 100, |w| w.houses[0].credits != c1).expect("second payment");
     assert_eq!(
-        w.obj(b).unwrap().depot.slots.get(&DepotSlot::Special1).copied(),
+        w.obj(b)
+            .unwrap()
+            .depot
+            .slots
+            .get(&DepotSlot::Special1)
+            .copied(),
         first,
         "already playing: not started again"
     );
@@ -268,5 +294,9 @@ fn claim_11_damaged_forms() {
     assert!(plays(&w, b, "PAYD"), "{:?}", playing(&w, b));
     until(&mut w, 100, |w| harvest::state_of(w, h).finishing).expect("finishing");
     assert!(plays(&w, b, "UNLDD"), "{:?}", playing(&w, b));
-    assert!(!playing(&w, b).iter().any(|n| n == "DOCK" || n == "PAY" || n == "UNLD"));
+    assert!(
+        !playing(&w, b)
+            .iter()
+            .any(|n| n == "DOCK" || n == "PAY" || n == "UNLD")
+    );
 }

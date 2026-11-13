@@ -7,7 +7,9 @@ mod econ_common;
 
 use econ_common::{SIZE, dec, game};
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{ArmourClass, BuildingType, Locomotor, ProjectileType, UnitType, WeaponType};
+use glasnost_rules::sim::{
+    ArmourClass, BuildingType, Locomotor, ProjectileType, UnitType, WeaponType,
+};
 use glasnost_sim::air;
 use glasnost_sim::combat::acquire;
 use glasnost_sim::orders::{self, Order};
@@ -98,7 +100,14 @@ struct Pass {
 /// cells east of it.
 fn pass(own: bool) -> Pass {
     let mut w = game(&rules());
-    let s = put(&mut w, Kind::Building, "POST", if own { 0 } else { 2 }, 0, 0);
+    let s = put(
+        &mut w,
+        Kind::Building,
+        "POST",
+        if own { 0 } else { 2 },
+        0,
+        0,
+    );
     if !own {
         ownership::change(&mut w, s, Some(HouseId(0)), Cause::Capture);
         assert_eq!(w.obj(s).unwrap().owner, Some(HouseId(0)), "captured");
@@ -125,7 +134,10 @@ fn pass(own: bool) -> Pass {
     for _ in 0..500 {
         glasnost_sim::tick::step(&mut w);
         let so = w.obj(s).unwrap();
-        if p.first_target.is_none() && so.target == Some(Target::Object(k)) && !air::on_ground(&w, k) {
+        if p.first_target.is_none()
+            && so.target == Some(Target::Object(k))
+            && !air::on_ground(&w, k)
+        {
             p.first_target = Some(w.tick);
         }
         if so.last_fired != last && so.target == Some(Target::Object(k)) {
@@ -144,7 +156,10 @@ fn pass(own: bool) -> Pass {
 fn turret_building_with_air_and_ground_weapon_engages_an_aircraft() {
     let p = pass(true);
     assert!(p.aircraft_class, "{p:?}");
-    assert!(p.first_target.is_some(), "acquires the aircraft in flight: {p:?}");
+    assert!(
+        p.first_target.is_some(),
+        "acquires the aircraft in flight: {p:?}"
+    );
     assert!(p.first_shot.is_some(), "fires at it: {p:?}");
     assert!(p.damaged, "hits it: {p:?}");
 }
@@ -154,7 +169,10 @@ fn turret_building_with_air_and_ground_weapon_engages_an_aircraft() {
 fn captured_turret_building_engages_an_aircraft() {
     let p = pass(false);
     assert!(p.aircraft_class, "{p:?}");
-    assert!(p.first_target.is_some(), "acquires the aircraft in flight: {p:?}");
+    assert!(
+        p.first_target.is_some(),
+        "acquires the aircraft in flight: {p:?}"
+    );
     assert!(p.first_shot.is_some(), "fires at it: {p:?}");
     assert!(p.damaged, "hits it: {p:?}");
 }
