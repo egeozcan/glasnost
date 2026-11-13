@@ -2388,6 +2388,80 @@ fn no_attack_order_to_an_aircraft_with_no_ammunition() {
     }
 }
 
+// design: own AI (#20) and S-0501 T1: an aircraft that has spent its ammunition on an intruder and flies back to its pad is not sent at the intruder again by the base defence, at any think on its way back.
+#[test]
+fn a_spent_aircraft_on_its_way_back_is_not_sent_again() {
+    let map = fixture::map();
+    let mut w = glasnost_sim::load::new_game(
+        fixture::rules(),
+        &map,
+        fixture::catalogue(),
+        &fixture::setup(5),
+    )
+    .expect("loads");
+    let pad = testkit::spawn(&mut w, Kind::Building, "HPAD", 0, fixture::at(-16, 4), 0);
+    testkit::run(&mut w, 2);
+    let t = w.rules().index_of(Kind::Aircraft, "JET").unwrap();
+    let jet = objects::create(&mut w, Kind::Aircraft, t, Some(HouseId(0)));
+    glasnost_sim::econ::release::release(&mut w, pad, jet);
+    let foe = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, fixture::at(-9, 4), 0);
+    w.obj_mut(foe).unwrap().health = 10_000;
+    shroud::area_reveal(
+        &mut w,
+        HouseId(0),
+        glasnost_sim::world::Pos::centre(fixture::at(-9, 4), 0),
+        3,
+    );
+    while glasnost_sim::orders::blocked(&w) {
+        testkit::run(&mut w, 1);
+    }
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: jet,
+            behaviour: glasnost_sim::rules::Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(foe)),
+            dest: None,
+        }
+    ));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let mut brain = Brain::new(&w, &map, HouseId(0));
+    let mut spent_thinks = 0;
+    for _ in 0..3000 {
+        testkit::run(&mut w, 1);
+        if w.obj(foe).is_none() || w.obj(jet).is_none() {
+            break;
+        }
+        if w.tick % period != 0 {
+            continue;
+        }
+        let spent = !glasnost_sim::air::ammo_left(&w, jet);
+        let flying = w.height_above_surface(jet) > 0;
+        let orders = brain.think(&w);
+        if spent && flying {
+            spent_thinks += 1;
+            assert!(
+                !orders.iter().any(|o| matches!(o, Order::Behaviour { actor, behaviour, attack_move, .. }
+                    if *actor == jet && (*behaviour == glasnost_sim::rules::Behaviour::Attack || *attack_move))),
+                "tick {}: {orders:?}",
+                w.tick
+            );
+        }
+        // Only the jet's orders are issued, so the scene stays the jet's.
+        for o in orders {
+            if o.actor() == Some(jet) {
+                glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+            }
+        }
+        if spent_thinks >= 3 && !flying {
+            break;
+        }
+    }
+    assert!(spent_thinks > 0, "the jet spent its ammunition in the air");
+}
+
 // design (M8 step A4 round 9, item 1): a unit moving toward an object that is no longer in play goes nowhere, so the script counts it idle and may order it; one moving toward an object still in play is busy.
 #[test]
 fn a_move_toward_a_removed_object_leaves_the_unit_idle() {
