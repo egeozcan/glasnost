@@ -2291,7 +2291,8 @@ fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
 /// [`AirState::ignored`].
 fn ignores(w: &World, id: ObjectId, d: Target) -> bool {
     let Some(a) = st_opt(w, id) else { return false };
-    if !a.landing || a.flying_to == Some(d) {
+    // spec: S-0501 claim 8 (the test is made at each hand-over, at each processing of move that gives a destination, claim 40, so also for the destination the flight already holds) (#159)
+    if !a.landing {
         return false;
     }
     // spec: S-0501 claim 8 (r120, Q-2507: the point it is landing at is its flight point, claim 40, the one its cleared destination gave it when it lands where it is, claim 6, not its position; with no flight point there is no such point)
