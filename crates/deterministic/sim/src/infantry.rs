@@ -286,6 +286,15 @@ pub(crate) fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
 /// or the same object). A first or different destination and a cleared one
 /// make no request. The request is not saved when refused.
 pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>) {
+    if let Some(new) = w.obj(id).and_then(|o| o.dest)
+        && crate::jump::own_cell_filtered(w, id, new)
+    {
+        // spec: S-0502 claim 23 (r24, Q-3043) and S-0213 claim 21 (r106): the own-cell assignment a jumpjet-type infantry unit ignores has no effect at all: its order-level destination keeps its preceding value, empty or not; no movement point, commitment, flight state or reservation changes and no draw is taken; it does not end a retry delay (S-0212 claim 21), restart a blockage delay (S-0209 claim 10) or request get-up (S-0107 claim 15). The order's other effects are the caller's and stand (#190)
+        if let Some(ob) = w.obj_mut(id) {
+            ob.dest = before;
+        }
+        return;
+    }
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0417 claim 17 (No path: a destination accepted after a failed search reaches the walk locomotor, which then has movement in progress until it is searched for; the destination it kept, given again, ends the retry delay, S-0212 claim 21 r98 and Q-2896, so it is searched for at its next movement update; its movement in progress until then is our design, S-0417 Open question 16)
         ob.path.failed_for = None;
@@ -315,10 +324,7 @@ pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>)
     if o.kind != Kind::Infantry || !o.infantry.as_ref().is_some_and(|i| i.prone) {
         return;
     }
-    // spec: S-0213 claim 21 (revision 34: repeating the cell it occupies requests get-up, unless the jumpjet own-cell filter of S-0502 claim 23 suppresses the assignment)
-    if crate::jump::own_cell_filtered(w, id, new) {
-        return;
-    }
+    // spec: S-0213 claim 21 (revision 34: repeating the cell it occupies requests get-up, unless the jumpjet own-cell filter of S-0502 claim 23 suppresses the assignment, which returned above)
     // spec: S-0107 claim 15 (only the current destination assigned again; quirks.prone_get_up_repeated_destination off: any non-empty one)
     if w.rules().quirks.prone_get_up_repeated_destination && before != Some(new) {
         return;
