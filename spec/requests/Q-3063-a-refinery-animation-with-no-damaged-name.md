@@ -1,9 +1,9 @@
 ---
 id: Q-3063
 title: Does a damaged building with a docking, payment or unloading animation but no damaged name play the normal animation or nothing?
-status: open
+status: answered
 related: [S-0402, S-0108]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
