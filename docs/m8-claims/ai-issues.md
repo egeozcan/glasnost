@@ -65,3 +65,32 @@ idle Yuri vehicle is no longer sent at an Allied aircraft it can neither fire at
 | #27 wave targets include allied, unoccupied and own starts | partly: allies were already left out (`ally_base_at`); the own start was a target when the base unit stood more than 5 cells off it | the one start nearest home is left out, however far. Unoccupied starts stay targets: a player does not know a start is empty until scouted | `scripted.rs`: `start_tests::the_own_start_is_no_target_when_the_base_unit_stands_off_it` |
 | #28 ENGAGE has no reach test | yes: an idle unit was sent at an enemy it could neither fire at nor reach, every think | an idle unit engages an enemy within ENGAGE only if it can fire at it from where it stands or reaches it (S-0215 claim 37 (b), `Script::reaches`) | `tests/livelocks.rs`: `an_idle_unit_is_not_sent_at_an_enemy_it_cannot_reach` |
 | #29 stranded infantry re-ordered every think | yes: a rifleman on an islet was sent to its own cell every think | a unit that stands at the cell nearest home it can reach is not sent there again; the nearest cells are kept per region for the think | `tests/livelocks.rs`: `a_stranded_rifleman_is_not_sent_to_where_it_stands` |
+
+## Batch 4
+
+Issues #15, #16, #18, #20, #21, #22, #23, #24, #25 and #26, and the anti-air repeat seen in batch 3's
+lane (play logic). AI game format 103. Each issue was confirmed on main with a test that failed there,
+committed before its fix, except #20, which main had already fixed: its test passes on main and is
+kept. The rest of #19 (the use counters) is not in this batch. The changes alter play, so the quick
+lane's winners move against batch 3's after lane (seeds 7 to 14, sides 0,2 and 1,2, 48 games; 15
+winners changed): Yuri wins 24 (before 23), Allied 12 of 24 (12), Soviet 12 of 24 (12). Every game
+has a winner: Soviet against Yuri, map 8, seed 12, which reached 120 000 ticks with none, now ends at
+114 701 with Yuri's win. Where a game's winner changed, the games part at an order of a fix: in
+Allied against Yuri, map 8, seed 7, the first differing tick is 12 008, where Yuri's absorber takes
+in infantry it held back before (#15). In the M7a sweep, bunker entries fall from a median of 14 to 4
+and exits from 12 to 4 (#18: no vehicle goes in to be let out at the next think).
+
+| issue | confirmed | change | test |
+|---|---|---|---|
+| #15 absorber reads power through `power::totals` | yes: in a blackout the totals read zero, so the absorber found no shortage and sent in the infantry it keeps back (3 sent, 2 expected) | the absorber reads the shortage as the power bar shows it (`power::short`), which a blackout does not zero | `tests/absorber.rs`: `a_blackout_does_not_send_the_kept_infantry_in` |
+| #16 deployers deploy bunkered vehicles | yes: a bunkered deploy-fire vehicle firing from the bunker was given Deploy, which lets it out (S-0606 claim 12, S-0214 row VD5) | the deployers skip a vehicle in a bunker or on its way into one | `tests/bunker.rs`: `a_bunkered_deploy_fire_vehicle_is_not_deployed_out` |
+| #18 bunker entry does not mirror the exits | yes: a vehicle was sent into a bunker at the retreat percentage, and into a bunker while a seen enemy stood near the base; both let it out at the next think | no vehicle is sent in while the base is attacked or into a bunker at or below `RETREAT_PERCENT` | `tests/bunker.rs`: `no_vehicle_is_sent_in_to_be_let_out_again` |
+| #20 defend sends spent aircraft back | no: fixed on main by 61fc12e (defend leaves an aircraft with no ammunition alone); the test passes on main and is kept | none | `tests/ai.rs`: `a_spent_aircraft_on_its_way_back_is_not_sent_again` |
+| #21 ferry boarding mixes heads with sizes, riders taken before the cursor test | yes: three riders of size 2 were clicked aboard a ferry for 4, and a refused rider kept a loaded ferry at home | the room is reckoned in sizes as the transport reckons it (S-0507 claim 1 and F1, the truncation switch read); only infantry the Enter cursor shows on the ferry count as free (claim 4); `FERRY_LOAD` stays a head count | `tests/ai.rs`: `a_refused_rider_does_not_hold_the_ferry_at_home`, `riders_are_clicked_aboard_by_size` |
+| #22 engineers repair buildings the house does not own | yes: an engineer was sent into an ally's badly damaged pillbox (the cursor offers the repair there, S-0214 rows I4 to I7) | `worth_repair` holds only for the house's own buildings | `tests/special.rs`: `an_engineer_does_not_repair_an_allys_building` |
+| #23 grinder side-step memory under the substituted cell | yes: the failure was kept under the cell the click's search found (S-0214 claim 11), so the blocked side was clicked again | `Memory::ask` keeps the goal a part asked for beside the order it gave; a failure counts against both | `tests/grinder.rs`: `a_far_unit_whose_side_click_is_moved_does_not_repeat_it` |
+| #24 lifter lets go early without looking below | yes: a held vehicle near its lifter was let go over the house's own infantry, which the drop removes (S-0607 claims 13 and 16) | the early let-go needs open dry land with nothing else on the cell (`lifter::clear_below`) | `tests/lifter.rs`: `a_held_vehicle_is_not_let_go_over_own_infantry` |
+| #25 gunner pairs not checked against the Enter cursor | yes: a healer too large for the vehicle was picked and the one that fits was not sent | the nearest healer whose Enter cursor holds on the vehicle is picked | `tests/gunner.rs`: `a_healer_the_vehicle_refuses_is_not_picked` |
+| #26 terror units have no claim tracking | yes: two idle planters (or disarmers) in one think went for the same target, and a planter went for the enemy another was already sent at | targets another own unit of the role is sent at, in this think or before, are passed over | `tests/terror.rs`: `two_planters_take_two_targets`, `a_planter_leaves_a_claimed_enemy_to_its_planter`, `two_disarmers_take_two_bombs` |
+| anti-air repeat (no issue number) | yes: Allied against Yuri, map 2, seed 7, house 0 ordered Infantry type 3 (an engineer type with an anti-air weapon) at every think from tick 45 000 while its superweapon building was short of money; the think's non-fighter filter dropped the order and nothing was built | the anti-air part picks only among the types that filter keeps (`antiair::build_type_where`) | `tests/antiair.rs`: `no_anti_air_non_fighter_is_picked_while_saving_for_a_superweapon` |
+| #19 (rest) counters count offered orders | not started in this batch | — | — |
