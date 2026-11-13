@@ -189,6 +189,28 @@ fn short_of_power_sends_them_all_the_room_permitting() {
     assert_eq!(sent, 2, "capacity 2: {orders:?}");
 }
 
+// design: own AI (#15) and S-0405 claims 5 and 6 (a timed blackout sets the house's output to 0 whatever plants stand): with power to spare a blackout does not make the house short of power, so it still keeps KEEP idle infantry at home.
+#[test]
+fn a_blackout_does_not_send_the_kept_infantry_in() {
+    let g = game(10);
+    let (mut w, b, u) = scene(&g, "BIOR", "WALKER", KEEP + 2);
+    assert!(!glasnost_ai::power::short(&w, HouseId(0)), "power to spare");
+    glasnost_sim::econ::power::start_blackout(&mut w, HouseId(0), 1000);
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let (out, _) = glasnost_sim::econ::power::totals(&w, HouseId(0));
+    assert_eq!(out, 0, "the blackout zeroes the house's output");
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    let sent = u
+        .iter()
+        .filter(|&&x| entered(&orders, x) == Some(b))
+        .count();
+    assert_eq!(sent, 2, "only the infantry beyond KEEP: {orders:?}");
+}
+
 // S-0605 claim 1 and S-0214 rows x3 and x4, PLAN §4.7: engineers are kept for their own work.
 #[test]
 fn engineers_are_kept() {
