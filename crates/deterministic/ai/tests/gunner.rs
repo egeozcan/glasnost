@@ -224,7 +224,14 @@ fn a_healer_the_vehicle_refuses_is_not_picked() {
     let (mut w, medi, guns) = scene(&r, PER_HEALER);
     // Nearer to the first gunner vehicle than MEDI.
     let x = -fixture::START_DX;
-    let big = testkit::spawn(&mut w, Kind::Infantry, "BIGMEDI", 0, fixture::at(x - 4, -3), 0);
+    let big = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "BIGMEDI",
+        0,
+        fixture::at(x - 4, -3),
+        0,
+    );
     testkit::run(&mut w, 1);
     while w.tick % 15 != 0 {
         testkit::run(&mut w, 1);

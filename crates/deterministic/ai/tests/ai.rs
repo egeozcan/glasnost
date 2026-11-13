@@ -1586,7 +1586,10 @@ fn riders_are_clicked_aboard_by_size() {
         .iter()
         .map(|&c| testkit::spawn(&mut w, Kind::Infantry, "HEAVY", 0, c, 0))
         .collect();
-    assert!(huge < heavy[0], "the refused one comes first in object order");
+    assert!(
+        huge < heavy[0],
+        "the refused one comes first in object order"
+    );
     let orders = ferry_think(&w);
     let boarding = |who: ObjectId| {
         orders.iter().any(|o| {

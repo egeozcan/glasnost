@@ -215,7 +215,14 @@ fn two_planters_take_two_targets() {
     let (mut w, unit, ids) = scene(&g, "PLANTER", &["GUNR", "MINR"]);
     let at = w.obj(unit).unwrap().pos.cell();
     // Placed at the think's tick: the first planter stays idle.
-    let second = testkit::spawn(&mut w, Kind::Infantry, "PLANTER", 0, CellXY::new(at.x, at.y + 1), 0);
+    let second = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "PLANTER",
+        0,
+        CellXY::new(at.x, at.y + 1),
+        0,
+    );
     let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
     let orders = brain.think(&w);
     let (a, b) = (attack_of(&orders, unit), attack_of(&orders, second));
@@ -233,7 +240,14 @@ fn a_planter_leaves_a_claimed_enemy_to_its_planter() {
     let best = *ids.iter().max_by_key(|&&i| actual_cost(&w, i)).unwrap();
     let other = *ids.iter().find(|&&i| i != best).unwrap();
     let at = w.obj(unit).unwrap().pos.cell();
-    let busy = testkit::spawn(&mut w, Kind::Infantry, "PLANTER", 0, CellXY::new(at.x, at.y + 1), 0);
+    let busy = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "PLANTER",
+        0,
+        CellXY::new(at.x, at.y + 1),
+        0,
+    );
     let tick = w.tick;
     let o = w.obj_mut(busy).unwrap();
     o.target = Some(Target::Object(best));
@@ -248,10 +262,26 @@ fn two_disarmers_take_two_bombs() {
     let g = game();
     let (mut w, unit, _) = scene(&g, "DISARMER", &[]);
     let at = w.obj(unit).unwrap().pos.cell();
-    let second = testkit::spawn(&mut w, Kind::Infantry, "DISARMER", 0, CellXY::new(at.x, at.y + 1), 0);
+    let second = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "DISARMER",
+        0,
+        CellXY::new(at.x, at.y + 1),
+        0,
+    );
     let carriers: Vec<ObjectId> = [3, 5]
         .into_iter()
-        .map(|dx| testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, CellXY::new(at.x + dx, at.y), 0))
+        .map(|dx| {
+            testkit::spawn(
+                &mut w,
+                Kind::Vehicle,
+                "GUNR",
+                0,
+                CellXY::new(at.x + dx, at.y),
+                0,
+            )
+        })
         .collect();
     for &c in &carriers {
         bomb(&mut w, c);
