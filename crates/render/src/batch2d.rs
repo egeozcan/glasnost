@@ -187,6 +187,22 @@ impl Atlas {
         self.size
     }
 
+    /// Whether the atlas changed since its last upload.
+    pub fn dirty(&self) -> bool {
+        self.dirty
+    }
+
+    /// The atlas was uploaded as it is now.
+    pub fn uploaded(&mut self) {
+        self.dirty = false;
+    }
+
+    /// Has the next [`Batch2d::upload_atlas`] upload the whole atlas
+    /// again: a new device holds none of it (design: render (#100)).
+    pub fn touch(&mut self) {
+        self.dirty = true;
+    }
+
     /// The index at a texel.
     pub fn get(&self, x: i32, y: i32) -> u8 {
         if x < 0 || y < 0 || x as u32 >= self.size || y as u32 >= self.size {
@@ -600,7 +616,7 @@ impl Batch2d {
                     self.atlas_side()
                 );
             }
-            atlas.dirty = false;
+            atlas.uploaded();
         }
     }
 

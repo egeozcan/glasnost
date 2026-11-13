@@ -701,6 +701,49 @@ fn renderer_goes(kept: Option<u64>, in_game: bool, serial: u64) -> bool {
     kept.is_some_and(|k| !in_game || k != serial)
 }
 
+/// Device rebuilds in a row, with no frame presented between them, before
+/// the window gives up and says so (design: render (#100)).
+const MAX_REBUILDS: u32 = 3; // design: render (#100)
+
+/// What the window does before a frame (design: render (#100)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Lost {
+    /// Nothing is lost: draw.
+    Draw,
+    /// The device or the surface was lost: rebuild them from the kept
+    /// instance, then draw.
+    Rebuild,
+    /// Rebuilt [`MAX_REBUILDS`] times in a row without a presented frame:
+    /// stop and say why.
+    GiveUp,
+}
+
+/// The window's rebuilds of a lost device or surface (design: render
+/// (#100)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Recovery {
+    /// Rebuilds since the last presented frame.
+    rebuilds: u32,
+}
+
+impl Recovery {
+    /// Before a frame; `lost`: whether the device or the surface was lost.
+    fn before_frame(&mut self, lost: bool) -> Lost {
+        let _ = lost;
+        Lost::Draw
+    }
+
+    /// A frame was presented: the device works.
+    fn presented(&mut self) {}
+}
+
+/// Whether a device-lost callback's `reason` is a loss under us: not our
+/// own drop or destroy of the device (design: render (#100)).
+fn lost_under_us(reason: wgpu::DeviceLostReason) -> bool {
+    let _ = reason;
+    false
+}
+
 /// Light-alpha values kept between frames, with what they came from.
 struct LightKept {
     covers: Vec<glasnost_render::shroud::Cover>,
@@ -1280,5 +1323,32 @@ mod tests {
         assert!(!renderer_goes(Some(1), true, 1));
         assert!(renderer_goes(Some(1), false, 1), "the game is over");
         assert!(renderer_goes(Some(1), true, 2), "another game started");
+    }
+
+    /// #100. design: render (#100): a lost device or surface is rebuilt
+    /// before the next frame; a presented frame clears the count; rebuilt
+    /// `MAX_REBUILDS` times in a row without one, the window gives up.
+    #[test]
+    fn a_lost_device_is_rebuilt_until_it_keeps_failing() {
+        let mut r = Recovery::default();
+        assert_eq!(r.before_frame(false), Lost::Draw);
+        assert_eq!(r.before_frame(true), Lost::Rebuild);
+        assert_eq!(r.before_frame(false), Lost::Draw);
+        r.presented();
+        for _ in 0..MAX_REBUILDS {
+            assert_eq!(r.before_frame(true), Lost::Rebuild);
+        }
+        assert_eq!(r.before_frame(true), Lost::GiveUp, "no frame between");
+        assert_eq!(r.before_frame(true), Lost::GiveUp);
+        r.presented();
+        assert_eq!(r.before_frame(true), Lost::Rebuild, "a frame came");
+    }
+
+    /// #100. design: render (#100): our own drop or destroy of a device
+    /// is not a loss; any other reason is.
+    #[test]
+    fn our_own_destroy_is_no_loss() {
+        assert!(lost_under_us(wgpu::DeviceLostReason::Unknown));
+        assert!(!lost_under_us(wgpu::DeviceLostReason::Destroyed));
     }
 }
