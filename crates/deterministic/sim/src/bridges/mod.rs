@@ -86,10 +86,7 @@ pub fn find_spans(w: &mut World, order: &[CellXY]) {
     let cells = &w.cells;
     let deck = |c: CellXY| cells.is_bridge(c);
     let mut spans = glasnost_map::bridges::find_spans(&cells.grid, &roles, deck);
-    // spec: S-0212 claim 3 (links in the visiting order of the start cells)
-    let rank: std::collections::BTreeMap<CellXY, usize> =
-        order.iter().enumerate().map(|(i, &c)| (c, i)).collect();
-    spans.sort_by_key(|s| rank.get(&s.start).copied().unwrap_or(usize::MAX));
+    sort_spans(&mut spans, order);
     // spec: S-0010 claim 25 (where bands overlap, the span whose start cell comes first in the visiting order decides the axis; so the spans are applied last to first)
     for s in spans.iter().rev().filter(|s| !s.high) {
         let axis = if s.east {
@@ -118,6 +115,15 @@ pub fn find_spans(w: &mut World, order: &[CellXY]) {
             enabled: s.high,
         })
         .collect();
+}
+
+/// Puts spans in link creation order (S-0212 claims 3 and 13b): the
+/// visiting order `order` of their start cells.
+pub(crate) fn sort_spans(spans: &mut [glasnost_map::bridges::Span], order: &[CellXY]) {
+    // spec: S-0212 claim 3 (links in the visiting order of the start cells)
+    let rank: std::collections::BTreeMap<CellXY, usize> =
+        order.iter().enumerate().map(|(i, &c)| (c, i)).collect();
+    spans.sort_by_key(|s| rank.get(&s.start).copied().unwrap_or(usize::MAX));
 }
 
 /// The first bridge link, in creation order, that `c` lies within `k`
