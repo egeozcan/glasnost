@@ -92,16 +92,29 @@ fn explored_part(
     house: glasnost_sim::world::HouseId,
     o: &glasnost_sim::world::Object,
 ) -> bool {
-    use glasnost_sim::econ::shroud;
+    // design: own AI (#37): any cell the object stands on
+    cells_of(w, o)
+        .into_iter()
+        .any(|c| glasnost_sim::econ::shroud::explored(w, house, c))
+}
+
+/// The cells object `o` stands on: a building's foundation from its
+/// top-left cell (its position, S-0204 claim 4), any other object's own
+/// cell.
+pub(crate) fn cells_of(
+    w: &glasnost_sim::world::World,
+    o: &glasnost_sim::world::Object,
+) -> Vec<glasnost_map::CellXY> {
     let at = o.pos.cell();
     if o.kind != glasnost_sim::rules::Kind::Building {
-        return shroud::explored(w, house, at);
+        return vec![at];
     }
-    // design: own AI (#37): the top-left cell first, then the rest of the foundation
-    shroud::explored(w, house, at)
-        || glasnost_sim::econ::placement::foundation_cells(w, o.type_index, at)
-            .into_iter()
-            .any(|c| shroud::explored(w, house, c))
+    // design: own AI (#30): every foundation cell, the top-left one included
+    let mut cells = glasnost_sim::econ::placement::foundation_cells(w, o.type_index, at);
+    if !cells.contains(&at) {
+        cells.push(at);
+    }
+    cells
 }
 
 /// Whether an enemy unit appears to house `house` as its disguise rather

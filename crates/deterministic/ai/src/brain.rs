@@ -1479,7 +1479,8 @@ impl Brain {
 
     /// The cells on which the house sees an object standing
     /// ([`crate::in_view`]): a person picks a free cell by what is drawn
-    /// there, and the map's ground is known to every player (#38).
+    /// there, and the map's ground is known to every player (#38); every
+    /// cell of a building (#30).
     fn seen_taken(&self, w: &World) -> std::collections::BTreeSet<CellXY> {
         let house = self.house();
         w.objects
@@ -1487,7 +1488,8 @@ impl Brain {
             .filter(|o| o.on_map)
             // design: own AI (#38): only objects the house sees
             .filter(|o| crate::in_view(w, house, o.id))
-            .map(|o| o.pos.cell())
+            // design: own AI (#30): a building's whole foundation
+            .flat_map(|o| crate::cells_of(w, o))
             .collect()
     }
 
@@ -1507,15 +1509,17 @@ impl Brain {
     }
 
     /// The seen enemy's cell with the most seen enemies within
-    /// [`STRIKE_RADIUS`] and none of the house's own objects; the first in
-    /// cell order on equal counts.
+    /// [`STRIKE_RADIUS`] and no cell of the house's own objects; the first
+    /// in cell order on equal counts.
     fn strike_cell(&self, w: &World) -> Option<CellXY> {
         let enemies = self.script.seen_enemies(w);
         let own: Vec<CellXY> = self
             .script
             .own(w)
             .into_iter()
-            .filter_map(|id| w.obj(id).map(|o| o.pos.cell()))
+            .filter_map(|id| w.obj(id))
+            // design: own AI (#30): every cell a building stands on
+            .flat_map(|o| crate::cells_of(w, o))
             .collect();
         let r2 = STRIKE_RADIUS * STRIKE_RADIUS;
         enemies
