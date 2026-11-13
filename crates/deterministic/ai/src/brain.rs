@@ -338,7 +338,7 @@ impl Brain {
             mark(p, "ai:build_drainer");
             self.build_drainer(w, &mut out);
             mark(p, "ai:build_anti_air");
-            self.build_anti_air(w, &mut out);
+            self.build_anti_air(w, &mut out, short);
             mark(p, "ai:expand");
             if !paying {
                 self.expand(w, &mut out, p);
@@ -954,12 +954,18 @@ impl Brain {
     /// the air ([`crate::antiair::build_type`]), as a person answers a
     /// drain he cannot shoot at: not while selling out. A defence replaces
     /// a tech-climb building this think ordered, as a superweapon building
-    /// does.
-    fn build_anti_air(&mut self, w: &World, out: &mut Vec<Order>) {
+    /// does. While the superweapon building is `short` of money no
+    /// non-fighter is picked: the think drops every build order for one
+    /// then (M8 step B7).
+    fn build_anti_air(&mut self, w: &World, out: &mut Vec<Order>, short: bool) {
         if self.script.selling() {
             return;
         }
-        let Some(t) = crate::antiair::build_type(&self.script, w) else {
+        let has_yard = short && self.has_yard(w);
+        // design: own AI (anti-air repeat, batch 4): an anti-air type the think's non-fighter filter drops was picked and counted at every think, and nothing was built (Allied against Yuri, map 2, seed 7, from tick 45 000: an engineer type with an anti-air weapon, 133 orders)
+        let Some(t) = crate::antiair::build_type_where(&self.script, w, |t| {
+            !(short && non_fighter(w, t, has_yard))
+        }) else {
             return;
         };
         if t.kind == Kind::Building {
