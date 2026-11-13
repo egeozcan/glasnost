@@ -45,6 +45,19 @@ fn rules() -> Arc<SimRules> {
         .entry("countries".into())
         .or_default()
         .push("Neutral".to_string());
+    // A crate overlay (as in tests/crates.rs).
+    r.registries
+        .entry("overlays".into())
+        .or_default()
+        .push("CRT".into());
+    r.sim.overlays.insert(
+        "CRT".into(),
+        glasnost_rules::sim::OverlayType {
+            has_art: Some(true),
+            crate_: Some(true),
+            ..Default::default()
+        },
+    );
     r.sim.countries.insert(
         "Neutral".into(),
         glasnost_rules::sim::Country {
@@ -1216,4 +1229,44 @@ fn a_spy_does_not_go_into_a_passive_houses_building() {
     let (w, target, unit) = spy_scene_of(&g, "SPYB", neutral);
     let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
     assert!(!garrison_orders(&orders, unit, target), "{orders:?}");
+}
+
+// design: own AI (#47): the special modules see the orders given earlier in the same think, so a unit gets one job: a spy sent into an enemy building is not also sent to a crate beside it (the later order would win).
+#[test]
+fn a_spy_sent_into_a_building_is_not_sent_to_a_crate() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = spy_scene(&g, "SPYB");
+    let at = w.obj(unit).unwrap().pos.cell();
+    let c = (1..6)
+        .flat_map(|d| [(d, 0), (0, d), (-d, 0), (0, -d)])
+        .map(|(dx, dy)| glasnost_map::CellXY::new(at.x + dx, at.y + dy))
+        .find(|&c| w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c))
+        .expect("a free cell by the spy");
+    // A crate on the cell, as in tests/crates.rs.
+    let overlay = w
+        .rules()
+        .overlays
+        .iter()
+        .position(|o| o.crate_)
+        .expect("the crate overlay") as u8;
+    w.cells.grid.get_mut(c).expect("the cell").overlay = overlay;
+    w.crates.places.insert(
+        0,
+        glasnost_sim::crates::Place {
+            cell: c,
+            start: w.tick,
+            life: 100_000,
+            trigger: false,
+        },
+    );
+    assert!(glasnost_sim::econ::shroud::explored(&w, HouseId(0), c));
+    assert!(
+        glasnost_sim::crates::is_crate(&w, c),
+        "the crate is on the map"
+    );
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+    let mine: Vec<&Order> = orders.iter().filter(|o| o.actor() == Some(unit)).collect();
+    assert_eq!(mine.len(), 1, "one order for the spy: {mine:?}");
 }
