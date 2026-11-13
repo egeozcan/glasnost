@@ -290,8 +290,8 @@ pub fn area_attempts(
     damage: i32,
     warhead: crate::combat::data::WarheadId,
 ) {
-    let g = w.rules().combat.general.clone();
-    let ion = g.ion_cannon_warhead == Some(warhead);
+    let g = &w.rules().combat.general;
+    let (ion, bridge_strength) = (g.ion_cannon_warhead == Some(warhead), g.bridge_strength);
     let half = w.rules().quirks.ranged_draw_half_span;
     let mut success = false;
     // spec: S-0511 claim 1 (test order: high bridge-role, high wooden, low wooden, low bridge-role)
@@ -324,7 +324,7 @@ pub fn area_attempts(
             attempts(w, c, if high { 4 } else { 1 })
         } else {
             // spec: S-0303 claim 18 (a ranged draw r over 1 to the bridge strength; an attempt exactly when r < D)
-            let r = w.rng.ranged(1, g.bridge_strength, half);
+            let r = w.rng.ranged(1, bridge_strength, half);
             r < damage && attempt(w, c)
         };
         success |= made;
