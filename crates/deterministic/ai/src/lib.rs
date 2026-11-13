@@ -60,6 +60,27 @@ pub mod special;
 pub mod tech_buildings;
 pub mod terror;
 
+/// Whether house `house` sees object `id` where it stands, as a person in
+/// its seat does: on the map, on a cell the house has explored (fog of war
+/// is off in a skirmish, S-0409 claim 19), and, for an object neither the
+/// house nor an ally owns, not hidden from it by a cloak it does not sense
+/// (S-0516 Terms and claim 28: not drawn for it). The special abilities ask
+/// this before they aim at a building (#36).
+pub fn in_view(
+    w: &glasnost_sim::world::World,
+    house: glasnost_sim::world::HouseId,
+    id: glasnost_sim::world::ObjectId,
+) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let me = &w.houses[usize::from(house.0)];
+    // design: own AI (#36): the house's own and its allies' objects are known to it; the cloak test is asked of the others
+    let friend = o.owner.is_some_and(|h| h == house || me.allied_with(h));
+    o.on_map
+        && glasnost_sim::econ::shroud::explored(w, house, o.pos.cell())
+        // spec: S-0516 Terms and claim 28 (a cloaked object the house does not sense is hidden from it)
+        && (friend || !glasnost_sim::cloak::hidden_from(w, id, Some(house)))
+}
+
 /// Whether a build order for `t` would be applied now: the type is
 /// buildable (S-0411 Terms) and a switched-on factory building of the house
 /// could start it. A person sees a switched-off factory (a building locked
