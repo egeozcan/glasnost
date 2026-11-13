@@ -2,13 +2,13 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 44
+revision: 45
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-11-13
 measurements: []
-requests: [Q-0010, Q-0016, Q-0018, Q-0023, Q-0045, Q-0046, Q-0419, Q-1805]
+requests: [Q-0010, Q-0016, Q-0018, Q-0023, Q-0045, Q-0046, Q-0419, Q-1805, Q-3064]
 supersedes: []
 ---
 
@@ -881,10 +881,10 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     Formulas. Header pairs 1 … 8 never affect where players start, and the header count affects it
     only through claim 29. A map whose
     header disagrees with its start waypoint markers shows markers in the wrong places (quirk
-    `quirks.preview_markers_from_header`). When the
+    `quirks.preview_markers_from_header`, whose switched-off behaviour is claim 25a). When the
     header block is absent, the count, origin and extent read as −1, so no markers are drawn. An
     extent of 0 (Wh = 0 or Hh = 0) with 1 ≤ N_h ≤ 8 makes the original crash when it draws the
-    markers. Our engine draws no preview markers for such a map and changes nothing
+    markers. With the switch on, our engine draws no preview markers for such a map and changes nothing
     else about it. An importer warns (Edge cases). Exactly the pairs
     1 … N_h are read, whatever the count: a pair numbered above N_h is never read, even when the map
     holds it. With N_h above 8, the pairs from the ninth up to the N_h-th are therefore read, and
@@ -896,6 +896,36 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       are read)
     - Confidence: high for the marker source and the −1 defaults. Medium for the formula and the
       extent-0 crash.
+    - **25a. Markers with the switch off.** With `quirks.preview_markers_from_header` off, the
+      header block has no effect on the preview markers. Its effects on start positions (claim 29)
+      are unchanged. The markers show the start list of claim 17 instead, as built for a game of L
+      players, where L is the lobby's player limit counted from the map (claim 23), and with
+      `quirks.start_waypoint_gap` as set (so N = max(L, K) in claim 17's terms). For each start
+      position p in 0 … N − 1 whose entry is
+      the cell of a defined waypoint marker, and that cell is a legal cell (claim 1), a marker
+      labelled p + 1 is drawn at the position given under Formulas (preview marker position,
+      waypoint form). The preview image is taken to cover the whole map footprint: the origin and
+      extent of that formula are those of the legal cells. A position whose entry is random gets no
+      marker. A start waypoint marker stored as 0, which the lobby counts
+      (`quirks.lobby_counts_zero_waypoint`), is undefined for the start list, so it never has a
+      marker of its own. A
+      position whose entry is a defined waypoint marker naming a non-legal cell is a real start
+      (claim 1), but its cell lies outside the footprint and so off the preview image, and it gets
+      no marker either. The marker graphic, its label and its corner shift (9, 6) are those of
+      claim 25. When no position qualifies, no markers are drawn. Only which positions have a
+      waypoint entry matters: drawing the markers finds no random start cell and takes no draw.
+      - Same markers as with the switch on: take a map whose defined start waypoint markers among
+        0 … 7 are exactly 0 … L − 1, all on legal cells, and whose header block has N_h = L, the
+        origin and extent of the waypoint form and, for pair i, the projection (u, v) of
+        waypoint i − 1's cell (Formulas). Both settings of the switch draw the same L markers there.
+        On such a map the start list's waypoint entries do not depend on the number of players,
+        so the markers are right for every player count. On a map with a gap in its start
+        waypoint markers they are right for a game of L players.
+      - Backing: `unmeasured` (a design choice of our engine for the switched-off state; the
+        original has no such state). Scenario M13's agreement variant measures, with the switch
+        on, that a header written by the waypoint form puts each marker over its waypoint's place
+        in a footprint-sized preview image.
+      - Confidence: high (fixed by this claim). Medium for the agreement variant's prediction.
 
 ### What a skirmish game reads
 
@@ -1946,6 +1976,23 @@ graphic's corner. Example of the wrap: X0 = −2147484, Wh = 1000 and xi = 21479
 xi − X0 = 4295468, whose product with 1000 wraps to 500704, so the inner quotient is 500, as for a
 pair halfway across the extent.
 
+**Preview marker position, waypoint form (claim 25a).** For a marked legal cell (x, y) on a map of
+size W × H, with pw, ph, left and top as in the formula above:
+u = ⌊(x − y) / 2⌋ and v = ⌊(x + y + 1) / 2⌋
+(u grows to the right on screen and v downwards; one step of u is two pixels of a footprint-sized
+preview image and one step of v is one pixel),
+u0 = ⌊(1 − W) / 2⌋ and v0 = ⌊(W + 2) / 2⌋ (the least u and the least v of any legal cell),
+U = W − 1 and V = ⌊(W + 2H + 1) / 2⌋ − ⌊(W + 2) / 2⌋ (the spans of u and v over the legal cells),
+px = ⌊⌊(u − u0)·1000 / U⌋ · pw / 1000⌋ + left − 9
+py = ⌊⌊(v − v0)·1000 / V⌋ · ph / 1000⌋ + top − 6.
+Integers only. For a legal cell every operand is non-negative and no product leaves the signed
+32-bit range, so each ⌊ ⌋ equals the truncation of the formula above and nothing wraps. When U = 0
+or V = 0 (W = 1, or H = 1 with W even), no markers are drawn. This is the formula above applied to a
+header with origin (u0, v0), extent (U, V) and pair (u, v). Adding one constant to X0 and to the
+first number of every pair, or to Y0 and to the second number of every pair, changes no marker.
+Example: W = H = 40 gives u0 = −20, v0 = 21, U = 39 and V = 39. The cell (30, 25) gives (u, v) = (2, 28)
+and the cell (25, 50) gives (−13, 38).
+
 **Floor height (claim 9).** For a flat cell of height level ℓ (an integer), the floor height is
 104 × ℓ leptons when ℓ ≥ 0 and 104 × ℓ + 1 leptons when ℓ < 0. In the original this is 104 × ℓ + 0.5,
 formed in floating point and truncated toward zero to an integer; the formula above gives the same
@@ -2036,8 +2083,8 @@ non-negative remainder. Integers, exact.
 | visceroid placement draw | 0 … 29 | draw values (dimensionless) | one per placement of a vehicle of a visceroid type (claim 46) |
 | purchases without a fall in the budget before our engine stops a house | 1000 | consecutive purchases | a limit of our engine, not a constant of the original (Edge cases) |
 | failed random start candidates before our engine gives up | 1000 | candidates (pairs of ranged draws) | a limit of our engine, not a constant of the original, which sets no limit (claim 18) |
-| preview marker scale | 1000 | ‰ of the marker extent | per-mille step of a header pair's displacement (Formulas, preview marker position) |
-| preview marker corner shift | (9, 6) | pixels | subtracted from the marker position: −9 horizontally, −6 vertically (Formulas) |
+| preview marker scale | 1000 | ‰ of the marker extent | per-mille step of a marker's displacement (Formulas, both preview marker position entries) |
+| preview marker corner shift | (9, 6) | pixels | subtracted from the marker position: −9 horizontally, −6 vertically, the same with the switch on or off (Formulas) |
 | lobby fallback player count | 8 | players | no start waypoint markers, no random-map count |
 | map-list default minimum players | 2 | players | loose map files only |
 | map-list default maximum players | 4 | players | loose map files only |
@@ -2082,7 +2129,7 @@ can see.
 | Smudges | yes | smudges (claim 42) | placed after every building (claim 43) |
 | ***Markers and start positions*** | | | |
 | The waypoint markers | yes | waypoint cells, home waypoint, start list | the early phase already uses them (claim 20) |
-| Header block (marker data) | yes | preview markers; pairs 9 … min(N_h, 16) are start position marks (claim 29) | its marks are in force for the early phase and are applied again for the late phase (claim 29) |
+| Header block (marker data) | yes | preview markers with `quirks.preview_markers_from_header` on; pairs 9 … min(N_h, 16) are start position marks (claim 29) | its marks are in force for the early phase and are applied again for the late phase (claim 29) |
 | ***Houses and pre-placed objects*** | | | |
 | Vehicles, aircraft, infantry, structures | yes | pre-placed objects (claims 27 and 34 to 41) | the late phase's list 3 is built on a map that already holds all of them (claim 20) |
 | Per-house definitions | **no** | — | houses come from the lobby |
@@ -2151,8 +2198,9 @@ Every quirk switch below defaults to the original (YR) behaviour described first
   but the game treats it as undefined and gives that slot a random start (claims 15, 23). *Fixed
   behaviour:* the lobby uses the same "undefined" test as the game.
 - **`quirks.preview_markers_from_header`.** Preview markers are taken from the header block, which
-  can disagree with the real start waypoint markers (claim 25). *Fixed behaviour:* draw markers at the start
-  waypoint cells, projected onto the preview.
+  can disagree with the real start waypoint markers (claim 25). *Fixed behaviour:* draw a marker for
+  each start position whose entry is a waypoint cell, at that cell projected onto the preview
+  (claim 25a and Formulas, preview marker position, waypoint form).
 - **`quirks.random_start_asymmetric_range`.** The random start candidate's y range runs 10 cells
   further than its x range and can leave the map (claim 18). *Fixed behaviour:* draw both
   coordinates from 11 … W + H − 10, in the original's order: the first ranged draw
@@ -2314,8 +2362,8 @@ Every quirk switch below defaults to the original (YR) behaviour described first
   warns about a negative level.
 - **Header extent of 0.** A header block with 1 ≤ N_h ≤ 8 and a marker extent Wh or Hh of 0 makes
   the original crash when the map selection screen draws the preview markers (claim 25). This is
-  not a quirk switch, since no engine reproduces a crash. Our engine draws no preview markers for
-  such a map and treats the rest of the map normally (preview image, start positions and
+  not a quirk switch, since no engine reproduces a crash. With `quirks.preview_markers_from_header`
+  on, our engine draws no preview markers for such a map and treats the rest of the map normally (preview image, start positions and
   everything else unchanged). An importer warns.
 - **`quirks.object_empty_fields_collapse`.** In an object or smudge entry, an empty field (two
   commas in a row, or a leading comma) is not a field: every later field moves one place forward,
@@ -2378,10 +2426,10 @@ the original's absent-key behaviour.
 | [Basic] AltHomeCell | alternative home waypoint (campaign use) | integer | 699 |
 | [Basic] NewINIFormat | format version | integer | 0 |
 | [CellTags] n | tag on cell n (claim 31). The key is a cell number, parsed leniently as a leading integer, decoded 1000-based at format version 4 and above, 128-based below it, wrapped modulo 65536 per coordinate, and acts on its selected cell (Terms, Formulas). Entries take effect in entry order, each with the value its key has under S-0002 claim 4. A cell keeps the first tag given to it. Tag names compare without regard to letter case. The value <none> or none attaches nothing; a value naming no defined tag attaches an empty tag that still occupies the cell; a line with an empty value creates no entry (S-0001 claim 11). The importer warns about a repeated key, about distinct keys that select the same cell, about a decoded x outside 0 … 511, about an undefined tag name, about a wrapped coordinate and about a non-legal cell (Edge cases) | string (tag name) | no tag on any cell |
-| [Header] NumberStartingPoints | preview marker count N_h | integer | −1 (no markers) |
-| [Header] StartX, StartY | marker origin X0, Y0 | integer | −1 |
-| [Header] Width, Height | marker extent Wh, Hh | integer | −1. An explicit 0 makes the original crash when markers are drawn; our engine then draws no markers and an importer warns (Edge cases) |
-| [Header] Waypoint1 … WaypointN | marker pairs (xi, yi), read for i = 1 … N_h only (N = N_h, the marker count); pairs 9 … min(N_h, 16) are start position marks (claim 29) | two integers, by S-0003 claim 9 (an unreadable component is unspecified in the original; our engine keeps the corresponding value in force, and the importer warns) | pairs 1 … 8: (0,0). Pairs 9 … 16: readable components set their corresponding marks; unreadable components are unspecified in the original and keep their prior marks in our engine. Missing or empty pairs keep both marks. Pairs above N_h: not read |
+| [Header] NumberStartingPoints | preview marker count N_h (markers with the switch on, claim 25) | integer | −1 (no markers) |
+| [Header] StartX, StartY | marker origin X0, Y0 (markers with the switch on, claim 25) | integer | −1 |
+| [Header] Width, Height | marker extent Wh, Hh (markers with the switch on, claim 25) | integer | −1. An explicit 0 makes the original crash when markers are drawn; our engine then draws no header markers and an importer warns (Edge cases) |
+| [Header] Waypoint1 … WaypointN | marker pairs (xi, yi) (markers with the switch on, claim 25), read for i = 1 … N_h only (N = N_h, the marker count); pairs 9 … min(N_h, 16) are start position marks (claim 29) | two integers, by S-0003 claim 9 (an unreadable component is unspecified in the original; our engine keeps the corresponding value in force, and the importer warns) | pairs 1 … 8: (0,0). Pairs 9 … 16: readable components set their corresponding marks; unreadable components are unspecified in the original and keep their prior marks in our engine. Missing or empty pairs keep both marks. Pairs above N_h: not read |
 | [Header] NumCoopHumanStartSpots | read; no skirmish effect established, so it has no unit here | integer | 4 |
 | [Preview] Size | preview width = third number, height = fourth | four integers | (0,0,0,0) (quirk); an empty value is the same as absent |
 | [PreviewPack] | preview pixels (claim 24) | encoded block | no preview |
@@ -2987,7 +3035,7 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   with minimum and maximum player settings both 3, one with 2 and 5, lobby only. *Expected:* the
   map list labels the first with a single number and the second with a range. *Falsified if*
   either label has the other form.
-- **M13, preview (claims 24, 25).** A map whose header block lists 2 markers at positions different
+- **M13, preview (claims 24, 25 and 25a).** A map whose header block lists 2 markers at positions different
   from its 2 start waypoint markers. 1 run. *Expected:* the preview markers are drawn at the header
   positions and players start at the waypoint cells. The same map with the preview stream shortened
   so that the last row is missing, 1 run. *Expected:* the preview is still shown, with all rows but
@@ -3011,6 +3059,14 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   marker 1 is drawn at the same place in both, near the centre of the preview (inner quotients 500 and
   500). *Falsified if* the two markers are drawn at different places, or the wrap variant draws no
   marker on the preview while the control does (the product then did not wrap).
+  *Agreement variant (claim 25a):* a map of size 40 × 40 with start waypoint markers 0 and 1 only,
+  at cells (30, 25) and (25, 50), and a preview of 78 × 39 pixels, all black except one white pixel
+  for each waypoint marker, at column 2·(u − u0) and row v − v0 of its projection (Formulas,
+  waypoint form): column 44, row 7 and column 14, row 17. Its header block has N_h = 2, origin
+  (−20, 21), extent (39, 39) and pairs (2, 28) and (−13, 38). 1 run, map selection screen.
+  *Expected:* marker 1 is drawn near waypoint 0's white pixel and marker 2 near waypoint 1's, each
+  with the same displacement from its pixel, within 2 pixels. *Falsified if* the two displacements differ by
+  more than 2 pixels in either direction, or a marker is nearer the other marker's pixel.
   *Extent-0 variant:* the first map with N_h = 2 and the marker extent Wh set to 0 (Import mapping), 1 run.
   Select the map in the map selection screen. *Expected:* the original crashes when the preview
   markers would be drawn. *Falsified if* the screen shows the preview with or without markers
