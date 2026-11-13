@@ -383,6 +383,33 @@ fn a_take_over_is_a_full_change_of_owner() {
     );
 }
 
+// spec: S-0210 claim 4 (the kill is credited to the crusher, as for any kill) and S-0414 claim 21 (the result screen's kill to the credited object's house, a loss to the victim's)
+#[test]
+fn a_crush_credits_the_kill_to_the_crusher() {
+    let mut s = scene();
+    s.place_unit(ALPHA, "MASHER", cell(0, 0), 64);
+    s.place_infantry(BETA, "GRUNT", cell(0, 0), 2);
+    let mut w = s.build();
+    let m = one(&w, Kind::Vehicle, "MASHER");
+    let g = one(&w, Kind::Infantry, "GRUNT");
+    let counts = |w: &World| {
+        (
+            w.houses[0].combat.kills,
+            glasnost_sim::econ::stats::of(w, HouseId(0)).kills,
+            w.houses[1].combat.losses,
+            glasnost_sim::econ::stats::of(w, HouseId(1)).losses,
+        )
+    };
+    assert_eq!(counts(&w), (0, 0, 0, 0));
+    crush::at_cell_centre(&mut w, m);
+    assert!(w.obj(g).is_none(), "the grunt is crushed");
+    assert_eq!(
+        counts(&w),
+        (1, 1, 1, 1),
+        "a kill for the crusher's house, a loss for the victim's"
+    );
+}
+
 // spec: S-0210 claim 5 (a thief whose destination is not the crusher is crushed as usual)
 #[test]
 fn a_thief_not_coming_for_the_crusher_is_crushed() {
