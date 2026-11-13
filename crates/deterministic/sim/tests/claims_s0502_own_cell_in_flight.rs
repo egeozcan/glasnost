@@ -28,7 +28,10 @@ fn a_filtered_own_cell_assignment_stays_ignored_after_the_unit_leaves_the_cell()
     // The own-cell order: filtered at the assignment.
     go(&mut w, u, over);
     let now = w.obj(u).unwrap().jump.as_ref().unwrap().clone();
-    assert_eq!(now.order, before.order, "the locomotor takes nothing at the assignment");
+    assert_eq!(
+        now.order, before.order,
+        "the locomotor takes nothing at the assignment"
+    );
     assert_eq!(now.dest, before.dest, "the movement point is kept");
     assert_eq!(w.rng.taken(), taken, "no draw at the assignment");
     assert_eq!(now.order, Some(Target::Cell(far)));

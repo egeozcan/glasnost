@@ -238,7 +238,10 @@ fn a_vehicle_in_contact_with_a_building_that_is_no_factory_is_locked() {
     w.obj_mut(v).unwrap().contact = Some(tower);
     let a = attacker(&mut w, "ERASER", 0, at(-12, -12));
     erase(&mut w, a, v);
-    assert!(erased(&w, v), "a building that is no vehicle factory refuses nothing");
+    assert!(
+        erased(&w, v),
+        "a building that is no vehicle factory refuses nothing"
+    );
 }
 
 // spec: S-0514 claim 3 (E4: a beam already attached to the firer refuses its new lock; a counter-lock releases the firer's own beam)

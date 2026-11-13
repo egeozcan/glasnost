@@ -68,7 +68,10 @@ fn a_vehicle_on_a_repair_depot_is_locked() {
             break;
         }
     }
-    assert!(arrived, "the vehicle stands on the depot, in contact, under repair");
+    assert!(
+        arrived,
+        "the vehicle stands on the depot, in contact, under repair"
+    );
     assert!(
         !glasnost_sim::econ::release::vehicle_factory(&w, depot),
         "the depot is not a vehicle factory"
@@ -84,7 +87,10 @@ fn a_vehicle_on_a_repair_depot_is_locked() {
     let on_depot_locked = erased(&w, v);
     // Control: the same type away from any building is locked by the same firer.
     erase(&mut w, a, other);
-    assert!(erased(&w, other), "control: the same type elsewhere is locked");
+    assert!(
+        erased(&w, other),
+        "control: the same type elsewhere is locked"
+    );
     assert!(still_on, "the vehicle was still on the depot at the hit");
     assert!(
         on_depot_locked,

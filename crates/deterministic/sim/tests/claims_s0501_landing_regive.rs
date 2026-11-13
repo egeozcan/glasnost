@@ -89,8 +89,22 @@ fn line(w: &World, a: ObjectId) -> String {
 fn moved_in_flight(ahead: i32) -> (World, ObjectId, CellXY) {
     let mut w = game(&rules());
     ready(&mut w);
-    let a = testkit::spawn(&mut w, Kind::Aircraft, "JET", 0, testkit::mid(SIZE, -10, 0), 0);
-    let v = testkit::spawn(&mut w, Kind::Vehicle, "TANK", 1, testkit::mid(SIZE, 14, 0), 0);
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Aircraft,
+        "JET",
+        0,
+        testkit::mid(SIZE, -10, 0),
+        0,
+    );
+    let v = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "TANK",
+        1,
+        testkit::mid(SIZE, 14, 0),
+        0,
+    );
     step(&mut w);
     assert!(issue(
         &mut w,
