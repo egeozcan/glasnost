@@ -585,6 +585,16 @@ fn complete(w: &mut World, x: ObjectId) {
         crate::structures::absorb::erased(w, x);
         // spec: S-0514 claim 12 and S-0606 claim 13 (an erased bunker lets its vehicle out at the completion of its erasure)
         crate::structures::bunker::let_out(w, x);
+        // spec: S-0314 claim 22 (destruction or other removal of a depot: every contact is released without a run-away notice) and S-0514 claim 12 (the erasure's removal) (#222)
+        let contacts: Vec<ObjectId> = w
+            .objects
+            .values()
+            .filter(|v| v.depot.link.is_some_and(|l| l.depot == x))
+            .map(|v| v.id)
+            .collect();
+        for c in contacts {
+            crate::depot::depot_destroyed(w, x, c);
+        }
     } else {
         // spec: S-0514 claim 12 and S-0606 claim 14 (removing a bunkered vehicle releases its bunker in place)
         crate::structures::bunker::release_in_place(w, x);

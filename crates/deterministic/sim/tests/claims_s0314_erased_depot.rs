@@ -133,7 +133,10 @@ fn erase_to_completion(w: &mut World, d: ObjectId) {
         tick::step(w);
         assert!(w.tick < t0 + 40, "the bullet did not detonate");
     }
-    assert!(glasnost_sim::temporal::erased(w, d), "the depot is being erased");
+    assert!(
+        glasnost_sim::temporal::erased(w, d),
+        "the depot is being erased"
+    );
     let t = w.tick;
     if let Some(o) = w.obj_mut(e) {
         o.target = Some(Target::Object(d));
