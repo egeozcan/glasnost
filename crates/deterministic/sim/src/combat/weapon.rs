@@ -19,11 +19,7 @@ pub fn in_air(w: &World, id: ObjectId) -> bool {
     if let Some(o) = w.obj(id)
         && o.kind == Kind::Aircraft
     {
-        let m = &w.rules().missiles;
-        let ab = [crate::spawn::RocketSetId::A, crate::spawn::RocketSetId::B]
-            .iter()
-            .any(|&s| m.set(s).type_index == Some(o.type_index));
-        if ab {
+        if ab_rocket(w, id) {
             // spec: S-0506 claim 22 (the set-A or set-B type: false before flight and in pause, tilt and raise; true in ascent, cruise and descent; independent of height, speed, health and rail membership)
             use crate::rocket::Phase;
             return o
@@ -38,6 +34,45 @@ pub fn in_air(w: &World, id: ObjectId) -> bool {
         }
     }
     aircraft_in_air(w, id)
+}
+
+/// Whether an object is an aircraft of the set-A or set-B rocket type
+/// (S-0506 claim 22).
+fn ab_rocket(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.kind != Kind::Aircraft {
+        return false;
+    }
+    let m = &w.rules().missiles;
+    [crate::spawn::RocketSetId::A, crate::spawn::RocketSetId::B]
+        .iter()
+        .any(|&s| m.set(s).type_index == Some(o.type_index))
+}
+
+/// *Airborne* in the sense of the range test (S-0307 Terms, claim 26) and
+/// the rules that take it from there (S-0306 claim 23): an object of the
+/// set-A or set-B rocket type answers by its locomotor's in-the-air answer
+/// ([`in_air`], S-0506 claim 22), every other object by the height test
+/// ([`airborne_by_height`]) (#253).
+pub fn range_airborne(w: &World, id: ObjectId) -> bool {
+    if ab_rocket(w, id) {
+        // spec: S-0307 claim 26 (the V3-rocket and dreadnought-missile types: the locomotor's own in-the-air answer replaces the height test)
+        return in_air(w, id);
+    }
+    airborne_by_height(w, id)
+}
+
+/// *Floor-bound* in the sense of the range test (S-0307 Terms, claim 26):
+/// for an object of the set-A or set-B rocket type the opposite of
+/// [`in_air`], not a separate height comparison; for every other object on
+/// the map and not airborne by the height test (#253).
+pub fn range_floor_bound(w: &World, id: ObjectId) -> bool {
+    if ab_rocket(w, id) {
+        // spec: S-0307 claim 26 (for those two types floor-bound is the opposite of that answer)
+        return !in_air(w, id);
+    }
+    // spec: S-0307 Terms (floor-bound: an ordinary object on the map that is not airborne)
+    w.obj(id).is_some_and(|o| o.on_map) && !airborne_by_height(w, id)
 }
 
 /// The in-the-air answer of an object that is not of a rocket type: for a

@@ -10,7 +10,7 @@ use glasnost_num::{F64, int};
 use crate::combat::ballistics;
 use crate::combat::data::WeaponId;
 use crate::combat::lof;
-use crate::combat::weapon::airborne_by_height;
+use crate::combat::weapon::{range_airborne, range_floor_bound};
 use crate::rules::Kind;
 use crate::world::{Layer, ObjectId, Pos, Target, World};
 
@@ -18,9 +18,11 @@ use crate::world::{Layer, ObjectId, Pos, Target, World};
 // spec: S-0307 Constants (unlimited-range sentinel −512 leptons, a field of −2)
 pub const UNLIMITED: i32 = -512;
 
-/// Floor-bound (S-0307 Terms): on the map and not airborne.
+/// Floor-bound (S-0307 Terms, claim 26): on the map and not airborne; the
+/// set-A and set-B rocket types by their flight phase (#253).
 fn floor_bound(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| o.on_map) && !airborne_by_height(w, id)
+    // spec: S-0307 claim 26 (elevation eligibility, claim 6, and target-height replacement, claim 7)
+    range_floor_bound(w, id)
 }
 
 /// A target's reference point (S-0204 claim 4); a cell's centre at its
@@ -68,8 +70,8 @@ pub fn source_point(w: &World, firer: ObjectId, weapon: WeaponId, t: Target) -> 
             w.surface_at(c.x, c.y) + if on_deck { 416 } else { 0 }, // spec: S-0307 Constants (deck 416 leptons)
         );
     }
-    if airborne_by_height(w, firer) {
-        // spec: S-0307 claim 8 (b) (an airborne firer: the world height of the target's reference point as it is)
+    if range_airborne(w, firer) {
+        // spec: S-0307 claim 8 (b) (an airborne firer: the world height of the target's reference point as it is); claim 26 (the set-A and set-B rocket types by their in-the-air answer)
         s.z = target_point(w, t).z;
     }
     s
@@ -163,7 +165,8 @@ pub fn in_range(
     }
     let s = source.unwrap_or_else(|| source_point(w, firer, weapon, t));
     let m = measured_point(w, t);
-    let target_air = matches!(t, Target::Object(x) if airborne_by_height(w, x));
+    // spec: S-0307 claim 3 and claim 26 (the air bonus: the set-A and set-B rocket types by their in-the-air answer)
+    let target_air = matches!(t, Target::Object(x) if range_airborne(w, x));
     let air_bonus = super::veterancy::type_combat(w, firer).map_or(0, |tc| tc.air_range_bonus);
     // spec: S-0307 F1 (R_b = R₀ + a · [target airborne]); the open-topped bonus is a seam
     let rr = if crate::structures::garrison::garrisoned(w, firer) {
