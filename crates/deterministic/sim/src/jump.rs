@@ -665,6 +665,15 @@ pub fn placement_qualifies(w: &World, id: ObjectId) -> bool {
     h.r < LISTING_HEIGHT || h.adjusted == 0
 }
 
+/// Whether a unit with jumpjet movement evaluates to the ground render
+/// layer (S-0102 *State and ordering*): the same two-height test as the
+/// listing predicate of claim 4.
+pub fn in_ground_layer(w: &World, id: ObjectId) -> bool {
+    let h = layer_heights(w, id);
+    // spec: S-0102 State and ordering (a unit with jumpjet movement is in the ground layer when r < 208 leptons or r′ = 0 leptons) and S-0502 claim 4 (the same 208-lepton test on r)
+    h.r < LISTING_HEIGHT || h.adjusted == 0
+}
+
 /// The two heights of S-0502 claim 4's exact height predicate, which are
 /// also those of S-0102's jumpjet layer rule (*State and ordering*): *r*,
 /// the height above the surface, and the bridge-adjusted *r*′.
