@@ -86,10 +86,7 @@ pub fn find_spans(w: &mut World, order: &[CellXY]) {
     let cells = &w.cells;
     let deck = |c: CellXY| cells.is_bridge(c);
     let mut spans = glasnost_map::bridges::find_spans(&cells.grid, &roles, deck);
-    // spec: S-0212 claim 3 (links in the visiting order of the start cells)
-    let rank: std::collections::BTreeMap<CellXY, usize> =
-        order.iter().enumerate().map(|(i, &c)| (c, i)).collect();
-    spans.sort_by_key(|s| rank.get(&s.start).copied().unwrap_or(usize::MAX));
+    sort_spans(&mut spans, order);
     // spec: S-0010 claim 25 (where bands overlap, the span whose start cell comes first in the visiting order decides the axis; so the spans are applied last to first)
     for s in spans.iter().rev().filter(|s| !s.high) {
         let axis = if s.east {
@@ -118,6 +115,15 @@ pub fn find_spans(w: &mut World, order: &[CellXY]) {
             enabled: s.high,
         })
         .collect();
+}
+
+/// Puts spans in link creation order (S-0212 claims 3 and 13b): the
+/// visiting order `order` of their start cells.
+pub(crate) fn sort_spans(spans: &mut [glasnost_map::bridges::Span], order: &[CellXY]) {
+    // spec: S-0212 claim 3 (links in the visiting order of the start cells)
+    let rank: std::collections::BTreeMap<CellXY, usize> =
+        order.iter().enumerate().map(|(i, &c)| (c, i)).collect();
+    spans.sort_by_key(|s| rank.get(&s.start).copied().unwrap_or(usize::MAX));
 }
 
 /// The first bridge link, in creation order, that `c` lies within `k`
@@ -181,8 +187,12 @@ fn attempt_in(w: &mut World, c: CellXY, ctx: &mut Ctx) -> bool {
     if let Some((family, Piece::Pier(line, k))) = pieces::piece_at(w, c)
         && k <= 3
         && pieces::sub(w, c).is_some_and(|s| pieces::pier_body_sub(line, s))
-        && let Some(r) = pieces::pier_reference(w, c, line)
     {
+        let Some(r) = pieces::pier_reference_of(w, c, line) else {
+            // nocite: our own input validation (#166; Q-3046: a reference cell that does not hold the hit cell's pier tile: nothing happens and the attempt fails, with a warning, as claim 2 does for a high-bridge cell with no responsible section)
+            w.note("S-0511 claim 2: a pier cell whose reference cell does not hold its tile; the attempt does nothing (Q-3046)");
+            return false;
+        };
         let ok = high::attempt_pier(w, r, family, line, k, ctx);
         if ok {
             let f = line.step();

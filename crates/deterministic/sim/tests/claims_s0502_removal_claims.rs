@@ -58,7 +58,7 @@ fn removing_a_hovering_jumpjet_vehicle_keeps_the_flag_of_the_vehicle_below() {
     assert_eq!(t.pos.cell(), at(0, 0));
     assert_eq!(
         t.drive.as_ref().unwrap().claims,
-        vec![at(0, 0)],
+        vec![(at(0, 0), Layer::Ground)],
         "the tank still records its claim"
     );
     assert_eq!(

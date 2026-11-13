@@ -10,6 +10,7 @@ use glasnost_num::F64;
 use glasnost_rules::sim::{BuildingType, Decimal, MovementZone, OverlayType, UnitType};
 use glasnost_sim::consts::CRUSH_CAP;
 use glasnost_sim::crush;
+use glasnost_sim::econ::victory;
 use glasnost_sim::infantry::Seq;
 use glasnost_sim::occupancy;
 use glasnost_sim::orders::{self, Order};
@@ -343,6 +344,70 @@ fn a_vehicle_thief_takes_the_crusher_over() {
     crush::at_cell_centre(&mut w, c);
     assert!(w.obj(t).is_none(), "the thief disappears");
     assert_eq!(w.obj(c).unwrap().owner, Some(HouseId(1)));
+}
+
+// spec: S-0210 claim 5 (the crusher changes owner to the thief's house), S-0414 claim 4 (a change of owner counts as leaving the map for the old owner and entering it for the new one, whatever its cause) and S-0309 claim 30 (a holder that changes owner drops its target)
+#[test]
+fn a_take_over_is_a_full_change_of_owner() {
+    let (a, b) = (HouseId(0), HouseId(1));
+    // The placing order that lists the grunt after the thief.
+    let grunt_first = {
+        let (w, _, t, g) = thief_world("MASHER", true);
+        listed_before(&w, t, g)
+    };
+    let (mut w, c, t, g) = thief_world("MASHER", grunt_first);
+    assert!(listed_before(&w, t, g));
+    w.obj_mut(c).unwrap().target = Some(Target::Object(g));
+    assert_eq!(
+        (victory::normal_sum(&w, a), victory::normal_sum(&w, b)),
+        (1, 2)
+    );
+    crush::at_cell_centre(&mut w, c);
+    assert!(w.obj(t).is_none(), "the thief disappears");
+    assert!(
+        w.obj(g).is_some(),
+        "listed after the thief: judged against the new house"
+    );
+    assert_eq!(w.obj(c).unwrap().owner, Some(b));
+    assert_eq!(
+        (victory::normal_sum(&w, a), victory::normal_sum(&w, b)),
+        (0, 2),
+        "the vehicle counts for the thief's house, not for its old one"
+    );
+    assert_eq!(w.obj(c).unwrap().target, None, "the target is dropped");
+    glasnost_sim::objects::remove(&mut w, c);
+    assert!(!victory::passes(&w, a), "the old owner has nothing left");
+    assert!(
+        victory::passes(&w, b),
+        "the thief's house still has its infantry"
+    );
+}
+
+// spec: S-0210 claim 4 (the kill is credited to the crusher, as for any kill) and S-0414 claim 21 (the result screen's kill to the credited object's house, a loss to the victim's)
+#[test]
+fn a_crush_credits_the_kill_to_the_crusher() {
+    let mut s = scene();
+    s.place_unit(ALPHA, "MASHER", cell(0, 0), 64);
+    s.place_infantry(BETA, "GRUNT", cell(0, 0), 2);
+    let mut w = s.build();
+    let m = one(&w, Kind::Vehicle, "MASHER");
+    let g = one(&w, Kind::Infantry, "GRUNT");
+    let counts = |w: &World| {
+        (
+            w.houses[0].combat.kills,
+            glasnost_sim::econ::stats::of(w, HouseId(0)).kills,
+            w.houses[1].combat.losses,
+            glasnost_sim::econ::stats::of(w, HouseId(1)).losses,
+        )
+    };
+    assert_eq!(counts(&w), (0, 0, 0, 0));
+    crush::at_cell_centre(&mut w, m);
+    assert!(w.obj(g).is_none(), "the grunt is crushed");
+    assert_eq!(
+        counts(&w),
+        (1, 1, 1, 1),
+        "a kill for the crusher's house, a loss for the victim's"
+    );
 }
 
 // spec: S-0210 claim 5 (a thief whose destination is not the crusher is crushed as usual)

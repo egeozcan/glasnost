@@ -479,7 +479,13 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
     // spec: S-0307 claim 22 (e) (an attacker in the ground layer has its own occupancy entry withdrawn during each clear-cell test)
     let withdraw = close && o.layer == Layer::Ground;
     let own_vehicle_cells: Vec<CellXY> = match o.drive.as_ref() {
-        Some(d) if o.kind == Kind::Vehicle => d.claims.clone(),
+        // spec: S-0307 claim 22 (e) (the entry withdrawn is the one in the ground record: a claim the vehicle holds there, S-0209 claim 1)
+        Some(d) if o.kind == Kind::Vehicle => d
+            .claims
+            .iter()
+            .filter(|x| x.1 == Layer::Ground)
+            .map(|x| x.0)
+            .collect(),
         _ => crate::teleport::mark_cell(w, id).into_iter().collect(),
     };
     let clear = |w: &World, cell: CellXY| -> bool {

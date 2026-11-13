@@ -34,10 +34,11 @@ pub fn tick(w: &mut World, id: ObjectId, facing_error: bool) {
         targets = crate::combat::behave::turret_target_rows(w, id, facing_error);
     } else if u.turret && !u.turret_spins && o.target.is_none() {
         let g = r.general.guard_area_targeting_delay;
-        // spec: S-0206 claim 9 (rest rows: not turning, at least G + 5 ticks since the vehicle last fired, not inside a tank bunker, S-0606 claim 9; a spinning turret never uses them)
+        // spec: S-0206 claim 9 (rest rows: not turning, at least G + 5 ticks since the vehicle last fired, not inside a tank bunker, S-0606 claim 9, not a deployed simple-deployer vehicle, S-0517; a spinning turret never uses them)
         let rested = !o.turret.turning(t)
             && t.wrapping_sub(o.last_fired) >= g.wrapping_add(5)
-            && !crate::structures::bunker::bunkered(w, id);
+            && !crate::structures::bunker::bunkered(w, id)
+            && !crate::econ::inplace::deployed(w, id);
         if rested {
             if crate::lift::seized(w, id) {
                 // spec: S-0206 claim 9 (no change while the vehicle is seized, S-0607 claims 5 and 20)

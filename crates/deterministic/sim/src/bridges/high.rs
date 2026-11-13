@@ -100,8 +100,11 @@ pub fn notice(w: &mut World, c: CellXY, kind: Notice, side: Side, ctx: &mut Ctx)
     }
     match pieces::piece_at(w, c) {
         Some((family, Piece::Pier(line, k))) => {
-            if let Some(r) = pieces::pier_reference(w, c, line) {
+            if let Some(r) = pieces::pier_reference_of(w, c, line) {
                 pier_notice(w, r, family, line, k, kind, side, ctx);
+            } else {
+                // nocite: our own input validation (#166; Q-3046: a notice at a pier cell whose reference cell does not hold its tile changes nothing, with a warning)
+                w.note("S-0511 claim 4: a notice at a pier cell whose reference cell does not hold its tile changes nothing (Q-3046)");
             }
         }
         Some((_, Piece::StartRamp(_) | Piece::FarRamp(_))) => {
@@ -547,8 +550,14 @@ pub fn name_cell(w: &mut World, c: CellXY, enable: bool) {
     } else {
         // spec: S-0212 claim 3 (none: the links are replaced by the spans found on the map as it stands, without the low-span bands, S-0010 claim 25)
         let roles = w.catalogue_arc().roles;
+        let order = w
+            .cells
+            .footprint()
+            .visiting_order(w.rules().quirks.narrow_map_partial_pass);
         let cells = &w.cells;
-        let spans = glasnost_map::bridges::find_spans(&cells.grid, &roles, |x| cells.is_bridge(x));
+        let mut spans =
+            glasnost_map::bridges::find_spans(&cells.grid, &roles, |x| cells.is_bridge(x));
+        super::sort_spans(&mut spans, &order);
         let mut links: Vec<BridgeLink> = spans
             .iter()
             .map(|s| BridgeLink {
@@ -559,15 +568,14 @@ pub fn name_cell(w: &mut World, c: CellXY, enable: bool) {
             })
             .collect();
         // spec: S-0212 claim 3 (when no new link lies within 3 cells, no link changes)
-        if !links.iter().any(within) {
-            return;
+        if links.iter().any(within) {
+            // spec: S-0212 Terms and claim 3 (links within 3 cells of the named cell)
+            for l in links.iter_mut().filter(|l| l.within(c, 3)) {
+                l.enabled = enable;
+            }
+            w.cells.links = links;
         }
-        // spec: S-0212 Terms and claim 3 (links within 3 cells of the named cell)
-        for l in links.iter_mut().filter(|l| l.within(c, 3)) {
-            l.enabled = enable;
-        }
-        w.cells.links = links;
     }
-    // spec: S-0212 claim 5 (connectivity brought up to date)
+    // spec: S-0212 claim 5 (connectivity brought up to date after a bridge destroyed or repaired, whether or not a link changed)
     w.regions.dirty = true;
 }

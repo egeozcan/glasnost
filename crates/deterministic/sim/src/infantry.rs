@@ -421,6 +421,7 @@ pub fn fear_turn(w: &mut World, id: ObjectId, in_progress: bool, has_dest: bool)
     let f = s.fear;
     let f2 = if f > 0 && !u.fearless { f - 1 } else { f };
     let deploying = s.seq.is_some_and(Seq::is_deploy);
+    let falling = o.fall.falling;
     if let Some(st) = w.obj_mut(id).and_then(|o| o.infantry.as_mut()) {
         st.fear = f2;
     }
@@ -437,6 +438,19 @@ pub fn fear_turn(w: &mut World, id: ObjectId, in_progress: bool, has_dest: bool)
         } else if s.prone && !deploying && f2 < 50 {
             request(w, id, Seq::GetUp, false);
         }
+    }
+    // spec: S-0107 claim 15 (Flee row: on every tick a fraidycat that is not deploying, not falling, with no movement in progress and no destination scatters when f′ > 50, after the lie-down and get-up rows) and S-0315 claim 2 (whatever its owner)
+    if u.fraidycat && !deploying && !falling && !in_progress && !has_dest && f2 > 50 {
+        // spec: S-0208 Terms (the flee rule's scatter request: forced, no threat point, not move-anywhere)
+        crate::scatter::request(
+            w,
+            id,
+            crate::scatter::ScatterRequest {
+                threat: None,
+                forced: true,
+                anywhere: false,
+            },
+        );
     }
     // spec: S-0107 State and ordering (on every tick a unit whose current sequence is parachute and that is no longer falling asks for stand, forced); S-0522 claim 12
     if w.obj(id).is_some_and(|o| {

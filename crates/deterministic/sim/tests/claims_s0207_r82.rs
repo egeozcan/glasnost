@@ -396,7 +396,7 @@ fn claim_28_d34_c_the_cycle_jumps_only_to_the_docking_cell() {
         let mut own: Vec<CellXY> = o
             .drive
             .as_ref()
-            .map(|d| d.claims.clone())
+            .map(|d| d.claims.iter().map(|x| x.0).collect())
             .unwrap_or_default();
         own.extend(o.teleport.as_ref().and_then(|t| t.mark));
         let stale: Vec<CellXY> = w

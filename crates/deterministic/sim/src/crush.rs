@@ -152,9 +152,8 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
         if thief && ob.dest == Some(Target::Object(id)) && !train {
             // spec: S-0210 claim 5 (the crusher is taken over instead: the thief disappears, the owner changes at once)
             crate::objects::remove(w, x);
-            if let Some(c2) = w.obj_mut(id) {
-                c2.owner = ob.owner;
-            }
+            // spec: S-0210 claim 5 and S-0414 claim 4 (a change of owner with every change-of-owner consumer, whatever its cause)
+            crate::mind::set_owner(w, id, ob.owner);
             continue;
         }
         if ob.kind == Kind::Vehicle {
@@ -162,6 +161,9 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
             // spec: S-0309 claim 27 and S-0210 claim 4 (its picks come before its holders' timer draws, which its removal takes)
             crate::combat::death::vehicle_animations(w, x, &ob);
         }
+        // spec: S-0210 claim 4 (the kill is credited to the crusher, as for any kill: S-0414 claims 21 and 22 for the result screen's counts, S-0311 claims 7 to 10 for score and veterancy)
+        crate::econ::stats::destruction(w, x, crate::econ::stats::Credit::Object(id));
+        crate::combat::veterancy::destruction_credited(w, x, Some(id), cr.owner);
         // spec: S-0210 claim 4 (removed on the same tick, no damage)
         crate::objects::remove(w, x);
         // spec: S-0210 claim 4 (the crushed type's crush sound plays at the crusher's position)

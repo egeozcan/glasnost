@@ -921,7 +921,9 @@ fn flag_holders(w: &World, c: CellXY, mover: ObjectId) -> Vec<ObjectId> {
         .values()
         .filter(|o| o.id != mover)
         .filter(|o| {
-            o.drive.as_ref().is_some_and(|d| d.claims.contains(&c))
+            o.drive
+                .as_ref()
+                .is_some_and(|d| d.claims.iter().any(|&(x, _)| x == c))
                 || o.hover
                     .as_ref()
                     .is_some_and(|h| h.claims.iter().any(|&(x, _)| x == c))
@@ -1694,7 +1696,7 @@ mod tests {
             .as_mut()
             .expect("a driving vehicle")
             .claims
-            .push(ahead);
+            .push((ahead, glasnost_sim::world::Layer::Ground));
         assert_eq!(flag_holders(&w, ahead, b), vec![a]);
         assert!(
             flag_holders(&w, ahead, a).is_empty(),

@@ -444,6 +444,15 @@ pub fn infantry_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32)
             Outcome::EnemyObstacle
         });
     }
+    // spec: S-0209 claim 4 (row WP4: a building in the cell that is the walker's mission target, or has its reference point, S-0204 claim 4, in the mission-target cell)
+    let wp4 = w.cells.list(c, obj_layer).iter().copied().find(|&b| {
+        w.obj(b).is_some_and(|o| o.kind == Kind::Building)
+            && match mission {
+                Some(Target::Object(t)) => t == b,
+                Some(Target::Cell(t)) => w.reference_point(b).cell() == t,
+                None => false,
+            }
+    });
     let mut override_value: Option<(usize, Outcome)> = None;
     let mut excused = false;
     for &oid in w.cells.list(c, obj_layer) {
@@ -467,6 +476,9 @@ pub fn infantry_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32)
                 // spec: S-0209 claim 4 (row WP3: the mission target overrides: clear, unless that occupant is being erased)
                 (true, Some(Outcome::Clear))
             }
+        } else if wp4.is_some_and(|b| b != oid) && !crate::econ::power::being_erased(w, oid) {
+            // spec: S-0209 claim 4 (row WP4: any other occupant of that building's cell gives none, unless it is being erased)
+            (false, None)
         } else if o.kind == Kind::Building {
             let b = &r.buildings[o.type_index as usize];
             if building_gives_none(w, oid) {
