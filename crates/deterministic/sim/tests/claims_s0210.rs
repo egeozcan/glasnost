@@ -10,6 +10,7 @@ use glasnost_num::F64;
 use glasnost_rules::sim::{BuildingType, Decimal, MovementZone, OverlayType, UnitType};
 use glasnost_sim::consts::CRUSH_CAP;
 use glasnost_sim::crush;
+use glasnost_sim::econ::victory;
 use glasnost_sim::infantry::Seq;
 use glasnost_sim::occupancy;
 use glasnost_sim::orders::{self, Order};
@@ -343,6 +344,43 @@ fn a_vehicle_thief_takes_the_crusher_over() {
     crush::at_cell_centre(&mut w, c);
     assert!(w.obj(t).is_none(), "the thief disappears");
     assert_eq!(w.obj(c).unwrap().owner, Some(HouseId(1)));
+}
+
+// spec: S-0210 claim 5 (the crusher changes owner to the thief's house), S-0414 claim 4 (a change of owner counts as leaving the map for the old owner and entering it for the new one, whatever its cause) and S-0309 claim 30 (a holder that changes owner drops its target)
+#[test]
+fn a_take_over_is_a_full_change_of_owner() {
+    let (a, b) = (HouseId(0), HouseId(1));
+    // The placing order that lists the grunt after the thief.
+    let grunt_first = {
+        let (w, _, t, g) = thief_world("MASHER", true);
+        listed_before(&w, t, g)
+    };
+    let (mut w, c, t, g) = thief_world("MASHER", grunt_first);
+    assert!(listed_before(&w, t, g));
+    w.obj_mut(c).unwrap().target = Some(Target::Object(g));
+    assert_eq!(
+        (victory::normal_sum(&w, a), victory::normal_sum(&w, b)),
+        (1, 2)
+    );
+    crush::at_cell_centre(&mut w, c);
+    assert!(w.obj(t).is_none(), "the thief disappears");
+    assert!(
+        w.obj(g).is_some(),
+        "listed after the thief: judged against the new house"
+    );
+    assert_eq!(w.obj(c).unwrap().owner, Some(b));
+    assert_eq!(
+        (victory::normal_sum(&w, a), victory::normal_sum(&w, b)),
+        (0, 2),
+        "the vehicle counts for the thief's house, not for its old one"
+    );
+    assert_eq!(w.obj(c).unwrap().target, None, "the target is dropped");
+    glasnost_sim::objects::remove(&mut w, c);
+    assert!(!victory::passes(&w, a), "the old owner has nothing left");
+    assert!(
+        victory::passes(&w, b),
+        "the thief's house still has its infantry"
+    );
 }
 
 // spec: S-0210 claim 5 (a thief whose destination is not the crusher is crushed as usual)
