@@ -1976,9 +1976,6 @@ fn pad_cell(w: &World, k: ObjectId, id: ObjectId) -> bool {
 fn dock(w: &mut World, id: ObjectId, k: ObjectId) {
     // spec: S-0501 claim 24 (docking by landing never applies the docking position: it rests where it touched down, short of that position if the horizontal difference was not used up) and S-0404 claim 15 (its contact place)
     let (_, place) = crate::econ::release::pad_position(w, k, id);
-    let facing = landing_facing(w, id);
-    let t = w.tick;
-    let keeps = w.rules().quirks.set_facing_keeps_target;
     if let Some(o) = w.obj_mut(id) {
         o.contact = Some(k);
         o.econ.exit = Some(crate::econ::release::Exit {
@@ -1986,10 +1983,8 @@ fn dock(w: &mut World, id: ObjectId, k: ObjectId) {
             tethered: false,
             place,
         });
-        // Claim 25's application time is open (Open question 4): applied at touchdown.
-        o.body.set(facing, t, keeps);
-        o.turret.set(facing, t, keeps);
     }
+    // spec: S-0501 claim 24 (r134, Q-2649: neither the report after a touchdown nor the pad's answer to it requests a facing) and claim 25 (the landing direction's one named use is claim 42's aiming request) (#162)
     report_entered(w, id, k);
 }
 
