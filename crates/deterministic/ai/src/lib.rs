@@ -92,10 +92,13 @@ fn explored_part(
     house: glasnost_sim::world::HouseId,
     o: &glasnost_sim::world::Object,
 ) -> bool {
-    // design: own AI (#37): any cell the object stands on
-    cells_of(w, o)
-        .into_iter()
-        .any(|c| glasnost_sim::econ::shroud::explored(w, house, c))
+    use glasnost_sim::econ::shroud;
+    // design: own AI (#37): any cell the object stands on; its own cell first, the foundation only when that one is unexplored
+    shroud::explored(w, house, o.pos.cell())
+        || (o.kind == glasnost_sim::rules::Kind::Building
+            && cells_of(w, o)
+                .into_iter()
+                .any(|c| shroud::explored(w, house, c)))
 }
 
 /// The cells object `o` stands on: a building's foundation from its
