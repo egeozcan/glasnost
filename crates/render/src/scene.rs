@@ -242,6 +242,13 @@ pub struct Scene {
     pub rewritten: std::collections::BTreeMap<u32, u64>,
     /// The number of in-place rewrites so far.
     pub rewrites: u64,
+    /// The palette rows rewritten in place by [`Scene::replace_rows`]: each
+    /// row with the value of [`Scene::row_rewrites`] at its last rewrite,
+    /// so that an uploader can find those rewritten since it last looked
+    /// (design: render (#107)).
+    pub rows_rewritten: std::collections::BTreeMap<u32, u64>,
+    /// The number of in-place row rewrites so far.
+    pub row_rewrites: u64,
 }
 
 impl Scene {
@@ -305,6 +312,10 @@ impl Scene {
             return false;
         };
         old.copy_from_slice(rows);
+        self.row_rewrites += 1;
+        for r in base..base + rows.len() {
+            self.rows_rewritten.insert(r as u32, self.row_rewrites);
+        }
         true
     }
 

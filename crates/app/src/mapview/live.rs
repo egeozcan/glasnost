@@ -3627,6 +3627,17 @@ impl Live {
                 .retint_houses(inputs, scene, &mut self.live_overlays);
             self.house_tint = house_tint;
         }
+        if relit || retinted {
+            // design: render (#107): the tables no cell chooses and no kept drawing takes give
+            // their rows back; this frame's other drawings are made below from today's tables
+            self.painter.free_unused_rows(
+                self.cell_pass
+                    .iter()
+                    .chain(self.static_ground.iter().flat_map(|g| g.items.iter()))
+                    .chain(self.static_layered.iter().flat_map(|(_, g)| g.items.iter()))
+                    .chain(self.live_overlays.iter()),
+            );
+        }
         if gone != self.gone || relit || retinted {
             scene.items.clear();
             scene.items.extend(

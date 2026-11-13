@@ -27,8 +27,8 @@ use glasnost_map::{CellGrid, CellXY, LightingSet, Map, NO_OVERLAY};
 use glasnost_num::geom::n_step;
 use glasnost_num::{F64, Rounding};
 use glasnost_render::compose::{
-    CompanionBody, DIAMOND_WIDTH, DepthTest, Paint, Profile, Shade, SignedImage, Translucency,
-    companion_origin, row565,
+    CompanionBody, DIAMOND_WIDTH, DepthTest, Paint, Profile, Row565, Shade, SignedImage,
+    Translucency, companion_origin, row565,
 };
 
 use glasnost_render::light::{self, DetailLevel, LightQuirks, LightSource, TileTable};
@@ -1216,6 +1216,28 @@ struct Rows {
     /// The general palette's untinted table (S-0306 Terms); `None` inside
     /// when its file is missing or unreadable.
     general: Option<Option<(usize, usize)>>,
+    /// The first rows of the tile and house-colour tables given back by
+    /// [`Painter::free_unused_rows`], by row count, for the next table of
+    /// that size (design: render (#107)).
+    free: BTreeMap<usize, Vec<usize>>,
+}
+
+impl Rows {
+    /// Puts the table `rows` into `scene`: into the rows of a freed table
+    /// of its size, or after the last row (design: render (#107)). Returns
+    /// its first row.
+    fn place(&mut self, scene: &mut Scene, rows: &[Row565]) -> usize {
+        if let Some(base) = self.free.get_mut(&rows.len()).and_then(Vec::pop)
+            && scene.replace_rows(base, rows)
+        {
+            return base;
+        }
+        let base = scene.rows.len();
+        for &row in rows {
+            scene.add_row(row);
+        }
+        base
+    }
 }
 
 /// The shared building companion depth image as read (S-0102 claims 31
@@ -6367,10 +6389,8 @@ impl Painter {
             None => {
                 // spec: S-0103 claim 8 (terrain tiles use the tile palette, shaded by their cell's table)
                 let t = light::shade_table(palette, table.tint(), table.rows(), None);
-                let base = scene.rows.len();
-                for row in &t {
-                    scene.add_row(row565(row));
-                }
+                let rows: Vec<Row565> = t.iter().map(row565).collect();
+                let base = self.rows.place(scene, &rows);
                 self.rows.tiles.insert(table, (base, t.len()));
                 (base, t.len())
             }
@@ -6443,10 +6463,8 @@ impl Painter {
         let pal = house_palette(source, remap.hsv);
         // spec: S-0103 claims 7 and 17 (indices 240 … 254 are tint-exempt in house-colour and named palettes)
         let t = light::shade_table(&pal, tint, HOUSE_ROWS, Some(TINT_EXEMPT));
-        let base = scene.rows.len();
-        for row in &t {
-            scene.add_row(row565(row));
-        }
+        let rows: Vec<Row565> = t.iter().map(row565).collect();
+        let base = self.rows.place(scene, &rows);
         self.rows.houses.insert((remap, tint), (base, t.len()));
         (base, t.len())
     }
@@ -6560,7 +6578,55 @@ impl Painter {
     /// Tables of the same size take their rows later. The drawings made
     /// each frame are made after this, from today's tables.
     pub fn free_unused_rows<'a>(&mut self, held: impl IntoIterator<Item = &'a Item>) {
-        let _ = held;
+        // Every row a kept drawing reads, so that a table is kept whichever
+        // of its rows is named.
+        let mut used = BTreeSet::new();
+        for item in held {
+            match item.paint {
+                Paint::Lit(s) | Paint::LitDiamond(s) | Paint::Translucent(s, _) => {
+                    let base = s.base as usize;
+                    used.extend(base..base + usize::from(s.rows));
+                }
+                Paint::Row(r) | Paint::Diamond(r) => {
+                    used.insert(r);
+                }
+                Paint::Shadow | Paint::Pixel(_) => {}
+            }
+        }
+        let unused = |&(base, n): &(usize, usize)| used.range(base..base + n).next().is_none();
+        let chosen: BTreeSet<TileTable> = self
+            .lights
+            .cells
+            .iter()
+            .flatten()
+            .map(|l| l.table)
+            .chain([TileTable::Neutral])
+            .collect();
+        let tint = self.house_tint();
+        let tiles: Vec<TileTable> = self
+            .rows
+            .tiles
+            .iter()
+            .filter(|(t, r)| !chosen.contains(t) && unused(r))
+            .map(|(t, _)| *t)
+            .collect();
+        let houses: Vec<(Remap, [i32; 3])> = self
+            .rows
+            .houses
+            .iter()
+            .filter(|((_, t), r)| *t != tint && unused(r))
+            .map(|(k, _)| *k)
+            .collect();
+        let mut freed: Vec<(usize, usize)> = Vec::new();
+        for t in tiles {
+            freed.extend(self.rows.tiles.remove(&t));
+        }
+        for k in houses {
+            freed.extend(self.rows.houses.remove(&k));
+        }
+        for (base, n) in freed {
+            self.rows.free.entry(n).or_default().push(base);
+        }
     }
 
     /// Sets the radiation fields' light sources (S-0525 claim 13); returns
