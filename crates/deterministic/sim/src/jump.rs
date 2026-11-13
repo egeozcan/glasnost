@@ -1350,9 +1350,8 @@ fn height_step(w: &World, id: ObjectId, j: &mut JumpState, f: &JumpFields, mode:
     // spec: S-0502 claim 9 and F3 (revision 14: the look-ahead in every state except grounded and descending, crashing included even at zero speed, when the movement point, not the order-level destination, is in another cell, and always for a balloon-hover type; otherwise, no movement point included, the direct reference)
     let elsewhere = j.dest.is_some_and(|d| d.cell() != p.cell());
     // spec: S-0502 F3, claim 18 and Edge cases (r24, Q-3042: crashing has no exception, so a listed object can hold the crash up; quirks.jumpjet_crash_lookahead off: an ordinary, not seized, crashing jumpjet always uses the direct reference)
-    let plain_crash = phase == Phase::Crashing
-        && !w.rules().quirks.jumpjet_crash_lookahead
-        && !seized(w, id);
+    let plain_crash =
+        phase == Phase::Crashing && !w.rules().quirks.jumpjet_crash_lookahead && !seized(w, id);
     let look = !matches!(phase, Phase::Grounded | Phase::Descending)
         && !plain_crash
         && (elsewhere || balloon_vehicle(w, id));

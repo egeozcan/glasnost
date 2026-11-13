@@ -649,9 +649,8 @@ fn ac4_run_4_given_no_destination_over_its_flight_points_cell_the_landing_goes_o
     let ti = w.obj(a).unwrap().type_index;
     let v = w.rules().unit(Kind::Aircraft, ti).unwrap().speed;
     let centre = glasnost_sim::world::Pos::centre(c, 0);
-    let dist = |x: i32, y: i32| {
-        (i64::from(x - centre.x).pow(2) + i64::from(y - centre.y).pow(2)).isqrt()
-    };
+    let dist =
+        |x: i32, y: i32| (i64::from(x - centre.x).pow(2) + i64::from(y - centre.y).pow(2)).isqrt();
     let mut h = air::height(&w, a);
     let mut checked = 0;
     let mut nudged = 0;

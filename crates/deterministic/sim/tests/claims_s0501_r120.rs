@@ -266,9 +266,8 @@ fn ac4_run_1_landing_where_it_is_starts_in_the_cell_and_does_not_steer() {
     let ti = w.obj(a).unwrap().type_index;
     let v = w.rules().unit(Kind::Aircraft, ti).unwrap().speed;
     let centre = glasnost_sim::world::Pos::centre(c, 0);
-    let dist = |x: i32, y: i32| {
-        (i64::from(x - centre.x).pow(2) + i64::from(y - centre.y).pow(2)).isqrt()
-    };
+    let dist =
+        |x: i32, y: i32| (i64::from(x - centre.x).pow(2) + i64::from(y - centre.y).pow(2)).isqrt();
     let mut checked = 0;
     let mut nudged = 0;
     for _ in 0..400 {

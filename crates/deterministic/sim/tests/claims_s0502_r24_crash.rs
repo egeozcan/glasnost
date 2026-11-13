@@ -119,7 +119,9 @@ fn j31_b_the_held_up_crash_ends_once_the_other_unit_leaves() {
     assert!(jump::crashing(&w, u), "held up");
     glasnost_sim::objects::remove(&mut w, other.unwrap());
     assert!(
-        until(&mut w, 30, |w| w.obj(u).is_none_or(|_| !jump::crashing(w, u))),
+        until(&mut w, 30, |w| w
+            .obj(u)
+            .is_none_or(|_| !jump::crashing(w, u))),
         "the crash ends within a few ticks"
     );
 }
@@ -131,7 +133,9 @@ fn j31_c_alone_in_its_cell_the_crash_ends() {
     let (u, _) = shot_down(&mut w, false, 50);
     kill(&mut w, u);
     assert!(
-        until(&mut w, 30, |w| w.obj(u).is_none_or(|_| !jump::crashing(w, u))),
+        until(&mut w, 30, |w| w
+            .obj(u)
+            .is_none_or(|_| !jump::crashing(w, u))),
         "the crash ends within a few ticks"
     );
 }
@@ -169,7 +173,9 @@ fn j31_a_with_the_crash_lookahead_off_the_crash_ends() {
     let (u, _) = shot_down(&mut w, true, 50);
     kill(&mut w, u);
     assert!(
-        until(&mut w, 30, |w| w.obj(u).is_none_or(|_| !jump::crashing(w, u))),
+        until(&mut w, 30, |w| w
+            .obj(u)
+            .is_none_or(|_| !jump::crashing(w, u))),
         "the crash ends"
     );
 }

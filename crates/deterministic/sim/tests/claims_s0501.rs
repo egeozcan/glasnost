@@ -4496,7 +4496,11 @@ fn claim_53_ac37_a_a_strafer_flies_on_to_its_killed_targets_point() {
     assert_eq!(o.target, None, "the target is lost at the hit");
     assert_eq!(o.dest, None, "the destination is lost at the hit");
     let s = st(&w, a);
-    assert_eq!(s.flying_to, Some(Target::Object(v)), "the flight is not told");
+    assert_eq!(
+        s.flying_to,
+        Some(Target::Object(v)),
+        "the flight is not told"
+    );
     assert!(s.unfinished, "its flight stays unfinished");
     let ticks = flies_on_to(&mut w, a, Target::Object(v), p);
     assert!(ticks > 1, "the strafer flew on until its next processing");
@@ -4602,7 +4606,11 @@ fn claim_53_ac37_b_a_move_that_loses_its_destination_after_the_second_processing
         let o = w.obj(a).unwrap();
         assert_eq!(o.beh.current, Some(Behaviour::Move), "{}", describe(&w, a));
         assert_eq!(o.dest, None, "no destination: {}", describe(&w, a));
-        assert_eq!(air::flight_point(&w, a, Target::Object(v)), p, "the kept point");
+        assert_eq!(
+            air::flight_point(&w, a, Target::Object(v)),
+            p,
+            "the kept point"
+        );
         if let Some(g) = guided_point(&w, a) {
             assert_eq!(g, p, "toward the kept point");
         }

@@ -4279,10 +4279,7 @@ fn move_(w: &mut World, id: ObjectId) -> i32 {
     // spec: S-0501 claim 40 (the selection runs at the first processing of every such move, also one started inside another behaviour's processing, such as the fall-back at a run's end, whose start timer that processing's delay replaced, S-0215 claims 2 and 3)
     let first = expired || st(w, id).first_moved != Some(start);
     let s = st(w, id);
-    if s.lost
-        && w.obj(id).is_some_and(|o| o.dest.is_none())
-        && (first || s.regive == Some(start))
-    {
+    if s.lost && w.obj(id).is_some_and(|o| o.dest.is_none()) && (first || s.regive == Some(start)) {
         // spec: S-0501 claim 53 (r183, Q-3041: in an ordinary move, a loss of the destination object before the move's second processing, the one that gives its flight point once more, makes its next processing fall back to rest, claim 18)
         if let Some(a) = st_mut(w, id) {
             a.regive = None;
