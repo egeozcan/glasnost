@@ -1376,6 +1376,7 @@ impl Client {
         match self.shell.screen {
             Screen::Multiplayer => self.netform.focus.is_some(),
             Screen::Room | Screen::Game => self.net.as_ref().is_some_and(|n| n.typing),
+            Screen::Setup => self.shell.picker.open && self.shell.picker.typing,
             _ => false,
         }
     }
@@ -1388,6 +1389,7 @@ impl Client {
         }
         match self.shell.screen {
             Screen::Multiplayer => self.netform.type_text(&text),
+            Screen::Setup => self.search_typed(&text),
             Screen::Room | Screen::Game => {
                 if let Some(n) = self.net.as_mut().filter(|n| n.typing) {
                     for c in text.chars() {
@@ -1564,6 +1566,15 @@ impl Client {
                 })
             }
             SetupHit::Back => return None,
+            // The map picker is the skirmish screen's (design: map picker
+            // (lead's request 2026-11-13)); the room never offers it.
+            SetupHit::OpenMaps
+            | SetupHit::PickMap(_)
+            | SetupHit::SearchField
+            | SetupHit::ClearSearch
+            | SetupHit::Filter(..)
+            | SetupHit::ScrollMaps(_)
+            | SetupHit::MapsDone => return None,
         })
     }
 

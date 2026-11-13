@@ -4,6 +4,7 @@
 //! network screens, which depend on the relay's answers).
 
 use crate::end::End;
+use crate::mappick::{self, MapFacts, MapPicker};
 use crate::menu::MenuHit;
 use crate::setup::{Lobby, MapEntry, Setup, SetupHit, SetupRules};
 
@@ -44,6 +45,9 @@ pub struct Shell {
     pub screen: Screen,
     /// The setup screen's state, kept between games.
     pub setup: Option<Setup>,
+    /// The skirmish setup's map picker (design: map picker (lead's request
+    /// 2026-11-13)).
+    pub picker: MapPicker,
 }
 
 impl Default for Shell {
@@ -58,6 +62,7 @@ impl Shell {
         Self {
             screen: Screen::Menu,
             setup: None,
+            picker: MapPicker::default(),
         }
     }
 
@@ -84,25 +89,121 @@ impl Shell {
         }
     }
 
-    /// A click on a setup target.
+    /// A click on a setup target, with no facts about the maps beyond
+    /// their entries ([`Shell::setup_with`]).
     pub fn setup(&mut self, hit: SetupHit, rules: &SetupRules, maps: &[MapEntry]) -> Option<Event> {
-        let s = self.setup.get_or_insert_with(|| Setup::new(rules));
+        self.setup_with(hit, rules, maps, &[])
+    }
+
+    /// The maps the picker's search and filters leave, in its order, as
+    /// indices into `maps` (`facts` by the same index).
+    pub fn maps_shown(&self, maps: &[MapEntry], facts: &[MapFacts]) -> Vec<usize> {
+        self.picker.query.shown(maps, facts)
+    }
+
+    /// Applies the picker's selection rule to the setup's map: kept while
+    /// the search and filters leave it, else the first map they leave
+    /// (design: map picker (lead's request 2026-11-13)); unchanged when
+    /// they leave none. Returns the maps they leave.
+    pub fn refilter(&mut self, maps: &[MapEntry], facts: &[MapFacts]) -> Vec<usize> {
+        let shown = self.maps_shown(maps, facts);
+        if let Some(s) = self.setup.as_mut()
+            && let Some(i) = mappick::keep_or_first(s.map, &shown)
+            && i != s.map
+        {
+            s.choose_map(i, maps);
+        }
+        if let Some(s) = self.setup.as_ref()
+            && let Some(at) = shown.iter().position(|&i| i == s.map)
+        {
+            self.picker.reveal(at, shown.len());
+        }
+        shown
+    }
+
+    /// A click on a setup target. `facts` holds what the map picker
+    /// filters on (an empty list: nothing known), by the index of `maps`.
+    /// The map arrows step through the picker's list, and the game does not
+    /// start while the list is empty.
+    pub fn setup_with(
+        &mut self,
+        hit: SetupHit,
+        rules: &SetupRules,
+        maps: &[MapEntry],
+        facts: &[MapFacts],
+    ) -> Option<Event> {
+        self.setup.get_or_insert_with(|| Setup::new(rules));
+        let shown = self.maps_shown(maps, facts);
+        let p = &mut self.picker;
+        let s = self.setup.as_mut()?;
         match hit {
             SetupHit::Back => {
+                p.open = false;
+                p.typing = false;
                 self.screen = Screen::Menu;
-                None
+                return None;
             }
-            SetupHit::Start_ => match s.lobby(rules, maps) {
-                Ok(l) => {
-                    self.screen = Screen::Game;
-                    Some(Event::StartGame(l))
+            SetupHit::Start_ if shown.is_empty() => return None,
+            SetupHit::Start_ => {
+                return match s.lobby(rules, maps) {
+                    Ok(l) => {
+                        p.open = false;
+                        p.typing = false;
+                        self.screen = Screen::Game;
+                        Some(Event::StartGame(l))
+                    }
+                    Err(_) => None,
+                };
+            }
+            // design: map picker (lead's request 2026-11-13): the arrows step through the list the search and filters leave, in its order
+            SetupHit::Map(d) => {
+                let at = shown.iter().position(|&i| i == s.map);
+                let next = match at {
+                    Some(at) => shown.get((at as i32 + d).rem_euclid(shown.len() as i32) as usize),
+                    None => shown.first(),
+                };
+                if let Some(&i) = next {
+                    s.choose_map(i, maps);
                 }
-                Err(_) => None,
-            },
-            h => {
-                s.apply(&h, rules, maps);
-                None
             }
+            SetupHit::OpenMaps => {
+                p.open = true;
+                p.typing = true;
+            }
+            SetupHit::MapsDone => {
+                p.open = false;
+                p.typing = false;
+            }
+            SetupHit::PickMap(i) => s.choose_map(i, maps),
+            SetupHit::SearchField => p.typing = true,
+            SetupHit::ClearSearch => {
+                p.query.search.clear();
+                p.typing = true;
+            }
+            SetupHit::Filter(k, d) => p.query.step(k, d, maps, facts),
+            SetupHit::ScrollMaps(d) => {
+                p.scroll_by(d, shown.len());
+                return None;
+            }
+            h => s.apply(&h, rules, maps),
+        }
+        self.refilter(maps, facts);
+        None
+    }
+
+    /// Typed text for the picker's search, while it takes typing.
+    pub fn type_search(&mut self, text: &str, maps: &[MapEntry], facts: &[MapFacts]) {
+        if self.picker.open && self.picker.typing {
+            self.picker.query.type_text(text);
+            self.refilter(maps, facts);
+        }
+    }
+
+    /// Backspace in the picker's search, while it takes typing.
+    pub fn search_backspace(&mut self, maps: &[MapEntry], facts: &[MapFacts]) {
+        if self.picker.open && self.picker.typing {
+            self.picker.query.backspace();
+            self.refilter(maps, facts);
         }
     }
 

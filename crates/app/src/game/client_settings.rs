@@ -59,13 +59,16 @@ impl Client {
             }
             SettingsHit::Rebind(i) => self.rebinding = Some(i),
             SettingsHit::Reset => {
-                // The relay address and a game to rejoin are not
+                // The relay address, a game to rejoin and the map picker's
+                // search and filters (kept from its own screen) are not
                 // preferences to reset.
                 let relay = std::mem::take(&mut self.settings.relay);
                 let rejoin = self.settings.rejoin.take();
+                let maps = std::mem::take(&mut self.settings.maps);
                 self.settings = Settings {
                     relay,
                     rejoin,
+                    maps,
                     ..Settings::default()
                 };
                 self.settings_changed();

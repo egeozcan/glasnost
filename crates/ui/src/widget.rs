@@ -299,6 +299,36 @@ pub fn text_field(
     box_r
 }
 
+/// A one-line text field without a label: the text in the box `r`, or
+/// `placeholder` dimmed while the text is empty and the field not focused,
+/// with a caret when `focused`. Returns the box (design: map picker
+/// (lead's request 2026-11-13)).
+pub fn search_field(
+    d: &mut DrawList,
+    r: Rect,
+    value: &str,
+    placeholder: &str,
+    focused: bool,
+    hot: bool,
+) -> Rect {
+    d.fill(r, if focused { colour::HOT } else { colour::RAISED });
+    d.frame(
+        r,
+        if focused || hot {
+            colour::ACCENT
+        } else {
+            colour::EDGE
+        },
+    );
+    let inner = Rect::new(r.x + 3, r.y, r.w - 6, r.h);
+    if value.is_empty() && !focused {
+        d.text_left(inner, &font::fit(placeholder, r.w - 12), colour::DIM);
+    } else {
+        d.text_left(inner, &tail_fit(value, r.w - 12, focused), colour::TEXT);
+    }
+    r
+}
+
 /// The end of `s` that fits in `width` pixels, with a caret when `caret`.
 pub fn tail_fit(s: &str, width: i32, caret: bool) -> String {
     let caret = if caret { "_" } else { "" };

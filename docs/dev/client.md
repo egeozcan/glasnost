@@ -122,6 +122,41 @@ Tests: `display_tests.rs` (the factor at scale factors 1.0, 1.25, 1.5, 2.0, 2.25
 
 Known limits: a fractional scale factor gets a whole factor, so at 1.25 the picture is one screen pixel per view pixel (smaller than the desktop's other windows) and at 1.5 two (larger); a fractional factor would blur or unevenly size art pixels. Up to `factor − 1` black columns and rows can show at the right and bottom. The browser's own zoom changes `devicePixelRatio` and so the factor under Auto.
 
+### Map picker (our own design)
+
+The lead asked on 2026-11-13 for previews, search and filtering in the map selection. The search, the filters, the sort, the size classes and the layout are ours, marked `// design: map picker (lead's request 2026-11-13)`. The preview's pixels follow S-0009 claim 24 and S-0012 claim 8, and the start markers over it follow S-0009 claim 25 and its Formulas. This is a client change only: no simulation state, save, replay, wire (format 12) or golden changes. `Setup` and `Problem` keep their shape, so the room is unchanged.
+
+- **Setup screen.** The map row keeps its arrows, which step through the maps that the search and filters leave, in the list's order. A **Choose map** button and the chosen map's preview (160 × 100, below the settings) open the picker. With the default search and filters, the arrows step in install order, as before.
+- **Picker** (`glasnost_ui::mappick`, drawn in the setup panel's 620 × 440 box, so it fits at `MIN_UI` 640 × 480 and at every interface size):
+  - **Search field.** It takes the typing while the picker is open. Every word typed must appear in the map's shown name, ignoring case. **Clear** empties it.
+  - **Sort.** As found (the install's order), Name, Players or Size.
+  - **Filters.** Players (Any, or each start count offered). Size (Any, Small, Medium, Large). Theater (Any, or each theater offered). Preview (Any, With, Without).
+  - **List.** 20 rows of 16 px with a scroll bar. Below it, the count "N of M maps".
+  - **Preview box** (290 × 200), with the name, start count, size and theater below it. **Done** closes the picker.
+- **Size classes.** Maps are ranked by area (width × height of `[Map] Size`). The smallest third is Small, the middle third Medium and the rest Large. Maps of equal area share a class.
+- **Selection rule.** After every change to the search or a filter, the chosen map stays if it is still in the list. Otherwise the first map of the list is taken. When nothing matches, the choice stays, both screens say "No map matches the search and filters", the setup shows no Start button, and Start is refused (`Shell::setup_with`).
+- **Keys.** While the search has the typing, letters and Space go into it and Backspace deletes. With no control focused, Up and Down choose the previous or next map of the list, and Enter closes the picker. Escape always closes it. Tab and the arrows otherwise move the keyboard focus as on the other screens. Typing follows the focus: it goes to the search only while the focus is on the search field. As on the multiplayer screen, a click anywhere but the search field (or **Clear**) ends the typing, and a click on the field starts it again.
+- **Wheel and touch.** The wheel scrolls the list 3 rows per notch. A touchpad swipe, or a finger dragged anywhere on the picker, scrolls it one row per row height (`Region::Bar` with the row pitch). A tap clicks, as on every screen.
+- **Previews.**
+  - `install::prepare` parses each offered map once. `glasnost_convert::map::list_facts` reads the size, the theater, the header block and the preview block, still packed (`PreviewSource`). No picture is held for the list.
+  - A preview is expanded only when its map is chosen. This happens in `Client::update`, never in `frame`, and at most one preview per update. The last 32 decoded previews are kept.
+  - The shown preview is uploaded once, as image 3 (`PREVIEW_IMAGE`). It is uploaded again after `new_device`. A side above 1024 pixels is shown at every n-th pixel.
+  - The box draws the preview fitted, keeping its proportions. The numbered markers are placed by S-0009's formula against the fitted rectangle. They are drawn only for 1 ≤ N_h ≤ 8 and a non-zero extent.
+- **No preview.** A map without a preview block, or with an invalid preview size, shows a placeholder box: "No preview" in dim text, plus "No embedded preview" in the picker's details. We chose a plain placeholder over a terrain picture built from S-0410's radar colours. That would need each map's tiles and the theater's tile art read for the list, which is a full map load per map and far too slow for hundreds of maps. A preview block that does not expand shows black (S-0009 claim 24).
+- **Markers and the quirk.** The markers come from the header block, as `quirks.preview_markers_from_header` says. With that switch off, no spec says where the markers go, so none are drawn (request Q-3064). The formula's preview place and size, (left, top) and (pw, ph), are the fitted preview's rectangle in interface pixels, scaled with the rest of the screen. This is our adaptation, because the spec states them in screen pixels.
+- **Kept.** The search, filters and sort are written to the settings file as `maps.search=`, `maps.players=`, `maps.size=`, `maps.theater=`, `maps.preview=` and `maps.sort=`. They are written only when something differs from the default. An older file without them loads with none. A wrong value keeps that field's default. **Reset** on the settings screen keeps them. When the skirmish screen opens with a kept search, the selection rule applies at once.
+
+Tests:
+- `crates/ui/src/mappick_tests.rs`: search, filters, sort, size classes, the selection rule, no match, the kept pairs, scrolling, the marker formula with its wrap example and limits, fitting, and layout at 640 × 480, 800 × 600 and 1280 × 960.
+- `crates/app/src/game/client_maps_tests.rs`: decode off the frame, a single upload and a new device; missing, broken and invalid previews; keys; no match; wheel; the settings round trip; the cache bound.
+- `install.rs` and `settings_tests.rs` tests.
+- `crates/app/tests/map_picker_shot.rs` writes pictures of 24 invented maps with generated previews to `GLASNOST_SHOT_DIR`.
+
+Known limits:
+- The network room has no picker and no preview. The host steps maps with the arrows as before.
+- There is no on-screen keyboard. No other text field opens one either, so a touch-only device cannot type a search.
+- Theater names are our own labels.
+
 ### Performance (M8 C4)
 
 The benchmark (`crates/app/src/game/bench.rs`, our own tooling: nothing in it is game behaviour). It starts a skirmish of our AI houses only on the install's `map`-th offered map, runs `late` ticks straight on the game without drawing, then times frames from fixed views at a fixed size: for each view, `warmup` frames recorded but left out, then `frames` timed ones. The views are found in the game when each starts: **base** (the watched house's densest cluster of buildings), **battle** (the mobile unit with the most units of other player houses in view), **open** (the candidate centre with the fewest objects) and **pan** (a sweep across the map's width through its middle, there and back). Ticks follow the game's own pacer against a virtual 60 frames-a-second clock, so every run and machine ticks on the same frames and draws the same pixels for the same frame; the state hash at the end is printed, and the offscreen host writes a picture of each view's last warmup frame for comparing builds. Maps are known by index and content hash only.
