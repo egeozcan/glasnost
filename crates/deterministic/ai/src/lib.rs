@@ -65,7 +65,11 @@ pub mod terror;
 /// could start it. A person sees a switched-off factory (a building locked
 /// by a temporal beam, say) and does not click a cameo the order would be
 /// refused for, so the M7a build choices ask this rather than
-/// buildability alone.
+/// buildability alone. The order must also pass the sidebar's legality
+/// when issued (S-0411 claim 4): offered, not at limit and not refused by
+/// claim 16's test (a full pad total for a dock-bound aircraft), and not on
+/// a busy building line, so a special builder never gives an order the
+/// sim refuses at every think (#426).
 pub fn startable(
     w: &glasnost_sim::world::World,
     house: glasnost_sim::world::HouseId,
@@ -80,4 +84,10 @@ pub fn startable(
                 && !b.econ.building.switched_off
                 && tech::could_start(w, b, t)
         })
+        // spec: S-0411 claim 4 and S-0407 claims 13 and 16 (the legality a build order meets when issued; design: own AI, #426, asks it before ordering)
+        && glasnost_sim::econ::sidebar::legal(
+            w,
+            house,
+            &glasnost_sim::orders::Order::Build { what: t },
+        )
 }

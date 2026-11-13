@@ -1396,13 +1396,16 @@ impl Script {
         yes
     }
 
-    /// Whether `t` is at its build limit for the house now
-    /// ([`tech::at_limit`]), the answer kept for the rest of a think.
+    /// Whether a build order for `t` would be refused at issue now by its
+    /// build limit or by claim 16's test, a full pad total for a dock-bound
+    /// aircraft among them ([`tech::refused_at_issue`]), the answer kept for
+    /// the rest of a think.
     fn at_limit(&self, w: &World, t: TypeRef) -> bool {
         if let Some(yes) = self.placed.limited(t) {
             return yes;
         }
-        let yes = tech::at_limit(w, self.house, t);
+        // spec: S-0407 claims 13 and 16 *At issue* (design: own AI, #426: a candidate the sidebar would refuse at issue is not chosen)
+        let yes = tech::refused_at_issue(w, self.house, t);
         self.placed.put_limited(t, yes);
         yes
     }
