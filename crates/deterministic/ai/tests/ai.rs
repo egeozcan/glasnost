@@ -2695,3 +2695,64 @@ fn a_move_toward_a_removed_object_leaves_the_unit_idle() {
         "bound for a removed object"
     );
 }
+
+// design: own AI (#37) and S-0516 claims 35 and 37 (an enemy unit disguised as one of the house's own appears disguised to it and is drawn as the disguise; a running fake blink shows the real unit): an idle tank of the house attacks an enemy tank next to it, not one disguised as the house's own, and again one whose fake blink runs.
+#[test]
+fn a_disguised_enemy_is_not_attacked() {
+    use glasnost_sim::cloak::{Disguise, DisguiseAs};
+    let mut g = start(5);
+    // Past the build-up, so the script gives its army orders.
+    while g.world.tick < 9000 {
+        g.step();
+    }
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    let free = |w: &World, c: glasnost_map::CellXY| {
+        w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c)
+    };
+    let (mine, theirs) = (4..20)
+        .flat_map(|r| [(r, 0), (0, r), (-r, 0), (0, -r)])
+        .map(|(dx, dy)| glasnost_map::CellXY::new(yard.x + dx, yard.y + dy))
+        .map(|c| (c, glasnost_map::CellXY::new(c.x + 2, c.y)))
+        .find(|&(a, b)| free(&g.world, a) && free(&g.world, b))
+        .expect("two free cells by the yard");
+    let gunr = g
+        .world
+        .rules()
+        .index_of(Kind::Vehicle, "GUNR")
+        .expect("GUNR");
+    let attacked = |disguised: bool, blink: bool| {
+        let mut w = g.world.clone();
+        testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, mine, 0);
+        let enemy = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, theirs, 0);
+        testkit::run(&mut w, 1);
+        while w.tick % 15 != 0 {
+            testkit::run(&mut w, 1);
+        }
+        assert!(shroud::explored(&w, HouseId(0), theirs));
+        let tick = w.tick;
+        let o = w.obj_mut(enemy).unwrap();
+        if disguised {
+            o.cloak.disguise = Some(Disguise {
+                what: Some(DisguiseAs::Vehicle(gunr)),
+                house: Some(HouseId(0)),
+                since: tick,
+            });
+        }
+        if blink {
+            o.cloak.blink_until = tick + 30;
+        }
+        let orders = Brain::with_plan(&w, &fixture::map(), HouseId(0), fixture::plan()).think(&w);
+        orders.iter().any(|o| {
+            matches!(o, Order::Behaviour { target: Some(Target::Object(t)), .. } if *t == enemy)
+        })
+    };
+    assert!(attacked(false, false), "an enemy tank in sight is attacked");
+    assert!(
+        !attacked(true, false),
+        "an enemy tank disguised as the house's own is not attacked"
+    );
+    assert!(
+        attacked(true, true),
+        "a disguised tank whose fake blink runs is shown as itself"
+    );
+}

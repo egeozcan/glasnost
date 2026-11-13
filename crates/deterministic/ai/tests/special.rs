@@ -1150,3 +1150,49 @@ fn a_spy_goes_for_cash_whatever_the_victim_holds() {
     let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
     assert!(garrison_orders(&orders, unit, target), "{orders:?}");
 }
+
+// design: own AI (#37): a building is seen when any cell of its foundation is explored, not only its top-left cell: an engineer is sent at an enemy building the house has explored all of but that cell.
+#[test]
+fn a_building_is_seen_by_any_of_its_cells() {
+    let mut g = game(5);
+    ready(&mut g);
+    let mut w = g.world.clone();
+    let home = home_of(&w);
+    let unit = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "ENGI",
+        0,
+        glasnost_map::CellXY::new(home.x + 3, home.y + 3),
+        0,
+    );
+    let explored =
+        |w: &World, c: glasnost_map::CellXY| glasnost_sim::econ::shroud::explored(w, HouseId(0), c);
+    let cells = |c: glasnost_map::CellXY| {
+        [(0, 0), (1, 0), (0, 1), (1, 1)]
+            .map(|(dx, dy)| glasnost_map::CellXY::new(c.x + dx, c.y + dy))
+    };
+    // The nearest 2 × 2 spot on the edge of what the house has explored:
+    // its top-left cell shrouded, its bottom-right cell explored, usable
+    // ground and nothing on it.
+    let spot = (0..2 * fixture::SIZE)
+        .flat_map(|y| (0..2 * fixture::SIZE).map(move |x| glasnost_map::CellXY::new(x, y)))
+        .filter(|&c| {
+            !explored(&w, c)
+                && explored(&w, glasnost_map::CellXY::new(c.x + 1, c.y + 1))
+                && cells(c)
+                    .iter()
+                    .all(|&x| w.cells.usable(x) && w.objects.values().all(|o| o.pos.cell() != x))
+        })
+        .min_by_key(|&c| ((c.x - home.x).pow(2) + (c.y - home.y).pow(2), c.y, c.x))
+        .expect("a spot on the edge of the explored area");
+    let target = testkit::spawn(&mut w, Kind::Building, "CAPT", 1, spot, 0);
+    run_to_think(&mut w, 2);
+    assert!(!explored(&w, spot), "the top-left cell is shrouded");
+    assert!(
+        explored(&w, glasnost_map::CellXY::new(spot.x + 1, spot.y + 1)),
+        "the bottom-right cell is explored"
+    );
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+}
