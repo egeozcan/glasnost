@@ -207,3 +207,64 @@ fn leaves_a_busy_planter_and_an_empty_field() {
     let mut brain2 = Brain::new(&w2, &fixture::map(), HouseId(0));
     assert_eq!(attack_of(&brain2.think(&w2), unit2), None);
 }
+
+// design: own AI (#26) and S-0519 claim 3 (a carrier is no target for a planting weapon): two idle planters in one think go for two different enemies, not both for the costliest one.
+#[test]
+fn two_planters_take_two_targets() {
+    let g = game();
+    let (mut w, unit, ids) = scene(&g, "PLANTER", &["GUNR", "MINR"]);
+    let at = w.obj(unit).unwrap().pos.cell();
+    // Placed at the think's tick: the first planter stays idle.
+    let second = testkit::spawn(&mut w, Kind::Infantry, "PLANTER", 0, CellXY::new(at.x, at.y + 1), 0);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    let (a, b) = (attack_of(&orders, unit), attack_of(&orders, second));
+    assert!(a.is_some() && b.is_some(), "{orders:?}");
+    assert_ne!(a, b, "both planters go for one enemy");
+    assert!(ids.contains(&a.unwrap()) && ids.contains(&b.unwrap()));
+    assert_eq!(brain.special_uses().bombs, 2);
+}
+
+// design: own AI (#26): an idle planter passes over the enemy another own planter is already sent at.
+#[test]
+fn a_planter_leaves_a_claimed_enemy_to_its_planter() {
+    let g = game();
+    let (mut w, unit, ids) = scene(&g, "PLANTER", &["GUNR", "MINR"]);
+    let best = *ids.iter().max_by_key(|&&i| actual_cost(&w, i)).unwrap();
+    let other = *ids.iter().find(|&&i| i != best).unwrap();
+    let at = w.obj(unit).unwrap().pos.cell();
+    let busy = testkit::spawn(&mut w, Kind::Infantry, "PLANTER", 0, CellXY::new(at.x, at.y + 1), 0);
+    let tick = w.tick;
+    let o = w.obj_mut(busy).unwrap();
+    o.target = Some(Target::Object(best));
+    o.beh.force(Behaviour::Attack, tick, true);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    assert_eq!(attack_of(&brain.think(&w), unit), Some(other));
+}
+
+// design: own AI (#26) and S-0519 claim 10: two idle disarmers in one think go for two different bombed own objects.
+#[test]
+fn two_disarmers_take_two_bombs() {
+    let g = game();
+    let (mut w, unit, _) = scene(&g, "DISARMER", &[]);
+    let at = w.obj(unit).unwrap().pos.cell();
+    let second = testkit::spawn(&mut w, Kind::Infantry, "DISARMER", 0, CellXY::new(at.x, at.y + 1), 0);
+    let carriers: Vec<ObjectId> = [3, 5]
+        .into_iter()
+        .map(|dx| testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, CellXY::new(at.x + dx, at.y), 0))
+        .collect();
+    for &c in &carriers {
+        bomb(&mut w, c);
+        w.obj_mut(c).unwrap().combat.bomb.as_mut().unwrap().house = Some(HouseId(0));
+    }
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    let (a, b) = (attack_of(&orders, unit), attack_of(&orders, second));
+    assert!(a.is_some() && b.is_some(), "{orders:?}");
+    assert_ne!(a, b, "both disarmers go for one bomb");
+    assert_eq!(brain.special_uses().disarms, 2);
+}
