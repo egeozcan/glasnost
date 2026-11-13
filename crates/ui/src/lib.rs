@@ -13,6 +13,7 @@ pub mod end;
 pub mod font;
 pub mod geom;
 pub mod hud;
+pub mod mappick;
 pub mod menu;
 pub mod modes;
 pub mod netmenu;

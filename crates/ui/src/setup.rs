@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::draw::{DrawList, Rgba, colour};
 use crate::geom::{Point, Rect};
+use crate::mappick::{self, FilterKind, Shown};
 use crate::widget::{self, Targets};
 
 /// The most player rows the screen shows: one human row and up to seven
@@ -497,27 +498,38 @@ impl Setup {
         })
     }
 
+    /// Makes map `index` of `maps` the chosen map (nothing for an index
+    /// outside them): start positions past its count become random, and
+    /// computer rows past its rows are emptied.
+    pub fn choose_map(&mut self, index: usize, maps: &[MapEntry]) {
+        let Some(m) = maps.get(index) else {
+            return;
+        };
+        self.map = index;
+        // Start positions past the new map's count become random.
+        let starts = m.starts;
+        for s in &mut self.slots {
+            if s.start.is_some_and(|x| x >= starts) {
+                s.start = None;
+            }
+        }
+        // spec: S-0412 claim 15 (computer rows beyond the new map's row count are emptied and hidden)
+        let rows = rows(Some(m));
+        for s in self.slots.iter_mut().skip(rows) {
+            if s.kind == SlotKind::Ai {
+                *s = Slot::closed();
+            }
+        }
+    }
+
     /// Applies one step of a control.
     pub fn apply(&mut self, hit: &SetupHit, rules: &SetupRules, maps: &[MapEntry]) {
         let step =
             |v: i32, d: i32, lo: i32, hi: i32, s: i32| (v + d * s.max(1)).clamp(lo, hi.max(lo));
         match *hit {
             SetupHit::Map(d) if !maps.is_empty() => {
-                self.map = (self.map as i32 + d).rem_euclid(maps.len() as i32) as usize;
-                // Start positions past the new map's count become random.
-                let starts = maps[self.map].starts;
-                for s in &mut self.slots {
-                    if s.start.is_some_and(|x| x >= starts) {
-                        s.start = None;
-                    }
-                }
-                // spec: S-0412 claim 15 (computer rows beyond the new map's row count are emptied and hidden)
-                let rows = rows(maps.get(self.map));
-                for s in self.slots.iter_mut().skip(rows) {
-                    if s.kind == SlotKind::Ai {
-                        *s = Slot::closed();
-                    }
-                }
+                let i = (self.map as i32 + d).rem_euclid(maps.len() as i32) as usize;
+                self.choose_map(i, maps);
             }
             SetupHit::Kind(0, d) if d != 0 => {
                 // design: watch mode (lead request 2026-11-02, an extra not in the original): the first row is the person's or a computer's; with no person's row the game is watched
@@ -601,6 +613,33 @@ impl Setup {
         hover: Option<Point>,
         room: Option<&RoomFrame>,
     ) -> (DrawList, Targets<SetupHit>) {
+        self.draw(size, rules, maps, hover, room, None)
+    }
+
+    /// Draws the skirmish screen with the map picker's parts (design: map
+    /// picker (lead's request 2026-11-13)): a **Choose map** button and the
+    /// chosen map's preview, which open the picker; with no map left by the
+    /// picker's search and filters, the screen says so and cannot start.
+    pub fn view_listed(
+        &self,
+        size: (i32, i32),
+        rules: &SetupRules,
+        maps: &[MapEntry],
+        hover: Option<Point>,
+        list: &Listed<'_>,
+    ) -> (DrawList, Targets<SetupHit>) {
+        self.draw(size, rules, maps, hover, None, Some(list))
+    }
+
+    fn draw(
+        &self,
+        size: (i32, i32),
+        rules: &SetupRules,
+        maps: &[MapEntry],
+        hover: Option<Point>,
+        room: Option<&RoomFrame>,
+        list: Option<&Listed<'_>>,
+    ) -> (DrawList, Targets<SetupHit>) {
         let mut d = DrawList::new();
         let mut t = Targets::new();
         let (w, h) = size;
@@ -624,17 +663,33 @@ impl Setup {
         };
         let x0 = outer.x + 10;
         let mut y = outer.y + 24;
-        let map_label = maps.get(self.map).map_or("(none)".to_owned(), |m| {
-            format!("{} ({} starts)", m.label, m.starts)
-        });
-        choice(
-            &mut d,
-            &mut t,
-            Rect::new(x0, y, 600, 16),
-            "Map",
-            &map_label,
-            &SetupHit::Map,
-        );
+        let matched = list.is_none_or(|l| l.any);
+        let map_label = match maps.get(self.map) {
+            Some(m) if matched => format!("{} ({} starts)", m.label, m.starts),
+            Some(_) => "(no map matches)".to_owned(),
+            None => "(none)".to_owned(),
+        };
+        match list {
+            None => choice(
+                &mut d,
+                &mut t,
+                Rect::new(x0, y, 600, 16),
+                "Map",
+                &map_label,
+                &SetupHit::Map,
+            ),
+            Some(_) => {
+                // design: map picker (lead's request 2026-11-13): the arrows step through the picker's list; a button opens it
+                let r = Rect::new(x0, y, 494, 16);
+                let (a, b) = widget::choice(&mut d, r, "Map", &map_label, matched);
+                if matched {
+                    t.push_choice(a, SetupHit::Map(-1), b, SetupHit::Map(1));
+                }
+                let open = Rect::new(x0 + 500, y, 100, 16);
+                widget::button(&mut d, open, "Choose map", hot(open), true);
+                t.push(open, SetupHit::OpenMaps);
+            }
+        }
         y += 24;
         // Player table header.
         let cols = [
@@ -782,10 +837,25 @@ impl Setup {
                 t.push(r, hit);
             }
         }
+        if let Some(l) = list {
+            // design: map picker (lead's request 2026-11-13): the chosen map's preview below the settings, which opens the picker
+            let thumb = Rect::new(outer.right() - 170, outer.y + 300, 160, 100);
+            let (shown, empty) = if matched {
+                (l.shown, "No preview")
+            } else {
+                (Shown::NONE, "No map matches")
+            };
+            mappick::draw_preview(&mut d, thumb, &shown, empty);
+            if hot(thumb) {
+                d.frame(thumb, colour::ACCENT);
+            }
+            t.push_hit(thumb, SetupHit::OpenMaps);
+        }
         let problem = self.problem(rules, maps);
         let by = outer.bottom() - 30;
         let note = match (room.and_then(|f| f.note.as_ref()), &problem) {
             (Some((text, bad)), _) => Some((text.clone(), *bad)),
+            _ if !matched => Some(("No map matches the search and filters".to_owned(), true)),
             (None, Some(p)) => Some((p.to_string(), true)),
             (None, None) => None,
         };
@@ -797,7 +867,7 @@ impl Setup {
         let back = Rect::new(outer.right() - 230, by, 100, 20);
         let go = Rect::new(outer.right() - 120, by, 110, 20);
         let (back_label, go_label, go_on) = match room {
-            None => ("Back", "Start game", problem.is_none()),
+            None => ("Back", "Start game", problem.is_none() && matched),
             // The host starts a setup without a problem; the others say
             // ready or not.
             Some(f) => (
@@ -841,6 +911,15 @@ pub struct RoomFrame {
     pub note: Option<(String, bool)>,
 }
 
+/// What the skirmish screen shows of the map picker ([`Setup::view_listed`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Listed<'a> {
+    /// Whether any map passes the picker's search and filters.
+    pub any: bool,
+    /// The chosen map's preview.
+    pub shown: Shown<'a>,
+}
+
 /// A column of a player row: offset, width, value and target maker.
 type Cell = (i32, i32, String, fn(usize, i32) -> SetupHit);
 
@@ -873,6 +952,21 @@ pub enum SetupHit {
     Back,
     /// Start the game.
     Start_,
+    /// Open the map picker (design: map picker (lead's request
+    /// 2026-11-13); skirmish only).
+    OpenMaps,
+    /// Choose map `.0`, an index into the maps offered, in the picker.
+    PickMap(usize),
+    /// Type into the picker's search.
+    SearchField,
+    /// Empty the picker's search.
+    ClearSearch,
+    /// Step one of the picker's filters, or its sort.
+    Filter(FilterKind, i32),
+    /// Scroll the picker's list by rows.
+    ScrollMaps(i32),
+    /// Close the picker.
+    MapsDone,
 }
 
 /// Builds the game setup of a lobby (S-0412): [`setup::skirmish`], the
