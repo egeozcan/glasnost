@@ -34,7 +34,7 @@
 use glasnost_sim::combat::weapon;
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind, UnitRules};
-use glasnost_sim::targeting::{self, Action};
+use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use glasnost_sim::{mind, psychic, transport};
 
@@ -204,7 +204,7 @@ impl Special {
             let Some(at) = w.obj(v).map(|o| o.pos.cell()) else {
                 continue;
             };
-            let pick = own
+            let mut candidates: Vec<(i64, ObjectId)> = own
                 .iter()
                 .copied()
                 .filter(|&id| {
@@ -215,7 +215,14 @@ impl Special {
                         && unit(id).is_some_and(|p| heals_in(w, vr, p))
                         && self.memory.ok(w, id, Target::Object(v))
                 })
-                .min_by_key(|&id| (w.obj(id).map_or(i64::MAX, |o| dist2(o.pos.cell(), at)), id));
+                .map(|id| (w.obj(id).map_or(i64::MAX, |o| dist2(o.pos.cell(), at)), id))
+                .collect();
+            candidates.sort_unstable();
+            // design: own AI (#25): the nearest unit the enter cursor shows on the vehicle (S-0214; S-0507 claims 1 and 4): a refused nearest unit was picked at every think and nobody was loaded
+            let pick = candidates.into_iter().map(|(_, id)| id).find(|&id| {
+                targeting::cursor(w, house, &[id], ClickOn::Object(v), Modifiers::default())
+                    == Action::Enter
+            });
             match pick {
                 Some(id) => {
                     plan.loads.push((id, v));
