@@ -152,9 +152,8 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
         if thief && ob.dest == Some(Target::Object(id)) && !train {
             // spec: S-0210 claim 5 (the crusher is taken over instead: the thief disappears, the owner changes at once)
             crate::objects::remove(w, x);
-            if let Some(c2) = w.obj_mut(id) {
-                c2.owner = ob.owner;
-            }
+            // spec: S-0210 claim 5 and S-0414 claim 4 (a change of owner with every change-of-owner consumer, whatever its cause)
+            crate::mind::set_owner(w, id, ob.owner);
             continue;
         }
         if ob.kind == Kind::Vehicle {
