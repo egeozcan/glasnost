@@ -214,6 +214,45 @@ fn a_type_that_hits_the_air_only_when_elite_is_not_built() {
     assert_eq!(n, 1);
 }
 
+/// [`flak_rules`] plus ENGRT, FLAKT at half its cost with the engineer
+/// flag (test data of our own): an armed anti-air type the brain counts as
+/// a non-fighter.
+fn engineer_rules() -> Arc<SimRules> {
+    let mut r = flak_ruleset();
+    let mut v = r.sim.vehicles["FLAKT"].clone();
+    v.cost = v.cost.map(|c| c / 2);
+    v.engineer = Some(true);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("ENGRT".into());
+    r.sim.vehicles.insert("ENGRT".into(), v);
+    Arc::new(SimRules::new(&r, kit::MAP_NAME))
+}
+
+// design: own AI (anti-air repeat, batch 4): while a superweapon building waits on its line for money, the brain gives no build order for a non-fighter (an engineer; M8 step B7), so the anti-air step does not pick one: with the cheaper anti-air type an engineer, the house orders the other, and the anti-air build it counts is one it gives. On main the engineer type was picked and counted at every think and the order dropped, so nothing was built (Allied against Yuri, map 2, seed 7, from tick 45 000).
+#[test]
+fn no_anti_air_non_fighter_is_picked_while_saving_for_a_superweapon() {
+    let (mut w, _) = drained(engineer_rules());
+    // A yard for SILO's line (the skirmish starts with units only).
+    spawn(&mut w, "YARD", Kind::Building, 1, -10, -2);
+    let silo = type_ref(&w, Kind::Building, "SILO");
+    glasnost_sim::econ::production::build(&mut w, BETA, silo);
+    w.houses[usize::from(BETA.0)].credits = 1;
+    assert!(
+        w.econ
+            .lines
+            .lines
+            .iter()
+            .any(|l| l.house == BETA && l.item.as_ref().is_some_and(|i| i.t == silo)),
+        "SILO waits on Beta's line for money"
+    );
+    let (out, n) = think(&w);
+    assert!(!builds(&w, &out, "ENGRT"), "{out:?}");
+    assert!(builds(&w, &out, "FLAKT"), "{out:?}");
+    assert_eq!(n, 1);
+}
+
 /// [`flak_rules`] plus NEVRT, a vehicle cheaper than FLAKT with GUNR's
 /// gun and FLAKT's anti-air gun as a never-use secondary (test data of
 /// our own: the never-use copy NEVRW).
