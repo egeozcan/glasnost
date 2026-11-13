@@ -3793,18 +3793,36 @@ impl Live {
                 ))
             })
             .collect();
+        // The own buildings' ground-layer entries (object-pass parts and slot animations) by sort
+        // key, and their slot animations of the other layers.
+        let mut own_ground: Vec<(i64, Vec<Item>)> = Vec::new();
+        let mut own_layered: Vec<(super::slots::Layer, Vec<Item>)> = Vec::new();
         if !own.is_empty() {
             let (ids, own): (Vec<ObjectId>, Vec<LiveBuilding>) = own.into_iter().unzip();
             let cells = self.protected_cells();
             self.painter.set_protected_cells(cells);
-            let (drawn, notes) = self.painter.buildings(inputs, scene, &own);
+            let (drawn, notes) = self.painter.buildings_drawn(inputs, scene, &own);
             self.painter.set_protected_cells(BTreeMap::new());
             self.notes.extend(notes);
-            for (id, mut items) in ids.into_iter().zip(drawn) {
+            for (id, d) in ids.into_iter().zip(drawn) {
+                let mut items = d.items;
                 self.apply_cloak(id, &mut items);
                 scene.items.extend(items);
+                for mut g in d.ground {
+                    self.apply_cloak(id, &mut g.items);
+                    own_ground.push((g.key, g.items));
+                }
+                for (layer, mut g) in d.layered {
+                    self.apply_cloak(id, &mut g.items);
+                    own_layered.push((layer, g.items));
+                }
             }
         }
+        // spec: S-0102 claims 5, 6 and 17 (a building's parts and its ground-layer slot animations
+        // are ordered among the ground layer's objects by their keys); design: render (#429): at
+        // equal keys they go before the layer's mobiles, and among themselves in object ID order
+        // (a stable sort; our engine keeps no entering order for them)
+        own_ground.sort_by_key(|(k, _)| *k);
         // The playing animations with a sprite (S-0109), by serial number.
         let playing: Vec<(u32, super::slots::Layer, AnimDraw)> = self
             .anims
@@ -3856,9 +3874,14 @@ impl Live {
             &particle_items,
             &mut by_code,
             &[],
+            &own_layered,
             |l| l < super::slots::Layer::Ground,
         );
-        for e in self.ground.order() {
+        let mut own_ground = own_ground.into_iter().peekable();
+        for &(e, key) in &self.ground.list {
+            while let Some((_, items)) = own_ground.next_if(|(k, _)| *k <= key) {
+                scene.items.extend(items);
+            }
             match e {
                 Entrant::Anim(serial) => {
                     if let Some((_, items)) = anim_items.get(&serial) {
@@ -3883,12 +3906,16 @@ impl Live {
                 | Entrant::Piece(_) => {}
             }
         }
+        for (_, items) in own_ground {
+            scene.items.extend(items);
+        }
         self.draw_layers(
             scene,
             &anim_items,
             &particle_items,
             &mut by_code,
             &waves,
+            &own_layered,
             |l| l > super::slots::Layer::Ground,
         );
         self.objects_end = scene.items.len();
@@ -4255,7 +4282,9 @@ impl Live {
     /// animations (`anims`, by serial number), the particles and projectiles
     /// (`particles`, by object number) and the mobile objects (`mobiles`, taken out as drawn); the
     /// magnetic waves (`waves`, with the next animation serial at their
-    /// creation) in the air layer (S-0607 claim 26).
+    /// creation) in the air layer (S-0607 claim 26); the live buildings'
+    /// slot animations of these layers (`own`) first in their layers.
+    #[allow(clippy::too_many_arguments)]
     fn draw_layers(
         &self,
         scene: &mut Scene,
@@ -4263,11 +4292,18 @@ impl Live {
         particles: &BTreeMap<ObjectId, Vec<Item>>,
         mobiles: &mut BTreeMap<u32, GroundEntry>,
         waves: &[(u32, Vec<glasnost_render::spots::Spot>)],
+        own: &[(super::slots::Layer, Vec<Item>)],
         which: impl Fn(super::slots::Layer) -> bool,
     ) {
         use super::slots::Layer;
         use glasnost_render::spots::SpotGroup;
         let mut layers: Vec<Layer> = self.layers.upper().filter(|l| which(*l)).collect();
+        for &(l, _) in own {
+            if which(l) && l != Layer::Ground && !layers.contains(&l) {
+                layers.push(l);
+            }
+        }
+        layers.sort();
         // spec: S-0607 claim 26 (a magnetic wave is an object of the air layer)
         let wave_layer = (!waves.is_empty() && which(Layer::Air)).then_some(Layer::Air);
         if let Some(l) = wave_layer
@@ -4285,6 +4321,14 @@ impl Live {
             });
         };
         for layer in layers {
+            // spec: S-0102 claims 3 and 17 (a building slot animation is in its type's layer);
+            // design: render (#429): a live building's slot animations of a layer other than
+            // ground are drawn first in it, by building in object ID order (our engine keeps no
+            // entering order for them; with quirks.unsorted_upper_layers off they are not merged
+            // by key either)
+            for (_, items) in own.iter().filter(|(l, _)| *l == layer) {
+                scene.items.extend_from_slice(items);
+            }
             let list = self.layers.list(layer);
             let slots = if wave_layer == Some(layer) {
                 wave_slots(list, waves.iter().map(|(after, _)| *after))

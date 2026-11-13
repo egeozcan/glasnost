@@ -7061,14 +7061,43 @@ impl Painter {
         Some((t, n))
     }
 
-    /// Draws the live game's own buildings into `scene`: for each, its
-    /// items (body, shadow, bib, then any voxel turret or barrel).
+    /// Draws the live game's own buildings into `scene`: for each, all its
+    /// items in one list (body, shadow, bib, then its object-pass parts and
+    /// its slot animations of every layer); [`Painter::buildings_drawn`]
+    /// keeps them apart.
     pub fn buildings(
         &mut self,
         inputs: &Inputs,
         scene: &mut Scene,
         list: &[LiveBuilding],
     ) -> (Vec<Vec<Item>>, BTreeSet<String>) {
+        let (drawn, notes) = self.buildings_drawn(inputs, scene, list);
+        let flat = drawn
+            .into_iter()
+            .map(|d| {
+                let mut items = d.items;
+                for g in d.ground {
+                    items.extend(g.items);
+                }
+                for (_, g) in d.layered {
+                    items.extend(g.items);
+                }
+                items
+            })
+            .collect();
+        (flat, notes)
+    }
+
+    /// Draws the live game's own buildings into `scene`: for each, its
+    /// items (body, shadow, bib), its ground-layer entries (its object-pass
+    /// parts and ground-layer slot animations, each with its sort key) and
+    /// its slot animations of the other layers (S-0102 claims 5, 6 and 17).
+    pub fn buildings_drawn(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        list: &[LiveBuilding],
+    ) -> (Vec<LiveDrawn>, BTreeSet<String>) {
         let mut b = Builder {
             map: inputs.map,
             rules: inputs.rules,
@@ -7094,7 +7123,7 @@ impl Painter {
         let mut out = Vec::new();
         for d in list {
             let Some(art) = b.type_art((Kind::Buildings, d.idx)) else {
-                out.push(Vec::new());
+                out.push(LiveDrawn::default());
                 continue;
             };
             let level = inputs
@@ -7108,7 +7137,7 @@ impl Painter {
             };
             let mut ground = Vec::new();
             b.live_slots = Some(d.slots.clone());
-            let mut items = b.building_items(
+            let items = b.building_items(
                 d.idx,
                 art,
                 d.cell,
@@ -7128,15 +7157,12 @@ impl Painter {
                 d.buildup,
                 &mut ground,
             );
-            for g in ground {
-                items.extend(g.items);
-            }
-            // Our placeholder order for a building the game placed: its slot
-            // animations of every layer follow its other items.
-            for (_, g) in std::mem::take(&mut b.built.layered) {
-                items.extend(g.items);
-            }
-            out.push(items);
+            // spec: S-0102 claims 5, 6 and 17 (the parts and slot animations keep their own sort keys and layers)
+            out.push(LiveDrawn {
+                items,
+                ground,
+                layered: std::mem::take(&mut b.built.layered),
+            });
         }
         *self = b.p;
         *scene = b.built.scene;
@@ -7223,6 +7249,20 @@ pub struct Buildup {
     pub count: i32,
     /// The building is being sold: the build-up plays backwards.
     pub selling: bool,
+}
+
+/// A live building's drawing, kept apart by where each piece goes in the
+/// object pass (S-0102 claims 5, 6 and 17).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LiveDrawn {
+    /// The body, shadow and bib items.
+    pub items: Vec<Item>,
+    /// The ground-layer entries, each with its sort key: the object-pass
+    /// parts (key of S-0102 F4) and the ground-layer slot animations
+    /// (claim 17's key).
+    pub ground: Vec<GroundEntry>,
+    /// The slot animations of the other layers, with their layers.
+    pub layered: Vec<(slots::Layer, GroundEntry)>,
 }
 
 /// A running slot animation of a live building, as the drawing takes it
