@@ -92,7 +92,11 @@ fn claim_23_infantry_own_cell_order_is_ignored() {
     let before = j(&w, u).clone();
     let taken = w.rng.taken();
     go(&mut w, u, at(0, 0));
-    assert_eq!(j(&w, u), &before, "the locomotor takes nothing");
+    let mut now = j(&w, u).clone();
+    // Q-3043 (interim: the filtered destination is recorded so the locomotor does not take it later, #190)
+    assert_eq!(now.filtered, Some(Target::Cell(at(0, 0))));
+    now.filtered = None;
+    assert_eq!(now, before, "the locomotor takes nothing");
     assert_eq!(w.rng.taken(), taken, "no standing-position draw");
     assert_eq!(
         w.obj(u).unwrap().dest,

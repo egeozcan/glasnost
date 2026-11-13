@@ -694,7 +694,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     }
     // An order-level destination changed without the assignment hook (a rule that writes the field) is a new order.
     let dest = w.obj(id).and_then(|o| o.dest);
-    if st(w, id).is_some_and(|j| j.order != dest) {
+    // spec: S-0502 claim 23 and S-0213 claim 21 (a filtered own-cell assignment is ignored); Q-3043 (interim: the order-level destination keeps the filtered one, which the locomotor does not take later, #190)
+    if st(w, id).is_some_and(|j| j.order != dest && !(dest.is_some() && j.filtered == dest)) {
         take_destination(w, id);
     }
     let Some(j) = st(w, id) else { return false };
