@@ -298,6 +298,8 @@ impl Special {
                         targeting::Modifiers::default(),
                     );
                     if !r.orders.is_empty() {
+                        // design: own AI (#23): a failure of the order counts for the side clicked, whatever cell the click gave (S-0214 claim 11)
+                        self.memory.ask(&r.orders, Target::Cell(side));
                         out.extend(r.orders);
                         sent += 1;
                         break;
