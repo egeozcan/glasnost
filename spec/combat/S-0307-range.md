@@ -2,13 +2,13 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 21
+revision: 24
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-13
 measurements: []
-requests: [Q-0172, Q-0230, Q-0237, Q-2171]
+requests: [Q-0172, Q-0230, Q-0237, Q-2171, Q-3069]
 supersedes: []
 ---
 
@@ -34,6 +34,7 @@ jumpjet stopping remain open below. Claim 21 resolves the usable-area/reach-regi
 of Q-0230. Claim 22 b cites S-0208 claim 21 for the ordinary walker's shortcut outcome.
 Claim 25 resolves the non-walking outcome of Q-0237. Claim 19 reads a high-bridge candidate's
 reach region for its deck, so deck cells over water can qualify (Q-2171).
+Claim 27 states what the test gives a floor-bound firer against an airborne target (Q-3069).
 Skirmish is covered; campaigns and network games are out of scope.
 
 ## Terms
@@ -668,7 +669,69 @@ and *subject to walls*. In addition:
       normal-action fixture is established here that isolates their range answers across
       locomotor states from the other targeting and firing refusals. Ordinary height-test
       backing remains RG2 and RG3 as cited by claims 3, 6 and 8
-    - Confidence: high
+    - Confidence: high for ordinary aircraft's height test; medium for the two exceptional
+      types' range-test consequences, which are `unmeasured`
+
+### Airborne targets of floor-bound firers
+
+27. **A floor-bound firer against an airborne target (Q-3069).** Claims 3 and 7 to 9 apply to a
+    floor-bound firer, a building in particular, and an airborne target, with no further term:
+    - (a) **Full height.** *M*_T keeps the target's world height, because claim 7 replaces it
+      only for a floor-bound target. *S* is claim 8's source point: the firer's reference point
+      (for a building the centre of its foundation, S-0204 claim 4) at that point's own world
+      height, or, for a weapon with the cell rangefinding property, the position and height that
+      claim 8 (a) gives. Neither the fire point of S-0313 nor a building's height raises it. So
+      Δ*z* is the target's whole height above *S*. Over level ground at the firer's height, for
+      an aircraft at its cruise height that is its cruise height (S-0501), and for a jumpjet
+      hovering near its jumpjet cruise height (S-0502) its height at that moment, while it is at
+      least 208 leptons. A jumpjet hovering lower is floor-bound (Terms), and claim 7 replaces its
+      height.
+    - (b) **Reach against a cruising flier.** For a projectile that is not arcing, *E*₁ = 0 and
+      β = 0 against an airborne target, so the target passes claim 9's comparison only while
+      ⌊*r*(Δ*x*² + Δ*y*² + Δ*z*²)⌋ ≤ *R* (claims 9 to 11's other refusals aside). A firer whose
+      weapon is not of unlimited range (claim 2) and whose *R* is less than ⌊*r*(Δ*z*²)⌋ never
+      reaches a flier at that height above *S*. A firer whose *R* is a little above it reaches
+      the flier only within a small planar distance of *S*, about √(*R*² − Δ*z*²). For an arcing
+      projectile, claim 9's planar comparison and its reachability test with the full height
+      difference apply.
+    - (c) **No other reach.** The air bonus of claim 3 is the only term that adds to *R*
+      because the target is airborne: claim 4 replaces *R* for a garrisoned building whatever
+      the target, and claim 5's additions are for a bunkered firer that is not a building and for
+      a passenger, neither of which a building is. Claim 6's bonus, added to claim 9's limits rather than to *R*, is 0.
+      A building's shots on its attack paths (S-0215 claim 32, S-0301 claim 14) are made on a
+      firing check that answers *can fire*, so it has passed this test, with one exception:
+      the secondary shot of a SAM building and the secondary attempt of an upgrade pair ask no
+      firing check of their own (S-0301 claim 9). Each follows, in the same processing, the
+      primary weapon's check answering *can fire*, so for them the secondary weapon's own range
+      is not tested.
+    - (d) **Scans.** The target scans of S-0309 use their own distance tests (S-0309 F3) and
+      do not change this one, except that with a search range of 0 an armed searcher needs the
+      candidate within this test's reach for the weapon it would use (S-0309 F3). A building that
+      holds an airborne target, however it was chosen, makes no shot on a firing check asked with
+      a weapon for which this test fails. That check answers *out of range* unless a reason of a
+      higher rank holds, such as a running rearm countdown (S-0301 claim 9).
+    - (e) **Rockets.** A V3-rocket or dreadnought-missile target (S-0506) is measured the same
+      way, at its position at that moment. Only whether it counts as airborne or floor-bound
+      follows claim 26. While it counts as floor-bound, claim 7's terrain height replaces its
+      height, and while it counts as airborne its whole altitude counts.
+    - Backing: `measurable` (RG27 runs a and b for parts a and b and part d's absence of a
+      shot; RG27 c for the air bonus in part c; RG2 c for the garrison replacement against an
+      airborne target). Part d's scan sentence restates S-0309 F3 and is backed there.
+      `unmeasured`: part a's statement that neither a building's fire point nor its height raises *S*, because
+      RG27 does not fix them so that a raised point would move the reach boundary across the
+      tested values of *p*; part b's arcing case, because RG27's projectile is not arcing; part
+      c's statement on claim 5, because neither of its states exists for a building, and its
+      unchecked secondaries, because RG27's building has one weapon; part d's answer of the
+      firing check, because RG27 records shots and targets, not that answer; part e, as claim 26
+      states for the two rocket types
+    - Confidence: high for part a's full height of an aircraft at its cruise height and of a
+      jumpjet hovering at 208 leptons or more over level ground, part b for a projectile that
+      is not arcing, part c's air bonus as the only term that adds to *R* for a building that is
+      not garrisoned, part c's garrison replacement and part d's absence of a shot (the runs named
+      in Backing). Part d's scan sentence at S-0309 F3's own level. Medium for part d's answer of
+      the firing check, which follows from S-0301 claim 9's ranks, part a's statement on the fire
+      point and the building's height, part b's arcing case, part c's statement on claim 5 and
+      its unchecked secondaries, and part e
 
 ## Formulas
 
@@ -1433,6 +1496,39 @@ and scenario stream state each tick through the first subsequent movement.
   S-0208 W13, not a non-walking control. No result here establishes full flight or sailing
   movement rules.
 
+**RG27. A building against cruising fliers (claim 27; Q-3069).** Flat open map, game speed
+index 2, the recorder. A computer player owns a named test building type with a turret and one
+weapon, able to fire at aircraft and at ground units, with no minimum range, no cell
+rangefinding property, a projectile that is not arcing, and no air range bonus. The type has no
+secondary weapon and no SAM flag, and no upgrade is installed. A computer player of another team
+owns the fliers: an unarmed named test aircraft type that is not airport-bound, and an unarmed
+named test jumpjet type, each with a strength that no shot in the run can use up. The fliers are
+moved by a scripted move (a map trigger, a team script or the arena's scheduled order), not by
+the human player. Record each tick the building's reference point and target, every shot with
+its target's exact position, and each flier's exact position and height.
+- Run a (plane): a first pass with a long range field records the plane's cruise height *h*
+  above the building's reference point. The test file then gives the weapon a range field
+  about one cell above *h*, and the run records its converted lepton value *R* (claim 1). The
+  plane is moved east to west along a row at planar distance *p* from the building's
+  reference point, starting and ending more than *R* away by planar distance. A pass counts
+  only if the plane's recorded height has reached *h* before its planar distance from the
+  reference point first falls to *R*. One run each for *p* = 0, 1, 2, 4 and 6 cells.
+- Run b (jumpjet): as run a with the jumpjet and the same *R*. The test jumpjet type's jumpjet
+  cruise height is set to run a's *h*. A pass counts only if the
+  jumpjet's recorded height is at least 208 leptons at every tick at which its planar distance
+  from the reference point is at most *R*.
+- Run c (air bonus): run a at *p* = 2 and 4 cells with the building type's air range bonus
+  set to 1 cell.
+- Expected: every shot at a flier has a recorded spatial distance from the reference point
+  of at most *R* (run c: *R* + 256). In runs a and b no shot is fired in a pass whose smallest
+  recorded spatial distance exceeds *R*, which holds for the larger values of *p*. The
+  building's target may be the flier while it is still out of range, without a shot.
+- Positive control: the counted pass at *p* = 0 of each of runs a and b has at least one shot
+  at the flier, and run c has at least one shot at a flier whose recorded spatial distance
+  exceeds *R*. A run without its shot is inconclusive, not a pass.
+- Falsified by any shot at a flier whose recorded spatial distance exceeds the limit, in
+  particular a shot within *R* by planar distance but beyond it spatially.
+
 ## Open questions
 
 - **Q-0230.** Questions 1 and 2 are resolved by claim 21: an ordinary outside-ground
@@ -1461,9 +1557,15 @@ and scenario stream state each tick through the first subsequent movement.
   alternative outside the map's legal cells (claim 21), and whether withdrawing and restoring
   the attacker's occupancy (claim 22 e) changes any observable order among a cell's occupants.
 - **Reach region of a moving attacker.** The reach region that the clear-cell test of claims 15
-  and 19 requires is looked up from the cell of the attacker's scatter reference point, which is
-  its own cell only while it is not moving. Claims 15 and 19 state the stationary case. A
-  moving attacker whose next point lies in another reach region has not been measured.
+  and 19 requires is looked up from the cell of one point of the attacker, the same point as
+  S-0215 claim 37 (a1) names. While the attacker travels through a tunnel (S-0212 Terms), it is
+  the tunnel exit's cell centre. Otherwise it is the point its locomotor is moving it towards at
+  that moment while there is one, and otherwise its own position. For a walking infantry unit that is its walking target
+  (its scatter reference point, S-0208 Terms). For a vehicle it is its heading point as its
+  movement spec gives it (S-0207 Terms for driving, S-0503 Terms for hovering). Claims 15 and 19
+  state the stationary case. A moving attacker whose next point lies in another reach region has not been
+  measured, and this point for a moving attacker has low confidence, as S-0215 claim 37 rates a
+  moving actor's cell.
 
 - **Q-0072 question 2, remaining coverage.** S-0517 claim 14 defines the deploy-to-fire cell
   test and its primary-cell filter: when the vehicle's own cell fails that test, a primary
