@@ -1,9 +1,9 @@
 ---
 id: Q-3041
 title: Between the removal of an aircraft's destination object and its next processing, what flight point does the aircraft fly to?
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
