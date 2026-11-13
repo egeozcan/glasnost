@@ -4,7 +4,8 @@
 //! the house sees; suicide units are thrown at the nearest enemy; infantry
 //! with explosive charges are sent at the nearest enemy building the cursor
 //! offers sabotage on; air-strike designators call their aircraft onto the
-//! costliest enemy building.
+//! costliest enemy building. A planter or disarmer passes over a target
+//! another own unit of its role is already sent at.
 //!
 //! It reads only what a person in the house's seat sees (the enemy objects
 //! on cells the house has explored, the bombs the house sees) and gives its
@@ -83,6 +84,17 @@ impl Special {
     ) {
         let house = script.house;
         let enemies = script.seen_enemies(w);
+        // design: own AI (#26): a target another own unit of the same role is already sent at, or is picked for in this think, is left to it: a carrier is no target for a planting weapon once its bomb is planted (S-0519 claim 3), so every idle planter (and every idle disarmer) went for the same one
+        let mut taken: Vec<(Role, ObjectId)> = own
+            .iter()
+            .filter_map(|&id| match w.obj(id)?.target {
+                Some(Target::Object(t)) if !scripted::idle(w, id) => {
+                    let r = role(w, id)?;
+                    matches!(r, Role::Plant | Role::Disarm).then_some((r, t))
+                }
+                _ => None,
+            })
+            .collect();
         for &id in own {
             if !scripted::idle(w, id) || !targeting::selectable(w, id) {
                 continue;
@@ -97,6 +109,7 @@ impl Special {
                     let best = own
                         .iter()
                         .copied()
+                        .filter(|&c| !taken.contains(&(Role::Disarm, c)))
                         .filter(|&c| bomb::visible(w, house, c) && scripted::can_attack(w, id, c))
                         .filter(|&c| self.memory.ok(w, id, Target::Object(c)))
                         .min_by_key(|&c| {
@@ -104,6 +117,7 @@ impl Special {
                         });
                     if let Some(c) = best {
                         out.push(attack(id, c));
+                        taken.push((Role::Disarm, c));
                         self.count_disarm();
                     }
                 }
@@ -113,6 +127,7 @@ impl Special {
                         .iter()
                         .filter(|&&(e, _)| {
                             (!building_only || w.obj(e).is_some_and(|o| o.kind == Kind::Building))
+                                && (building_only || !taken.contains(&(Role::Plant, e)))
                                 && scripted::can_attack(w, id, e)
                                 && self.memory.ok(w, id, Target::Object(e))
                         })
@@ -122,6 +137,7 @@ impl Special {
                         if building_only {
                             self.count_strike();
                         } else {
+                            taken.push((Role::Plant, e));
                             self.count_bomb();
                         }
                     }
