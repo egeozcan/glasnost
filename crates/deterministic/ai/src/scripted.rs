@@ -1426,6 +1426,12 @@ impl Script {
         let blockers = tech::unmet_prerequisites(w, self.house, t)?;
         let mut options: Vec<Vec<u32>> =
             blockers.into_iter().map(|p| Self::meeting(w, p)).collect();
+        // design: own AI (#49): a blocker that no building clears (an
+        // upgrade or an unknown name, S-0407 claim 8 (d)) keeps the type
+        // blocked whatever is built for the others, so none is climbed for it
+        if options.iter().any(Vec::is_empty) {
+            return None;
+        }
         if options.is_empty() {
             // Every prerequisite is met: a factory of its kind may be
             // missing. A factory type the house already has does not help
