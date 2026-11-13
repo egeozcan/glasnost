@@ -34,7 +34,10 @@ fn rules() -> Ruleset {
     }
     let mut up = e::plain(50);
     up.econ.powers_up_building = Some("HUT".into());
-    r.registries.get_mut("buildings").unwrap().push("UPG".into());
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("UPG".into());
     r.sim.buildings.insert("UPG".into(), up);
     let mut x = e::foot(100);
     x.econ.prerequisite = Some(vec!["UPG".into()]);
@@ -82,8 +85,15 @@ fn claim_12_upgrade_placed_and_sold_recheck_the_offer() {
     assert_eq!(w.obj(hut).unwrap().econ.building.upgrade_count, 1, "placed");
     // spec: S-0407 claim 12 (a placement: the recheck in the next tick's house update, scenario T14 run 4)
     e::step(&mut w);
-    assert_eq!(tech::answer(&w, H, upx), Answer::Allowed, "claim 8 (c) is met");
-    assert!(tech::offered(&w, H, upx), "offered after the upgrade is gained");
+    assert_eq!(
+        tech::answer(&w, H, upx),
+        Answer::Allowed,
+        "claim 8 (c) is met"
+    );
+    assert!(
+        tech::offered(&w, H, upx),
+        "offered after the upgrade is gained"
+    );
 
     assert!(e::issue(&mut w, 0, Order::Sell { actor: hut }));
     for _ in 0..50 {
@@ -93,7 +103,10 @@ fn claim_12_upgrade_placed_and_sold_recheck_the_offer() {
     assert_eq!(o.econ.building.upgrade_count, 0, "the upgrade is sold");
     assert!(o.econ.sale.is_none(), "the sale has ended");
     assert_eq!(tech::answer(&w, H, upx), Answer::Refused);
-    assert!(!tech::offered(&w, H, upx), "not offered after the sale ended");
+    assert!(
+        !tech::offered(&w, H, upx),
+        "not offered after the sale ended"
+    );
 }
 
 /// Whether a recheck is due for house 0 right after the tick that applies
@@ -118,6 +131,12 @@ fn due_after_sale_start(no_recheck: bool) -> bool {
 // spec: S-0407 Edge cases (quirks.sale_start_no_recheck: on, the original, the start of a sale is no event of claim 12; off, it is one for the building's owner)
 #[test]
 fn quirk_sale_start_no_recheck() {
-    assert!(!due_after_sale_start(true), "on: no recheck at the sale start");
-    assert!(due_after_sale_start(false), "off: a recheck at the sale start");
+    assert!(
+        !due_after_sale_start(true),
+        "on: no recheck at the sale start"
+    );
+    assert!(
+        due_after_sale_start(false),
+        "off: a recheck at the sale start"
+    );
 }
