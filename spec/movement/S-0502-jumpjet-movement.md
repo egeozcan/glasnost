@@ -2,13 +2,13 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 21
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-13
 measurements: []
-requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504]
+requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504, Q-3042, Q-3043]
 supersedes: []
 ---
 
@@ -200,6 +200,7 @@ New terms:
      unit eligible for its next update, even without a move order. Claim 17 separately
      guarantees every update of its no-cell magnetic-release safety fall. Claim 18 then applies:
      a dead hovering unit cannot remain suspended merely because its order ended.
+     A raised look-ahead reference can still hold its fall up (claim 18, held-up crash).
      A grounded unit cannot start an aerial crash; S-0312 claims 15 and 16 own removal.
    - The original's movement eligibility does not itself include a pending crash start.
      A successful later destination assignment would resume updates, but no general automatic
@@ -207,9 +208,9 @@ New terms:
    - Backing: `measurable` (scenario J2) for ordinary tick timing and grounded idle values.
      Uncommitted hovering idle values are `unmeasured`: J2 does not establish an ordinary
      input sequence producing that starting state independently of a retained commitment.
-     The original idle-crash aftermath is `unmeasured` (diagnostic J15): an ordinary killing
-     hit also clears orders and can invoke claim 17, so establishing the otherwise idle case
-     requires recording those effects. The safety departure is a design rule, not an
+     The original idle-crash aftermath is `unmeasured` (diagnostic J15): the killing hit's
+     destination clear of claim 18 can reroute a committed unit, so establishing the otherwise
+     idle case requires recording that it had no commitment. The safety departure is a design rule, not an
      observation of the original.
    - Confidence: high
 
@@ -337,31 +338,44 @@ New terms:
    - When the remaining difference is within one step, it snaps to the desired height exactly.
    - It never descends below the terrain, or below the deck when it is on or over a deck
      (F3).
-   - **Ground hold.** In the same step, if the jumpjet is not over its destination cell and its
-     height above the ground reference is less than half its desired height (truncated toward
-     zero), its current speed is set to 0.
+   - **Ground hold.** In the same step, after its height change, if the jumpjet is not over its
+     movement point's cell and its height above the ground reference before the step is below
+     F4's hold threshold, its current speed is set to 0:
+     - for a desired height of at least 2 leptons, when that height is below half the desired
+       height, truncated toward zero; a jumpjet below the reference is below it
+     - for a desired height of 0 or 1 lepton, when the jumpjet is below the reference
+     - for a negative desired height, as in *crashing*, when the jumpjet is at or below its
+       desired height above the reference (Q-3042).
    - So a jumpjet away from its destination only moves sideways once it is at least half its
      desired height. It stops moving sideways when an obstacle ahead raises the ground
      reference by enough (claim 9).
-   - Backing: `measurable` (scenario J5)
-   - Confidence: high
+   - Backing: `measurable` (scenario J5; J31 for a negative desired height). The rule for a
+     desired height of 0 or 1 lepton is `unmeasured`: the only states known to give such a
+     height (*descending*, *crashed*, and a seized unit's crash) either use the direct
+     reference over the movement point's cell or already have both speeds at 0, so no
+     scenario shows a speed it resets.
+   - Confidence: high (at least 2 leptons and negative); medium (0 or 1 lepton)
 
 9. **Wobble and look-ahead.**
    - **Wobble.** In *hovering* and *cruising*, unless its type has the no-wobble flag, the
      jumpjet's height oscillates around its target height with amplitude *d*, at the rate of
      *W* wobbles per 15 ticks (F2). In every other state, the wobble phase is 0.
    - **Ground reference.** In every state except *grounded* and *descending*, the ground
-     reference uses a look-ahead (F3) when the jumpjet is not over its destination cell, and
-     always for a balloon-hover type. “Destination cell” here means the cell of the stored
-     movement point, not the order-level destination. This includes *crashing*: a dropped
+     reference uses a look-ahead (F3) when the jumpjet is not over its movement point's cell (the
+     cell of the stored movement point, not that of the order-level destination), and always
+     for a balloon-hover type. This includes *crashing*: a dropped
      seized unit over its cell centre that retains a stop-reroute point in another cell
-     (S-0607 claim 13) uses look-ahead even with zero horizontal speed. With zero speed,
-     only its own cell's clearance contributes, not the neighbouring cell's. Thus its
+     (S-0607 claim 13) uses look-ahead even with zero horizontal speed. With zero speed as F1 leaves it in
+     that step, after both its acceleration and braking stages, only its own cell's clearance
+     contributes, not the neighbouring cell's. Thus its
      ordinary height step can rise towards an object's clearance before the extra crash
-     drop, rather than using bare terrain as its reference. The look-ahead combines two clearances:
+     drop, rather than using bare terrain as its reference. An ordinary crashing jumpjet uses look-ahead
+     the same way unless `quirks.jumpjet_crash_lookahead` is off (claim 18). The look-ahead combines two clearances:
      - the clearance of the jumpjet's own cell
-     - while its current speed is above 0, the clearance of the neighbouring cell in the
-       8-direction of its movement heading.
+     - while its current speed as F1 leaves it in that step, after both its acceleration and
+       braking stages (claim 6), is above 0, the clearance of the neighbouring cell in the 8-direction of its movement heading. The
+       ground hold of the same step (claim 8) comes later, so a speed it resets still counts
+       here.
 
      A cell's clearance is its terrain height plus an allowance:
      - a building's art height (in height levels, times 104 leptons) when a building is listed
@@ -613,14 +627,35 @@ New terms:
     - **Start.** When a jumpjet has started to crash (S-0312 claim 16), is above the surface and
       is not already *crashing* or *crashed*, and is not held by magnetic lift, its next update
       includes the extra crash drop *k* and enters *crashing* with target height −5 leptons.
-      That update's ordinary physics still uses the preceding flight state and target height:
-      its height may therefore rise before the extra drop. The −5-lepton target first affects
+      That update's ordinary physics still uses the preceding flight state and target height,
+      as left by the destination clear below: its height may therefore rise before the extra
+      drop. A rerouted *descending* unit has become *ascending* with target height *H*
+      (claim 24's table), so its first crash update climbs towards that height. The −5-lepton target first affects
       ordinary height control in the following update (claim 3). A jumpjet that is neither
       moving nor moving now takes no update, so it does not start this fall until it next
       updates in the original. Claim 3's safety departure instead guarantees that next
       update for a pending aerial crash. An infantry jumpjet switches to its *air-death-start* sequence
       (S-0107). A seized dropped unit instead follows S-0607 claim 15's cell-centre detour
       before crash entry.
+    - **Destination clear at crash start (Q-3042).** Starting a crash makes one empty
+      destination assignment at once, inside the hit or event that starts it, so before the
+      unit's next movement update. It is an ordinary assignment, so claims 24, 27 and 28 decide
+      its effect:
+      - A jumpjet-type infantry unit has no equality suppression. With a movement commitment
+        it always reroutes under claim 17: a nearby search around its current cell, then
+        standing-position adjustment with its eligible ranged draw over 0 to 3 (claim 23).
+      - An ordinary jumpjet vehicle reroutes only when its order-level destination is not
+        already empty, or destination refresh is pending (claim 27). Otherwise its movement
+        point and commitment stay as they were. Its reroute takes no draw.
+      - A balloon-hover vehicle can reject the clear under claim 28.
+
+      An effective clear empties the order-level destination. With a commitment, the
+      commitment survives with the replacement point. Without a commitment claim 17 makes no
+      reroute, so the movement point and flight state stay as they were. The
+      replacement point lies in another cell whenever the search rejects the current cell,
+      for instance because another unit's mark is in that cell's occupancy record (claim 23).
+      A killed unit has no health left, so a failed search does not destroy it again
+      (claim 17). A unit held by magnetic lift is outside this bullet (S-0607).
     - **Fall.** In each tick of *crashing*:
       - after that tick's ordinary physics height step (F4), its world height drops by an
         additional *k*, with the resulting world height truncated toward zero. Away from the
@@ -641,15 +676,64 @@ New terms:
       An ordinary jumpjet's impact then follows S-0312 claim 16. A dropped seized unit
       instead follows S-0607 claims 16 and 17: a clear cell leads to *descending*, not
       *crashed*, and blocked water can lead to sinking (claim 19).
+    - **Held-up crash (Q-3042).** Crashing has no exception to F3 and F4. While its movement
+      point lies in another cell, an ordinary crashing jumpjet's reference *g* is the
+      look-ahead reference with its listed-object clearances (claim 9), worked out afresh in each
+      update. The crash start leaves its maximum speed as its flight state last set it
+      (claims 7 and 11).
+      - **Reference.** In an update that starts with its current speed at 0, as every update
+        after a ground hold does, the neighbouring cell's clearance counts (F3) exactly when
+        the acceleration *a* and full speed *S* are above 0 and its maximum speed is at least
+        min(*a*, *S*); the hold of that update does not change this. From 0, F1's acceleration
+        stage gives min(*a*, *S*). With a smaller maximum speed its braking stage returns the
+        speed to 0 in the same step, and otherwise F1 leaves min(*a*, *S*), which is above 0.
+        The neighbouring cell lies
+        in the direction of its spinning movement heading, so it can change from update to
+        update. On flat land with one other unit listed in its own cell and nothing listed in
+        the neighbouring cells, *g* is the terrain height plus 85 leptons when the neighbour
+        does not count and plus 42 leptons when it does.
+      - **Height per update.** From its second crash update on (target height −5), while its
+        world height stays positive, F4's step and the extra drop together give the world
+        height after the update as:
+        - at or below *g* − 5 before the update: min(*z* + ⌊*c*⌋, *g* − 5) − ⌈*k*⌉
+        - above *g* − 5: max(*z* − ⌈*c*⌉, *g* − 5) − ⌈*k*⌉, with F4's floor at the terrain or
+          deck applied before the drop.
+
+        In every update in which it starts at or below *g* − 5, the ground hold (claim 8) sets
+        its current speed to 0 after the height step, so it does not move sideways in that
+        update.
+      - **When it is held up.** With ⌊*c*⌋ ≥ ⌈*k*⌉, no update leaves it lower than the smaller
+        of its height before the update and *g* − 5 − ⌈*k*⌉ for that update's *g*. The crash
+        then never ends while each such value stays at least 1 lepton above the surface, the
+        drop crosses no deck and the listed objects stay. With *g* constant it settles at
+        *g* − 5 − ⌈*k*⌉. The exception is ⌊*c*⌋ = ⌈*k*⌉ with its height after the first crash
+        update at or below *g* − 5 − ⌈*k*⌉: then it keeps that height, so a unit killed below
+        that level does not fall at all. With ⌊*c*⌋ < ⌈*k*⌉ its height falls by at least
+        1 lepton in every update and the crash ends.
+      - **What ends it.** No time limit applies. A dead jumpjet unit leaves play only after its
+        crash end. A held-up crash ends when *g* falls far enough, for instance when the listed
+        object leaves the cell, or when a new destination assignment moves its point into the
+        cell it is over; no rule known here makes such an assignment to a dead unit.
+      - Meanwhile it stays in play and on the map, and keeps any hover slot and its
+        registration (claim 29). Two jumpjets killed together in one cell, each with
+        its point elsewhere, can each hold the other up while each is listed in that cell
+        (claim 4).
+      - This is the original's behaviour, kept as `quirks.jumpjet_crash_lookahead`
+        (Edge cases). A dropped seized unit keeps S-0607's rules.
     - **Magnetic lift.** A seized dropped unit does not spin. Its speeds are 0 and its
       target height is 0 leptons in each crashing update, rather than the ordinary
       −5-lepton target. Its crash rate starts afresh at its own type's crash value at
       every seize (claim 1). At each crashing update, the extra drop is determined by the current crash rate, and the resulting world height is truncated toward zero. The crash rate for the next update is 1.0 lepton per tick greater than the current rate; the addition uses double precision and its result narrows to single precision under S-0205 claim 5. Consequently, the first extra drop uses the starting rate, and each later extra drop uses the rate increased by 1.0 lepton per tick per tick (S-0607 claim 15).
     - Backing: `measurable` (scenario J12 for ordinary crash motion; S-0607 scenarios L3
       and L4 for the cell-centre detour, zero-speed fall, no spin, initial rate,
-      drop-before-growth ordering and zero target height).
+      drop-before-growth ordering and zero target height). The destination clear at crash
+      start and the held-up crash are `measurable` (J31, with named test data for the held-up
+      case; J12's descent subcase for the changed first crash update).
       Crash requests on idle units share claim 3's `unmeasured` limitation.
-    - Confidence: high (fall and spin); medium (the hand-over to S-0312's impact)
+    - Confidence: high (fall and spin; the destination clear at the hit and its dispatch; the
+      reference, the height per update, the speed reset and the held-up condition of a held-up
+      crash); medium (the hand-over to S-0312's impact, and that nothing other than the listed
+      events ends a held-up crash, which is a claim of absence)
 
 19. **What sets a jumpjet sinking.** Only a dropped unit (S-0607 claim 13) is
     checked on impact. S-0607 claims 16 and 17 decide the outcome: a blocked water cell,
@@ -754,6 +838,13 @@ New terms:
     This applies while grounded too, before claim 16's search, so an ordinary own-cell
     player order does not start that infantry unit's ascent. This filter concerns the
     imported jumpjet-type flag, not merely use of the jumpjet locomotor.
+    The ignored assignment has no effect at all on that unit (Q-3043). Its order-level
+    destination keeps its preceding value, empty or not. Its movement point, commitment,
+    flight state and landing reservation are unchanged, and it takes no draw. It is not an
+    assignment that is made for any other rule either: it does not end a retry delay
+    (S-0212 claim 21), restart a blockage delay (S-0209 claim 10) or request get-up
+    (S-0107 claim 15). Effects the same order makes apart from the assignment, such as its
+    target, behaviour or guard spot, are not prevented (S-0213 claim 21).
     J2's former unconditional own-cell expectation was incorrect; claim 7 describes the
     ascent transition only when the accepted movement point actually is in that cell.
 
@@ -771,11 +862,22 @@ New terms:
       are taken, in which case adjustment fails.
     - An own-cell infantry order also takes this draw when adjustment is eligible. When a
       neighbour step reaches infantry adjustment, this draw follows claim 21's neighbour draw.
-    - Backing: `measurable` (J2 and J16, including the own-cell filter and occupancy test, and
-      S-0607 scenario L2 for the initial seize's nearby-cell search).
+    - Backing: `measurable` (J2 and J16, including the own-cell filter and occupancy test,
+      with J32 parts (a) and (b) for the unchanged order-level destination and movement after an
+      ignored assignment, and J32 part (c) for the absent get-up request; S-0607 scenario L2
+      for the initial seize's nearby-cell search).
       The world-height-0 deck boundary is `unmeasured`
       (J16 diagnostic): a legal stock-map fixture at that boundary is not established.
-    - Confidence: high for settings and choice rules.
+      That the ignored assignment neither ends a retry delay nor restarts a blockage delay is
+      `unmeasured`: those delays act only on units that search paths, S-0212 claim 21's retry
+      delay on their path searches and S-0209 claim 10's blockage delay on a walker's. A unit
+      using the jumpjet locomotor searches no path (claim 10), so no scenario can show either
+      delay on it. A jumpjet-type infantry type with a path-searching locomotor would exist
+      only as test data, and no scenario sets one up.
+    - Confidence: high for settings and choice rules, and for the ignored assignment's lack
+      of any effect on its order-level destination, movement point, commitment, flight state,
+      draws and get-up; medium for the unmeasured part on the two delays, which stands on the
+      original's rule as read.
 
 24. **Destination clearing, stop, empty points and off-map failure (Q-0976, Q-0981,
     Q-1012).** An effective order-level destination clear invokes claim 17 whenever the
@@ -1178,7 +1280,9 @@ precision.
 **F3. Ground reference (claim 9).**
 Use look-ahead only in states other than *grounded* and *descending*, and within those
 states when either the movement point is in another cell or the type is balloon-hover.
-This includes *crashing*, even at zero horizontal speed; otherwise use the direct reference.
+This includes *crashing*, even at zero horizontal speed; with `quirks.jumpjet_crash_lookahead`
+off, an ordinary (not seized) crashing jumpjet always uses the direct reference instead (claim 18).
+Otherwise use the direct reference.
 - **Direct.** Let *f* be the terrain height at the jumpjet's position. On a high-bridge cell,
   when *z* ≥ *f* + 416 − *k*, use *f* + 416; otherwise use *f*.
 - **Clearance of a cell.** clear(cell) = *f*(cell centre) + *A*(cell) + *B*(cell), where:
@@ -1187,7 +1291,9 @@ This includes *crashing*, even at zero horizontal speed; otherwise use the direc
   - *B* = the bridge height (416) on a high-bridge cell, else 0.
 - **Look-ahead.** Let *C* = clear(own cell) and *N* = the clearance of the neighbouring cell in
   direction *e*, the 8-step facing of the movement heading (S-0204 claim 10). *N* counts only while
-  *v*<sub>c</sub> > 0; otherwise *N* = *C*.
+  *v*<sub>c</sub> > 0, taking *v*<sub>c</sub> as F1 has left it in this step, that is
+  *v*<sub>c</sub>′ after the braking stage, before F4's ground hold of the same step.
+  Otherwise *N* = *C*.
   - The original adds the neighbouring cell's *B* to *C* instead of to *N*
     (`quirks.jumpjet_lookahead_bridge`).
   - *g* = *N* when *N* > *C*; otherwise *g* = trunc((*N* + *C*) / 2).
@@ -1201,8 +1307,14 @@ This includes *crashing*, even at zero horizontal speed; otherwise use the direc
   - else *z*′ = trunc(*z* − *c*).
   - *z*′ is never below the terrain, or the deck selected by F3's direct reference.
 - If *u* = *h*<sub>d</sub>, the world height is unchanged.
-- **Ground hold.** Let *u*⁺ = max(*u*, 0). If the jumpjet is not over its destination cell and
-  *u*⁺ < trunc(*h*<sub>d</sub> / 2), then *v*<sub>c</sub> = 0.
+- **Ground hold.** After the height step, take *u* from before it. Let
+  *u*<sub>h</sub> = *u* when *u* ≤ *h*<sub>d</sub>, and *u*<sub>h</sub> = max(*u*, 0) when
+  *u* > *h*<sub>d</sub>. If the jumpjet is not over its movement point's cell and
+  *u*<sub>h</sub> < trunc(*h*<sub>d</sub> / 2), then *v*<sub>c</sub> = 0. F5 uses the speed
+  after this.
+  - For *h*<sub>d</sub> ≥ 2 this is max(*u*, 0) < trunc(*h*<sub>d</sub> / 2).
+  - For *h*<sub>d</sub> < 0 it holds exactly when *u* ≤ *h*<sub>d</sub>.
+  - For *h*<sub>d</sub> of 0 or 1 it holds exactly when *u* < 0.
 
 **F5. Horizontal step (claim 10).** With heading *F* (facing units, 0 = map north, clockwise),
 let *F*ₛ = *F* for *F* < 32768, otherwise *F* − 65536. This signed representative is used only
@@ -1359,6 +1471,21 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   (claim 29), so on the ground it can still be found by the flying-object search as well as in
   its cell (claim 31). Off (fixed behaviour): every touchdown ends registration. Backing and
   confidence are claim 29's.
+- **Held-up crash** (`quirks.jumpjet_crash_lookahead`, default on, YR behaviour).
+  - On: an ordinary *crashing* jumpjet uses claim 9's ground reference like the other
+    airborne states, so a listed object can hold its crash up indefinitely (claim 18). The
+    dead unit then stays in play and on the map.
+  - Off (fixed behaviour): an ordinary crashing jumpjet always uses F3's direct reference.
+    Listed objects then never raise it, and every ordinary crash with a crash rate above 0
+    reaches its end. With a crash rate of 0 and a climb rate above 0 it still comes down to
+    the terrain or a deck: on terrain its crash ends, but on a deck it stays there under
+    either setting, because the drop crosses no deck. With both rates 0 a crashing jumpjet
+    does not fall under either setting. A dropped seized unit is unaffected: S-0607 owns its reference.
+  - Backing: `measurable` (J31 gives the original-behaviour falsifier). The off alternative
+    is a design rule, not a claim about the original.
+  - Confidence: high for the reference, the height per update, the speed reset and the
+    held-up condition; medium that no other
+    event ends a held-up crash.
 - **Ion storms.** An ion storm makes every flying jumpjet of the affected house crash, and stops a
   grounded one taking off. Ion storms do not occur in skirmish, so this is out of scope.
 
@@ -1662,6 +1789,10 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
     for the former ascending state, followed by the extra drop; only the following update
     uses the −5-lepton target. A first-update ordinary descent using that new target falsifies
     claim 18's entry timing.
+  - Repeat the kill during *descending* while the vehicle has a nonempty order-level
+    destination and a commitment. Expected: the destination clear at the hit reroutes it,
+    so the first crash update climbs as *ascending* towards its target height, then takes the
+    extra drop. A first-update descent falsifies claim 18's destination-clear consequence.
   - Repeat over a high bridge. Expected: the extra drop that crosses below its deck ends the
     fall at the resulting height, without a snap back to the deck. Any trace inconsistent with
     the two height steps, a spin in the opposite sense or at a different rate, a hover
@@ -1687,7 +1818,8 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
 
 - **J15 Idle crash diagnostic.** Common setup; use a landing-first jumpjet vehicle, or a
   named test-data equivalent if no stock type establishes the case. Record a hover with its
-  moving flag false before shooting it down. Record crash start, order clear/reroute, health,
+  moving flag false before shooting it down. Record crash start, the destination clear of
+  claim 18 (which must not reroute a unit without a commitment), health,
   removal and the next 60 ticks of position/state. The source hypothesis is no movement
   update from crash-start alone; an update without a new movement order or state change
   falsifies that hypothesis. An order-induced wake does not. This diagnoses the original
@@ -1999,6 +2131,73 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   a ground evaluation at such a height falsifies claim 32. Target death, movement,
   crash or interference makes that interval inconclusive. For a joint target-acquisition
   test use S-0309 scenario A11 part k; do not infer a layer change from retaliation.
+- **J31 Held-up crash (claims 8, 18 and 23, Q-3042).** Common setup, read-only recorder for
+  world height, height above the surface, flight state, current speed, movement point,
+  order-level destination, occupancy and listings of the test cells, and the scenario random
+  stream.
+  - (a) Named test data *jumpjet-flight-test*: a crashable jumpjet infantry type with the
+    climb-rate, crash-rate, speed and acceleration keys absent, so they take the absent-key
+    defaults, and its target height set to 400 leptons, so that claim 7 sets its maximum
+    speed only above 100 leptons. On flat land, a second infantry unit with no order stands
+    in the test unit's cell. Void unless the recorder shows that unit's mark in the cell's
+    occupancy record at the hit. Order the test unit to a far cell and kill it with one hit
+    during its ascent, at a recorded height above the surface of at least 1 and at most 75
+    leptons. That is at or below *g* − 5 − ⌈*k*⌉ with *g* the terrain height plus
+    85 leptons and the absent-key crash rate; its maximum speed is then still 0, so only its
+    own cell's clearance counts. Void if the kill falls outside that height window. Record
+    every tick for 3000 ticks after the kill.
+    Expected: at the hit the order-level destination becomes empty, the movement point moves
+    to a nearby cell other than the current one and one ranged draw over 0 to 3 is taken.
+    The two rates are equal, so by claim 18 the unit keeps its kill height in every update,
+    stays *crashing*, has current speed 0 at the end of each update and does not move
+    sideways. A crash end while the other unit stays, or any change of its height, falsifies
+    the held-up crash. No reroute at the hit, or a point in the current cell, falsifies the
+    destination clear.
+  - (b) Continue (a): order the other infantry unit out of the cell. Expected: the crash ends
+    within a few ticks of that unit's listing leaving the cell, by claim 18's ordinary end.
+  - (c) Control: (a) with the test unit alone in its cell. Expected: the crash ends within a
+    few ticks of the kill.
+  - (d) Diagnostic, stock data: the stock jumpjet infantry type in (a)'s setup. Whether it is
+    held depends on its own climb and crash fields under claim 18's held-up condition; record
+    the outcome and compare it with that condition, which it must not contradict.
+  - (e) Repeat (a), with the neighbouring cells empty, but with the test type's target
+    height set to 160 leptons, so that claim 7 sets its maximum speed to *S* above
+    40 leptons. In place of (a)'s kill window, kill the unit in the first gap between updates
+    after the recorder shows its maximum speed as *S*. The acceleration and full speed keep their absent-key defaults,
+    both above 0, so its maximum speed *S* is at least min(*a*, *S*), and F1 leaves a speed
+    above 0 in every crash update (claim 18's reference). Void unless the second unit's mark
+    is recorded as in (a), and unless its position stays in the starting cell from the kill
+    until the first update it starts at or below *g* − 5. Expected: the neighbour counts in
+    every update, so *g* is the terrain height plus 42 leptons; the unit settles at the
+    terrain height plus 32 leptons (*g* − 5 − ⌈*k*⌉) and stays there, with current speed 0
+    at the end of each update in which it starts at or below *g* − 5. Keeping its kill
+    height instead falsifies claim 18's reference: the neighbour did not count, although the speed F1 leaves after its braking
+    stage, before the hold, was above 0.
+  - Engine test for `quirks.jumpjet_crash_lookahead` off: (a) must reach its crash end.
+- **J32 Ignored own-cell assignment (claim 23, Q-3043).** Common setup, recorder as J31
+  plus the infantry sequence shown each tick.
+  - (a) Stock jumpjet infantry. Order the unit to a far cell; while it is cruising, order it
+    to move to the cell it is over at that moment. Expected: its order-level destination
+    stays the far cell, its point and flight state are unchanged, no draw is taken and it
+    flies on to the far cell.
+  - (b) Repeat (a) with an area-guard order on that cell. Expected at the order boundary
+    only: the same unchanged values and no draw, while the guard spot changes; S-0215 owns
+    its later guard movement.
+  - (c) Named test data *jumpjet-flight-test*: a jumpjet infantry type that can crawl, with
+    *go-prone* and *get-up* sequences, and is not a cyborg, not a fraidycat and not fearless,
+    owned by the human test house. With the unit grounded on flat land and no destination,
+    make it lie down with a hit it survives from a known attacker, which raises its fear
+    (S-0107 claims 15 and 16). Void unless it lies down without moving or taking a
+    destination. Then order it to move to its own cell twice, a few ticks apart, both after
+    its *go-prone* sequence has finished, as the recorded sequence shows, and before its
+    fear-driven *get-up* 51 ticks after the hit (S-0107 claim 15). Void unless it is still
+    prone, with *go-prone* no longer playing, at both orders. Expected: no
+    *get-up* at either order, its order-level destination stays empty and it does not
+    ascend. *Get-up* at the second order shows that the first order's assignment was made
+    (S-0107 claim 15's repeated-destination rule) and *get-up* at either order shows a
+    request; either falsifies claim 23's no-get-up rule.
+  - A changed order-level destination, a draw or a stop at an order in (a) or (b) falsifies
+    claim 23's no-effect rule.
 
 ## Open questions
 
@@ -2014,6 +2213,10 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
 - **Original exceptional outcomes.** J15 and J17 retain the unmeasured original idle-crash
   aftermath and off-map failed-adjustment diagnostic. Claims 3 and 24 supply deterministic
   safety departures, not a promise that the original recovers safely.
+- **A new destination for a held-up crash.** Claim 18 knows no rule that gives a dead
+  crashing unit a new destination assignment. If one exists, its point could move into the
+  cell it is over and end the held-up crash; the scenarios of J31 would show it as an
+  unexplained crash end (confidence medium).
 - **The crashed state.** What a *crashed* jumpjet does until S-0312's impact removes it, and what
   an ordinary dead jumpjet does on water after impact (S-0312's open question), are not settled
   here.
