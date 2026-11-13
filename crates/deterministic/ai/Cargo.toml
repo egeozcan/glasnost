@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 glasnost-rules.workspace = true
 glasnost-map.workspace = true
+glasnost-num.workspace = true
 glasnost-sim.workspace = true
 postcard = { version = "1", default-features = false, features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }

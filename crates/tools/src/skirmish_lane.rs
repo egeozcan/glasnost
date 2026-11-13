@@ -4080,8 +4080,19 @@ fn aa_probe_line(w: &World, h: HouseId, p: &glasnost_ai::antiair::Probe) -> Stri
             dc.x, dc.y
         ));
     }
+    // The issue-time verdict on the build order (S-0213 claim 3, S-0407
+    // claim 13): taken, offered, at limit, refused by the queue-time limit.
+    let issue = p.build.map(|t| {
+        use glasnost_sim::econ::{production, sidebar, tech};
+        (
+            sidebar::legal(w, h, &glasnost_sim::orders::Order::Build { what: t }),
+            tech::offered(w, h, t),
+            tech::at_limit(w, h, t),
+            tech::queue_refused(w, h, t, production::copies_in_line(w, h, t)),
+        )
+    });
     format!(
-        "aaprobe tick {} house {}: credits {} drainers {} on ground {} lined {} build {:?} candidates hit/lit/startable/free {:?} units hit/near/unberserk/check/there {:?} defences hit/operating/weapon/check/range {:?} refused {:?}; [{}]",
+        "aaprobe tick {} house {}: credits {} drainers {} on ground {} lined {} build {:?} issue legal/offered/at_limit/queue_refused {:?} candidates hit/lit/startable/free {:?} units hit/near/unberserk/check/there {:?} defences hit/operating/weapon/check/range {:?} refused {:?}; [{}]",
         w.tick,
         h.0,
         w.houses[usize::from(h.0)].credits,
@@ -4089,6 +4100,7 @@ fn aa_probe_line(w: &World, h: HouseId, p: &glasnost_ai::antiair::Probe) -> Stri
         p.draining_on_ground,
         p.lined,
         p.build.map(|t| (t.kind, t.index)),
+        issue,
         p.candidates,
         p.units,
         p.defences,

@@ -17,6 +17,7 @@ use glasnost_sim::econ::{deploy, inplace};
 use glasnost_sim::infantry::Seq;
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind};
+use glasnost_sim::structures::bunker;
 use glasnost_sim::targeting::{self, Action};
 use glasnost_sim::world::{ObjectId, Target, World};
 
@@ -153,6 +154,10 @@ impl Special {
         let enemies = script.seen_enemies(w);
         for &id in own {
             if !targeting::selectable(w, id) {
+                continue;
+            }
+            // design: own AI (#16): a vehicle in a tank bunker, or on its way into one, is left to the bunker part: its deploy cursor lets it out of the bunker (S-0214 table VD row VD5, S-0606 claim 12), and a deploy-fire vehicle that fired from inside was let out at once
+            if bunker::bunkered(w, id) || bunker::entering_bunker(w, id) {
                 continue;
             }
             let order = if in_place_vehicle(w, id) {

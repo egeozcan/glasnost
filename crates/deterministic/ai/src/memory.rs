@@ -44,6 +44,10 @@ struct Given {
     /// The unit's rearm tick when it was given the order: another value
     /// later means it fired.
     rearm: i32,
+    /// The goal the module asked about when the click gave another one
+    /// ([`Memory::ask`]): a failure counts for it too.
+    #[serde(default)]
+    asked: Option<Target>,
 }
 
 /// A failed order: the unit did not leave its cell for the goal.
@@ -65,6 +69,10 @@ pub struct Memory {
     /// empty between thinks (never saved).
     #[serde(skip)]
     offered: Vec<Order>,
+    /// The goals asked about for offered orders that go elsewhere
+    /// ([`Memory::ask`]); empty between thinks (never saved).
+    #[serde(skip)]
+    asked: Vec<(Order, Target)>,
 }
 
 impl Memory {
@@ -85,17 +93,17 @@ impl Memory {
                 }
                 continue;
             }
-            {
-                let until = w.tick + BLOCKED_FOR;
+            let until = w.tick + BLOCKED_FOR;
+            for goal in std::iter::once(g.goal).chain(g.asked.filter(|&a| a != g.goal)) {
                 match self
                     .failed
                     .iter_mut()
-                    .find(|f| f.unit == g.unit && f.goal == g.goal && f.at == g.at)
+                    .find(|f| f.unit == g.unit && f.goal == goal && f.at == g.at)
                 {
                     Some(f) => f.until = until,
                     None => self.failed.push(Failed {
                         unit: g.unit,
-                        goal: g.goal,
+                        goal,
                         at: g.at,
                         until,
                     }),
@@ -122,6 +130,22 @@ impl Memory {
         );
     }
 
+    /// Tells the memory that the behaviour orders among `orders` answer a
+    /// click on `asked`, whatever goal they carry (a click on a cell out of
+    /// the unit's reach moves it to a cell the search finds instead, S-0214
+    /// claim 11): when such an order fails, `asked` is failed too, so the
+    /// module that asks [`Memory::ok`] about `asked` does not click it
+    /// again.
+    // design: own AI (#23): the grinder's side click was judged under the cell the search found, which may differ at every think, so the same side was clicked again and again
+    pub fn ask(&mut self, orders: &[Order], asked: Target) {
+        self.asked.extend(
+            orders
+                .iter()
+                .filter(|o| matches!(o, Order::Behaviour { .. }))
+                .map(|o| (o.clone(), asked)),
+        );
+    }
+
     /// Notes the offered orders the brain gives: those that are their
     /// actor's last behaviour order among the think's final orders `out`
     /// (a later filter may drop one, or a later part give the actor
@@ -132,6 +156,7 @@ impl Memory {
     // design: own AI (#19): every offered order was noted, also those a filter dropped or the full pending list refused, and its unit was given up for BLOCKED_FOR ticks
     pub fn note_given(&mut self, w: &World, out: &[Order], room: usize) {
         let offered = std::mem::take(&mut self.offered);
+        let asked = std::mem::take(&mut self.asked);
         if offered.is_empty() {
             return;
         }
@@ -152,13 +177,14 @@ impl Memory {
                     .is_some_and(|&i| i < room && out.get(i) == Some(o))
             })
             .collect();
-        self.note(w, &given);
+        self.note(w, &given, &asked);
     }
 
     /// Notes the behaviour orders among `orders`, to be judged at the next
-    /// think.
-    fn note(&mut self, w: &World, orders: &[Order]) {
+    /// think, each with the goal asked about for it in `asked`, if any.
+    fn note(&mut self, w: &World, orders: &[Order], asked: &[(Order, Target)]) {
         for o in orders {
+            let asked_for = asked.iter().find(|(x, _)| x == o).map(|&(_, t)| t);
             let Order::Behaviour {
                 actor,
                 target,
@@ -183,6 +209,7 @@ impl Memory {
                 at,
                 since: w.tick,
                 rearm,
+                asked: asked_for,
             });
         }
         if self.given.len() > LIMIT {

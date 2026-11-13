@@ -122,10 +122,11 @@ pub(crate) fn room_left(w: &World, house: HouseId) -> bool {
     absorbers(w, house).iter().any(|&b| room(w, b) > 0)
 }
 
-/// Whether the house is short of power: output not above drain.
+/// Whether the house is short of power, read as a person reads the power
+/// bar without a blackout ([`crate::power::short`]).
+// design: own AI (#15): the house total read here before is 0 during a timed or drain blackout whatever plants stand (S-0405 claims 5 and 6), so every blackout sent all spare infantry in, the KEEP reserve too
 fn short_of_power(w: &World, house: HouseId) -> bool {
-    let (output, drain) = glasnost_sim::econ::power::totals(w, house);
-    output <= drain
+    crate::power::short(w, house)
 }
 
 /// Whether infantry unit `id` is free to be sent: idle, selectable, not

@@ -210,6 +210,44 @@ fn queues_a_healer_without_credits_to_spare() {
     assert_eq!(builds, 1, "{orders:?}");
 }
 
+// design: own AI (#25) and S-0507 claim 1 (a rider larger than the transport's size limit is refused): a healer the gunner vehicle refuses (too large for it) is not picked for it; the healer that fits is sent instead.
+#[test]
+fn a_healer_the_vehicle_refuses_is_not_picked() {
+    let mut r = ruleset(1);
+    let mut big = r.sim.infantry["MEDI"].clone();
+    big.size = Some(glasnost_rules::sim::Decimal("3".into()));
+    r.sim.infantry.insert("BIGMEDI".into(), big);
+    r.registries
+        .get_mut("infantry")
+        .expect("infantry registry")
+        .push("BIGMEDI".into());
+    let (mut w, medi, guns) = scene(&r, PER_HEALER);
+    // Nearer to the first gunner vehicle than MEDI.
+    let x = -fixture::START_DX;
+    let big = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "BIGMEDI",
+        0,
+        fixture::at(x - 4, -3),
+        0,
+    );
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    assert_ne!(
+        transport::answer(&w, guns[0], big),
+        transport::Answer::Accepts,
+        "the vehicle refuses the large healer"
+    );
+    let (orders, loads) = think(&w);
+    assert_eq!(sent_into(&orders, big), None, "{orders:?}");
+    let v = sent_into(&orders, medi).expect("MEDI is sent into a gunner vehicle");
+    assert!(guns.contains(&v));
+    assert_eq!(loads, 1);
+}
+
 /// The special abilities' think on `w` for house 0, with `earlier` move
 /// orders for `unit` given before it in the same think (the script's rally
 /// and the brain's ferry, say).

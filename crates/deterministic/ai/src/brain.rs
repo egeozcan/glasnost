@@ -53,6 +53,7 @@
 
 use glasnost_map::terrain::land;
 use glasnost_map::{CellXY, Map};
+use glasnost_num::F64;
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, tech};
 use glasnost_sim::orders::Order;
@@ -337,7 +338,7 @@ impl Brain {
             mark(p, "ai:build_drainer");
             self.build_drainer(w, &mut out);
             mark(p, "ai:build_anti_air");
-            self.build_anti_air(w, &mut out);
+            self.build_anti_air(w, &mut out, short);
             mark(p, "ai:expand");
             if !paying {
                 self.expand(w, &mut out, p);
@@ -953,12 +954,18 @@ impl Brain {
     /// the air ([`crate::antiair::build_type`]), as a person answers a
     /// drain he cannot shoot at: not while selling out. A defence replaces
     /// a tech-climb building this think ordered, as a superweapon building
-    /// does.
-    fn build_anti_air(&mut self, w: &World, out: &mut Vec<Order>) {
+    /// does. While the superweapon building is `short` of money no
+    /// non-fighter is picked: the think drops every build order for one
+    /// then (M8 step B7).
+    fn build_anti_air(&mut self, w: &World, out: &mut Vec<Order>, short: bool) {
         if self.script.selling() {
             return;
         }
-        let Some(t) = crate::antiair::build_type(&self.script, w) else {
+        let has_yard = short && self.has_yard(w);
+        // design: own AI (anti-air repeat, batch 4): an anti-air type the think's non-fighter filter drops was picked and counted at every think, and nothing was built (Allied against Yuri, map 2, seed 7, from tick 45 000: an engineer type with an anti-air weapon, 133 orders)
+        let Some(t) = crate::antiair::build_type_where(&self.script, w, |t| {
+            !(short && non_fighter(w, t, has_yard))
+        }) else {
             return;
         };
         if t.kind == Kind::Building {
@@ -2055,7 +2062,8 @@ impl Brain {
     ///   to stand idle (M8 step B4: a house short of money kept its
     ///   vehicle line busy at every think and never had a ferry);
     /// - at home, sends idle infantry aboard with a click on the ferry
-    ///   (the enter cursor, claim 5);
+    ///   (the enter cursor, claim 5), as many as fit by their sizes
+    ///   (claim 1);
     /// - with [`FERRY_LOAD`] aboard (or every boarder in and no more idle
     ///   infantry), sends it to a free land cell near the next wave's goal
     ///   from which its passengers can walk there (across water when they
@@ -2213,13 +2221,31 @@ impl Brain {
                 .into_iter()
                 .filter(|&id| w.obj(id).is_some_and(|p| p.dest == Some(Target::Object(f))))
                 .collect();
-            let boarders = aboard + entering.len() as i32;
+            // design: own AI (#21): the ferry's room is reckoned as the transport reckons it, in sizes (S-0507 claim 1 and F1: a candidate fits while the load with its size is at most the capacity and its size at most the size limit), and only infantry the enter cursor shows on the ferry are counted free (S-0214; S-0507 claim 4); FERRY_LOAD stays a head count. The head count was set against the capacity, and the first candidates were taken before the cursor test, so a refused rider held the ferry at home
+            let Some((cap, limit)) = w
+                .rules()
+                .unit(o.kind, o.type_index)
+                .map(|u| (F64::from_i64(i64::from(room), w.rules().mode), u.size_limit))
+            else {
+                continue;
+            };
+            let mut load = entering
+                .iter()
+                .fold(transport::load(w, f), |l, &e| Self::load_with(w, l, e));
+            let fits = |load: F64, p: ObjectId| {
+                let s = Self::rider_size(w, p);
+                load.add(s, w.rules().mode).le(cap) && s.le(limit)
+            };
             let free: Vec<ObjectId> = infantry
                 .iter()
                 .copied()
                 .filter(|id| !taken.contains(id) && !entering.contains(id))
+                .filter(|&p| fits(load, p))
+                .filter(|&p| {
+                    targeting::cursor(w, house, &[p], ClickOn::Object(f), mods) == Action::Enter
+                })
                 .collect();
-            let full = aboard >= FERRY_LOAD.min(room);
+            let full = aboard >= FERRY_LOAD;
             if full || (aboard > 0 && entering.is_empty() && free.is_empty()) {
                 if let Some(c) = to_goal() {
                     out.push(go(c));
@@ -2244,15 +2270,42 @@ impl Brain {
             if !has_drop {
                 continue;
             }
-            for p in free
-                .into_iter()
-                .take(usize::try_from(room - boarders).unwrap_or(0))
-            {
-                if targeting::cursor(w, house, &[p], ClickOn::Object(f), mods) == Action::Enter {
-                    out.extend(targeting::click(w, house, &[p], ClickOn::Object(f), mods).orders);
-                    taken.push(p);
+            for p in free {
+                if !fits(load, p) {
+                    continue;
                 }
+                let orders = targeting::click(w, house, &[p], ClickOn::Object(f), mods).orders;
+                if orders.is_empty() {
+                    continue;
+                }
+                out.extend(orders);
+                taken.push(p);
+                load = Self::load_with(w, load, p);
             }
+        }
+    }
+
+    /// The size of rider `p` (S-0507 Import mapping: 1 when its type gives
+    /// none).
+    fn rider_size(w: &World, p: ObjectId) -> F64 {
+        let mode = w.rules().mode;
+        w.obj(p)
+            .and_then(|o| w.rules().unit(o.kind, o.type_index))
+            // spec: S-0507 Import mapping (Size absent: 1.0)
+            .map_or_else(|| F64::from_i64(1, mode), |u| u.size)
+    }
+
+    /// A vehicle transport's load `l` with rider `p` added, as the
+    /// transport adds it (S-0507 F1).
+    fn load_with(w: &World, l: F64, p: ObjectId) -> F64 {
+        let r = w.rules();
+        let sum = l.add(Self::rider_size(w, p), r.mode);
+        if r.quirks.transport_load_truncated {
+            // spec: S-0507 F1 and Edge cases (quirks.transport_load_truncated: the sum truncated toward zero after each addition)
+            F64::from_i64(i64::from(sum.to_i32_common()), r.mode)
+        } else {
+            // spec: S-0507 Edge cases (switch off: the sum rounded at each addition)
+            sum
         }
     }
 

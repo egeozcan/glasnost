@@ -1504,6 +1504,104 @@ fn a_loaded_ferry_with_no_drop_cell_lets_its_passengers_out() {
     );
 }
 
+/// The strait skirmish with HEAVY (a rifleman of size 2) and HUGE (one of
+/// size 3, above the transports' size limit of 2), never built, once house
+/// 0's yard stands and a think is due: the world, the hovering transport
+/// LIFT spawned beside the yard, and free cells beside it.
+fn ferry_scene() -> (World, ObjectId, Vec<glasnost_map::CellXY>) {
+    let mut r = fixture::ruleset();
+    for (n, size) in [("HEAVY", "2"), ("HUGE", "3")] {
+        let mut u = r.sim.infantry["WALKER"].clone();
+        u.size = Some(glasnost_rules::sim::Decimal(size.into()));
+        u.tech_level = Some(99);
+        r.sim.infantry.insert(n.into(), u);
+        r.registries
+            .entry("infantry".into())
+            .or_default()
+            .push(n.into());
+    }
+    let map = fixture::map_strait();
+    let mut g = Game::new(
+        std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-ferry")),
+        &map,
+        "synthetic-strait",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the strait skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let t = g.world.tick;
+    step_until(&mut g, t + period, |w| w.tick % period == 0);
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    let cells = free_cells(&g.world, glasnost_map::CellXY::new(yard.x, yard.y + 5), 6);
+    assert_eq!(cells.len(), 6, "room beside the yard");
+    let mut w = g.world;
+    let lift = testkit::spawn(&mut w, Kind::Vehicle, "LIFT", 0, cells[0], 0);
+    (w, lift, cells[1..].to_vec())
+}
+
+fn ferry_think(w: &World) -> Vec<Order> {
+    let mut brain = Brain::with_plan(
+        w,
+        &fixture::map_strait(),
+        HouseId(0),
+        glasnost_ai::brain::default_plan(),
+    );
+    brain.think(w)
+}
+
+// design: own AI (#21) and S-0507 claims 1 and 4: a ferry at home with riders aboard whose only idle infantry left is one it refuses (here too large for it) leaves for the goal; the refused unit does not hold it at home for good.
+#[test]
+fn a_refused_rider_does_not_hold_the_ferry_at_home() {
+    let (mut w, lift, cells) = ferry_scene();
+    for &c in &cells[..2] {
+        let p = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, c, 0);
+        glasnost_sim::transport::board(&mut w, p, lift);
+    }
+    let huge = testkit::spawn(&mut w, Kind::Infantry, "HUGE", 0, cells[2], 0);
+    assert_eq!(glasnost_sim::transport::count(&w, lift), 2);
+    assert_ne!(
+        glasnost_sim::transport::answer(&w, lift, huge),
+        glasnost_sim::transport::Answer::Accepts,
+        "the ferry refuses the large one"
+    );
+    let orders = ferry_think(&w);
+    let mid = fixture::at(0, 0).x;
+    let side = (w.obj(lift).unwrap().pos.cell().x - mid).signum();
+    assert!(
+        orders.iter().any(|o| matches!(o,
+            Order::Behaviour { actor, dest: Some(Target::Cell(c)), .. }
+                if *actor == lift && (c.x - mid) * side < 0)),
+        "the ferry leaves across the strait: {orders:?}"
+    );
+}
+
+// design: own AI (#21) and S-0507 claim 1 (a vehicle transport takes a rider while its load plus the rider's size is within its capacity): the ferry's room is counted in sizes, so no more riders are clicked aboard than fit (two of size 2 in a ferry for 4), and the first refused does not keep the others off.
+#[test]
+fn riders_are_clicked_aboard_by_size() {
+    let (mut w, lift, cells) = ferry_scene();
+    let huge = testkit::spawn(&mut w, Kind::Infantry, "HUGE", 0, cells[0], 0);
+    let heavy: Vec<ObjectId> = cells[1..4]
+        .iter()
+        .map(|&c| testkit::spawn(&mut w, Kind::Infantry, "HEAVY", 0, c, 0))
+        .collect();
+    assert!(
+        huge < heavy[0],
+        "the refused one comes first in object order"
+    );
+    let orders = ferry_think(&w);
+    let boarding = |who: ObjectId| {
+        orders.iter().any(|o| {
+            matches!(o, Order::Behaviour { actor, behaviour: glasnost_sim::rules::Behaviour::Enter, target, dest, .. }
+                if *actor == who && (*target == Some(Target::Object(lift)) || *dest == Some(Target::Object(lift))))
+        })
+    };
+    assert!(!boarding(huge), "{orders:?}");
+    let n = heavy.iter().filter(|&&p| boarding(p)).count();
+    assert_eq!(n, 2, "two of size 2 fill the room of 4: {orders:?}");
+}
+
 // Infantry that cannot walk to the next wave's goal (PLAN §4.7, S-0212
 // claim 4): on the strait map a rifleman standing far from home on its own
 // shore is called home, where the ferry takes idle infantry, instead of
@@ -2386,6 +2484,80 @@ fn no_attack_order_to_an_aircraft_with_no_ammunition() {
             assert!(orders.iter().any(|o| matches!(o, Order::Behaviour { target: Some(Target::Object(e)), .. } if *e == foe)));
         }
     }
+}
+
+// design: own AI (#20) and S-0501 T1: an aircraft that has spent its ammunition on an intruder and flies back to its pad is not sent at the intruder again by the base defence, at any think on its way back.
+#[test]
+fn a_spent_aircraft_on_its_way_back_is_not_sent_again() {
+    let map = fixture::map();
+    let mut w = glasnost_sim::load::new_game(
+        fixture::rules(),
+        &map,
+        fixture::catalogue(),
+        &fixture::setup(5),
+    )
+    .expect("loads");
+    let pad = testkit::spawn(&mut w, Kind::Building, "HPAD", 0, fixture::at(-16, 4), 0);
+    testkit::run(&mut w, 2);
+    let t = w.rules().index_of(Kind::Aircraft, "JET").unwrap();
+    let jet = objects::create(&mut w, Kind::Aircraft, t, Some(HouseId(0)));
+    glasnost_sim::econ::release::release(&mut w, pad, jet);
+    let foe = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, fixture::at(-9, 4), 0);
+    w.obj_mut(foe).unwrap().health = 10_000;
+    shroud::area_reveal(
+        &mut w,
+        HouseId(0),
+        glasnost_sim::world::Pos::centre(fixture::at(-9, 4), 0),
+        3,
+    );
+    while glasnost_sim::orders::blocked(&w) {
+        testkit::run(&mut w, 1);
+    }
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: jet,
+            behaviour: glasnost_sim::rules::Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(foe)),
+            dest: None,
+        }
+    ));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let mut brain = Brain::new(&w, &map, HouseId(0));
+    let mut spent_thinks = 0;
+    for _ in 0..3000 {
+        testkit::run(&mut w, 1);
+        if w.obj(foe).is_none() || w.obj(jet).is_none() {
+            break;
+        }
+        if w.tick % period != 0 {
+            continue;
+        }
+        let spent = !glasnost_sim::air::ammo_left(&w, jet);
+        let flying = w.height_above_surface(jet) > 0;
+        let orders = brain.think(&w);
+        if spent && flying {
+            spent_thinks += 1;
+            assert!(
+                !orders.iter().any(|o| matches!(o, Order::Behaviour { actor, behaviour, attack_move, .. }
+                    if *actor == jet && (*behaviour == glasnost_sim::rules::Behaviour::Attack || *attack_move))),
+                "tick {}: {orders:?}",
+                w.tick
+            );
+        }
+        // Only the jet's orders are issued, so the scene stays the jet's.
+        for o in orders {
+            if o.actor() == Some(jet) {
+                glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+            }
+        }
+        if spent_thinks >= 3 && !flying {
+            break;
+        }
+    }
+    assert!(spent_thinks > 0, "the jet spent its ammunition in the air");
 }
 
 // design (M8 step A4 round 9, item 1): a unit moving toward an object that is no longer in play goes nowhere, so the script counts it idle and may order it; one moving toward an object still in play is busy.

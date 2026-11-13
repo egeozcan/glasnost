@@ -899,6 +899,53 @@ fn an_engineer_repairs_only_an_important_badly_damaged_building() {
     assert!(!sent_at(&orders, unit, powr));
 }
 
+// design: own AI (#22) (S-0509, S-0214 rows I4 to I7: the cursor offers the repair on an allied house's damaged building too): the engineer, spent by the repair, is spent only on a building of the house's own; an ally's badly damaged factory gets none.
+#[test]
+fn an_engineer_does_not_repair_an_allys_building() {
+    let mut g = game(5);
+    ready(&mut g);
+    let mut w = g.world.clone();
+    let home = home_of(&w);
+    let pill = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "PILL",
+        1,
+        glasnost_map::CellXY::new(home.x + 6, home.y),
+        0,
+    );
+    let unit = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "ENGI",
+        0,
+        glasnost_map::CellXY::new(home.x + 3, home.y + 3),
+        0,
+    );
+    // Houses 0 and 1 allied, both ways.
+    w.houses[0].allies.push(HouseId(1));
+    w.houses[0].allies.sort();
+    w.houses[1].allies.push(HouseId(0));
+    w.houses[1].allies.sort();
+    run_to_think(&mut w, 2);
+    let s = glasnost_sim::combat::damage::strength(&w, pill);
+    w.obj_mut(pill).unwrap().health = s / 3;
+    assert!(w.allied(Some(HouseId(0)), Some(HouseId(1))));
+    assert_eq!(
+        glasnost_sim::targeting::cursor(
+            &w,
+            HouseId(0),
+            &[unit],
+            glasnost_sim::targeting::ClickOn::Object(pill),
+            glasnost_sim::targeting::Modifiers::default()
+        ),
+        glasnost_sim::targeting::Action::RepairBuilding,
+        "the cursor offers the repair"
+    );
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!sent_at(&orders, unit, pill), "{orders:?}");
+}
+
 /// A world copy where house 0 has a barracks, no engineer and no credits,
 /// and sees `derricks` tech buildings that pay (DERR of the Neutral house).
 fn derrick_scene(g: &Game, derricks: i32) -> (World, Vec<ObjectId>) {

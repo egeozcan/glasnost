@@ -1819,6 +1819,7 @@ name = "glasnost-ai"
 version = "0.0.0"
 dependencies = [
  "glasnost-map",
+ "glasnost-num",
  "glasnost-rules",
  "glasnost-sim",
  "postcard",

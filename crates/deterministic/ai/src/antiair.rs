@@ -620,6 +620,15 @@ fn lined(script: &Script, w: &World, armours: &[usize]) -> usize {
 /// would be in operation when placed (on equal price the first in type
 /// order), when its line is free.
 pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
+    build_type_where(script, w, |_| true)
+}
+
+/// [`build_type`] among the types `ok` lets the house order in this think.
+pub(crate) fn build_type_where(
+    script: &Script,
+    w: &World,
+    ok: impl Fn(TypeRef) -> bool,
+) -> Option<TypeRef> {
     let threats = drainers_in_air(script, w);
     if threats.is_empty() {
         return None;
@@ -638,6 +647,7 @@ pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
         .filter(|&t| lit_when_placed(w, script.house, t))
         .filter(|&t| crate::startable(w, script.house, t))
         .filter(|&t| !script.busy(w, t))
+        .filter(|&t| ok(t))
         .min_by_key(|&t| (production::cost_field(w, t), t.kind, t.index))
 }
 
