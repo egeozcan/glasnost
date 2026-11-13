@@ -500,6 +500,75 @@ fn drives_a_yard_vehicle_to_the_far_field_and_deploys_it() {
     assert!(of(&g.world, "MCV").is_empty());
 }
 
+/// [`fixture::map`] with one ore cell at [`far`] in a lake of water out
+/// to 14 cells from it (the script's field reach), so that no yard fits
+/// within that reach of the field, while the outer rings of the spiral
+/// around it hold land.
+fn moat_map() -> Map {
+    let mut m = fixture::map();
+    let f = far();
+    for ox in -14i32..=14 {
+        for oy in -14i32..=14 {
+            if ox * ox + oy * oy > 196 {
+                continue;
+            }
+            let Some(cell) = m.cells.get_mut(CellXY::new(f.x + ox, f.y + oy)) else {
+                continue;
+            };
+            if ox == 0 && oy == 0 {
+                cell.overlay = 0;
+                cell.overlay_data = 6;
+            } else {
+                cell.tile = fixture::WATER_TILE;
+                cell.overlay = glasnost_map::NO_OVERLAY;
+            }
+        }
+    }
+    m
+}
+
+// design: own AI (#41): the cells looked at around the far field are those within the reach the house counts the field's harvesters in (14 cells, `scripted::FIELD_REACH`), so a yard vehicle sent there deploys on arrival; with none there it deploys where it stands (#5). Before, the spiral's first fit could be a cell of an outer ring beyond that reach, where the arriving vehicle did not deploy and was sent on.
+#[test]
+fn the_cell_by_the_far_field_is_within_its_reach() {
+    let map = moat_map();
+    let mut g = built_up(&map);
+    scout(&mut g.world);
+    g.world.houses[0].credits = 100_000;
+    let yard = g.world.obj(of(&g.world, "YARD")[0]).unwrap().pos.cell();
+    let spare = (2..12)
+        .map(|d| CellXY::new(yard.x + d, yard.y - 4))
+        .find(|&c| g.world.cells.usable(c) && free(&g.world, c))
+        .expect("a free cell by the yard");
+    let mcv = testkit::spawn(&mut g.world, Kind::Vehicle, "MCV", 0, spare, 0);
+    let mut w = g.world.clone();
+    let (orders, _, _) = think(&mut w, &map);
+    let dest = orders.iter().find_map(|o| match o {
+        Order::Behaviour {
+            actor,
+            behaviour: Behaviour::Move,
+            dest: Some(Target::Cell(c)),
+            ..
+        } if *actor == mcv => Some(*c),
+        _ => None,
+    });
+    // The script's field reach (`scripted::FIELD_REACH`, crate-private).
+    let reach = 14; // nocite: tuning of our own opponent
+    match dest {
+        Some(dest) => assert!(
+            dist2(dest, far()) <= reach * reach,
+            "{dest:?} (squared distance {}) beyond the reach of the field {:?}",
+            dist2(dest, far()),
+            far()
+        ),
+        None => assert!(
+            orders
+                .iter()
+                .any(|o| matches!(o, Order::Deploy { actor } if *actor == mcv)),
+            "{orders:?}"
+        ),
+    }
+}
+
 // Tuning of our own opponent and PLAN §4.7 (M8 step B10): a house whose home field has run dry and that cannot pay for both a power plant and the refinery by the far field orders the refinery, though its drain would leave the house short of power; with the money for both it builds the plant first, as before.
 #[test]
 #[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
