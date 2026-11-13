@@ -61,11 +61,12 @@ pub mod tech_buildings;
 pub mod terror;
 
 /// Whether house `house` sees object `id` where it stands, as a person in
-/// its seat does: on the map, on a cell the house has explored (fog of war
-/// is off in a skirmish, S-0409 claim 19), and, for an object neither the
-/// house nor an ally owns, not hidden from it by a cloak it does not sense
+/// its seat does: on the map, and either the house's own or an ally's, or
+/// on a cell the house has explored (fog of war is off in a skirmish,
+/// S-0409 claim 19) and not hidden from it by a cloak it does not sense
 /// (S-0516 Terms and claim 28: not drawn for it). The special abilities ask
-/// this before they aim at a building (#36).
+/// this before they aim at a building (#36), the superweapon and ferry
+/// cell choosers before they call a cell free (#38).
 pub fn in_view(
     w: &glasnost_sim::world::World,
     house: glasnost_sim::world::HouseId,
@@ -75,10 +76,12 @@ pub fn in_view(
     let me = &w.houses[usize::from(house.0)];
     // design: own AI (#36): the house's own and its allies' objects are known to it; the cloak test is asked of the others
     let friend = o.owner.is_some_and(|h| h == house || me.allied_with(h));
+    // design: own AI (#38): the house's own and its allies' objects are seen wherever they stand
     o.on_map
-        && explored_part(w, house, o)
-        // spec: S-0516 Terms and claim 28 (a cloaked object the house does not sense is hidden from it)
-        && (friend || !glasnost_sim::cloak::hidden_from(w, id, Some(house)))
+        && (friend
+            || (explored_part(w, house, o)
+                // spec: S-0516 Terms and claim 28 (a cloaked object the house does not sense is hidden from it)
+                && !glasnost_sim::cloak::hidden_from(w, id, Some(house))))
 }
 
 /// Whether the house has explored a cell of the object: any cell of a

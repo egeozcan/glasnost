@@ -1579,9 +1579,11 @@ fn a_loaded_ferry_with_no_drop_cell_lets_its_passengers_out() {
         .map(|(c, _)| c)
         .collect();
     assert!(!far.is_empty(), "land across the strait");
+    // design: own AI (#38): the ferry's drop cell is free of what the house
+    // sees, so the cells are taken by its own infantry, which it always sees.
     for c in far {
-        if let Some(o) = g.world.cells.occ_mut(c, glasnost_sim::world::Layer::Ground) {
-            o.others = o.others.saturating_add(1);
+        if g.world.cells.usable(c) && g.world.objects.values().all(|o| o.pos.cell() != c) {
+            testkit::spawn(&mut g.world, Kind::Infantry, "WALKER", 0, c, 0);
         }
     }
     let mut brain = Brain::with_plan(
