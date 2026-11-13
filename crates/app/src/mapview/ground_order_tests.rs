@@ -204,3 +204,26 @@ fn a_vehicle_behind_a_live_buildings_slot_animation_is_drawn_before_it() {
         "the vehicle in front is drawn after it: {o:?}"
     );
 }
+
+/// #421. spec: S-0606 Terms (a bunkered vehicle stays on the map, on a cell of the bunker's
+/// foundation, drawn) and claims 6 and 7 (the walls-up effects start *special-1*), S-0102
+/// claims 5, 6, 10 and 17
+///
+/// The walls are HUTX's *special-1* animation with a y-sort of 1000: key
+/// 256 · (C_x + C_y) + 1000. A vehicle at the centre of the foundation cell C + (1, 1) has the
+/// key 256 · (C_x + C_y) + 768: the walls are in front of it and drawn after it.
+#[test]
+fn a_vehicle_on_a_live_buildings_foundation_is_drawn_before_its_front_walls() {
+    let o = order(
+        "SpecialAnim=SLOTL\nSpecialAnimYSort=1000\n",
+        true,
+        &[(1, 1)],
+    );
+    assert!(!o.slot.is_empty(), "the walls are drawn: {o:?}");
+    assert!(!o.cars[0].is_empty(), "the vehicle is drawn: {o:?}");
+    let first_slot = o.slot[0];
+    assert!(
+        o.cars[0].iter().all(|&i| i < first_slot),
+        "the vehicle is drawn before the walls in front of it: {o:?}"
+    );
+}
