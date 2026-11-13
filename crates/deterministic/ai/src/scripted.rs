@@ -3361,8 +3361,17 @@ impl Script {
         );
         let mut reach: BTreeMap<String, (usize, usize)> = BTreeMap::new();
         if let Some(home) = self.home(w) {
-            let mut probe = w.clone();
-            regions::ensure(&mut probe);
+            // design: own AI (#51): every tick ends with the regions up to
+            // date, so the world is read as it is; it is copied only when
+            // they are not (before the first tick).
+            let probe: std::borrow::Cow<'_, World> =
+                if w.regions.dirty || w.regions.region.is_empty() {
+                    let mut p = w.clone();
+                    regions::ensure(&mut p);
+                    std::borrow::Cow::Owned(p)
+                } else {
+                    std::borrow::Cow::Borrowed(w)
+                };
             if let Some(&(_, goal)) = enemies.iter().min_by_key(|&&(_, c)| dist2(c, home)) {
                 for id in self.of_role(w, Role::Army) {
                     let Some(o) = w.obj(id) else { continue };

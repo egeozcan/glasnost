@@ -53,6 +53,16 @@ struct SavedGame {
     replay: Replay,
 }
 
+/// [`SavedGame`] written from borrows: the same fields in the same order,
+/// so the same bytes, without copying the brains and the replay (#51).
+#[derive(Serialize)]
+struct SavedGameRef<'a> {
+    version: u32,
+    world: Vec<u8>,
+    brains: &'a [Brain],
+    replay: &'a Replay,
+}
+
 /// The AI houses of a setup.
 fn ai_houses(setup: &GameSetup) -> Vec<HouseId> {
     setup
@@ -103,8 +113,16 @@ impl Game {
     }
 
     /// [`Game::step`], telling `p` where the tick is (the tools' benchmark,
-    /// `glasnost_sim::probe`); `p` reads nothing and changes nothing.
+    /// `glasnost_sim::probe`); `p` reads nothing and changes nothing. Once
+    /// the game is over (S-0414) a step does nothing, so the state stays the
+    /// one its replay ends on.
     pub fn step_with<P: Probe>(&mut self, p: &mut P) {
+        // design: own AI (#51): the simulation runs its final tick again when
+        // stepped after it (the tick number stays), and the AI would think
+        // again, while the replay's tick count stays put
+        if self.outcome().is_some() {
+            return;
+        }
         let on = p.on();
         for b in &mut self.brains {
             let h = b.house();
@@ -215,11 +233,11 @@ impl Game {
 
     /// Saves the game.
     pub fn save(&self) -> Vec<u8> {
-        postcard::to_allocvec(&SavedGame {
+        postcard::to_allocvec(&SavedGameRef {
             version: GAME_FORMAT_VERSION,
             world: save::save(&self.world),
-            brains: self.brains.clone(),
-            replay: self.replay.clone(),
+            brains: &self.brains,
+            replay: &self.replay,
         })
         .expect("the game serializes")
     }
