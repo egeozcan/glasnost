@@ -3880,6 +3880,73 @@ mod start_tests {
 }
 
 #[cfg(test)]
+mod income_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+    use glasnost_sim::testkit;
+
+    /// The fixture skirmish's world and a cell by house 0's first object.
+    fn world() -> (World, CellXY) {
+        let g = Game::new(
+            fixture::rules(),
+            &fixture::map(),
+            "synthetic-skirmish",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the skirmish loads");
+        let w = g.world.clone();
+        let home = w
+            .objects
+            .values()
+            .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+            .map(|o| o.pos.cell())
+            .expect("house 0 has an object");
+        (w, CellXY::new(home.x + 4, home.y + 4))
+    }
+
+    // design: own AI (#50): an item started and done between two thinks was paid for (S-0404 claim 4), so its price is no lost income
+    #[test]
+    fn an_item_made_between_two_thinks_is_no_lost_income() {
+        let (mut w, at) = world();
+        let house = HouseId(0);
+        let mut s = Script::new(house, Plan::default());
+        let c0 = w.houses[0].credits;
+        s.watch.credits = c0;
+        s.watch_income(&w);
+        assert_eq!(s.watch.earned, 0);
+        // Before the next think: a load pays 300 and a tank is bought and
+        // made for 700, never seen on its line.
+        let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, at, 0);
+        w.obj_mut(tank).unwrap().econ.start_price = Some(700);
+        w.houses[0].credits = c0 + 300 - 700;
+        w.tick += THINK_PERIOD;
+        s.watch_income(&w);
+        assert_eq!(s.watch.earned, 300);
+    }
+
+    // design: own AI (#50): the refund of a building the house sold (S-0408 claim 1) is no income
+    #[test]
+    fn a_sale_refund_is_no_income() {
+        let (mut w, at) = world();
+        let house = HouseId(0);
+        let b = testkit::spawn(&mut w, Kind::Building, "PROC", 0, at, 0);
+        w.obj_mut(b).unwrap().econ.sale = Some(sell::Sale::default());
+        let mut s = Script::new(house, Plan::default());
+        let c0 = w.houses[0].credits;
+        s.watch.credits = c0;
+        s.watch_income(&w);
+        let refund = sell::refund(&w, house, tech::type_of(w.obj(b).unwrap()));
+        assert!(refund > 0);
+        glasnost_sim::objects::remove(&mut w, b);
+        w.houses[0].credits = c0 + refund;
+        w.tick += THINK_PERIOD;
+        s.watch_income(&w);
+        assert_eq!(s.watch.earned, 0);
+    }
+}
+
+#[cfg(test)]
 mod unblocker_tests {
     use super::*;
     use crate::{fixture, game::Game};
