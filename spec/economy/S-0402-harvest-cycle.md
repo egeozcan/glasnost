@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 80
+revision: 84
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-28
+approved-on: 2026-11-13
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130, Q-1759, Q-1870, Q-1990]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130, Q-1759, Q-1870, Q-1990, Q-3062, Q-3063]
 supersedes: []
 ---
 
@@ -68,7 +68,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
   In particular, an absent locomotor destination point does not mean that a harvester
   has no destination for the seeking test of claim 3.
 - **Remembered cell.** A cell a harvester keeps so that it can drive back to its field after
-  unloading (claims 6 and 12).
+  unloading (claims 6 and 12). An owner change forgets it (S-0309 claim 31).
 - **Landing point, pending jump, vehicle-present mark.** S-0207's terms (claims 20, 21 and 27): the
   fixed landing point of a teleporting object's destination, the jump still to be made to it, and the
   vehicle-present mark that S-0207 sets on the cell of a vehicle's landing point. Claim 17 calls that
@@ -112,17 +112,25 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 - **Free unit.** S-0408's term (Terms): the vehicle type that a building type's free-unit field
   names. Claim 18 says when one is created.
 - **Grand opening.** S-0108's term (claim 11): a building's once-only entry into service,
-  at construction completion in play or during placement at game set-up.
+  at construction completion in play, during placement at game set-up, when a trigger action
+  creates the building in play, or at an owner change of a building that has not had it (S-0309
+  claim 31).
 - **Start price.** The price of a produced item at the moment its production starts (S-0404,
   claim 2), which the original records on the produced object; claim 18 reads it.
 - **Docking, payment and unloading animations.** Three animations of the building in the
   neighbouring cell (claim 11): the *docking animation* (the building's pre-production animation,
   played when unloading starts), the *payment animation* (its special animation, played at a
   payment unless it is already playing) and the *unloading animation* (its production animation,
-  played, by a refinery-flag building only, when the harvester's load is empty). Each is played in its damaged form when the
-  building's health ratio is at or below the yellow health threshold (S-0003, claim C9), and
-  only if the building's art data gives that animation; a building without it plays nothing.
-  Only the unloading animation delays the harvester (claim 11).
+  played, by a refinery-flag building only, when the harvester's load is empty). They are the
+  building's *pre-production*, *special-1* and *production* slots of S-0108, and each is started
+  as S-0108 starts a slot (Terms there), with no occupied variant allowed: with its damaged
+  variant when the building's health ratio is at or below the yellow health threshold (S-0003,
+  claim C9), with its normal variant otherwise. The type's art read fills an empty damaged name
+  with the normal name (S-0108 Import mapping, **Names**), so a damaged building whose art gives
+  only the normal name plays that normal animation, for each of the three alike. A start plays
+  nothing only when the chosen variant's name is empty or names no animation type: the art gives
+  neither name, or it gives only the damaged name and the building is not damaged. Only the
+  unloading animation delays the harvester (claim 11).
 - **Primary building.** A building marked as its owner's primary factory (S-0213, claim 13, owns
   how the mark is switched). Any building that carries the mark counts, including a refinery of a
   type that is also a factory type.
@@ -744,18 +752,49 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     | In contact, not unloading, facing map east | starts unloading: step counter set to 0 and a pacing period of 1 tick started now; the building in the neighbouring cell, if any, plays its docking animation | standard delay of *unload* (S-0215, claim 6, one draw) |
     | Unloading, not finishing, and no building stands in the neighbouring cell | breaks off contact and queues *harvest* with an immediate start | — |
     | Unloading, not finishing, a building there, counter < 900 × *D* (the integer counter compared with the double product) | nothing | 1 tick |
-    | Unloading, not finishing, a building there, counter ≥ 900 × *D*, load not empty | the building plays its payment animation unless that is already playing; the harvester is paid (claim 12) for the tiberium it holds with the lowest registration index, the whole amount at once; counter set to 0 (its period is not restarted) | 1 tick |
-    | Unloading, not finishing, a building there, counter ≥ 900 × *D*, load empty | becomes *finishing*; the building's payment animation, if playing, is stopped, and a refinery-flag building in the neighbouring cell plays its unloading animation; the counter is left as it is | 1 tick |
+    | Unloading, not finishing, a building there, counter ≥ 900 × *D*, load not empty | in this order: the smoke event (**Refinery smoke**, below); the building plays its payment animation unless that is already playing; the harvester is paid (claim 12) for the tiberium it holds with the lowest registration index, the whole amount at once; counter set to 0 (its period is not restarted) | 1 tick |
+    | Unloading, not finishing, a building there, counter ≥ 900 × *D*, load empty | in this order: the smoke event; the building plays its payment animation unless that is already playing, as in the payment row; a refinery-flag building in the neighbouring cell plays its unloading animation; the building's payment animation is stopped. It becomes *finishing*; the counter is left as it is | 1 tick |
     | Finishing, and the building in the neighbouring cell is a refinery-flag building that is still playing its unloading animation | nothing | 1 tick |
     | Finishing, with a destination and a queued behaviour other than *harvest* | leaves the unloading state; stops if moving; starts the queued behaviour if it is ready to change; contact is kept | standard delay of the behaviour then current (one draw) |
     | Finishing, otherwise | leaves the unloading state; queues *harvest* without an immediate start; if it is ready to change, breaks off contact and starts the queued behaviour | standard delay of the behaviour then current (one draw) |
 
     **Refinery smoke.** Each payment row and the empty-load row that starts *finishing*
     produces one smoke event on the building in the neighbouring cell, as defined by
-    S-0616 claim 1. By the time payment is applied at that processing, the smoke event has occurred. Thus an uninterrupted
+    S-0616 claim 1. The smoke event comes first in its row: before the row's animations start or
+    stop and before payment is applied at that processing. Thus an uninterrupted
     unloading of *k* different tiberiums produces *k* + 1 events, including one when docking
     empty. Whether an event creates smoke systems is S-0616 claim 1's rule, independent of
     the docking, payment and unloading animations above.
+
+    **Order within the two rows.** The objects that the smoke event and the row's own starts
+    create in a payment row or the empty-load row enter play in this order: the smoke event's
+    particle systems (S-0616 claim 1), then the payment animation if it was not already playing,
+    then, in the empty-load row, the unloading animation. A start made in the condition opposite
+    to the building's slot condition first makes S-0108 claim 12's swap of every running slot,
+    whose new animations and draws come before that start's own, at that claim's ratings (the
+    order of the swap's restarts and draws is medium there). Making the smoke systems takes no draw (S-0616 claim 1); each animation takes its
+    creation draws (S-0109) at its start, so the payment animation's draws come before the
+    unloading animation's. In the
+    empty-load row the payment animation is always stopped last, so a payment animation that was
+    not playing when that row came is started and removed in the same processing: it enters play
+    with its creation draws and leaves play before it is ever processed or drawn. A building whose
+    payment animation's chosen variant names an animation (Terms) plays it at a docking with an
+    empty load in this way too.
+    Stopping a slot takes no draw (S-0108 Terms).
+
+    *The harvester's image while unloading.* While a harvester is in the unloading state (below),
+    its body is drawn with the image of its type's deployed image type (S-0517 claim 12; the same
+    imported field) when its type names one, and with its own image otherwise. The image changes
+    with the start row's processing and changes back when the harvester leaves the unloading state
+    (*Unloading state*, below). As in
+    S-0517 claim 12, the deployed image type is used only for drawing the body: the harvester
+    keeps its own type for every rule, and its own position, facing (map east from the start
+    row), owner and light. A body drawn as a voxel model takes its frame from the harvester's own
+    walk-animation counter (S-0105 claim 16), as any vehicle body does; the image type does not
+    restart it. The harvester's selection box, health bar and other overlays are not part of the
+    body and keep its own type. Unloading adds nothing else to the harvester's display: no
+    sequence or frame change of its own, and no facing change once the turning row has brought it
+    to map east; the harvesting sprite of claim 5a is not shown while unloading.
 
     While the harvester unloads, the step counter follows the schedule of claim 5 (Formulas F6)
     with a period of 1 tick. Unloading starts the period at its processing in tick *u*₀, so the
@@ -772,8 +811,12 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 
     So unloading takes one payment per tiberium carried, each max(1, ⌈900 × *D*⌉) ticks after the
     previous one, then one further such interval before *finishing*, and then the wait for the
-    building's unloading animation (none when the building has no such animation data, so the
-    harvester leaves in the tick after it became *finishing*). The docking and payment animations
+    building's unloading animation (the finishing row above). That wait depends on whether a
+    refinery-flag building in the neighbouring cell is playing an unloading animation when the
+    *finishing* harvester is processed, not on whether the empty-load row started one: a start
+    whose chosen variant names nothing leaves a running unloading animation in place (S-0108), so
+    the harvester then waits for that one. When none is playing, the harvester takes its next
+    *finishing* row in the tick after it became *finishing*. The docking and payment animations
     never delay the harvester. Back in *harvest*, the harvester starts seeking and drives to its
     remembered cell (claim 3).
 
@@ -825,6 +868,15 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     processing decides whether the jump is made, and where a miner that is not full goes
     instead (claim 17, case (f)).
 
+    *Refinery changing owner while unloading.* A harvester docked at a refinery that changes owner
+    follows it (S-0509 claim 14) and has its orders reset (S-0309 claim 31). In the unloading state
+    it is not ready to change, so the *guard* request of that change stays queued, and it goes on
+    unloading by the rows above; each payment after the change goes to the new owner, and at
+    *finishing* it queues *harvest* in place of *guard*. It has forgotten its remembered cell, so
+    back in *harvest* it seeks from where it stands (claim 3). A harvester in *unload* that has not
+    yet started unloading starts *guard* at the change, or once its body turn ends, and stays
+    docked with its load unpaid (claim 13's rules for a harvester in *guard*).
+
     *Contact lost otherwise while unloading.* When the refinery leaves play without a sale (it is
     destroyed, for example) or otherwise breaks off contact with no run-away, the next processing
     takes the first row. With nothing queued, the fall-back queues nothing (*unload* is current)
@@ -845,8 +897,10 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     the first eligible start under *Turning body*, including the first per-tick start on the
     turn's expiry tick when no other blocker remains. The harvester keeps the part of its load that has not been paid; it is not paid for it
     later unless it unloads again. The original also has a route by which an order ends unloading
-    while contact is kept (the harvester then becomes *finishing* with its load kept, and the row
-    for a destination and a queued behaviour applies), but orders of S-0213 never reach it, since
+    while contact is kept (the harvester then becomes *finishing* with its load kept, playing the
+    unloading animation and stopping the payment animation as the empty-load row does but with no
+    smoke event and no payment-animation start, and the row for a destination and a queued
+    behaviour applies), but orders of S-0213 never reach it, since
     only a dock-unload refinery queues *unload* and an order breaks off that contact first.
     - Backing: `measurable` (scenario H1; its variant e for the three animations; H12 for the sale,
       its part a2 for the end of contact at the sale's second processing, contact lost while
@@ -863,21 +917,47 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       contact, since row 2 of claim 10 replaces it with the docking cell at the processings of
       *enter* that follow; H12 part a4 records it if a run shows it. A chrono miner's jump at the
       sale, to the scatter cell or to a field cell, is S-0207 claim 28's and claim 17's case (f)
-      (S-0207 scenario D34 part h).
+      (S-0207 scenario D34 part h). A change of the refinery's owner while unloading is
+      `measurable` by S-0309 scenario A19 part e; for a harvester that has not yet started
+      unloading it is `unmeasured`, as S-0309 claim 31 gives. The order of the objects created in
+      the payment and empty-load rows, the transient payment animation, the harvester's body image
+      while unloading, and the normal animation of a damaged building whose art gives only the
+      normal name are `measurable` by scenario H28. The frame of a body drawn as a voxel model and
+      the overlays, the selection box and health bar included, are `unmeasured`: H28 records
+      neither the harvester's walk-animation counter nor any overlay, and its deployed image type
+      differs from the harvester's type only in its image, so a run could not tell from which of the
+      two types an overlay is drawn. That the three starts allow no occupied variant (Terms) is
+      `unmeasured`: no part here garrisons the building, so no run tells such a start from one that
+      allows the occupied variant. The damaged forms when the art gives both names are
+      `measurable` by H1 variant e's health control (distinguishable damaged versions of all three
+      animations, falsified by any other selection than the damaged one exactly in the runs at or
+      below the yellow threshold). The wait for an unloading animation that a start whose chosen
+      variant names nothing left running is `unmeasured`: no part here keeps one unloading
+      animation running into a later empty-load row. The payment animation's leaving play in the
+      same processing, rather than before it is first drawn, is `unmeasured`: H28 part b captures
+      frames and lists the objects that enter play, not those that leave it.
     - Confidence: high for the payment per tiberium, the dump threshold and the smoke events.
       Medium for the exact
       tick of each payment and the 1-tick intervals, for the extra interval before *finishing* and
       for the one-tick difference of the first payment; medium for the unloading animation being
-      the one the harvester waits for and the other two not delaying it; low for the damaged forms
-      and for which building types play the docking animation (this claim says any building in the
-      neighbouring cell); medium for the stall after contact is lost, for the order's route and for
+      the one the harvester waits for and the other two not delaying it; high for the order of the
+      smoke event and the animations within the payment and empty-load rows, for the transient
+      payment animation's start, its creation draws and its never being drawn, for the damaged
+      forms when the art gives both names (H1 variant e) and for the normal animation played when
+      only the normal name is given (H28 part d); medium for the payment animation's leaving play
+      in the same processing, for the three starts allowing no occupied variant and for the wait
+      for an unloading animation left running (each `unmeasured`, above); high for the harvester's body being drawn with its type's deployed
+      image type while unloading, medium for the drawing properties that come from that type and
+      for the overlays keeping the harvester's own type; low for which building types play the
+      docking animation (this claim says any building in the neighbouring cell); medium for the stall after contact is lost, for the order's route and for
       the delays of the two *finishing* rows; medium for the sale's run-away and the *guard* of a
       harvester still in *enter*; medium, until H12 part a2 runs, for the end of contact at the
       sale's second processing; medium, until H12 part a4 runs, for a cell destination kept with
-      no request; medium for the removal of a destination naming the refinery (`unmeasured`,
+      no request; medium for a change of the refinery's owner while unloading; medium for the removal of a destination naming the refinery (`unmeasured`,
       above); medium for the sale's
       scatter request being refused when
-      *harvest* could not start; low for the route with contact kept
+      *harvest* could not start; low for the route with contact kept, its animation starts and
+      stops included
 
 12. **What the house gains, and when.** Each payment for an amount *a* of tiberium *T* (value per
     bale *V*) adds to the balance of the refinery's owner:
@@ -1381,8 +1461,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 18. **When and where a free unit appears.** A building whose type has a free unit (Terms) gets
     one at its grand opening (Terms), subject to the exclusions below. For a building constructed
     in play, this is at the end of its build-up, in the building's own turn. It gets none:
-    - when it is captured (a capture is not a grand opening, and a building has one grand opening
-      at most),
+    - when it changes owner (an owner change gives a building that has not had its grand opening
+      that opening, with no free unit, and a building has one grand opening at most, so none
+      follows at the end of its build-up, S-0309 claim 31),
     - when the map pre-places it: the grand opening runs during set-up placement, but its free-unit
       grant is suppressed then (S-0009 claim 40). This does not suppress the opening itself or its
       readiness effect. Set-up queues *guard*, and it becomes current at the first per-tick start
@@ -1447,8 +1528,10 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       The immediate start of *harvest* is `measurable` (H13; S-0207 D34 part f, *harvest* from the
       tick the free miner appears); its replacement of the fall-back's queued *harvest* is
       `unmeasured`, since it shows nothing, as stated above.
-    - Confidence: high for the timing at the grand opening, for no unit after a capture and for the
-      first place and its facing; medium for the two searches, the refund, the start of *harvest*
+    - Confidence: high for the timing at the grand opening and for the first place and its
+      facing, high for no unit after a capture of a building that has had its grand opening (H13
+      part e), medium for no unit after an owner change before its grand opening (`measurable`,
+      S-0309 scenario A19 part m, run m2), and medium for the two searches, the refund, the start of *harvest*
       and the start-price condition; medium, until S-0207 scenario D34 part f runs, for the
       placement fall-back before *harvest* for a chrono miner, the type that part tests; medium
       for it for other harvester types (`unmeasured`, above); high for suppression of the
@@ -1469,7 +1552,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     free unit get them when those sources create the miner. A newly created deployed building
     with a slave type also gets a hidden group. Conversion preserves the previous working
     group: deploying and packing up already transfer its slaves (S-0415 claims 6 and 10).
-    The transferred slaves are not replaced by a second working group.
+    The transferred slaves are not replaced by a second working group. The fate of a group
+    created at production start whose item is then cancelled is S-0312 claim 31 (*A cancelled
+    production master*).
 
     Each initial or replacement infantry creation takes the ordinary object-creation draw
     (S-0202 claim 10). Each initial slave also takes one creation number after its own draw.
@@ -2225,6 +2310,7 @@ select which harvester takes the earlier turn.
 | Art, building section, `QueueingCell` | queueing shift (Terms, claim 9); it does not move the docking cell (claim 10) | two integers *x*, *y*, cells | 0, 0 |
 | Art, building section, `NumberOfDocks` | dock slots (Terms, claim 10) | integer; values below 1 give 1 | 1 |
 | Art, building section, `PreProductionAnim`, `PreProductionAnimDamaged`, `SpecialAnim`, `SpecialAnimDamaged`, `ProductionAnim`, `ProductionAnimDamaged` | docking animation, payment animation and unloading animation, with their damaged forms (Terms, claim 11) | animation type name | none |
+| Rules, vehicle type section, `UnloadingClass` | deployed image type of a harvester type: the image its body is drawn with while unloading (claim 11, *The harvester's image while unloading*; S-0517 claim 12 owns the field and its other use) | vehicle type name | none: the harvester's own image |
 | Rules, `[AudioVisual]`, `ConditionYellow` | the yellow health threshold that selects the damaged forms (Terms; owned by S-0003, claim C9) | percentage (S-0003) | S-0003 |
 | Rules, `[Unload]`, `[Harvest]`, `[Enter]` behaviour sections (S-0215) | rates of the standard delays of *unload*, *harvest* and *enter* | owned by S-0215 | S-0215 |
 
@@ -3408,6 +3494,58 @@ is wrong). *Runs:* 3.
   mouse/keyboard orders suffice. No harness change or oracle measurement is performed
   by this spec.
 
+**H28. Animations and smoke at payment, and the harvester's image while unloading (claim 11, Terms; Q-3062, Q-3063).**
+- *Setup:* a purpose-made two-player map with a small ore field; stock data otherwise, with the
+  director and mods off, at a fixed seed. The human house starts with a construction yard, a war
+  factory and enough power and credits, and builds one refinery-flag, dock-unload refinery by a
+  place order at the start of the run. A structure that the map places for a human player's house
+  is dropped (S-0009 claim 27), so the refinery is not pre-placed. The refinery's
+  art gets three purpose-made animation types of known, distinct lengths and distinguishable
+  images for its docking, payment and unloading animations; the payment and unloading types each
+  have a descending random-rate pair whose converted bounds differ (*d*<sub>1</sub>′ ≠
+  *d*<sub>2</sub>′, S-0109 claim 3), so each creation takes exactly one ranged draw. The
+  payment animation is longer than the interval from the payment to the change to *finishing*,
+  which the run records. The test data gives the refinery's type a refinery smoke type and one
+  set smoke point, so that each smoke event makes one system (S-0616 claim 1). A test harvester type names a purpose-made vehicle
+  type with a distinguishable image as its deployed image type; a second run uses a test harvester
+  type that names none.
+- *Procedure:* (a) let a harvester with a load of one bale dock and unload. (b) Give a
+  newly produced harvester, its load empty, an explicit enter order to the refinery. (c) Run (a)
+  with the harvester type that names a deployed image type, capturing every frame from the docking
+  row to its departure. (d) Give the refinery only normal names for the three animations, damage it to at or
+  below the yellow threshold, and repeat (a); then give it only damaged names, at full health, and
+  repeat (a).
+- *Observable:* per tick, the objects that enter play (particle systems and animations) in the
+  order the read-only recorder lists them, and the scenario random stream's state before and after
+  the harvester's processing, from which the ranged draws taken and their order follow (the raw
+  values each ranged draw consumes follow S-0202 claim 4); the animation shown on the refinery per captured frame; the
+  harvester's drawn body image per frame; the tick of the change to *finishing* and of the
+  contact's end.
+- *Expected:* (a) in the payment tick, the smoke system enters play before the payment
+  animation, which takes its one draw, and the credits arrive in the same tick; in the empty-load
+  tick, the smoke system and then the unloading animation enter play, with the unloading
+  animation's one draw, no payment animation is started again, and the payment animation is
+  gone at the end of that tick. (b) The empty docking shows the docking animation; in the empty-load
+  tick the smoke system, then a payment animation with its draw, then the unloading animation
+  with its draw enter play, and the payment animation is not shown on the refinery in any
+  captured frame. (c)
+  The body is drawn with the deployed image type's image from the start row's tick until the
+  harvester leaves the unloading state, and with its own image before and after; with the type
+  that names none, its own
+  image throughout. (d) With only normal names, the damaged refinery plays the normal animations,
+  and the harvester waits for the normal unloading animation; with only damaged names at full
+  health, no animation plays and the harvester changes from *finishing* to its next row 1 tick
+  later, as in H1 variant e run (iii).
+- *Falsified by:* in parts a and c, and in part d's run with only normal names, credits arriving
+  in a tick other than that of the payment animation's start; a payment animation entering play
+  before the smoke system; a payment animation started again in
+  part a's empty-load tick; in part b, the payment animation's draw after the unloading
+  animation's, or the payment animation drawn; a body image other than the deployed image type's at any
+  frame of the unloading state, or that image outside it; no animation on the damaged refinery
+  with only normal names.
+- *Tool:* tick-labelled screen capture and the read-only recorder; ordinary orders only. This is
+  a proposal for the oracle; no harness change is assumed beyond what the recorder already lists.
+
 ## Open questions
 
 - (Claim 17, Q-1759.) Q-1759 questions 1 to 4 are settled in S-0207 claim 28 (its answer
@@ -3513,6 +3651,14 @@ is wrong). *Runs:* 3.
   "since no player house is computer-controlled" holds except for the test-only
   computer-controlled player house (glossary), which takes row 2's case and the owner
   alternative of claim 14, like the neutral and special houses.
+- **S-0517 claim 12 and its Import mapping, the deployed image type's second use.** The field
+  also gives the image a harvester's body is drawn with while it is in the unloading state (S-0402
+  claim 11, *The harvester's image while unloading*), with the same rule that the type is used
+  only for drawing. Claim 12's second item and its Import mapping row can point there. Level and
+  backing: high for the body's image and when it is used, medium for the drawing properties that
+  come from that type and for the overlays keeping the harvester's own type; `measurable` by
+  S-0402 scenario H28 part c for the body's image, and `unmeasured` for a voxel body's frame and
+  for the overlays, the selection box and health bar included, as S-0402 claim 11's backing says.
 
 ## Questions for the project lead
 
