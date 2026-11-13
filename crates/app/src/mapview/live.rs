@@ -34,8 +34,8 @@ use glasnost_sim::world::{GameSetup, HouseId, Layer, Object, ObjectId, World};
 use super::anims::{self, AnimQuirks, Playback, Player};
 use super::beams;
 use super::build::{
-    AnimDraw, Attitude, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile,
-    Painter, ShadowAnchor, find_type, rule_int,
+    AnimDraw, Attitude, Buildup, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding,
+    Mobile, Painter, ShadowAnchor, find_type, rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
 use super::pip_scale;
@@ -3126,6 +3126,65 @@ impl Live {
         })
     }
 
+    /// The build-up stage building `o` shows in the shown tick while it is
+    /// in the construction state (S-0108 claims 1, 2 and 5): building up
+    /// until its handover, or in the build-down of a sale; `None` outside
+    /// it.
+    ///
+    /// The simulation keeps the stage's timing (the entry tick, the first
+    /// construction processing *C* and the build-down's start) but not the
+    /// stage itself, so the drawing derives it from those ticks as
+    /// uninterrupted play runs it (S-0406 claims 14 and 17, F7; S-0408
+    /// claim 6). A tick without the building's update, which S-0406 claim
+    /// 17 says delays the processing steps, is not followed (our seam).
+    pub(super) fn buildup_of(&self, o: &Object) -> Option<Buildup> {
+        use glasnost_sim::econ::sell::{Stage, buildup_range};
+        let t = self.shown_tick();
+        let c = &o.econ.construction;
+        let (start, selling) = match o.econ.sale.as_ref().map(|s| s.stage) {
+            // spec: S-0309 claim 31 (an owner change's idle range takes the place of the build-down: the building is no longer in the construction state)
+            Some(Stage::BuildDown(_)) if o.econ.idle_body.is_some() => return None,
+            // spec: S-0408 claim 6 and S-0108 claim 2 (the build-down from its first tick, backwards)
+            Some(Stage::BuildDown(since)) => (since, true),
+            _ if c.building_up => {
+                // spec: S-0406 claim 17 (stage timing counts from the entry tick) and claim 14 (the
+                // first construction processing C starts the range again at stage 0)
+                let start = match (c.first, c.entry) {
+                    (Some(first), _) if t >= first => first,
+                    (_, Some(entry)) => entry,
+                    (Some(first), None) => first,
+                    (None, None) => t,
+                };
+                (start, false)
+            }
+            _ => return None,
+        };
+        let range = buildup_range(&self.world, o.type_index);
+        // spec: S-0108 claim 1 (a building whose construction has not completed draws its build-up
+        // sprite) and S-0309 claim 31 (an owner change's idle range can take the place of the
+        // build-up): the idle stage, as claim 2 gives an idle building's frame k
+        if let Some(body) = o.econ.idle_body {
+            return Some(Buildup {
+                stage: body.stage,
+                count: range.n,
+                selling,
+            });
+        }
+        // spec: S-0108 claims 5 and 6 (stage k = elapsed ticks / d_b; a zero delay keeps stage 0;
+        // past the end of the range it wraps to a = 0) and S-0406 claim 18 (a positive-delay range
+        // of one stage or fewer wraps back to 0 in the same turn)
+        let stage = if range.delay <= 0 || range.n <= 1 {
+            0
+        } else {
+            (t.saturating_sub(start).max(0) / range.delay).rem_euclid(range.n)
+        };
+        Some(Buildup {
+            stage,
+            count: range.n,
+            selling,
+        })
+    }
+
     /// The tick whose updates the picture shows: the last one that ran
     /// (S-0201 claim 6).
     fn shown_tick(&self) -> i32 {
@@ -3525,8 +3584,11 @@ impl Live {
                 continue;
             };
             let pose = (o.turret.value(tick), o.combat.anim_frame);
+            // spec: S-0108 claims 1 and 2 (a map building in the construction state, its build-down
+            // in a sale, draws its build-up sprite: it is drawn live from then on)
             if self.map_start_pose.get(code) != Some(&pose)
                 || o.beh.current == Some(Behaviour::Unload)
+                || self.buildup_of(o).is_some()
             {
                 self.map_posed.insert(*code);
             }
@@ -3726,6 +3788,7 @@ impl Live {
                         protection: self.protection_look(o),
                         // spec: S-0519 claims 25 and 26, F7 (the flash count and the mark)
                         adjust: self.building_look(o).adjust,
+                        buildup: self.buildup_of(o),
                     },
                 ))
             })

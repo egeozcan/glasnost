@@ -1722,6 +1722,7 @@ fn live_building_items_quirks(
             gate_door,
             protection: None,
             adjust: Default::default(),
+            buildup: None,
         }],
     );
     // spec: S-0108 claim 8 (centred on the foundation's top corner; canvas 40 wide)
@@ -4870,6 +4871,7 @@ fn protection_building_body_rows() {
                     protection,
                     adjust: Default::default(),
                     slots: Vec::new(),
+                    buildup: None,
                 }],
             );
             let body = drawn[0]
@@ -5002,6 +5004,7 @@ fn hut(protection: Option<super::protection::Look>, unloading: Option<Unloading>
         gate_door: None,
         protection,
         adjust: Default::default(),
+        buildup: None,
     }
 }
 

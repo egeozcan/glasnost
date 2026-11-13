@@ -2712,14 +2712,21 @@ impl<'a> Builder<'a> {
 
     /// The companion of the body of building type `i` drawn at draw point
     /// `p` (S-0102 claim 31, F5: live constants, the art displacement
-    /// applied).
-    fn body_companion(&mut self, i: usize, p: (i32, i32)) -> Option<(u32, i32, i32)> {
+    /// applied unless the building is in the construction state).
+    fn body_companion(
+        &mut self,
+        i: usize,
+        p: (i32, i32),
+        construction: bool,
+    ) -> Option<(u32, i32, i32)> {
         let foundation = self.foundation(i);
         // spec: S-0102 Import mapping (ZShapePointMove: two integers, default 0, 0)
         let m = self
             .art_value(Kind::Buildings, i, b"ZShapePointMove")
             .map(|v| value::int_tuple_or::<2>(v, [0, 0]).0)
             .unwrap_or([0, 0]);
+        // spec: S-0102 F5 (live construction and selling omit the art displacement)
+        let m = if construction { [0, 0] } else { m };
         match self.companion_image() {
             Companion::Image(id, stored) => {
                 let origin =
@@ -2813,6 +2820,8 @@ impl<'a> Builder<'a> {
                 None,
                 None,
                 Default::default(),
+                // spec: S-0009 claim 40 (a map-placed building is complete: not in the construction state)
+                None,
                 ground,
             );
             self.built.scene.items.extend(items);
@@ -2825,7 +2834,9 @@ impl<'a> Builder<'a> {
     /// to `ground` as a ground-layer entry). `condition` is (damaged, badly
     /// damaged); `facing` the turret's facing; `unloading` the unloading
     /// state of a live building, which adds the images of S-0108 claims 22
-    /// and 23 (the door image goes to `ground` with the turret).
+    /// and 23 (the door image goes to `ground` with the turret); `buildup`
+    /// the build-up stage of a live building in the construction state
+    /// (S-0108 claims 1, 2 and 4).
     #[allow(clippy::too_many_arguments)]
     fn building_items(
         &mut self,
@@ -2842,6 +2853,7 @@ impl<'a> Builder<'a> {
         unloading: Option<Unloading>,
         gate_door: Option<unload::DoorView>,
         look: super::protection::BuildingLook,
+        buildup: Option<Buildup>,
         ground: &mut Vec<GroundEntry>,
     ) -> Vec<Item> {
         let mut items = Vec::new();
@@ -2852,13 +2864,17 @@ impl<'a> Builder<'a> {
             .and_then(value::integer)
             .unwrap_or(9);
         // spec: S-0108 claim 4 (a gate opening or closing draws frame p, or p + G + 1 damaged, from
-        // the body sprite; F8's rounding mode as the rules hold it)
-        let moving_gate = gate_door.filter(|_| gate).and_then(|d| {
-            let mode = self.rules.map_or(Rounding::TowardZero, |r| r.mode);
-            unload::gate_frame(d, gate_stages, condition.0, mode)
-        });
-        // spec: S-0108 claim 4 (while the gate moves no unloading or under-door image is drawn)
-        let unloading = unloading.filter(|_| moving_gate.is_none());
+        // the body sprite; F8's rounding mode as the rules hold it); claim 2 (construction takes
+        // precedence)
+        let moving_gate = gate_door
+            .filter(|_| gate && buildup.is_none())
+            .and_then(|d| {
+                let mode = self.rules.map_or(Rounding::TowardZero, |r| r.mode);
+                unload::gate_frame(d, gate_stages, condition.0, mode)
+            });
+        // spec: S-0108 claim 4 (while the gate moves no unloading or under-door image is drawn);
+        // claim 2 (construction takes precedence over the unloading sprites)
+        let unloading = unloading.filter(|_| moving_gate.is_none() && buildup.is_none());
         let (hsv, _) = self.owner_colour(owner);
         // spec: S-0103 claim 16 (a building type's named palette: its body and sprite parts unless
         // it uses the terrain palette, its voxel parts and its own animations drawn with it)
@@ -2922,8 +2938,20 @@ impl<'a> Builder<'a> {
             }
             None => row,
         };
-        let Some(body_sprite) = art.sprite.clone() else {
-            return items;
+        // spec: S-0108 claim 1 (in the construction state the build-up sprite; when it does not exist
+        // nothing of the body is drawn: no body, bib or shadow, the slot animations still are)
+        let body_sprite = match buildup {
+            Some(_) => art
+                .building_sprites
+                .get("buildup")
+                .cloned()
+                .unwrap_or_default(),
+            None => {
+                let Some(s) = art.sprite.clone() else {
+                    return items;
+                };
+                s
+            }
         };
         let quirks = self.p.view_quirks;
         // spec: S-0108 claim 22 (while unloading, the deploying or roof-deploying sprite replaces the
@@ -2936,7 +2964,12 @@ impl<'a> Builder<'a> {
         let replaced = unload_sprites.and_then(|u| u.body);
         // spec: S-0108 claims 3 and 9 (N, the clamp and the shadow are the sprite in use's)
         let sprite = replaced.map_or(body_sprite, |(s, _)| s.to_vec());
-        let n = self.sprite_frames(&sprite).unwrap_or(0);
+        // spec: S-0108 claim 1 (no build-up sprite: nothing of the body, as a sprite of no frames)
+        let n = if sprite.is_empty() {
+            0
+        } else {
+            self.sprite_frames(&sprite).unwrap_or(0)
+        };
         // spec: S-0009 claim 40 (a map-placed building is complete and idle at once);
         // S-0108 claim 6 (a change during the game's set-up is immediate: stage = a of the range)
         let idle = self
@@ -2950,7 +2983,15 @@ impl<'a> Builder<'a> {
         // spec: S-0108 claim 2 (outside construction the occupiable rule comes before the stationary
         // gate rule: occupiable 2·[occupied] + [hurt], hurt badly damaged at tech level 0 or below,
         // damaged above; a gate 0, damaged G + 1; others k, damaged k + 1 in the idle state)
-        let f: i32 = if let Some(m) = moving_gate {
+        let f: i32 = if let Some(b) = buildup {
+            // spec: S-0108 claims 2 and 4 (construction: k; selling, and a gate both ways:
+            // a + c − k − 1 with a = 0, c = n)
+            if b.selling || gate {
+                b.count.saturating_sub(1).saturating_sub(b.stage)
+            } else {
+                b.stage
+            }
+        } else if let Some(m) = moving_gate {
             // spec: S-0108 claim 2 (a moving gate uses claim 4, before the occupiable rule)
             i32::try_from(m).unwrap_or(-1)
         } else if occupiable {
@@ -2982,9 +3023,8 @@ impl<'a> Builder<'a> {
             .and_then(value::integer)
             .unwrap_or(0);
         // spec: S-0102 claim 31, F5 (the body's companion depth image, placed from its draw point;
-        // a stationary body of a building that is neither under construction nor being sold, so
-        // the art displacement applies)
-        let companion = self.body_companion(i, anchor);
+        // the art displacement applies outside the construction state)
+        let companion = self.body_companion(i, anchor, buildup.is_some());
         // spec: S-0102 claim 13 (body: −L(z) − 2 + normal depth adjustment, upright, writes; drawn
         // as a deploying or roof-deploying sprite: −L(z) − 22 or −L(z) − 42 replacing the normal
         // depth adjustment, the companion depth image as for the normal body)
@@ -3035,8 +3075,10 @@ impl<'a> Builder<'a> {
         // spec: S-0108 claim 7 (bib: same frame f, no clamp, outside the construction state)
         // spec: S-0108 claim 3 (a negative bib index draws nothing; one past the bib sprite neither)
         // spec: S-0108 claim 4 (no bib while a gate opens or closes)
+        // spec: S-0108 claim 7 (no bib in the construction state, so never during build-up or selling)
         if let Some(bib) = art.building_sprites.get("bib").cloned()
             && moving_gate.is_none()
+            && buildup.is_none()
             && let Ok(bib_frame) = usize::try_from(f)
             && let Some(item) = self.place_sprite(
                 &bib,
@@ -7083,6 +7125,7 @@ impl Painter {
                     protection: d.protection,
                     adjust: d.adjust,
                 },
+                d.buildup,
                 &mut ground,
             );
             for g in ground {
@@ -7165,6 +7208,21 @@ pub struct LiveBuilding {
     /// Its charge flash count and air-strike mark in the shown tick
     /// (S-0519 claims 25 and 26, F7).
     pub adjust: glasnost_sim::mark::Adjust,
+    /// Its build-up stage while it is in the construction state (S-0108
+    /// claims 1 and 2); `None` outside it.
+    pub buildup: Option<Buildup>,
+}
+
+/// The build-up stage a live building in the construction state shows
+/// (S-0108 claims 1, 2, 4 and 5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Buildup {
+    /// Stage *k* of the construction range.
+    pub stage: i32,
+    /// The range's count *c* = *n* (its start *a* is 0).
+    pub count: i32,
+    /// The building is being sold: the build-up plays backwards.
+    pub selling: bool,
 }
 
 /// A running slot animation of a live building, as the drawing takes it
