@@ -207,8 +207,17 @@ fn a_protected_target_is_refused() {
 // spec: S-0514 claim 3 (E4: a vehicle still standing in the cell of the vehicle factory it is in contact with is refused; once it has left, it is locked)
 #[test]
 fn a_vehicle_in_its_factory_is_refused() {
-    let mut w = world(|_| {});
-    let factory = spawn(&mut w, Kind::Building, "TOWER", 1, at(0, 0));
+    let mut w = world(|r| {
+        let mut f = r.sim.buildings["TOWER"].clone();
+        f.weapons_factory = Some(true);
+        r.registries
+            .entry("buildings".into())
+            .or_default()
+            .push("WFAC".into());
+        r.sim.buildings.insert("WFAC".into(), f);
+    });
+    let factory = spawn(&mut w, Kind::Building, "WFAC", 1, at(0, 0));
+    assert!(glasnost_sim::econ::release::vehicle_factory(&w, factory));
     let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(0, 0));
     w.obj_mut(v).unwrap().contact = Some(factory);
     let a = attacker(&mut w, "ERASER", 0, at(-12, -12));
@@ -217,6 +226,19 @@ fn a_vehicle_in_its_factory_is_refused() {
     w.obj_mut(v).unwrap().pos = glasnost_sim::world::Pos::centre(at(3, 3), 0);
     erase(&mut w, a, v);
     assert!(erased(&w, v), "outside it");
+}
+
+// spec: S-0514 claim 3 (the refusal names the vehicle factory the vehicle is in contact with; a vehicle in contact with another building, standing in its cell, has no refusal and is locked)
+#[test]
+fn a_vehicle_in_contact_with_a_building_that_is_no_factory_is_locked() {
+    let mut w = world(|_| {});
+    let tower = spawn(&mut w, Kind::Building, "TOWER", 1, at(0, 0));
+    assert!(!glasnost_sim::econ::release::vehicle_factory(&w, tower));
+    let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(0, 0));
+    w.obj_mut(v).unwrap().contact = Some(tower);
+    let a = attacker(&mut w, "ERASER", 0, at(-12, -12));
+    erase(&mut w, a, v);
+    assert!(erased(&w, v), "a building that is no vehicle factory refuses nothing");
 }
 
 // spec: S-0514 claim 3 (E4: a beam already attached to the firer refuses its new lock; a counter-lock releases the firer's own beam)

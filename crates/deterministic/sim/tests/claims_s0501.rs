@@ -4416,3 +4416,77 @@ fn claim_45_below_the_cruise_height_with_a_target_queues_attack() {
     );
     assert_eq!(o.target, Some(Target::Object(v)));
 }
+
+// spec: S-0501 claim 32 (after the loss of its target the aircraft keeps flying in its current T1 stage until its next attack processing), claim 24 (a destination that is gone leaves the aircraft none) and claim 42 (guidance requests facings only toward a flight point); Q-3041 (interim: a destination whose object is gone gives the movement updates no flight point) (#160)
+#[test]
+fn a_strafer_whose_destination_object_is_removed_does_not_steer_to_the_origin() {
+    let (mut w, _k, a) = built("STRAFE");
+    assert!(air::strafer(&w, a));
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 12, 0);
+    click(&mut w, a, ClickOn::Object(v));
+    // T1's choosing row gives the strafer its target as destination.
+    assert!(run_until(&mut w, 200, |w| {
+        w.obj(a).unwrap().dest == Some(Target::Object(v))
+    }));
+    step(&mut w);
+    let d = Target::Object(v);
+    glasnost_sim::objects::remove(&mut w, v);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, None, "the target is dropped at the removal");
+    assert_eq!(
+        o.dest,
+        Some(d),
+        "the destination still names the removed object"
+    );
+    let requested = o.body.target;
+    let origin = direction(-i64::from(o.pos.x), -i64::from(o.pos.y), true);
+    assert_ne!(requested, origin, "the set-up does not face the origin");
+    let mut ticks = 0;
+    while w.obj(a).is_some_and(|o| o.dest == Some(d)) && ticks < 400 {
+        step(&mut w);
+        ticks += 1;
+        let o = w.obj(a).unwrap();
+        assert_eq!(
+            o.body.target,
+            requested,
+            "no facing request toward a flight point of the removed object: {}",
+            describe(&w, a)
+        );
+    }
+    assert!(ticks > 1, "the strafer waited with the destination");
+    assert!(ticks < 400, "its next processing replaces the destination");
+}
+
+// spec: S-0501 claim 24 (r134, Q-2649: neither the report after a touchdown nor the pad's answer to it requests a facing) and claim 25 (the landing direction's one named use is claim 42's aiming request) (#162)
+#[test]
+fn claim_24_the_report_after_a_touchdown_at_rest_changes_no_facing() {
+    let mut w = game(&rules());
+    let k = building(&mut w, "APAD", 0, 0, 0);
+    ready(&mut w);
+    let a = put(&mut w, Kind::Aircraft, "JET", 0, 10, 0);
+    step(&mut w);
+    w.obj_mut(a).unwrap().combat.ammo = 0;
+    glasnost_sim::process::fall_back(&mut w, a, false);
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Enter));
+    let service = |w: &World| w.obj(k).unwrap().air.as_ref().and_then(|s| s.service);
+    let mut rested: Option<(i32, Facing, bool)> = None;
+    let mut reported = None;
+    for _ in 0..3000 {
+        let before = service(&w);
+        step(&mut w);
+        let o = w.obj(a).unwrap();
+        let s = st(&w, a);
+        if rested.is_none() && s.ground && air::height(&w, a) == 0 {
+            rested = Some((w.tick, o.body.value(w.tick), o.body.turning(w.tick)));
+        }
+        if before.is_none() && service(&w).is_some() {
+            reported = Some((w.tick, o.body.value(w.tick)));
+            break;
+        }
+    }
+    let (t0, body0, turning0) = rested.expect("a touchdown at rest");
+    let (t1, body1) = reported.expect("an entry report");
+    assert!(!turning0, "no body turn in progress at touchdown");
+    assert!(t1 >= t0, "the report comes after the touchdown");
+    assert_eq!(body1, body0, "the report requests no facing");
+}
