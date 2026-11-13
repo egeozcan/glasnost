@@ -354,3 +354,75 @@ fn a_stalled_entrant_is_sent_again() {
     let orders = brain(&w).think(&w);
     assert_eq!(entered(&orders, holder), Some(b), "{orders:?}");
 }
+
+// S-0605 claim 1 (a switched-off building refuses) and S-0214 rows x3 and x4, design: own AI (#44): when the nearest absorber refuses the enter click, the unit goes to the next nearest one that takes it.
+#[test]
+fn a_refusing_nearest_absorber_does_not_block_the_others() {
+    let g = game(10);
+    let (mut w, near, u) = scene(&g, "BIOD", "WALKER", 1);
+    let h = home(&w);
+    let far = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "BIOD",
+        0,
+        CellXY::new(h.x + 6, h.y + 6),
+        0,
+    );
+    w.obj_mut(near).unwrap().econ.building.switched_off = true;
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let at = w.obj(u[0]).unwrap().pos.cell();
+    let d2 = |b: ObjectId| {
+        let c = w.obj(b).unwrap().pos.cell();
+        let (dx, dy) = (i64::from(c.x - at.x), i64::from(c.y - at.y));
+        dx * dx + dy * dy
+    };
+    assert!(d2(near) < d2(far), "the switched-off one is the nearer");
+    let orders = brain(&w).think(&w);
+    assert_eq!(entered(&orders, u[0]), Some(far), "{orders:?}");
+}
+
+// S-0605 claims 3, 4 and 17, design: own AI (#44): an entrant sent again after it stalled counts against its building's room; no more entrants are sent than the building has room for.
+#[test]
+fn a_resent_stalled_entrant_takes_its_room() {
+    let g = game(2);
+    let (mut w, b, u) = scene(&g, "BIOD", "WALKER", 2);
+    let orders = brain(&w).think(&w);
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    testkit::run(&mut w, 1);
+    let holder = u
+        .iter()
+        .copied()
+        .find(|&x| w.obj(x).unwrap().contact == Some(b))
+        .expect("one in contact");
+    {
+        let o = w.obj_mut(holder).unwrap();
+        o.beh.current = Some(Behaviour::Guard);
+        o.beh.queued = None;
+        o.dest = None;
+    }
+    // A third walker at home: capacity 2 holds the stalled one and the one
+    // waiting behind it, so there is no room for it.
+    let h = home(&w);
+    let third = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        0,
+        CellXY::new(h.x + 2, h.y + 9),
+        0,
+    );
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    assert_eq!(glasnost_ai::absorber::stalled(&w, holder), Some(b));
+    let orders = brain(&w).think(&w);
+    assert_eq!(entered(&orders, holder), Some(b), "{orders:?}");
+    assert_eq!(entered(&orders, third), None, "{orders:?}");
+}
