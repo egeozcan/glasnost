@@ -1735,6 +1735,226 @@ fn bridge_state_save_round_trip() {
     assert_eq!(save::state_hash(&l), save::state_hash(&w));
 }
 
+// ---------------------------------------------------------------------
+// Sim issues S6 (#420): reservations dropped from a lost deck (#165).
+
+fn walker_mark(w: &World, c: CellXY, l: Layer, id: ObjectId) -> bool {
+    w.cells.occ(c, l).unwrap().marks.iter().flatten().any(|m| {
+        matches!(m.by, glasnost_sim::cells::Marker::Infantry(who, _) if who == id)
+    })
+}
+
+// spec: S-0511 claim 9 (movement reservations are cleared at the locomotor's heading point, at that point's stored height: a moving walker's deck reservation in a lost section's cell)
+#[test]
+fn claim_9_moving_walker_drop_clears_its_deck_reservation() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let c = at(3, 0);
+    let deck_z = w.surface_at(256 * c.x + 128, 256 * c.y + 128) + 416;
+    let walker = spawn(&mut w, Kind::Infantry, "WALKER", c);
+    {
+        let h = w.obj(walker).unwrap().owner.unwrap();
+        let ground = *w.cells.occ(c, Layer::Ground).unwrap();
+        let p = (0..5).find(|&p| ground.taken(p)).unwrap();
+        w.cells
+            .clear_position(c, Layer::Ground, p, glasnost_sim::objects::occ_quirks(&w));
+        w.cells.leave(c, Layer::Ground, walker);
+        w.cells.enter(c, Layer::Deck, walker, false);
+        w.cells.mark_infantry(c, Layer::Deck, p, walker, h);
+        let o = w.obj_mut(walker).unwrap();
+        o.layer = Layer::Deck;
+        o.pos.z += 416;
+        o.walk.as_mut().unwrap().target = Some(centre(c, deck_z));
+    }
+    assert!(bridges::attempts(&mut w, c, 2));
+    let o = w.obj(walker).unwrap();
+    assert!(o.fall.falling && o.layer == Layer::Ground);
+    assert!(
+        !walker_mark(&w, c, Layer::Deck, walker),
+        "the deck reservation is cleared at the drop"
+    );
+    for _ in 0..60 {
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert!(!alive(&w, walker));
+    hut::repair(&mut w, c);
+    assert!(w.cells.is_bridge(c), "the deck is rebuilt");
+    assert!(
+        !walker_mark(&w, c, Layer::Deck, walker),
+        "no mark of a dead unit after the repair"
+    );
+}
+
+// spec: S-0511 claim 9 and S-0207 claim 24 (a drive vehicle's heading-point reservation is cleared in the record of the track's stored height, also when the heading cell has just lost its deck)
+#[test]
+fn claim_9_moving_vehicle_drop_clears_its_deck_reservation() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let c = at(3, 0);
+    let deck_z = w.surface_at(256 * c.x + 128, 256 * c.y + 128) + 416;
+    let cart = spawn(&mut w, Kind::Vehicle, "CART", c);
+    onto_deck(&mut w, cart);
+    {
+        let o = w.obj_mut(cart).unwrap();
+        let last = (o.pos.x, o.pos.y);
+        let d = o.drive.as_mut().unwrap();
+        d.claims = vec![c];
+        d.between_steps = false;
+        d.track = Some(glasnost_sim::drive::Track {
+            d: 2,
+            e: None,
+            target: (256 * c.x + 128, 256 * c.y + 128),
+            target_cell: c,
+            height: deck_z,
+            next: 0,
+            last,
+            cells: vec![c],
+            crush: false,
+            exit: false,
+            bunker: None,
+        });
+    }
+    assert_eq!(w.cells.occ(c, Layer::Deck).unwrap().vehicles, 1);
+    assert_eq!(w.cells.occ(c, Layer::Ground).unwrap().vehicles, 0);
+    assert!(bridges::attempts(&mut w, c, 2));
+    let o = w.obj(cart).unwrap();
+    assert!(o.fall.falling && o.layer == Layer::Ground);
+    assert_eq!(
+        w.cells.occ(c, Layer::Deck).unwrap().vehicles,
+        0,
+        "the deck flag is cleared at the drop"
+    );
+    assert_eq!(
+        w.cells.occ(c, Layer::Ground).unwrap().vehicles,
+        0,
+        "the ground record is not touched"
+    );
+    for _ in 0..60 {
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert!(!alive(&w, cart));
+    hut::repair(&mut w, c);
+    assert!(w.cells.is_bridge(c));
+    assert_eq!(
+        w.cells.occ(c, Layer::Deck).unwrap().vehicles,
+        0,
+        "no flag of a dead vehicle after the repair"
+    );
+}
+
+// ---------------------------------------------------------------------
+// Sim issues S6 (#420): a pier whose reference cell does not hold it
+// (#166), connectivity after a pier collapse with no link nearby (#167).
+
+fn count_tile(w: &World, t: i32) -> usize {
+    w.cells.grid.iter().filter(|(_, x)| x.tile == t).count()
+}
+
+fn tile_at(w: &World, c: CellXY) -> i32 {
+    w.cells.cell(c).unwrap().tile
+}
+
+// spec: S-0511 Terms (the reference cell is the pier's cell at sub-tile 4; a different tile laid over part of a pier is not changed) and claim 6; Q-3046 (interim: no pier at the reference cell, the attempt does nothing and fails)
+#[test]
+fn claim_6_a_painted_over_reference_cell_floods_nothing() {
+    let mut m = base();
+    let t = tile(Family::Bridge, M1);
+    put_tile(&mut m, at(4, -1), t, 0, 4);
+    put_tile(&mut m, at(4, 1), t, 8, 4);
+    put_tile(&mut m, at(5, 0), t, 5, 4);
+    // at(4, 0), the reference position, keeps ground tile 0.
+    let mut w = game(&ruleset(), &m);
+    let ground = count_tile(&w, 0);
+    assert!(!bridges::attempt(&mut w, at(4, -1)));
+    assert_eq!(count_tile(&w, 0), ground, "no ground cell rewritten");
+    assert_eq!(tile_at(&w, at(-20, 15)), 0, "ground far from the pier");
+    assert_eq!(pier_k(&w, at(4, -1)), Some(0), "the hit cell keeps its state");
+}
+
+// spec: S-0511 claim 6 (a collapse lowers the pier's own cells); Q-3046 (interim: no pier at the reference cell, no collapse and no success)
+#[test]
+fn claim_6_a_painted_over_reference_cell_in_state_3_collapses_nothing() {
+    let mut m = base();
+    let t = tile(Family::Bridge, M1);
+    put_tile(&mut m, at(4, -1), t + 3, 0, 4);
+    put_tile(&mut m, at(4, 0), 0, 0, 4);
+    let mut w = game(&ruleset(), &m);
+    let far = at(-20, 15);
+    w.cells.grid.get_mut(far).unwrap().level = 9;
+    assert!(
+        !bridges::attempt(&mut w, at(4, -1)),
+        "no pier at the reference cell: no success"
+    );
+    assert_eq!(w.cells.cell(far).unwrap().level, 9, "far ground not lowered");
+    assert_eq!(count_tile(&w, t + 4), 0, "no collapsed pier tile written");
+    assert_eq!(pier_k(&w, at(4, -1)), Some(3));
+}
+
+// spec: S-0511 claim 6 (a collapsed pier, state 4, is not attempted; the collapse lowers it once); Q-3046 (interim: a cut-off part in another state than the reference cell does nothing)
+#[test]
+fn claim_6_a_cut_off_part_does_not_restore_or_collapse_again() {
+    let mut m = base();
+    let t = tile(Family::Bridge, M1);
+    put_tile(&mut m, at(4, -1), t, 0, 4);
+    put_tile(&mut m, at(4, 0), t, 4, 4);
+    put_tile(&mut m, at(5, 0), t, 5, 4);
+    // at(4, 1) (sub-tile 8) is painted over with ground; at(4, 2), the
+    // tile's sub-tile 12, is cut off from the reference cell's component.
+    put_tile(&mut m, at(4, 2), t, 12, 4);
+    let mut w = game(&ruleset(), &m);
+    let r = at(4, 0);
+    assert!(!bridges::attempt(&mut w, r));
+    assert!(bridges::attempt(&mut w, r));
+    assert_eq!(pier_k(&w, r), Some(4));
+    assert_eq!(w.cells.cell(r).unwrap().level, 0);
+    assert_eq!(pier_k(&w, at(4, 2)), Some(0), "the cut-off cell stays");
+    assert!(!bridges::attempt(&mut w, at(4, 2)));
+    assert_eq!(pier_k(&w, r), Some(4), "the collapsed pier stays collapsed");
+    assert!(!bridges::attempt(&mut w, r), "no second collapse");
+    assert_eq!(w.cells.cell(r).unwrap().level, 0, "lowered once");
+}
+
+// spec: S-0511 claim 12, S-0212 claims 3 and 5 (a pier collapse with no bridge link within 3 cells: no link changes, but connectivity is brought up to date, so the running game's regions are those a save and load rebuild)
+#[test]
+fn claim_12_pier_collapse_with_no_link_nearby_updates_the_regions() {
+    use glasnost_sim::{regions, save};
+    let mut m = base();
+    // A plateau at level 4 around the pier.
+    for dx in 1..=8 {
+        for dy in -3..=3 {
+            put_tile(&mut m, at(dx, dy), 0, 0, 4);
+        }
+    }
+    // A pier along x with no ramp or other pier in its row: on no span.
+    let t = tile(Family::Bridge, M1);
+    put_tile(&mut m, at(4, -1), t, 0, 4);
+    put_tile(&mut m, at(4, 0), t, 4, 4);
+    put_tile(&mut m, at(4, 1), t, 8, 4);
+    put_tile(&mut m, at(5, 0), t, 5, 4);
+    let mut w = game(&ruleset(), &m);
+    assert!(w.cells.links.is_empty(), "the lone pier is on no span");
+    let (r, n) = (at(4, 0), at(3, 0));
+    let idx = |w: &World, c: CellXY| w.cells.idx(c).unwrap();
+    regions::ensure(&mut w);
+    assert_eq!(w.regions.region[idx(&w, r)], w.regions.region[idx(&w, n)]);
+    assert!(!bridges::attempt(&mut w, r), "state 0 to state 3");
+    assert!(bridges::attempt(&mut w, r), "state 3 collapses");
+    assert_eq!(w.cells.cell(r).unwrap().level, 0);
+    assert_eq!(w.cells.cell(n).unwrap().level, 4);
+    assert!(w.regions.dirty, "connectivity is marked out of date");
+    regions::ensure(&mut w);
+    let bytes = save::save(&w);
+    let l = save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("load");
+    assert_ne!(
+        w.regions.region[idx(&w, r)],
+        w.regions.region[idx(&w, n)],
+        "the lowered pier is no longer joined to the plateau"
+    );
+    assert_eq!(w.regions.region, l.regions.region);
+}
+
 // spec: S-0202 claim 13 (the map-generator stream starts an ordinary-map game in its seed-0 state, whatever the game seed)
 #[test]
 fn map_generator_stream_starts_at_seed_zero() {
