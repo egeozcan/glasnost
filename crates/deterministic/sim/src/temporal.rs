@@ -214,11 +214,13 @@ fn refusal(w: &World, firer: ObjectId, target: ObjectId) -> bool {
     if crate::superweapons::protected(w, target) {
         return true;
     }
-    // spec: S-0514 claim 3 (a vehicle still standing in the cell of the vehicle factory it is in contact with)
+    // spec: S-0514 claim 3 (a vehicle still standing in the cell of the vehicle factory it is in contact with; contact with any other building, a repair depot for one, is no refusal) (#214)
     if let Some(o) = w.obj(target)
         && o.kind == Kind::Vehicle
-        && let Some(b) = o.contact.and_then(|c| w.obj(c))
+        && let Some(c) = o.contact
+        && let Some(b) = w.obj(c)
         && b.kind == Kind::Building
+        && crate::econ::release::vehicle_factory(w, c)
         && crate::econ::placement::foundation_cells(w, b.type_index, b.pos.cell())
             .contains(&o.pos.cell())
     {
