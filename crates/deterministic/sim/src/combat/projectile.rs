@@ -14,6 +14,7 @@ use glasnost_num::{F64, Rounding};
 use crate::combat::area::{self, Detonation, DetonationResult};
 use crate::combat::ballistics;
 use crate::combat::data::{ProjectileKind, ProjectileRules, WarheadId, WeaponId};
+use crate::combat::death::{Flow, Frame};
 use crate::combat::effects::{self, Effect};
 use crate::combat::range::target_point as ref_point;
 use crate::combat::state::Projectile;
@@ -1603,13 +1604,15 @@ fn explode(
 /// The nine children of an airburst (S-0306 claim 21).
 fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
     let rules = w.rules_arc();
-    // nocite: our own input validation (#203): a marked projectile launches no children, and takes no draw, through a link on a loop of airburst weapons; Q-2998 asks what the game does
-    let Some(looped) =
-        rules
-            .loops
-            .airburst
-            .link(Some(pr.weapon as usize), pr.looped, Some(aw as usize))
-    else {
+    // spec: S-0306 r87 claim 21a (a marked projectile launches no children, and takes no draw, through a link between two projectile types of one loop of airburst links)
+    // A projectile's type is its weapon record's projectile type: it keeps no type of its own, and a child carries the airburst weapon as its record.
+    let from = rules
+        .combat
+        .weapon(pr.weapon)
+        .projectile
+        .map(|p| p as usize);
+    let to = rules.combat.weapon(aw).projectile.map(|p| p as usize);
+    let Some(looped) = rules.loops.airburst.link(from, pr.looped, to) else {
         return;
     };
     let half = rules.quirks.ranged_draw_half_span;
@@ -1695,7 +1698,6 @@ pub fn projectile_detonation(
 /// (S-0303 claim 2: a parasite-flag, air-strike-flag or electric-charge
 /// warhead's projectile).
 #[allow(clippy::too_many_arguments)]
-// spec: S-0303 claim 21 (N(P, 32, u mod 256), the invisible-projectile animation scatter)
 fn detonation_inner(
     w: &mut World,
     weapon: WeaponId,
@@ -1709,8 +1711,43 @@ fn detonation_inner(
     target: Option<Target>,
     warhead_as: Option<WarheadId>,
 ) -> DetonationResult {
+    detonation_inner_in(
+        w, weapon, damage, point, attacker, house, q, invisible, area, target, warhead_as, false,
+    )
+    .done_or(DetonationResult::Hit)
+}
+
+/// What a projectile detonation does after its area damage (S-0303 claims
+/// 21 and 22): kept as a frame when a hit of the area damage reaches a
+/// death weapon of a chain (S-0312 claim 33).
+#[derive(Clone, Debug)]
+pub(crate) struct InnerRest {
+    warhead: WarheadId,
+    damage: i32,
+    point: Pos,
+    q: Pos,
+    invisible: bool,
+}
+
+/// [`detonation_inner`]; with `chain` (S-0312 claim 33) an area hit that
+/// reaches a death weapon keeps the rest of the detonation as a frame and
+/// returns suspended.
+#[allow(clippy::too_many_arguments)]
+fn detonation_inner_in(
+    w: &mut World,
+    weapon: WeaponId,
+    damage: i32,
+    point: Pos,
+    attacker: Option<ObjectId>,
+    house: Option<HouseId>,
+    q: Pos,
+    invisible: bool,
+    area: bool,
+    target: Option<Target>,
+    warhead_as: Option<WarheadId>,
+    chain: bool,
+) -> Flow<DetonationResult> {
     let rules = w.rules_arc();
-    let half = rules.quirks.ranged_draw_half_span;
     // spec: S-0303 claim 14 and S-0302 claim 1 (a firer removed from the game by any means since the shot: neither attacker nor attacking house is carried; a loaded firer, which stays carried, is a seam: transports)
     let (attacker, house) = if attacker.is_some_and(|a| w.obj(a).is_none()) {
         (None, None)
@@ -1721,7 +1758,7 @@ fn detonation_inner(
     let warhead = warhead_as.or(rules.combat.weapon(weapon).warhead);
     let Some(h) = warhead else {
         // spec: S-0303 Edge cases (a projectile without a warhead does nothing, a departure)
-        return DetonationResult::Missed;
+        return Flow::Done(DetonationResult::Missed);
     };
     // spec: S-0514 claim 20 (one selected special hit: the first enabled row of the table wins, all later rows and ordinary damage are suppressed even when the selected effect cannot succeed; locomotor replacement is S-0607's seize)
     let special = if warhead_as.is_some() {
@@ -1748,22 +1785,54 @@ fn detonation_inner(
     }
     // spec: S-0514 claim 20 (with no selected row ordinary damage applies; a selected row, built or not, replaces it)
     let area = area && special.is_none();
+    let rest = InnerRest {
+        warhead: h,
+        damage,
+        point,
+        q,
+        invisible,
+    };
     let res = if area {
-        area::detonate(
-            w,
-            Detonation {
-                point,
-                damage,
-                warhead: Some(h),
-                source: attacker,
-                house,
-                resources: true,
-            },
-        )
+        let det = Detonation {
+            point,
+            damage,
+            warhead: Some(h),
+            source: attacker,
+            house,
+            resources: true,
+        };
+        match area::detonate_in(w, det, chain) {
+            Flow::Done(r) => r,
+            Flow::Suspended => {
+                // spec: S-0312 claim 33 (a death weapon nests inside this detonation's area damage: the explosion animation and the debris come once it is complete) and S-0303 claims 21 and 22
+                crate::combat::death::keep(w, Frame::Inner(Box::new(rest)));
+                return Flow::Suspended;
+            }
+        }
     } else {
         // spec: S-0303 claim 2 (no area hits for a parasite-flag, air-strike-flag or electric-charge warhead's projectile)
         DetonationResult::Missed
     };
+    Flow::Done(inner_rest(w, rest, res))
+}
+
+/// The work of a projectile detonation after its area damage, whose
+/// result is `res` (S-0303 claims 21 and 22).
+// spec: S-0303 claim 21 (N(P, 32, u mod 256), the invisible-projectile animation scatter)
+pub(crate) fn inner_rest(
+    w: &mut World,
+    rest: InnerRest,
+    res: DetonationResult,
+) -> DetonationResult {
+    let InnerRest {
+        warhead: h,
+        damage,
+        point,
+        q,
+        invisible,
+    } = rest;
+    let rules = w.rules_arc();
+    let half = rules.quirks.ranged_draw_half_span;
     let wh = rules.combat.warhead(h).clone();
     let mut anim_at = point;
     if invisible {
@@ -1977,6 +2046,21 @@ pub fn detonate_weapon(
     house: Option<HouseId>,
     _death: bool,
 ) {
+    let _ = detonate_weapon_in(w, weapon, damage, at, source, house, false);
+}
+
+/// [`detonate_weapon`]; with `chain` (S-0312 claim 33) an area hit that
+/// reaches a death weapon keeps the rest of the detonation as frames and
+/// returns suspended.
+pub(crate) fn detonate_weapon_in(
+    w: &mut World,
+    weapon: WeaponId,
+    damage: i32,
+    at: Pos,
+    source: Option<ObjectId>,
+    house: Option<HouseId>,
+    chain: bool,
+) -> Flow<()> {
     let unplaced = w.rules().quirks.death_weapon_unplaced_projectile;
     // spec: S-0312 claim 6 (the unplaced projectile's default position, believed the origin; off: the object's position)
     let q = if unplaced { Pos::default() } else { at };
@@ -1987,7 +2071,13 @@ pub fn detonate_weapon(
         .is_some_and(|p| p.inviso);
     // spec: S-0525 claim 1 (a death weapon's detonation leaves radiation at the dying object's position)
     crate::radiation::detonation(w, weapon, at.cell());
-    projectile_detonation(w, weapon, damage, at, source, house, q, inviso);
+    // As projectile_detonation: area damage, no target, the weapon's own warhead.
+    match detonation_inner_in(
+        w, weapon, damage, at, source, house, q, inviso, true, None, None, chain,
+    ) {
+        Flow::Done(_) => Flow::Done(()),
+        Flow::Suspended => Flow::Suspended,
+    }
 }
 
 /// A death weapon's projectile detonation with another warhead (S-0607

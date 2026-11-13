@@ -425,15 +425,16 @@ fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> Option<ObjectId>
     }
     // spec: S-0601 claim 15 (a controlled vehicle that deploys: the new building is the controlling house's; with the switch off it inherits the link)
     crate::mind::converted(w, id, bid);
-    // Leave the vehicle's cell before the building enters it; its holders are handed over below, not dropped (#221).
-    crate::objects::remove_converted(w, id);
-    // spec: S-0415 claim 6 and Constants (the centre of the anchor at the surface height, inserted facing 0, not the vehicle's facing or D × 256; construction begins; not a place order, S-0415 claim 7)
-    crate::econ::placement::put_on_map_facing(w, bid, at, false, INSERTION_FACING);
     let yard = w.rules().buildings[b as usize]
         .raw
         .construction_yard
         .unwrap_or(false);
+    // spec: S-0415 r22 claim 13 (a deploy gives the vehicle's holders the building before the vehicle is removed, so its removal makes no drop and takes no timer reset draw; claim 6)
     retarget(w, id, bid, yard);
+    // Leave the vehicle's cell before the building enters it.
+    crate::objects::remove(w, id);
+    // spec: S-0415 claim 6 and Constants (the centre of the anchor at the surface height, inserted facing 0, not the vehicle's facing or D × 256; construction begins; not a place order, S-0415 claim 7)
+    crate::econ::placement::put_on_map_facing(w, bid, at, false, INSERTION_FACING);
     // spec: S-0415 claim 6 (the vehicle type's deploy sound at its position)
     w.effects.push(Effect::Sound {
         sound: Sound::Deploy,
@@ -454,12 +455,23 @@ fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> Option<ObjectId>
 /// claims 6 and 10); a vehicle thief's becomes nothing when `new` is a
 /// construction yard (`yard`).
 fn retarget(w: &mut World, old: ObjectId, new: ObjectId, yard: bool) {
-    let ids: Vec<ObjectId> = w
-        .objects
+    let ids = holders(w, old);
+    hand_over(w, ids, new, yard);
+}
+
+/// The objects whose target is `id`, in creation order.
+fn holders(w: &World, id: ObjectId) -> Vec<ObjectId> {
+    w.objects
         .values()
-        .filter(|x| x.target == Some(Target::Object(old)))
+        .filter(|x| x.target == Some(Target::Object(id)))
         .map(|x| x.id)
-        .collect();
+        .collect()
+}
+
+/// Each object of `ids` gets `new` as its target (S-0415 claims 6 and 10);
+/// a vehicle thief's becomes nothing when `new` is a construction yard
+/// (`yard`).
+fn hand_over(w: &mut World, ids: Vec<ObjectId>, new: ObjectId, yard: bool) {
     for x in ids {
         let thief = w
             .obj(x)
@@ -504,8 +516,10 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
     }
     // spec: S-0415 claims 10 and 11 (the take-over of the slaves requires successful placement: the group is held apart until the return-cell test)
     let group = super::slaves::detach(w, id);
-    // spec: S-0415 claims 10 and 11 (the holders are handed over on success and dropped on refusal, below; #221)
-    crate::objects::remove_converted(w, id);
+    // spec: S-0415 r22 claim 13 (the objects that hold the building when the build-down finishes; on success they take the vehicle, whatever their drop left them)
+    let held_by = holders(w, id);
+    // spec: S-0415 r22 claim 13 (the building leaves the map before claim 12's test, whatever its result: its holders drop it as S-0309 claim 27 gives, with their draws in creation order, and then its foundation cells are recalculated)
+    crate::objects::remove(w, id);
     // spec: S-0415 claim 12 (the test is made before the vehicle inherits the building's experience or the guard spot)
     let accepted = can_stand(w, vid, c);
     if let Some(ob) = w.obj_mut(vid) {
@@ -542,12 +556,12 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
                 ob.beh.queue(Some(Behaviour::Move));
             }
         }
-        retarget(w, id, vid, false);
+        // spec: S-0415 claim 10 and r22 claim 13 (every object that held the building when the build-down finished takes the vehicle)
+        hand_over(w, held_by, vid, false);
         // spec: S-0415 claim 10 (the vehicle takes over the building's control group and selection, on successful placement only: the client's, told by a presentation effect)
         w.effects.push(Effect::Converted { old: id, new: vid });
     } else {
-        // spec: S-0309 claim 27 (a removed object is dropped by its holders) and Q-3011 (open: the drop at the refusal, first in it, as the removal's own drop came before; #221)
-        crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::Removed);
+        // spec: S-0415 r22 claim 13 (on refusal no hand-over follows: each holder keeps what its drop at the removal left it, and the drops came before the refund and the end of the old group)
         // spec: S-0415 claim 11 (the vehicle cannot be put on the map: the sale refund instead)
         let amount = crate::econ::sell::refund(
             w,

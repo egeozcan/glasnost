@@ -8,6 +8,7 @@ use glasnost_num::geom::root_floor;
 
 use crate::combat::damage::{self, Hit};
 use crate::combat::data::{WarheadId, WarheadRules};
+use crate::combat::death::{Flow, Frame};
 use crate::combat::effects::Effect;
 use crate::rules::Kind;
 use crate::world::{HouseId, Layer, ObjectId, Pos, World};
@@ -313,7 +314,8 @@ pub fn wall_success(w: &mut World, c: CellXY, absolute: bool) {
     }
 }
 
-/// One candidate hit: the object, its distance (claim 7) and its cell.
+/// One candidate hit: the object and its distance (claim 7).
+#[derive(Clone, Copy, Debug)]
 struct Candidate {
     id: ObjectId,
     d: i32,
@@ -343,17 +345,38 @@ pub fn harvester_immune(w: &World, kind: Kind, type_index: u32) -> bool {
             .contains(&type_index)
 }
 
+/// What is left of an area detonation once its candidates are listed: the
+/// candidates not yet hit, in order, and what the work after the hits
+/// reads. Kept as a frame when a hit reaches a death weapon of a chain
+/// (S-0312 claim 33).
+#[derive(Clone, Debug)]
+pub(crate) struct AreaRest {
+    det: Detonation,
+    warhead: WarheadId,
+    layer: Layer,
+    cands: std::collections::VecDeque<Candidate>,
+    nullified: bool,
+    any: bool,
+}
+
 /// Applies one detonation's area damage (S-0303 claims 1 to 20).
-// spec: S-0303 claim 7 and Constants (raised-detonation building allowance 208 leptons)
 pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
+    detonate_in(w, det, false).done_or(DetonationResult::Hit)
+}
+
+/// [`detonate`]; with `chain` (S-0312 claim 33) a hit that reaches a death
+/// weapon keeps the rest of the detonation as a frame and returns
+/// suspended.
+// spec: S-0303 claim 7 and Constants (raised-detonation building allowance 208 leptons)
+pub(crate) fn detonate_in(w: &mut World, det: Detonation, chain: bool) -> Flow<DetonationResult> {
     let rules = w.rules_arc();
     let q = rules.quirks;
     // spec: S-0303 claim 2 (a damage amount of 0 or no warhead: no effect at all, missed; and every detonation of an inert map is like this)
     let Some(warhead) = det.warhead else {
-        return DetonationResult::Missed;
+        return Flow::Done(DetonationResult::Missed);
     };
     if det.damage == 0 || w.map_flags.inert {
-        return DetonationResult::Missed;
+        return Flow::Done(DetonationResult::Missed);
     }
     let h = rules.combat.warhead(warhead).clone();
     let p = det.point;
@@ -516,8 +539,31 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
     }
     // spec: S-0303 claim 15 (quirks.curtain_nullifies_small_detonation off: a curtain-protected object only cancels its own hits)
     let nullified = nullified && q.curtain_nullifies_small_detonation;
-    let mut any = false;
-    for cand in cands {
+    hits(
+        w,
+        AreaRest {
+            det,
+            warhead,
+            layer,
+            cands: cands.into(),
+            nullified,
+            any: false,
+        },
+        chain,
+    )
+}
+
+/// Resumes an area detonation kept at a death weapon of a chain (S-0312
+/// claim 33): its next candidates, then the work after the hits.
+pub(crate) fn resume(w: &mut World, rest: AreaRest) -> Flow<DetonationResult> {
+    hits(w, rest, true)
+}
+
+/// The hits of an area detonation on its candidates in order, then the
+/// work after them (S-0303 claims 11 and 15 to 20).
+fn hits(w: &mut World, mut rest: AreaRest, chain: bool) -> Flow<DetonationResult> {
+    let (det, warhead, nullified) = (rest.det, rest.warhead, rest.nullified);
+    while let Some(cand) = rest.cands.pop_front() {
         if nullified && !crate::superweapons::protected(w, cand.id) {
             // spec: S-0303 claim 15 (a nullified detonation hits only objects under invulnerability, of either kind; all others take nothing)
             continue;
@@ -529,7 +575,7 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
         if o.health <= 0 || !o.on_map || dead {
             continue;
         }
-        any = true;
+        rest.any = true;
         let hit = Hit {
             amount: det.damage,
             warhead: Some(warhead),
@@ -539,12 +585,19 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
             ignore_defences: false,
             no_escape: false,
         };
-        // spec: S-0303 claim 11 (each hit is resolved completely before the next)
-        damage::apply(w, cand.id, hit);
+        // spec: S-0303 claim 11 (each hit is resolved completely before the next) and S-0312 claim 33 (a death weapon this hit sets off, and every death nested inside it, completes before the next hit)
+        if damage::apply_in(w, cand.id, hit, chain) == Flow::Suspended {
+            crate::combat::death::keep(w, Frame::Area(Box::new(rest)));
+            return Flow::Suspended;
+        }
     }
+    let rules = w.rules_arc();
+    let h = rules.combat.warhead(warhead).clone();
+    let (p, layer, any) = (det.point, rest.layer, rest.any);
+    let centre = p.cell();
     if nullified {
         // spec: S-0303 claim 15 (a nullified detonation skips claims 18 to 20)
-        return DetonationResult::Nullified;
+        return Flow::Done(DetonationResult::Nullified);
     }
     if h.rocker {
         // spec: S-0303 claim 20 and Observable order (the warhead's rocking takes no draw and is reported to the drawing; it comes after all object hits with their nested detonations, and before the bridge-test draws, the centre-cell exploding overlay and the particle system)
@@ -560,11 +613,11 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
         // spec: S-0303 claim 20 and S-0613 claim 4 (a warhead that names a particle system creates it at P at the end of the detonation, owned by the source house, with its first particle)
         crate::gas::warhead_system(w, &name, p, det.house);
     }
-    if any {
+    Flow::Done(if any {
         DetonationResult::Hit
     } else {
         DetonationResult::Missed
-    }
+    })
 }
 
 /// The least damage amount whose rocking strength min(*D* × 0.01, 4.0)

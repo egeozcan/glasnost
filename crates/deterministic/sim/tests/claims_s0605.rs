@@ -129,6 +129,8 @@ fn rules() -> Ruleset {
     vehicle(&mut r, "CTRL", |t| t.primary = Some("Ray".into()));
     infantry(&mut r, "PSY", |t| t.primary = Some("Ray".into()));
     infantry(&mut r, "BALLOON", |t| t.balloon_hover = Some(true));
+    // A factory-marked absorber: a factory category that makes nothing.
+    absorber(&mut r, "BIOF", |t| t.factory = Some("terrain".into()));
     absorber(&mut r, "BIO2", |t| t.econ.number_of_docks = Some(2));
     absorber(&mut r, "BIO0", |t| t.econ.extra_power = None);
     absorber(&mut r, "BIOS", |t| t.econ.power = Some(-10));
@@ -1046,6 +1048,22 @@ fn claim_11_13_release_by_deploy() {
     assert!(until(&mut w, 300, |w| !inside(w, first, b)));
     assert_eq!(sounds(&w, Sound::LeaveBioReactor), 2);
     assert_eq!(absorb::count(&w, b), 0);
+}
+
+// spec: S-0214 table M part 3 (deploy on a building: a primary order if it is factory-marked, and an unload behaviour order if it is an absorbing building) and S-0605 claim 11 (the unload releases the passengers)
+#[test]
+fn a_factory_marked_absorber_gets_both_deploy_orders() {
+    let mut w = game();
+    let b = bio(&mut w, "BIOF");
+    w.obj_mut(b).unwrap().econ.building.primary = false;
+    let u = fill_one(&mut w, b);
+    assert_eq!(cursor(&w, &[b], b), Action::Deploy);
+    let r = click(&mut w, &[b], ClickOn::Object(b));
+    assert_eq!(
+        r.orders,
+        vec![Order::Primary { actor: b }, Order::Deploy { actor: b }]
+    );
+    assert!(until(&mut w, 300, |w| !inside(w, u, b)), "released");
 }
 
 // spec: S-0605 F3 (exit facing 32 × e: direction 5 gives 160 of 256)

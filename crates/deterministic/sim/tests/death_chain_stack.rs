@@ -1,8 +1,9 @@
 //! A long chain of death weapons, each object's killing the next, resolves
-//! whole on a small thread stack (#218). The chain's order is S-0312 claim
-//! 1's and S-0303 claim 1's: each death weapon inside the killing hit,
-//! depth first. Synthetic data only: an invented exploding vehicle BARREL
-//! on the testkit's combat rules.
+//! whole on a small thread stack (#218; S-0312 r74 claim 33, Q-3000
+//! answered). The chain's order is S-0312 claim 1's and S-0303 claim 1's:
+//! each death weapon inside the killing hit, depth first, with no depth
+//! limit. Synthetic data only: an invented exploding vehicle BARREL on the
+//! testkit's combat rules.
 //!
 //! A stack overflow aborts the whole test process, so this file holds only
 //! this test.
@@ -120,7 +121,7 @@ fn run_chain(n: usize) -> usize {
         .count()
 }
 
-// spec: S-0312 claims 1 and 6 (the death weapon is set off inside the killing hit) and S-0303 claim 1 (a nested detonation's effects come before the outer detonation's later hits): a chain of any length resolves whole, the same on every stack
+// spec: S-0312 claims 1 and 6 (the death weapon is set off inside the killing hit), claim 33 (no depth limit, the same on every machine) and S-0303 claim 1 (a nested detonation's effects come before the outer detonation's later hits): a chain of any length resolves whole, the same on every stack
 #[test]
 // The thread belongs to the test harness, not to the simulation, which runs
 // on it alone; a stack overflow aborts the process.

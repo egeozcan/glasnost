@@ -181,30 +181,92 @@ fn death_weapon(w: &World, id: ObjectId) -> Option<(WeaponId, i32)> {
     Some((g, dmg))
 }
 
-/// How many death-weapon detonations nest inside one killing hit before a
-/// deeper one is listed instead (#218): a row of exploding objects, each
-/// killing the next, nested once per object on the machine's stack, so a
-/// long row aborted the program at a length that depended on the stack.
-pub const DEATH_WEAPON_DEPTH: u32 = 16; // nocite: our own input validation (#218), Q-3000
+/// Whether a step of a killing hit ran to its end, or stopped at a death
+/// weapon of a chain (S-0312 claim 33) with the rest of its work kept as a
+/// frame on [`DeathChain`] for [`set_off_death_weapon`] to resume.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Flow<T> {
+    /// The step ran to its end with this result.
+    Done(T),
+    /// The step stopped at a death weapon; its rest is a frame.
+    Suspended,
+}
 
-/// The death-weapon detonations under way inside one killing hit, and
-/// those listed past [`DEATH_WEAPON_DEPTH`], oldest first (#218; Q-3000).
+impl<T> Flow<T> {
+    /// The result of a step run without the chain flag, which never stops;
+    /// `otherwise` is never used.
+    pub(crate) fn done_or(self, otherwise: T) -> T {
+        match self {
+            Flow::Done(t) => t,
+            Flow::Suspended => otherwise,
+        }
+    }
+}
+
+/// A death weapon to set off: weapon, damage, position, source and house.
+#[derive(Clone, Copy, Debug)]
+struct Pending {
+    weapon: WeaponId,
+    damage: i32,
+    pos: Pos,
+    source: ObjectId,
+    house: Option<crate::world::HouseId>,
+}
+
+/// The rest of a killing hit's death effects after its death weapon
+/// (S-0312 table, from step 3): the attached bomb and the kind's effects.
+#[derive(Clone, Debug)]
+pub(crate) struct KillRest {
+    id: ObjectId,
+    hit: Hit,
+    /// The object as the death effects found it.
+    o: crate::world::Object,
+    /// It takes S-0312 claim 11's effects.
+    marked_water: bool,
+}
+
+/// One kept rest of a step stopped at a death weapon of a chain.
+#[derive(Clone, Debug)]
+pub(crate) enum Frame {
+    /// The rest of [`kill`].
+    Kill(Box<KillRest>),
+    /// The rest of a hit ([`crate::combat::damage::apply`]).
+    Apply(Box<crate::combat::damage::ApplyRest>),
+    /// The rest of an area detonation ([`crate::combat::area::detonate`]).
+    Area(Box<crate::combat::area::AreaRest>),
+    /// The rest of a projectile detonation after its area damage.
+    Inner(Box<crate::combat::projectile::InnerRest>),
+}
+
+/// The death-weapon chain under way inside one killing hit (S-0312 claim
+/// 33): the kept rests of the steps stopped at a death weapon, the
+/// innermost on top once the driver has ordered them, and the death weapon
+/// to set off next. Empty between calls.
 #[derive(Clone, Debug, Default)]
 pub struct DeathChain {
-    /// The detonations nesting now.
-    depth: u32,
-    /// The listed ones: weapon, damage, position, source and house.
-    listed:
-        std::collections::VecDeque<(WeaponId, i32, Pos, ObjectId, Option<crate::world::HouseId>)>,
+    frames: Vec<Frame>,
+    pending: Option<Pending>,
+}
+
+/// Keeps the rest of a step stopped at a death weapon of a chain.
+pub(crate) fn keep(w: &mut World, f: Frame) {
+    w.death_chain.frames.push(f);
 }
 
 /// A killed exploding object's death weapon (S-0312 claim 6), set off
-/// inside its killing hit. Up to [`DEATH_WEAPON_DEPTH`] such detonations
-/// nest, in the spec's order (S-0303 claim 1); a deeper one is listed, and
-/// the outermost one, once its own detonation is complete, sets the listed
-/// ones off in the order listed, each nesting again to the same depth. So a
-/// chain of any length resolves inside the one hit, the same on every
-/// machine.
+/// inside its killing hit; death weapons inside death weapons nest depth
+/// first with no depth limit (claim 33), in S-0303 claim 1's order at every
+/// depth.
+///
+/// The chain runs on [`DeathChain`], not on the machine stack, so how deep
+/// it nests does not depend on the machine. Each detonation runs with the
+/// chain flag: a death weapon it reaches through its area hits is recorded
+/// as pending, and every step above it keeps its rest as a frame and
+/// returns at once. The driver then sets the pending one off, and once a
+/// detonation is complete it resumes the kept rests, innermost first, a
+/// resumed area detonation handing its result to the projectile detonation
+/// below it. It stops at the depth of frames it found, so a driver started
+/// by a route without the flag leaves an outer driver's frames alone.
 fn set_off_death_weapon(
     w: &mut World,
     weapon: WeaponId,
@@ -213,24 +275,65 @@ fn set_off_death_weapon(
     source: ObjectId,
     house: Option<crate::world::HouseId>,
 ) {
-    // nocite: our own input validation (#218): past the depth the detonation is listed, not nested; Q-3000 asks what the game does
-    if w.death_chain.depth >= DEATH_WEAPON_DEPTH {
-        w.death_chain
-            .listed
-            .push_back((weapon, damage, pos, source, house));
-        return;
-    }
-    w.death_chain.depth += 1;
-    crate::combat::projectile::detonate_weapon(w, weapon, damage, pos, Some(source), house, true);
-    w.death_chain.depth -= 1;
-    if w.death_chain.depth == 0 {
-        // nocite: our own input validation (#218): the listed detonations, oldest first, once the outermost one is complete
-        while let Some((wp, d, p, s, h)) = w.death_chain.listed.pop_front() {
-            w.death_chain.depth += 1;
-            crate::combat::projectile::detonate_weapon(w, wp, d, p, Some(s), h, true);
-            w.death_chain.depth -= 1;
+    use crate::combat::area::DetonationResult;
+    let base = w.death_chain.frames.len();
+    let mut next = Some(Pending {
+        weapon,
+        damage,
+        pos,
+        source,
+        house,
+    });
+    let mut last = DetonationResult::Missed;
+    loop {
+        if let Some(p) = next.take() {
+            let mark = w.death_chain.frames.len();
+            // spec: S-0312 claims 6 and 33 (the death weapon goes off at once, inside the killing hit; a death weapon its hits reach nests inside it)
+            let flow = crate::combat::projectile::detonate_weapon_in(
+                w,
+                p.weapon,
+                p.damage,
+                p.pos,
+                Some(p.source),
+                p.house,
+                true,
+            );
+            if flow == Flow::Suspended {
+                next = stopped(w, mark);
+            }
+            continue;
+        }
+        if w.death_chain.frames.len() <= base {
+            break;
+        }
+        let Some(f) = w.death_chain.frames.pop() else {
+            break;
+        };
+        // spec: S-0312 claim 33 (a nested death completes inside the death weapon's detonation, before the killing object's effects after its death weapon and before a later hit of an outer detonation, at whatever depth) and S-0303 claim 1
+        match f {
+            Frame::Kill(r) => kill_rest(w, *r),
+            Frame::Apply(r) => crate::combat::damage::apply_rest(w, *r),
+            Frame::Area(r) => {
+                let mark = w.death_chain.frames.len();
+                match crate::combat::area::resume(w, *r) {
+                    Flow::Done(res) => last = res,
+                    Flow::Suspended => next = stopped(w, mark),
+                }
+            }
+            // A death weapon's detonation is the last step of `detonate_weapon_in`, whose caller keeps no result.
+            Frame::Inner(r) => {
+                let _ = crate::combat::projectile::inner_rest(w, *r, last);
+            }
         }
     }
+}
+
+/// After a step stopped at a death weapon: the frames it kept from `mark`
+/// on were kept innermost first, so they are reversed to put the innermost
+/// on top; returns the death weapon to set off.
+fn stopped(w: &mut World, mark: usize) -> Option<Pending> {
+    w.death_chain.frames[mark..].reverse();
+    w.death_chain.pending.take()
 }
 
 /// A shot-down aircraft's impact (S-0312 claim 16): its death weapon goes
@@ -446,14 +549,21 @@ fn wake_and_splash(w: &mut World, pos: Pos) {
 
 /// The death effects of a killing hit (S-0312 claim 1 and its table).
 pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
-    let Some(o) = w.obj(id).cloned() else { return };
+    let _ = kill_in(w, id, hit, false);
+}
+
+/// [`kill`]; with `chain` (S-0312 claim 33) an exploding object's death
+/// weapon is recorded as pending and the rest of the death effects kept as
+/// a frame, for [`set_off_death_weapon`] to go on with.
+pub(crate) fn kill_in(w: &mut World, id: ObjectId, hit: &Hit, chain: bool) -> Flow<()> {
+    let Some(o) = w.obj(id).cloned() else {
+        return Flow::Done(());
+    };
     if o.structure.inside.is_some() {
         // spec: S-0508 claim 19 (an occupant killed inside a building by its own house's defeat: individual killing hits, no eviction; our engine then removes the place and repairs the index under claim 23, `garrison::removing`; like a passenger it shows no death effects)
         passenger_death(w, id, hit);
-        return;
+        return Flow::Done(());
     }
-    let rules = w.rules_arc();
-    let half = rules.quirks.ranged_draw_half_span;
     mark_killed(w, id);
     // spec: S-0608 claim 13 (a killing hit on the drainer or the building ends their link at once, before the death effects that follow it)
     crate::drain::killed(w, id);
@@ -462,7 +572,7 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     if !o.on_map && crate::econ::production::is_item_object(w, id) {
         // spec: S-0414 claim 15 (an item in production takes its hit off the map and stays until its line deletes it; it is not hit again)
         // Q-0193 (interim: no other death effect, no draws; it stays on its line with health 0)
-        return;
+        return Flow::Done(());
     }
     // spec: S-0312 claim 29 and table, before step 1 (the destruction raises and the actions they fire, before the debris)
     destruction_raises(w, id, hit);
@@ -489,9 +599,52 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         && exploding(w, id)
         && let Some((wp, dmg)) = death_weapon(w, id)
     {
-        // spec: S-0312 claim 6 (the death weapon goes off at the object's position, inside its killing hit); nested to DEATH_WEAPON_DEPTH (#218, Q-3000)
-        set_off_death_weapon(w, wp, dmg, o.pos, id, o.owner);
+        let rest = KillRest {
+            id,
+            hit: *hit,
+            o,
+            marked_water,
+        };
+        if chain {
+            // spec: S-0312 claim 33 (inside a death weapon's detonation this death weapon nests: it goes off before the rest of this object's effects and before the outer detonation's later hits, at any depth)
+            w.death_chain.pending = Some(Pending {
+                weapon: wp,
+                damage: dmg,
+                pos: rest.o.pos,
+                source: id,
+                house: rest.o.owner,
+            });
+            keep(w, Frame::Kill(Box::new(rest)));
+            return Flow::Suspended;
+        }
+        // spec: S-0312 claim 6 (the death weapon goes off at the object's position, inside its killing hit) and claim 33 (death weapons it sets off nest depth first, with no depth limit)
+        set_off_death_weapon(w, wp, dmg, rest.o.pos, id, rest.o.owner);
+        kill_rest(w, rest);
+        return Flow::Done(());
     }
+    kill_rest(
+        w,
+        KillRest {
+            id,
+            hit: *hit,
+            o,
+            marked_water,
+        },
+    );
+    Flow::Done(())
+}
+
+/// The death effects of a killing hit after its death weapon (S-0312
+/// table, from step 3): the attached bomb, then the kind's effects.
+fn kill_rest(w: &mut World, rest: KillRest) {
+    let KillRest {
+        id,
+        hit,
+        o,
+        marked_water,
+    } = rest;
+    let hit = &hit;
+    let rules = w.rules_arc();
     // spec: S-0312 table step 3 and S-0519 claim 5 (an attached bomb goes off once at the carrier's position, or is removed silently off the map; the carrier's death does not set it off a second time)
     crate::bomb::carrier_killed(w, id);
     match o.kind {
@@ -563,7 +716,6 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         Kind::Building => building_death(w, id, hit),
         Kind::Terrain => {}
     }
-    let _ = half;
 }
 
 /// What the death effects that a leftover vehicle repeats at the defeat

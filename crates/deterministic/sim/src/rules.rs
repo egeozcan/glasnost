@@ -457,6 +457,8 @@ pub struct OverlayRules {
     pub chain_reaction: bool,
     /// Explodes flag (S-0303 claim 19).
     pub explodes: bool,
+    /// A legal target (S-0214 *attackable cell* (i)).
+    pub legal_target: bool,
     /// The cell animation's type name (S-0009 claim 12), if any.
     pub cell_anim: Option<String>,
 }
@@ -476,6 +478,10 @@ pub struct TerrainRules {
     pub armour: usize,
     /// Immune (S-0302 claim 20).
     pub immune: bool,
+    /// A legal target (S-0214 Import mapping, claim 6 (a)).
+    pub legal_target: bool,
+    /// Accepts bombs (S-0214 Import mapping, row I19).
+    pub bombable: bool,
     /// The animated flag of an ore mine (S-0401 claim 15).
     pub animated: bool,
     /// The animation rate *R* of an ore mine, ticks (S-0401 claim 15).
@@ -1434,6 +1440,10 @@ impl SimRules {
                     // spec: S-0305 claim 2 (a type no layer has given the field: class none)
                     armour: t.armor.unwrap_or_default().index(),
                     immune: t.immune.unwrap_or(false),
+                    // spec: S-0214 Import mapping (object type LegalTarget absent: yes)
+                    legal_target: t.legal_target.unwrap_or(true),
+                    // spec: S-0214 Import mapping (object type Bombable absent: yes)
+                    bombable: t.bombable.unwrap_or(true),
                     // spec: S-0401 Import mapping (IsAnimated absent: no)
                     animated: t.is_animated.unwrap_or(false),
                     // spec: S-0401 Import mapping (AnimationRate absent: 0)
@@ -1558,7 +1568,7 @@ impl SimRules {
         }
         let gas = crate::gas::GasRules::new(r, &warhead_names, &quirks);
         let pieces = crate::pieces::PieceRules::new(r, &warhead_names, &gas, mode);
-        // nocite: our own input validation (#224, #174, #203, #198): the loops of the links between types; Q-2996 to Q-2999 ask what the game does
+        // spec: S-0319 r30 claim 15, S-0317 r59 claim 29, S-0306 r87 claim 21a, S-0616 r29 claim 8a (the loops of the links between types)
         let loops = crate::loops::LinkLoops::new(&animations, &pieces, &combat, &gas);
         Self {
             loops,
@@ -2012,6 +2022,8 @@ fn overlay_rules(name: &str, o: rs::OverlayType) -> OverlayRules {
         },
         chain_reaction: o.chain_reaction.unwrap_or(false),
         explodes: o.explodes.unwrap_or(false),
+        // spec: S-0214 Import mapping (object type LegalTarget absent: yes)
+        legal_target: o.legal_target.unwrap_or(true),
         // spec: S-0009 Import mapping (CellAnim absent: no cell animation)
         cell_anim: o.cell_anim,
     }

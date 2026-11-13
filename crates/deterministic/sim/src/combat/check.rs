@@ -669,15 +669,7 @@ fn answer(
         if !pass && u.vehicle.deploy_to_fire && !crate::econ::inplace::deploy_test(w, firer) {
             return Answer::MustDeploy;
         }
-        // spec: S-0310 claim 11 and S-0301 claim 9 rank 12 (a vehicle healer: illegal when the target is absent, does not count as a vehicle, or is at full health)
-        if healing(w, weapon) {
-            let ok = matches!(target, Some(Target::Object(x))
-                if crate::targeting::counts_as_vehicle(w, x) && !full_health(w, x));
-            if !ok {
-                return Answer::Illegal;
-            }
-        }
-        // spec: S-0301 claim 9 rank 12 (a vehicle tethered, glossary, with a building as its contact: impossible; #176). Q-3012 (open): the healer's illegal keeps its place before it
+        // spec: S-0301 r76 claim 9 rank 12 (a vehicle tethered, glossary, with a building as its contact: impossible; #176; within rank 12 the tether reason comes first, before the healer's illegal, Q-3012 answered)
         // Not an illegal reason, so the illegal-only ask passes over it; the own AI's lasting test passes over it too, as a reason of the moment (our design, PLAN §4.7: a release or dock tether ends within ticks).
         if moment
             && crate::econ::tethered(w, firer)
@@ -686,6 +678,14 @@ fn answer(
                 .is_some_and(|c| c.kind == Kind::Building)
         {
             return Answer::Impossible;
+        }
+        // spec: S-0310 claim 11 and S-0301 claim 9 rank 12 (a vehicle healer: illegal when the target is absent, does not count as a vehicle, or is at full health)
+        if healing(w, weapon) {
+            let ok = matches!(target, Some(Target::Object(x))
+                if crate::targeting::counts_as_vehicle(w, x) && !full_health(w, x));
+            if !ok {
+                return Answer::Illegal;
+            }
         }
         // spec: S-0301 claim 9 rank 13 (moving)
         if vehicle_moving(w, firer, weapon) {

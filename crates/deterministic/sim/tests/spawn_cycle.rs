@@ -101,7 +101,7 @@ fn a_spawn_chain_without_a_loop_ends() {
     assert!(ended);
 }
 
-// nocite: our own input validation (#174): a piece made through a spawn link that closes a loop of types makes no spawns through such a link, so at most 2c pieces come of one
+// spec: S-0317 claim 29 (a piece made through a spawn link on a loop of piece types makes no spawns through such a link, so at most 2c pieces come of one)
 #[test]
 fn a_self_spawning_meteor_piece_ends_the_pass() {
     let mut w = world_with_piece(&[("LOOP", "LOOP")], "LOOP");
@@ -110,7 +110,7 @@ fn a_self_spawning_meteor_piece_ends_the_pass() {
     assert!(made <= 8, "{made} objects made from one piece");
 }
 
-// nocite: our own input validation (#174): the same for a loop of two types
+// spec: S-0317 claim 29 (the same for a loop of two types)
 #[test]
 fn a_spawn_loop_of_two_ends_the_pass() {
     let mut w = world_with_piece(&[("X", "Y"), ("Y", "X")], "X");
@@ -119,7 +119,7 @@ fn a_spawn_loop_of_two_ends_the_pass() {
     assert!(made <= 8, "{made} objects made from one piece");
 }
 
-// nocite: our own input validation (#174): one real tick returns
+// spec: S-0317 claim 29 (one real tick returns)
 #[test]
 fn a_self_spawning_meteor_piece_tick_returns() {
     let (tx, rx) = mpsc::channel();
@@ -204,7 +204,7 @@ fn a_bounce_spawn_without_a_loop_is_unchanged() {
     assert!(!made.is_empty(), "this seed draws at least one spawn");
 }
 
-// nocite: our own input validation (#174): an animation made through a spawn link that closes a loop of types makes no spawns through such a link when it lands
+// spec: S-0319 claim 15 (an animation made through a spawn link on a loop of types makes no spawns through such a link when it lands)
 #[test]
 fn a_self_spawning_bouncing_animation_spawns_once() {
     let mut w = testkit::game_with(&anim_rules("SELF"), N, 7);

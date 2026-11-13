@@ -923,7 +923,7 @@ fn end(w: &mut World, id: ObjectId) {
                     },
                 );
             }
-            // nocite: our own input validation (#174): a marked piece makes no piece, and takes no draw, through a spawn link on a loop of piece types; Q-2997 asks what the game does
+            // spec: S-0317 r59 claim 29 (a marked piece makes no piece, and takes no draw, through a spawn link on a loop of piece types)
             if t.meteor
                 && let Some(s) = t.spawns
                 && t.spawn_count > 0

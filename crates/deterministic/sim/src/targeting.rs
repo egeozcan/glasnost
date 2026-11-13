@@ -295,8 +295,8 @@ pub(crate) fn vehicle_like(w: &World, id: ObjectId) -> bool {
 /// aircraft or vehicle-like building in play, not already selected, not
 /// tethered to a building that stands on its cell, not a bunkered vehicle
 /// or an occupied bunker (S-0606 claim 11), not a vehicle disabled by the
-/// loss of its control centre (S-0405 claim 20). Slaves controlled by a
-/// master are excluded too; that state does not exist yet.
+/// loss of its control centre (S-0405 claim 20), not a slave controlled by
+/// a master.
 pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0214 claim 19 (own infantry, vehicles and aircraft; ordinary buildings excluded, vehicle-like buildings taken)
@@ -313,8 +313,11 @@ pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: Objec
     let bunker = crate::structures::bunker::bunkered(w, id)
         || (crate::structures::bunker::is_bunker(w, id)
             && crate::structures::bunker::occupied(w, id));
+    // spec: S-0214 claim 19 (an ordinary band box takes units not controlled by a slave master; S-0402 claim 14's slave with a master) (#209)
+    let slave = crate::econ::slaves::is_slave(w, id);
     // spec: S-0214 claim 19 (in play, selectable, not being erased, not already selected; enemy and allied objects never added)
     kind_ok
+        && !slave
         && own(w, house, id)
         && selectable(w, id)
         && !seized_out(w, id)
@@ -512,15 +515,19 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
         // spec: S-0214 Terms and S-0614 claim 8 (not held)
         // spec: S-0214 Terms and S-0606 claim 11 (not held inside a tank bunker)
         // spec: S-0214 Terms (movable: not phasing in) and claim 6 (d) (r78: a phasing-in actor is not movable, so part (d) asks that the target be in range of the weapon it would use)
-        // The Terms' "not being erased" and "not a slave unit" are not asked here (seams: rows G2 and GC1 refuse a click of an actor being erased; our engine has no slave units).
+        // spec: S-0214 Terms (movable mobile object: it is not being erased, and it is not a slave unit, S-0402 claim 14's slave with a master) (#209)
         Some(Kind::Infantry | Kind::Vehicle) => {
             !disabled(w, id)
+                && !being_erased(w, id)
+                && !crate::econ::slaves::is_slave(w, id)
                 && !phasing_in(w, id)
                 && !crate::parasite::held(w, id)
                 && !crate::structures::bunker::bunkered(w, id)
         }
         Some(Kind::Aircraft) => {
             !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false))
+                && !being_erased(w, id)
+                && !crate::econ::slaves::is_slave(w, id)
                 && !phasing_in(w, id)
                 && !crate::parasite::held(w, id)
         }
@@ -965,14 +972,57 @@ fn building_passengers(w: &World, id: ObjectId) -> Option<i32> {
         .map(|b| b.absorb.capacity)
 }
 
+/// A terrain object's type rules.
+fn terrain_type(w: &World, id: ObjectId) -> Option<&crate::rules::TerrainRules> {
+    let o = w.obj(id)?;
+    if o.kind != Kind::Terrain {
+        return None;
+    }
+    w.rules().terrain.get(o.type_index as usize)
+}
+
+/// An object-type flag, read from the target's own kind of type: a unit
+/// type, a building type or a terrain type (S-0214 Import mapping, *Object
+/// type*; #208). `None` when the target has no such type.
+fn type_flag(
+    w: &World,
+    id: ObjectId,
+    of_unit: impl Fn(&glasnost_rules::sim::UnitType) -> Option<bool>,
+    of_building: impl Fn(&glasnost_rules::sim::BuildingType) -> Option<bool>,
+    of_terrain: impl Fn(&crate::rules::TerrainRules) -> bool,
+) -> Option<Option<bool>> {
+    match kind(w, id)? {
+        Kind::Building => building(w, id).map(|b| of_building(&b.raw)),
+        Kind::Terrain => terrain_type(w, id).map(|t| Some(of_terrain(t))),
+        _ => unit(w, id).map(|u| of_unit(&u.raw)),
+    }
+}
+
 fn immune(w: &World, id: ObjectId) -> bool {
-    // spec: S-0214 Import mapping (Immune absent: no)
-    unit(w, id).is_some_and(|u| u.raw.immune.unwrap_or(false))
+    // spec: S-0214 Import mapping (object type Immune, for every object type; absent: no)
+    type_flag(w, id, |u| u.immune, |b| b.immune, |t| t.immune)
+        .flatten()
+        .unwrap_or(false)
 }
 
 fn legal_target(w: &World, id: ObjectId) -> bool {
-    // spec: S-0214 Import mapping (LegalTarget absent: yes)
-    unit(w, id).is_none_or(|u| u.raw.legal_target.unwrap_or(true))
+    // spec: S-0214 Import mapping (object type LegalTarget, for every object type; absent: yes)
+    type_flag(
+        w,
+        id,
+        |u| u.legal_target,
+        |b| b.legal_target,
+        |t| t.legal_target,
+    )
+    .flatten()
+    .unwrap_or(true)
+}
+
+fn bombable(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 Import mapping (object type Bombable: accepts bombs, row I19, for every object type; absent: yes)
+    type_flag(w, id, |u| u.bombable, |b| b.bombable, |t| t.bombable)
+        .flatten()
+        .unwrap_or(true)
 }
 
 fn invisible(w: &World, id: ObjectId) -> bool {
@@ -1108,10 +1158,18 @@ fn engineer_friendly(w: &World, actor: ObjectId, t: ObjectId) -> bool {
 fn attack_rule(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, mods: Modifiers) -> bool {
     let enemy = !allied(w, actor, t);
     let u = unit(w, actor);
+    // spec: S-0214 claim 6 (may attack as a friend: the attack-cursor-on-friendlies flag counts unless the warhead of the weapon it would use plants bombs and the target's type can carry passengers) (#211)
+    let bomb_on_transport = || {
+        passengers(w, t)
+            && weapon::would_use(w, actor, Some(Target::Object(t)))
+                .1
+                .and_then(|x| w.rules().combat.warhead_of(x))
+                .is_some_and(|h| h.ivan_bomb)
+    };
     // spec: S-0214 claim 6 (may attack as a friend: the attack-friendlies or attack-cursor-on-friendlies flag)
     let friend_ok = u.is_some_and(|u| {
         u.raw.attack_friendlies.unwrap_or(false)
-            || u.raw.attack_cursor_on_friendlies.unwrap_or(false)
+            || (u.raw.attack_cursor_on_friendlies.unwrap_or(false) && !bomb_on_transport())
     }) || sonic_on_parasite_carrier(w, actor, t);
     // spec: S-0214 claim 6 (disguise rule: a target that does not appear disguised passes; one that does passes with the general attack-cursor-on-disguise rule, a permanently disguised type, a running blink, or friend-attack); S-0516 claim 36
     // Seam: the scenery-disguise terrain-fire pass of the rule (low, S-0214 Open questions) is not built.
@@ -1382,9 +1440,7 @@ fn infantry_on(
     // Rows I17 and I18 need the weapon cursor flags, which are not imported.
     // spec: S-0214 table I row I19 (a bomb planter: bomb if the type accepts bombs and carries none)
     if uflag(w, actor, |u| u.raw.ivan.unwrap_or(false)) && g1 == Action::Attack {
-        // spec: S-0214 Import mapping (Bombable absent: yes)
-        let bombable = unit(w, t).is_none_or(|u| u.raw.bombable.unwrap_or(true));
-        return if bombable {
+        return if bombable(w, t) {
             Action::Bomb
         } else {
             Action::NoBomb
@@ -1770,7 +1826,7 @@ fn generic_cell(w: &World, house: HouseId, actor: ObjectId, c: CellXY, mods: Mod
     }
     // spec: S-0214 table GC row GC4 (a weapon, force-fire or an attackable cell, movable or the cell centre in range)
     if weapon::current_weapon(w, actor).is_some()
-        && (mods.force_fire || attackable_cell(w, c))
+        && (mods.force_fire || attackable_cell(w, actor, c))
         && (mv || in_range_of(w, actor, Target::Cell(c)))
     {
         return Action::Attack;
@@ -1807,18 +1863,43 @@ fn generic_cell(w: &World, house: HouseId, actor: ObjectId, c: CellXY, mods: Mod
     Action::Nothing
 }
 
-/// An attackable cell without force-fire (S-0214 table GC): a
-/// destroyable-cliff cell without an overlay (warhead flags are not imported,
-/// and walls have no owner yet).
-fn attackable_cell(w: &World, c: CellXY) -> bool {
+/// An attackable cell for `actor` without force-fire (S-0214 table GC,
+/// *attackable cell*; #212), judged with the warhead of the weapon it would
+/// use against the cell. No fog of war, so the remembered overlay and
+/// building cases do not arise; the veinhole case is a seam (no veinhole
+/// monsters).
+fn attackable_cell(w: &World, actor: ObjectId, c: CellXY) -> bool {
     let Some(cell) = w.cells.cell(c) else {
         return false;
     };
+    let rules = w.rules();
+    let warhead = weapon::would_use(w, actor, Some(Target::Cell(c)))
+        .1
+        .and_then(|x| rules.combat.warhead_of(x));
     let cat = w.catalogue.as_deref();
     let (s, n) = cat.map_or((0, 0), |k| (k.roles.destroyable_cliff, k.tile_count()));
     // spec: S-0214 Terms (destroyable-cliff cell: s ≤ t ≤ s + 1 and 0 ≤ t < N)
     let cliff = cell.tile >= s && cell.tile <= s + 1 && cell.tile >= 0 && cell.tile < n;
-    cliff && cell.overlay == glasnost_map::NO_OVERLAY
+    let overlay = (cell.overlay != glasnost_map::NO_OVERLAY)
+        .then(|| rules.overlays.get(usize::from(cell.overlay)))
+        .flatten();
+    // spec: S-0214 *attackable cell* (i) (the overlay type is a legal target; or a destroyable-cliff cell and the warhead lacks the fire flag)
+    let first = overlay.is_some_and(|o| o.legal_target)
+        || (cliff && !warhead.is_some_and(|h| h.fire));
+    if !first {
+        return false;
+    }
+    let Some(o) = overlay else {
+        // spec: S-0214 *attackable cell* (ii) (the cell has no overlay)
+        return true;
+    };
+    // spec: S-0214 *attackable cell* (ii) (the cell belongs to a house not allied with the actor; a wall of no house belongs to none)
+    let owner = w.cells.idx(c).and_then(|i| w.cells.wall_owner.get(i).copied().flatten());
+    let actor_house = w.obj(actor).and_then(|a| a.owner);
+    let enemy = owner.is_some() && !w.allied(actor_house, owner);
+    // spec: S-0214 *attackable cell* (ii) and Import mapping (a wall the warhead can damage: the wall flag, or the wood flag and the overlay's armour class wood)
+    let damages = warhead.is_some_and(|h| h.wall || (h.wood && o.wood));
+    enemy && o.wall && damages
 }
 
 /// The final action on a cell by kind (S-0214 tables IC, VC, ACC and BC);
@@ -1838,6 +1919,10 @@ fn cell_action(
         Some(Kind::Infantry) => {
             let jumpjet = uflag(w, actor, |u| u.jumpjet);
             let dipd = deployed_ipd(w, actor);
+            // spec: S-0214 table IC row IC4 (a healing actor whose c′ is attack: area guard) (#210)
+            if g == Action::Attack && healing_actor(w, actor) {
+                return Action::AreaGuard;
+            }
             // spec: S-0214 table IC row IC5 (a jumpjet type on a tunnel cell)
             if jumpjet && matches!(g, Action::Move | Action::NoMove) && tunnel {
                 return Action::Nothing;
@@ -1861,6 +1946,10 @@ fn cell_action(
             g
         }
         Some(Kind::Vehicle) => {
+            // spec: S-0214 table VC row VC1 (a healing actor whose c′ is attack: idle) (#210)
+            if g == Action::Attack && healing_actor(w, actor) {
+                return Action::Idle;
+            }
             let cell = w.cells.cell(c);
             // spec: S-0214 table VC row VC2 (ore land and a harvester, or weed land and a weeder)
             if g == Action::Move
@@ -2209,12 +2298,12 @@ pub fn click(
             continue;
         }
         let a = action_in(w, house, selection, id, on, mods);
-        let o = order(w, house, id, a, on, mods, am);
+        let o = orders(w, house, id, a, on, mods, am);
         // spec: S-0214 claim 14 (only the first object of the selection gives the acknowledgement, and only when it gets an order)
         // spec: S-0214 claim 30 (one move-target marker, from the first object only: a mobile actor handling a cell click
         // with action move, a force-move or a move converted to attack-move to a place included; never a building's
         // click, a no-move click, an object click or a click refused before dispatch)
-        if i == 0 && o.is_some() {
+        if i == 0 && !o.is_empty() {
             result.acknowledge = Some(id);
             result.marker = a == Action::Move
                 && matches!(on, ClickOn::Cell(_))
@@ -2348,9 +2437,32 @@ pub fn held_without_order(
     (berserk || melee_held) && !tote
 }
 
+/// The orders that one actor's action gives (S-0214 table M, claim 10), in
+/// order: [`order`]'s, then, for a deploy on a factory-marked absorbing
+/// building, its unload order after the primary order (table M part 3;
+/// #411).
+pub fn orders(
+    w: &World,
+    house: HouseId,
+    id: ObjectId,
+    a: Action,
+    on: ClickOn,
+    mods: Modifiers,
+    attack_move: bool,
+) -> Vec<Order> {
+    let first = order(w, house, id, a, on, mods, attack_move);
+    // spec: S-0214 table M part 3 (deploy on a building: a primary order if it is factory-marked, and an unload behaviour order if it is an absorbing building) and S-0605 claim 11
+    let unload = (a == Action::Deploy
+        && first == Some(Order::Primary { actor: id })
+        && crate::structures::absorb::is_absorber(w, id))
+    .then_some(Order::Deploy { actor: id });
+    first.into_iter().chain(unload).collect()
+}
+
 /// The order that one actor's action gives (S-0214 table M, claim 10),
 /// with claim 9's rule for cells outside the usable area; `attack_move`
-/// asks for the attack-move translation of claim 5.
+/// asks for the attack-move translation of claim 5. A factory-marked
+/// absorbing building's second deploy order is [`orders`]'s.
 pub fn order(
     w: &World,
     house: HouseId,
@@ -2392,7 +2504,7 @@ pub fn order(
             (Action::Attack, _) => behaviour(Behaviour::Attack, Some(target), None),
             // spec: S-0213 claim 11 (a detonate action on an own building that carries a bomb)
             (Action::Detonate, _) => Some(Order::Detonate { actor: id }),
-            // spec: S-0214 table M part 3 (deploy: a primary order if the building is factory-marked; the unload orders of gap generators, absorbing buildings and garrisons are not modelled)
+            // spec: S-0214 table M part 3 (deploy: a primary order if the building is factory-marked; an absorbing building's unload order follows it, [`orders`]; the unload orders of gap generators and garrisons are not modelled)
             (Action::Deploy, _) if factory_marked(w, id) => Some(Order::Primary { actor: id }),
             // spec: S-0214 table M part 3 and S-0605 claim 11 (deploy: an unload behaviour order for an absorbing building)
             (Action::Deploy, _) if crate::structures::absorb::is_absorber(w, id) => {
@@ -2557,8 +2669,11 @@ pub fn key_command(
             // spec: S-0213 table T2 (scatter: movable)
             KeyCommand::Scatter if mv => Some(Order::Scatter { actor: id }),
             KeyCommand::Guard => {
-                let harvester = o.kind == Kind::Vehicle && unit(w, id).is_some_and(|u| u.harvester);
-                // spec: S-0213 table T2 (guard: movable, able to fire and not a building; or a harvester vehicle)
+                // spec: S-0213 claim 15 (a house's orders act only on its own objects; the input rules keep it) and claim 3 (an object of another house is an order the input would not let a person give): table T2's "movable or not" waives the rest of movable, not its own-object part (#207)
+                let harvester = own(w, house, id)
+                    && o.kind == Kind::Vehicle
+                    && unit(w, id).is_some_and(|u| u.harvester);
+                // spec: S-0213 table T2 (guard: movable, able to fire and not a building; or an own harvester vehicle, movable or not)
                 ((mv && fire && o.kind != Kind::Building) || harvester).then(|| Order::Behaviour {
                     actor: id,
                     behaviour: Behaviour::AreaGuard,

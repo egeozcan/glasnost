@@ -2692,6 +2692,10 @@ pub struct BuildingType {
     /// `LegalTarget`.
     #[serde(default)]
     pub legal_target: Option<bool>,
+    /// `Bombable`, accepts bombs (S-0214 Import mapping, row I19); absent:
+    /// yes.
+    #[serde(default)]
+    pub bombable: Option<bool>,
     /// `Crushable`.
     #[serde(default)]
     pub crushable: Option<bool>,
@@ -2848,6 +2852,10 @@ pub struct OverlayType {
     /// `Explodes` (S-0303 claim 19).
     #[serde(default)]
     pub explodes: Option<bool>,
+    /// `LegalTarget`, a legal target (S-0214 Import mapping: the attackable
+    /// cell); absent: yes.
+    #[serde(default)]
+    pub legal_target: Option<bool>,
     /// `CellAnim`, the overlay type's cell animation (S-0009 claim 12 and
     /// Import mapping): an animation type key; absent: none.
     #[serde(default)]
@@ -2895,6 +2903,14 @@ pub struct TerrainObjectType {
     /// `Immune` (S-0302 claim 20).
     #[serde(default)]
     pub immune: Option<bool>,
+    /// `LegalTarget`, a legal target (S-0214 Import mapping, claim 6 (a));
+    /// absent: yes.
+    #[serde(default)]
+    pub legal_target: Option<bool>,
+    /// `Bombable`, accepts bombs (S-0214 Import mapping, row I19); absent:
+    /// yes.
+    #[serde(default)]
+    pub bombable: Option<bool>,
 }
 
 /// A weapon's simulation fields.

@@ -120,11 +120,9 @@ pub struct Quirks {
     // spec: S-0206 claim 5
     #[serde(default = "on")]
     pub set_facing_keeps_target: bool,
-    /// A turret-less track-class body turn that passes exactly through its target's direction stops there.
-    /// Not consulted: claim 16 is not built, so the body turn goes on to its own target facing in
-    /// both positions (the off position) until Q-3001 says at which point of the tick the test is
-    /// made (#327).
-    // spec: S-0206 claim 16
+    /// A turret-less track-class body turn that passes exactly through its target's direction stops there,
+    /// tested at the end of each turn the vehicle takes. Off: the body turn goes on to its own target facing.
+    // spec: S-0206 r19 claim 16
     #[serde(default = "on")]
     pub track_body_turn_stops_at_target: bool,
     /// Only passive vehicles chain two-cell curves.

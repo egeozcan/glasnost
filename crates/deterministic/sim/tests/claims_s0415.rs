@@ -286,9 +286,9 @@ fn packing_yard(w: &mut World) -> ObjectId {
     y
 }
 
-// spec: S-0415 claim 10 (every object whose target was the building gets the vehicle as its target, with no drop of S-0309 claim 27)
+// spec: S-0415 r22 claim 13 (Q-3011 answered: the packing building leaves the map before the placement test and its holders drop it as S-0309 claim 27 gives, a timer more than 10 ticks from its end taking the reset draw; on success every object that held it then takes the vehicle as its target, claim 10)
 #[test]
-fn claim_10_pack_up_hands_the_holder_to_the_vehicle() {
+fn claim_13_pack_up_drops_then_hands_the_holder_to_the_vehicle() {
     let mut w = game(&rules());
     let y = packing_yard(&mut w);
     let enemy = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, c(-6, 6), 0);
@@ -304,8 +304,8 @@ fn claim_10_pack_up_hands_the_holder_to_the_vehicle() {
     let e = w.obj(enemy).unwrap();
     assert_eq!(e.target, Some(Target::Object(v)));
     assert!(
-        e.targeting_timer - w.tick > 10,
-        "no drop: the timer was not restarted ({} left)",
+        e.targeting_timer - w.tick <= 8,
+        "the drop restarted the timer ({} left)",
         e.targeting_timer - w.tick
     );
 }

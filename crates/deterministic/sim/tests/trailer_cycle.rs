@@ -81,7 +81,7 @@ fn a_trailer_chain_without_a_loop_is_unchanged() {
     assert_eq!(pass(&mut w), (true, 4), "A, B, C and PLAIN");
 }
 
-// nocite: our own input validation (#224): an animation made through a trailer link that closes a loop of types makes no trailer through such a link, so the pass ends
+// spec: S-0319 claim 15 (an animation made through a trailer link on a loop of types makes no trailer through such a link, so the pass ends)
 #[test]
 fn a_self_trailer_ends_the_pass() {
     let mut w = world(&[("LOOPX", Some("LOOPX"))], "LOOPX");
@@ -93,7 +93,7 @@ fn a_self_trailer_ends_the_pass() {
     assert_eq!(n, 3, "only the first makes a trailer in each tick");
 }
 
-// nocite: our own input validation (#224): the same for a loop of two types and for a chain that enters a loop
+// spec: S-0319 claim 15 (the same for a loop of two types and for a chain that enters a loop)
 #[test]
 fn a_trailer_loop_of_two_and_a_chain_into_it_end_the_pass() {
     let types = [("X", Some("Y")), ("Y", Some("X")), ("Z", Some("X"))];
@@ -103,7 +103,7 @@ fn a_trailer_loop_of_two_and_a_chain_into_it_end_the_pass() {
     assert_eq!(pass(&mut w), (true, 3), "Z, X (no loop yet) and Y");
 }
 
-// nocite: our own input validation (#224): one real tick returns
+// spec: S-0319 claim 15 (one real tick returns)
 #[test]
 fn a_self_trailer_tick_returns() {
     let (tx, rx) = mpsc::channel();

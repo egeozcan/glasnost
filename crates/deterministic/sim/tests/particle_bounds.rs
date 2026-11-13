@@ -126,7 +126,7 @@ fn a_smoke_chain_without_a_loop_is_unchanged() {
     assert_eq!(counts.iter().max(), Some(&2), "{counts:?}");
 }
 
-// nocite: our own input validation (#198): a successor made through a next-type link that closes a loop of types splits no more through such a link
+// spec: S-0616 claim 8a (a successor made through a next-type link on a loop of types splits no more through such a link)
 #[test]
 fn a_smoke_type_that_names_itself_splits_once() {
     let counts = smoke_counts(&[("LOOP", Some("LOOP"))], "LOOP");
@@ -134,7 +134,7 @@ fn a_smoke_type_that_names_itself_splits_once() {
     assert_eq!(counts.last(), Some(&0), "the system empties: {counts:?}");
 }
 
-// nocite: our own input validation (#198): the same for a loop of two types
+// spec: S-0616 claim 8a (the same for a loop of two types)
 #[test]
 fn a_smoke_loop_of_two_splits_once() {
     let counts = smoke_counts(&[("X", Some("Y")), ("Y", Some("X"))], "X");
@@ -158,7 +158,7 @@ fn an_ordinary_spark_cap_is_unchanged() {
     assert!((20..40).contains(&n), "{n}");
 }
 
-// nocite: our own input validation (#198): a spark burst makes at most the engine's ceiling of sparks, with their draws, whatever the cap
+// spec: S-0616 claim 20a (a spark burst makes at most 4096 sparks, with their draws, whatever the cap)
 #[test]
 fn a_huge_spark_cap_meets_the_ceiling() {
     let (n, _) = burst(2_000_000_000);
@@ -188,7 +188,7 @@ fn an_ordinary_railgun_line_is_unchanged() {
     assert_eq!(line("0.5"), 512);
 }
 
-// nocite: our own input validation (#198): a railgun line makes at most the engine's ceiling of particles, with their draws, whatever the field
+// spec: S-0616 claim 20a and F12 (a railgun line makes at most 4096 particles, with their draws, whatever the field)
 #[test]
 fn a_huge_railgun_line_meets_the_ceiling() {
     let n = line("100");

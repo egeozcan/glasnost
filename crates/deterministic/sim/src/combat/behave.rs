@@ -22,6 +22,47 @@ fn dir(w: &World, from: Pos, t: Target) -> u16 {
     )
 }
 
+/// The stop of a body turn at the target's direction (S-0206 r19 claim 16,
+/// `quirks.track_body_turn_stops_at_target`): a turret-less track vehicle
+/// with a target, no destination and no movement whose body value equals
+/// the target's direction exactly at the end of its turn.
+pub fn track_body_stop(w: &mut World, id: ObjectId) {
+    let rules = w.rules_arc();
+    if !rules.quirks.track_body_turn_stops_at_target {
+        return;
+    }
+    let Some(o) = w.obj(id) else { return };
+    let Some(u) = rules.unit(o.kind, o.type_index) else {
+        return;
+    };
+    // spec: S-0206 r19 claim 16 (a vehicle without a turret whose locomotion class is track, S-0211; a missing class is wheel)
+    let track = u.class == Some(glasnost_rules::sim::LocomotionClass::Track);
+    let Some(t) = o.target else { return };
+    // spec: S-0206 r19 claim 16 (a target, no movement destination, and its locomotor not moving it, as that turn's movement left them)
+    if o.kind != Kind::Vehicle
+        || u.turret
+        || !track
+        || o.dest.is_some()
+        || crate::occupancy::in_progress(w, id)
+    {
+        return;
+    }
+    let now = w.tick;
+    if !o.body.turning(now) {
+        // spec: S-0206 r19 claim 16 (a body resting at that direction is not affected)
+        return;
+    }
+    // spec: S-0206 r19 claim 16 (the direction of the target, S-0204 claim 8, from the vehicle's position to the target's at that point)
+    let d = dir(w, w.reference_point(id), t);
+    let value = o.body.value(now);
+    if value == d
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0206 r19 claim 16 (the body's current facing becomes its new body target facing: claim 3 with Θ = 0)
+        ob.body = crate::turning::Turning::at(value);
+    }
+}
+
 /// A vehicle's own firing step (S-0310 claim 9). Returns whether the check
 /// gave a facing error (for the turret rows of S-0206 claim 9).
 pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
