@@ -527,7 +527,7 @@ fn moat_map() -> Map {
     m
 }
 
-// design: own AI (#41): the cells looked at around the far field are those within the reach the house counts the field's harvesters in (14 cells, `scripted::FIELD_REACH`), so a yard vehicle sent there deploys on arrival; with none there it deploys where it stands (#5). Before, the spiral's first fit could be a cell of an outer ring beyond that reach, where the arriving vehicle did not deploy and was sent on.
+// design: own AI (#41): the cells looked at around the far field are those within the reach the house counts the field's harvesters in (14 cells, `scripted::FIELD_REACH`), so a yard vehicle sent there deploys on arrival; with none there it deploys where it stands, or near it (#5). Before, the spiral's first fit could be a cell of an outer ring beyond that reach, where the arriving vehicle did not deploy and was sent on.
 #[test]
 fn the_cell_by_the_far_field_is_within_its_reach() {
     let map = moat_map();
@@ -553,10 +553,14 @@ fn the_cell_by_the_far_field_is_within_its_reach() {
     });
     // The script's field reach (`scripted::FIELD_REACH`, crate-private).
     let reach = 14; // nocite: tuning of our own opponent
+    // The spiral's rings (`scripted::SPIRAL_RINGS`, crate-private): with no
+    // cell by the field (the moat), the unit is sent near where it stands.
+    let rings = 12; // nocite: tuning of our own opponent
+    let by_the_unit = |c: CellXY| (c.x - spare.x).abs().max((c.y - spare.y).abs()) <= rings;
     match dest {
         Some(dest) => assert!(
-            dist2(dest, far()) <= reach * reach,
-            "{dest:?} (squared distance {}) beyond the reach of the field {:?}",
+            dist2(dest, far()) <= reach * reach || by_the_unit(dest),
+            "{dest:?} (squared distance {}) beyond the reach of the field {:?}, and not by the unit at {spare:?}",
             dist2(dest, far()),
             far()
         ),
