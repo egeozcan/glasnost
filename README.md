@@ -70,7 +70,7 @@ Sound starts with your first click or key press, since browsers only allow sound
 
 **Skirmish.** From the main menu, **Skirmish** opens the setup screen:
 
-- **Map:** any multiplayer map in your install with at least two start positions.
+- **Map:** any multiplayer map in your install with at least two start positions. **Choose map** (or a click on the preview) opens the map picker: type part of a name to search, filter by players, size, theater and preview, and sort by name, players or size. The picker shows each map's preview with its numbered start markers, and it remembers your search and filters.
 - **Players:** each row is **You**, **AI** or **Closed**, with a country, colour, team and start position. You need at least two players, and no more than the map has start positions.
 - **Credits**, starting **Units** and **Game speed**.
 - **Options:** Short game, Superweapons, Crates, Build off ally and Redeploy.
