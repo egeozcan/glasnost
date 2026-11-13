@@ -1,9 +1,9 @@
 ---
 id: Q-3043
 title: Does a jumpjet infantry unit's filtered own-cell assignment change its order-level destination?
-status: open
+status: answered
 related: [S-0502, S-0213, S-0207, S-0107]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need
