@@ -100,8 +100,11 @@ pub fn notice(w: &mut World, c: CellXY, kind: Notice, side: Side, ctx: &mut Ctx)
     }
     match pieces::piece_at(w, c) {
         Some((family, Piece::Pier(line, k))) => {
-            if let Some(r) = pieces::pier_reference(w, c, line) {
+            if let Some(r) = pieces::pier_reference_of(w, c, line) {
                 pier_notice(w, r, family, line, k, kind, side, ctx);
+            } else {
+                // nocite: our own input validation (#166; Q-3046: a notice at a pier cell whose reference cell does not hold its tile changes nothing, with a warning)
+                w.note("S-0511 claim 4: a notice at a pier cell whose reference cell does not hold its tile changes nothing (Q-3046)");
             }
         }
         Some((_, Piece::StartRamp(_) | Piece::FarRamp(_))) => {

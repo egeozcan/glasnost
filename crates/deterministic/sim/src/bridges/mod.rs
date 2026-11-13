@@ -181,8 +181,12 @@ fn attempt_in(w: &mut World, c: CellXY, ctx: &mut Ctx) -> bool {
     if let Some((family, Piece::Pier(line, k))) = pieces::piece_at(w, c)
         && k <= 3
         && pieces::sub(w, c).is_some_and(|s| pieces::pier_body_sub(line, s))
-        && let Some(r) = pieces::pier_reference(w, c, line)
     {
+        let Some(r) = pieces::pier_reference_of(w, c, line) else {
+            // nocite: our own input validation (#166; Q-3046: a reference cell that does not hold the hit cell's pier tile: nothing happens and the attempt fails, with a warning, as claim 2 does for a high-bridge cell with no responsible section)
+            w.note("S-0511 claim 2: a pier cell whose reference cell does not hold its tile; the attempt does nothing (Q-3046)");
+            return false;
+        };
         let ok = high::attempt_pier(w, r, family, line, k, ctx);
         if ok {
             let f = line.step();
