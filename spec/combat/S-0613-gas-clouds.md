@@ -2,13 +2,13 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 13
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-01
+approved-on: 2026-11-14
 measurements: []
-requests: [Q-0662, Q-1240, Q-1241, Q-1242, Q-1244]
+requests: [Q-0662, Q-1240, Q-1241, Q-1242, Q-1244, Q-3054]
 supersedes: []
 ---
 
@@ -19,7 +19,8 @@ supersedes: []
 How lingering gas clouds are made and how they behave in skirmish; campaigns and network games are out of scope. It covers the shared gas system that exists in
 every skirmish, the poison clouds left by a virus death (clouds whose warhead is a poison warhead), the first particle of a particle system that a warhead creates, and the gas
 particle itself: its drift, slope deflection, sinking, wind, lifetime, particle stage, successor and
-the damage it deals at a fixed cadence. Gas damage is ordinary damage. What a hit then
+the damage it deals at a fixed cadence, what happens to gas made on a high bridge's deck, and the
+routes established here by which a weapon makes gas. Gas damage is ordinary damage. What a hit then
 does (immunities, poison, berserk, death kinds) belongs to the specs named below.
 
 **What this spec does not restate.**
@@ -33,8 +34,8 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 - **Particle art lookup:** S-0007 claims 28 and 29.
 - **Berserk** from a gas hit with a berserk-causing warhead: S-0302 claim 10 decides whether
   the hit takes effect and its duration; S-0610 claims 4 to 7 govern entry, re-hits, countdown,
-  expiry, restrictions and tint. Whether the chaos drone's weapon names a particle system is outside
-  this spec (Open questions).
+  expiry, restrictions and tint. Which weapons make gas, area berserk weapons included, is
+  claim 20.
 
 ## Terms
 
@@ -63,7 +64,8 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 - **Object number.** S-0306 (Terms): the number our engine gives each object at creation from its
   own counter. A particle gets one like any other object.
 - **Terrain height** *H*(*x*, *y*). The terrain surface height of S-0106 claims 2 and 3 at a
-  horizontal position, including its in-cell slope, never a bridge deck.
+  horizontal position, including its in-cell slope, never a bridge deck (with
+  `quirks.gas_through_bridge_deck` off, claim 19 uses a deck height in its place for a particle at or above a deck's height).
 
 ## Behaviour
 
@@ -101,31 +103,34 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 
 2. **Virus death with the animation.** When an infantry unit dies a virus death that plays the
    rules' virus-death animation (S-0107 claim 17, the human row), the animation is created at the
-   unit's position. If the damage had an attacker object, the animation's owner house is the
-   attacker's house. With no attacker object, it instead takes the hit's supplied attacking house
-   (S-0302 claim 1), or no house when neither is supplied. This ownership changes nothing in this
-   spec: the clouds go into the shared gas
-   system, which has no house. The particles requested by the animation's middle event (S-0109
+   unit's position, its height included (on a bridge deck, the deck's height). If the damage had
+   an attacker object, the animation's owner house is the attacker's house. With no attacker
+   object, it instead takes the hit's supplied attacking house (S-0302 claim 1), or no house when
+   neither is supplied. This ownership changes nothing in this spec: the clouds go into the shared
+   gas system, which has no house. The particles requested by the animation's middle event (S-0109
    claim 14: its particle type, its particle count times) are all created in the shared gas system
    at the animation's position, *whatever their type's behaviour kind*.
    - Backing: `measurable` (G2 part a for animation position, ownership, shared-system
-     membership and particle count; G2 part d for ownership without an attacker object)
-   - Confidence: high
+     membership and particle count; G2 part d for ownership without an attacker object; G14 for
+     the position at a bridge deck's height)
+   - Confidence: high, the bridge-deck height included (G14)
 
 3. **Virus death without the animation's middle event.** In the two extra-animation cases of
    S-0107 claim 17 (an infantry type that is not human, and a parachutist killed by a virus death),
    the virus-death animation is created with no loop delay, so its start event happens at once
    (S-0109 claim 13: start sound, and the middle event too when its μ is 0). Then exactly one
    particle of the animation's particle type is created in the shared gas system at the unit's
-   position, and the animation is removed in the same step, so it never reaches a later middle
+   position, its height included, and the animation is removed in the same step, so it never reaches a later middle
    event. With μ ≠ 0 the animation's particle count therefore plays no
    part, and the death leaves one cloud. With μ = 0 the creation middle event's particles (and its
    scorch mark or crater, S-0109 claim 14) come first, then the one extra particle.
    The order of this extra virus effect relative to the other death effects is given by
    S-0615 claim 1.
    - Backing: `measurable` (scenario G2, part b: one cloud where part a gives the particle count).
-     The μ = 0 case uses G2 part c's named test art file.
-   - Confidence: high
+     The μ = 0 case uses G2 part c's named test art file. `unmeasured` for the height on a bridge
+     deck: G14's virus death is claim 2's case, and no part kills a unit of this claim on a deck.
+   - Confidence: high; medium for the height on a bridge deck, which rests on the same unit
+     position as claim 2's case without a run of its own
 
 4. **First particle of a warhead's particle system.** When a detonation creates a particle system
    (S-0303 claim 20), one particle of the system's held type, when named, is created in it at once,
@@ -214,7 +219,7 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    - Confidence: high
 
 9. **Vertical speed.** On even tick numbers: when the particle's height above the terrain
-   (glossary, taken at its own position; a particle is never on a bridge deck) is more than 5 leptons, *v*_z goes down by 1, but not below −5. Otherwise a
+   (glossary, taken at its own position; with `quirks.gas_through_bridge_deck` on, a particle is never on a bridge deck, and with it off claim 19 gives the deck height in place of *H* for a particle at or above a deck's height) is more than 5 leptons, *v*_z goes down by 1, but not below −5. Otherwise a
    negative *v*_z is set to 0.
    - Backing: `measurable` (scenario G7)
    - Confidence: high
@@ -233,9 +238,12 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     - Confidence: medium (downhill direction and the zero on flat ground: high. The exact
       magnitudes and the obstacle and bridge triggers: medium)
 
-11. **Movement.** Each live gas particle's position after the update pass is determined by F5. A due wind push contributes on either parity of tick (claim 12). On even ticks the particle's height is unchanged and its horizontal velocity contributes no movement. On odd ticks, wind and stored deflection determine the horizontal position at which sinking is evaluated; sinking moves the particle toward 5 leptons above the terrain by no more than 2 leptons, and velocity determines its subsequent displacement. After an odd-tick move its final height is never below 5 leptons above the terrain at its final horizontal position. Even-tick wind movement applies no terrain-height clamp.
-    - Backing: `measurable` (G6 and G7; G9 for even-tick wind without a height clamp)
-    - Confidence: high
+11. **Movement.** The position after the update pass of a live gas particle whose system's turn moves it (the gas, smoke and fire turns; spark and railgun turns have no move pass, S-0616 claim 3) is determined by F5. A due wind push contributes on either parity of tick (claim 12). On even ticks the particle's height is unchanged and its horizontal velocity contributes no movement. On odd ticks, wind and stored deflection determine the horizontal position at which sinking is evaluated; sinking moves the particle toward 5 leptons above the terrain by no more than 2 leptons, and velocity determines its subsequent displacement. After an odd-tick move its final height is never below 5 leptons above the terrain at its final horizontal position. Even-tick wind movement applies no terrain-height clamp. With `quirks.gas_through_bridge_deck` off, claim 19 gives the deck height in place of the terrain for a particle at or above a deck's height. A gas particle whose system's turn does not move it gets no wind push (claim 12), and its stored deflection (claim 10) moves nothing.
+    - Backing: `measurable` (G6 and G7; G9 for even-tick wind without a height clamp).
+      `unmeasured` for a gas particle whose system's turn does not move it: no scenario puts a gas
+      particle in a spark or railgun system.
+    - Confidence: high; medium for a gas particle whose system's turn does not move it, which
+      rests on S-0616 claim 3 without a run of its own
 
 12. **Wind.** A gas particle type with a positive wind-effect field *W* is pushed one step of the
     rules' wind direction on every tick whose number is a multiple of ⌊10 / *W*⌋ (F6). The step is
@@ -259,8 +267,10 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     The hit is not a detonation. The warhead's particle system, animations, area spread and other
     detonation effects of S-0303 do not happen. So a gas cloud never makes new particle systems,
     however its warhead is set.
-    The ground layer is used whatever the particle's height, so an object on a bridge deck is never
-    hit, even by a cloud level with the deck. An object removed by a hit does not stop the hits on
+    With `quirks.gas_through_bridge_deck` on, the ground layer is used whatever the particle's
+    height, so an object on a bridge deck is not hit (claim 19 for a cloud level with the deck); with
+    it off, claim 19 gives the bridge-deck layer in its place for a particle at or above the deck's
+    height. An object removed by a hit does not stop the hits on
     the others listed after it. The first hit of a new particle comes on its update number
     equal to its damage interval reduced modulo 65536, with zero meaning 65536 updates. Its death
     kind, poison and other damage effects follow S-0302 and S-0107 claim 17. For a berserk-causing
@@ -271,7 +281,9 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
       G4 tests its wrap and absence of early hits, but reaching update 65536 also needs the
       unforced initial-zero lifetime of claim 5, with no earlier stage deletion.
     - Confidence: high (cadence, ground layer, no detonation). Medium for *D*: it uses the lift of
-      F7, which makes the distance smaller than the lepton distance.
+      F7, which makes the distance smaller than the lepton distance. Medium for a cloud level with a
+      bridge deck with the switch on, as claim 19 rates it; the layer with the switch off is
+      claim 19's design decision.
 
 14. **Credit.** Kills and damage by particles of the shared gas system credit no house: chain
     deaths from a virus cloud give no veterancy and no score to anyone, even though the virus-death
@@ -369,6 +381,130 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
       unit on an even tick)
     - Confidence: high
 
+### Gas over a high bridge
+
+19. **Gas made on a deck sinks through it** (`quirks.gas_through_bridge_deck`, default on). A gas
+    particle has no on-deck state. Every height rule of this spec measures from the terrain height
+    *H* at the particle's position, also over a high bridge's cells (Terms): creation (claim 5),
+    vertical speed (claim 9, F4) and movement (claim 11, F5). A gas particle at or above a deck's
+    height with a vertical speed of zero or less, for example a gas cloud of an infantry unit that
+    dies a virus death while it stands on the deck (the clouds start at the unit's position, its
+    height included, claims 2 and 3), or the first particle of a detonation at deck height (claim
+    4), therefore keeps sinking toward 5 leptons above the terrain under the bridge, as it would
+    over open ground of that height, as long as its system's turn moves it (the gas, smoke and fire
+    turns; spark and railgun turns have no move pass, S-0616 claim 3). Consequences:
+    - A gas particle made by claim 5 starts with a vertical speed of zero, and F4 never makes it
+      positive. So one made at the deck's height in such a system is below that height after its
+      first odd-tick move, where the terrain is at least 7 leptons below the deck's height both at
+      the position after wind and deflection, where F5 lowers it by 2, and at its final position
+      after velocity, where F5's floor is the terrain plus 5. A gas successor (claim 7) starts
+      from the dead particle's velocity instead. With a vertical speed of zero or less it does the
+      same. A positive vertical speed is added on each odd tick (F5) and lowered by 1 on each even
+      tick while the particle is more than 5 leptons above the terrain (F4), so such a successor
+      can rise before it sinks. A particle of another kind in a gas system moves by its own
+      kind's rules (S-0616 claim 3), not by this claim.
+    - On the even tick when its probe crosses F3's crossing height *h* + 416, claim 10's bridge
+      crossing sets the deflection; over a flat bridge cell that deflection is zero. Nothing else marks the deck.
+    - Its hits use the ground layer of its cell from its first hit, whatever its height (claim
+      13): objects under the bridge are hit, and objects on the deck are not, also while it is
+      still level with the deck.
+    - Over a cell without a high bridge, F3's bridge crossing no longer applies; the height rules,
+      which never read the deck, do not change.
+    - It is drawn at its own world height, with the particle depth of S-0616 claim 27 (the
+      particle-sprite row of S-0102 claim 13), and with no rule of its own for bridges. Like every
+      particle it reads depth and never writes it, so the deck, which writes depth (S-0102 claim
+      15), hides those of its pixels where the deck's stored depth is nearer than the particle's
+      own. Above the deck it is therefore drawn over the deck, as a unit on the deck is; once
+      below the deck, the deck hides it where they overlap, as it hides a unit under the bridge.
+      Either way, the particle's upright depth profile (S-0616 claim 27), which changes its depth
+      from row to row under one bias for the whole drawing, can put some of its pixels on the
+      other side of the deck's depth: hidden while above, or shown while below.
+
+    Smoke and fire particles, unlike gas, do take the deck into account (S-0616: smoke stops at a
+    deck, fire hits the bridge-deck layer from deck height).
+    **Off:** DECIDED (autonomy, 2026-11-13): a gas particle whose cell carries a high bridge and whose height is at least that
+    cell's deck height treats the deck as its ground. The deck height is that of S-0616 claim 14,
+    the cell's height level plus 4, times 104 leptons: one value for the whole cell, so on a
+    sloped cell it is not *H* + 416. For such a particle, claims 5, 9 and 11 (F4, F5) use the
+    deck height in place of *H* at that position, so it settles 5 leptons above the deck, and
+    its hits (claim 13) list the bridge-deck layer of its cell in place of the ground layer. The
+    test is made at each position the rules read, with the particle's height before the move.
+    Once the particle is over a cell without a high bridge it uses *H* again and sinks there as
+    claims 9 and 11 give; it does not return to a deck it is below. Claim 10 (F3), including its
+    bridge crossing at *h* + 416, is the same with the switch off.
+    - Backing: `measurable` (scenario G14 for the sinking, the passage below the deck's height at
+      the first odd-tick move and the hits on objects under the bridge; G4 variant a for objects
+      on the deck and a cloud below it). `unmeasured` for objects on the deck while the cloud is
+      still level with the deck: G14's clouds are level with it only until their first odd-tick
+      move, G14 does not ensure a hit due before that move, and no scenario records the health
+      of objects on a deck while a cloud is level with it. `unmeasured` for a gas successor made
+      at the deck's height, which G14 does not make: it follows from claim 7, F4 and F5.
+      `unmeasured` for the drawing: it rests on S-0102 claim 15 and S-0616 claim 27, and G14
+      records the screen but falsifies nothing on it. The bridge-crossing bullets are backed as
+      claim 10 (G8). The **Off** behaviour is a design choice, `unmeasured`: the original has no
+      such behaviour to observe.
+    - Confidence: high for the sinking, the passage below the deck's height at the first odd-tick
+      move and the ground-layer hits once the cloud is below the deck (G14, G4 variant a). Medium
+      for objects on the deck not being hit while the cloud is still level with the deck, as no
+      run ensures a hit then. Medium for a gas successor made at the deck's height, as it is not
+      measured. High for the zero deflection over a flat bridge cell and medium for the bridge
+      crossing's trigger, on that cell and its absence elsewhere, as claim 10 rates them. Medium
+      for the drawing, as S-0102 claim 15 rates the deck hiding what is under it and S-0616 claim
+      27 rates the depth order that results on screen.
+
+### Weapons that make gas
+
+20. **Gas from a weapon.** A gas particle is a particle of a gas type, whatever system holds it
+    (S-0616 claim 3). The routes established here by which a shot makes gas particles of its own are:
+    - **Its warhead's particle system** (S-0303 claim 20): claim 4's first particle when the held
+      type is a gas type, any particle of a gas held type that the system emits later by its own
+      kind's rules (S-0616 claims 5 to 18), and any successor of a gas type that a dead particle of
+      that system names (claim 7 in a gas system, S-0616 claim 8 in a smoke system).
+    - **Its weapon's own effect system** (the effect-weapon row of S-0616 claim 1): the particles
+      of a gas held type that it emits, and their successors as above.
+    - **Its warhead's voxel-model debris** (S-0303 claim 22): a debris piece whose type names a
+      particle system makes it (S-0317 claim 13; the voxel-model animation row of S-0616 claim 1),
+      and the particles of a gas held type that it emits, with their successors as above. A
+      piece's end can also detonate the piece type's own warhead (S-0317 claim 11), whose particle
+      system makes gas by the warhead route above, applied to that warhead.
+    - **The virus death it causes** (claims 2 and 3).
+    - **An animation it creates whose middle event requests particles** (S-0109 claim 14: those
+      particles enter the shared gas system whatever the animation).
+    - **An animation it creates that delivers damage** (S-0109 claim 17): each delivery is an area
+      detonation with one of the game-wide warheads, which makes gas by the warhead route above,
+      applied to that warhead, only where S-0303 lets the detonation create its particle system
+      (S-0303 claims 2, 15 and 20): not, for example, when the damage amount is 0, on an inert
+      map, or when the detonation is nullified.
+    - **An electric-bolt shot** (S-0616 claim 1): it makes one system of the game-wide spark
+      type at the bolt's end. A system can hold a particle type of another kind (S-0616 claim 3),
+      so when that system's held type is a gas type, the particles it makes are gas particles,
+      with their successors as above.
+    - **The deliveries of a drone parasite that it attaches** (S-0614 claim 9): each delivery to a
+      host that is not infantry makes a system of the same game-wide spark type (S-0616 Import
+      mapping), which makes gas as the electric bolt's system does.
+    - **An animation it creates whose start event sets off a resource chain reaction** (S-0109
+      claim 13): the reaction's detonation, when the cell holds resource, uses the demolition
+      warhead (S-0401 claim 20), which makes gas by the warhead route above under the same
+      conditions as the damaging animation's deliveries.
+
+    The overload sparks of a mind controller (S-0601 claim 16) come from its overload pulses, not
+    from a shot, so they are not a route here. Which of these routes a particular object's data
+    enables, a drone's for example, is outside this spec.
+
+    What the objects it damages or destroys then make (their own death weapons, the systems of
+    S-0616 claim 1 that belong to them) is theirs, not the shot's. An area berserk weapon (S-0610
+    claim 8) adds no route of its own: its area fire and the berserk effect of its hits make no
+    particle, and its berserk hits are its area damage (S-0303), not gas hits. Where its
+    animations appear when the firer stands on a high bridge's deck or under it depends on where
+    its shot detonates, which is S-0306's (Open questions).
+    - Backing: `measurable` (scenario G15: run G15-none for the area berserk weapon, run G15-gas
+      for the warhead route). `unmeasured` for the other routes: G15 makes none of them, and each
+      follows from the claims it cites.
+    - Confidence: high for an area berserk weapon's area fire and berserk effect making no particle
+      (G15-none) and for the warhead route's first particle (G15-gas); medium for the other routes
+      listed, as their cited claims rate them at most, and for the completeness of the list, since
+      G15 tests one weapon.
+
 ## Formulas
 
 **F1. Signed magnitude.** For a raw value *r* read as a signed 32-bit integer (S-0202 Terms):
@@ -392,7 +528,7 @@ With *r*₃ = −2³¹, *k* = −3 before clamping the resulting velocity.
 **F3. Deflection** (even ticks). Let *G* be the rules gravity (integer, 3 when absent) and
 *v*⁰ = (0, 0, −2 − *G*) in single precision. Let *p* = (*x*, *y*, *z*) be the particle's position.
 The probe is *q* = (*x*, *y*, *z* − 2 − *G*), in the particle's cell. Let *h* = *H*(*x*, *y*) and
-the deck height *b* = *h* + 416.
+the bridge crossing height *b* = *h* + 416 (on a flat bridge cell, the deck height).
 - **Bridge crossing:** when the particle's cell is a high bridge's cell and either
   *z* ≥ *b* > *z* − 2 − *G* (downward crossing) or *z* < *b* ≤ *z* − 2 − *G* (upward crossing).
   The upward case requires gravity below −2 leptons per tick².
@@ -477,7 +613,7 @@ follows S-0205 claim 3 with its importer warning.
 | Sink step | 2 | leptons per odd tick, at most | F5 |
 | Probe depth | 2 + gravity | leptons | F3 |
 | Obstacle band | 150 | leptons above the terrain | F3 |
-| Bridge deck height | 416 | leptons above the terrain | F3, as in S-0102 |
+| Bridge crossing height | 416 | leptons above the terrain height *h* at the particle's position | F3's bridge crossing, as in S-0102; the **Off** text of claim 19 uses S-0616 claim 14's deck height instead |
 | Wind cadence numerator | 10 | ticks | F6 |
 | Wind table Δₓ by direction 0–7 | 0, 2, 2, 1, 0, −2, −2, −2 | leptons | Direction 3 is short (Edge cases) |
 | Wind table Δᵧ by direction 0–7 | −2, −2, 0, 2, 2, 2, 0, −2 | leptons | |
@@ -494,7 +630,7 @@ follows S-0205 claim 3 with its importer warning.
 
 | State | Event | Result |
 |---|---|---|
-| live | update: *C* reaches 0, damage ≠ 0 | hits the ground-layer objects of its cell; *C* restarts |
+| live | update: *C* reaches 0, damage ≠ 0 | hits the ground-layer objects of its cell (claim 19 for the switch off); *C* restarts |
 | live | update: particle stage equals the end stage, delete flag set | dead |
 | live | update: particle stage equals the end stage, no delete flag | particle stage ← 0 |
 | live | lifetime *E* reaches 0 after an update | dead |
@@ -519,6 +655,10 @@ Ordering consequences:
   instead of 2, unlike its mirror direction 5. Off: Δₓ = 2 for direction 3. It is gas-only: smoke has its own wind table
   (S-0616 claim 7), so it does not apply to smoke. It affects only gas
   types with a wind effect.
+- **Gas through a bridge deck** (`quirks.gas_through_bridge_deck`, default on). Gas made on a
+  high bridge's deck, in a system whose turn moves it, sinks through it toward the terrain under
+  the bridge, and it hits the ground layer (claim 19). Off: the deck is the ground of a particle at or above it, and such a particle
+  hits the deck's objects (claim 19, **Off**).
 - **Particle stage parity.** The original takes the parity in F8 from its own object identifier.
   Our object number (Terms) has a different sequence, so which clouds advance with period *A* and which with
   *A* + 1 can differ from the original. This is a known departure of the same kind as S-0306's
@@ -796,11 +936,49 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   follows the hit. *Falsified if* the death draws come before the drift draws, or the stage step
   comes before the hit.
 
+- **G14. Cloud made on a deck (claim 19).** A purpose-made map with a high bridge over land, at
+  least three cells long. Enemy infantry A stands in the middle of the deck; enemy infantry B
+  stands on the deck in the cell next to A's, and enemy infantry C on the ground under A's cell
+  and D under B's cell, all ordered to stay. A virus sniper on the ground beside the bridge kills
+  A (G2 a's procedure). Record every tick for 300 ticks: each cloud's position, its height above
+  the terrain and above the deck, the tick parity, and the health of B, C and D; capture the
+  screen for the first 60 ticks. Expected: the clouds start at A's height on the deck and, with the land
+  under the bridge's cells 416 leptons below the deck, are below it after their first odd-tick move, then follow F4 and F5 toward 5 leptons above the terrain under
+  the bridge; B is not hit once every cloud is below the deck, C (and D, if a cloud drifts into its cell) is hit at the cadence of
+  G4 from each cloud's first due hit.
+  On screen the clouds are first drawn over the deck and are hidden by it, where they overlap,
+  once below, except at pixels that the upright depth profile of S-0616 claim 27 puts on the
+  other side of the deck's depth.
+  Run three times.
+  *Falsified if* a cloud stays at or settles on the deck, B is hit after every cloud is below
+  the deck, or C is not hit at the predicted ticks. A hit on B before then falsifies nothing: it
+  is claim 19's medium, `unmeasured` case. The screen capture is recorded for the drawing, which stays medium; it
+  falsifies nothing, since the upright depth profile of S-0616 claim 27 can put pixels of a cloud
+  below the deck nearer than the deck.
+- **G15. Gas from an area berserk weapon (claim 20).** A chaos drone deploys and fires once on flat
+  open ground, with enemy infantry around it. Named test rules file
+  G15-none gives the drone's weapon a non-zero damage field, so that the shot's damage, which its
+  detonation passes as the damage amount (S-0306 claim 21), is not 0 and its area damage takes
+  effect (S-0303 claim 2). It gives the weapon and warhead no particle system, no debris and no
+  animations, does not flag the weapon as an electric-bolt weapon, gives the warhead an infantry death kind other than the virus death, and gives the
+  infantry type placed around it no weapons, so that nothing but the drone fires. Named test rules
+  file G15-gas is G15-none with the warhead also given a particle system whose type section is read
+  and whose held type is a gas type. Record the number of particles and particle systems in play
+  before and after the shot, and each new particle's system and position. Expected: with G15-none
+  the shot adds no particle and no particle system other than what an object it damages or destroys
+  makes (claim 20: its damage smoke or damage sparks, S-0616 claim 1, and its own death effects),
+  and with G15-gas one first particle of the system appears at the detonation point (claim 4) on open
+  ground. *Falsified if* any other particle or particle system appears with G15-none, or no particle
+  appears on open ground with G15-gas.
+
 ## Open questions
 
-- **Chaos drone.** A chaos-drone weapon that creates an animation and an area berserk effect but
-  names no particle system leaves no gas particles under claim 4. S-0610 should not rely on this
-  spec to assert whether the chaos drone's weapon names a particle system.
+- **An area-fire animation on a high bridge.** Where the invisible shot of an area-fire weapon
+  fired by a unit standing on a high bridge's deck detonates, and so where its animations appear,
+  is not known here. It depends on the shot target and stored target point of a high-bridge cell
+  and on the target's reference point that the 32-lepton test measures from, which belong to
+  S-0306 claims 3 (a), 9 and 20. This spec makes no claim about it. Claim 20 says that such a
+  weapon's area fire and the berserk effect of its hits make no particle.
 - **Adaptive drawing cutoff.** Claim 16 establishes the suppression test, but the settings and
   complete tuning of the shared performance-cutoff mechanism are not specified here; their
   import mapping remains untraced. This omission is `unmeasured` in this draft because no
