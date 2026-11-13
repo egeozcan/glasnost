@@ -1,9 +1,9 @@
 ---
 id: Q-3046
 title: What does a pier attempt or notice do when the pier's reference cell does not hold the pier, or when the hit cell is a part of the pier cut off from it?
-status: open
+status: answered
 related: [S-0511, S-0307, S-0010]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need
