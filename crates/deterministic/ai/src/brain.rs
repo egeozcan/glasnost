@@ -1512,15 +1512,18 @@ impl Brain {
     }
 
     /// The seen enemy's cell with the most seen enemies within
-    /// [`STRIKE_RADIUS`] and no cell of the house's own objects; the first
-    /// in cell order on equal counts.
+    /// [`STRIKE_RADIUS`] and no cell of the house's or its allies' objects;
+    /// the first in cell order on equal counts.
     fn strike_cell(&self, w: &World) -> Option<CellXY> {
+        let house = self.house();
+        let me = &w.houses[usize::from(house.0)];
         let enemies = self.script.seen_enemies(w);
-        let own: Vec<CellXY> = self
-            .script
-            .own(w)
-            .into_iter()
-            .filter_map(|id| w.obj(id))
+        let own: Vec<CellXY> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0)
+            // design: own AI (#32): the allies' objects too, which the house sees wherever they stand (`crate::in_view`)
+            .filter(|o| o.owner.is_some_and(|h| h == house || me.allied_with(h)))
             // design: own AI (#30): every cell a building stands on
             .flat_map(|o| crate::cells_of(w, o))
             .collect();
