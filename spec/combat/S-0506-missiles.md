@@ -2,14 +2,14 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 40
+revision: 41
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-08
+approved-on: 2026-11-13
 measurements: []
 requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561, Q-2159, Q-2711, Q-2748,
-Q-2749, Q-2811]
+Q-2749, Q-2811, Q-3044]
 supersedes: []
 ---
 
@@ -420,7 +420,8 @@ above the terrain*.
     whatever the destination does afterwards. Later move orders to such a missile are ignored. The
     aim point is the destination's *heading point*:
     - for a unit: the point its locomotor is moving it to at that moment (the end of the step it is
-      on), or its position when it is not moving; for a unit inside a tunnel, the tunnel's exit,
+      on), or its position when it is not moving; for a hovering vehicle, as the paragraph *A
+      hovering destination* below gives; for a unit inside a tunnel, the tunnel's exit,
     - for a building: its centre, the point 128 × (*W* − 1) leptons further on the map *x* axis and
       128 × (*H* − 1) further on the map *y* axis than its position, *W* × *H* being its foundation,
       except that a building whose type is a helipad, a unit repair or reload building, or a bunker
@@ -432,6 +433,25 @@ above the terrain*.
     A missile fired at a moving unit therefore flies to where the unit was heading at the launch,
     not to where it is when the missile arrives (`quirks.rocket_aim_at_heading_point`; off: sample
     the unit's position at that same moment).
+
+    **A hovering destination** (Q-3044). For a hovering vehicle (S-0503 Terms), the heading point of
+    the list above is its heading point *P* (S-0503 Terms, at the height given there) whenever it
+    holds one at that moment, and its position when it holds none. Holding *P* is the whole test:
+    whether the vehicle is powered, its throttle *T* and S-0503's *moving* play no part. So:
+    - a switched-off vehicle that holds *P*, whether still above a hover height of 0 or already down
+      at 0, gives *P*, although it may never travel there (S-0503 claim 10: the switch-off keeps *P*),
+    - a powered vehicle that holds *P* in a tick in which its throttle is 0 because its movement
+      heading is more than 45° from the direction to *P* (S-0503 claim 2) gives *P*,
+    - a vehicle that keeps a destination but holds no *P*, as after a step check whose outcome is
+      not *clear*, for example while it waits at a closed gate of its own house (S-0503 claim 12),
+      gives its position, although S-0503 counts it as moving.
+
+    A rocket missile launched at a switched-off vehicle that holds *P* therefore detonates where
+    claim 19 gives for the aim point *P*, wherever the vehicle has come to rest. The vehicle takes
+    S-0303's area damage at its own distance from that detonation point, like any other object
+    there, and none when that distance exceeds the warhead's spread radius. With
+    `quirks.rocket_aim_at_heading_point` off the aim point is the vehicle's position in each of
+    these cases.
 
     **A destination that leaves play after the launch** (Q-2711). After the launch the missile's aim
     point and flight do not depend on the destination. When the destination object leaves play at
@@ -521,6 +541,10 @@ above the terrain*.
       missile of a type without the missile-spawn flag being unaffected by the reset: it rests on
       claim 11's rule for such an object. `unmeasured` for a crashing destination: no stock rocket
       launcher reliably targets an object that is not in the air at the launch and then crashes.
+      `measurable` (scenario R27) for a hovering destination. The result of the M-0003 row
+      restated by M-0016 that Q-3044 names (the launchers win all 12 games against switched-off
+      hovering vehicles) is consistent with it; those records give outcomes only and do not by
+      themselves tell it from an aim at the position.
     - Confidence: high for the fixing at the launch. High, for a destination that leaves play other
       than by crashing and a missile that loses no update after the leaving, for the aim point, the
       path and the detonation and for no missile being left on the map without a flight, which
@@ -543,7 +567,10 @@ above the terrain*.
       following the target, and for the fixing by the first later destination not in the air
       from its heading point at that moment; medium for claim 24's ticks counting from the tick
       of that fixing, for pitch 0 while the missile waits, and (`unmeasured`) for a later
-      destination in the air not fixing an aim point
+      destination in the air not fixing an aim point. For a hovering destination: high for *P*
+      while the vehicle is switched off, above a hover height of 0 or down at 0, for *P* while its
+      throttle is 0, for the position when it keeps a destination without *P*, and for the absence
+      of any power, throttle or settling test
 
 15. **Flight phases.** A rocket missile goes through these phases, by the Rocket table under State
     and ordering:
@@ -1695,8 +1722,9 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   one rocket slot, of the human-controlled house, force-fires at a unit of its own house, on a small
   flat map with the recorder. Per tick from the launch until the missile leaves play, record the
   missile's position, height and pitch, its phase as drawn, its speed, and its detonation tick and
-  point; record the target's heading point in the launch tick (its step end, or its position when it
-  is not moving) and the tick and way it leaves play. Variants, each with 5 runs: (a) the target is
+  point; record the target's heading point in the launch tick (as claim 14 gives it: its step end, or
+  its position when it is not moving, or for a hovering vehicle its *P* or position) and the tick
+  and way it leaves play. Variants, each with 5 runs: (a) the target is
   an infantry unit that boards a transport of its house standing next to it, ordered in so that it
   goes inside within 10 ticks after the launch; (b) the target is an engineer that enters and
   captures a building of a computer-controlled house, timed to go inside in the launch tick (the
@@ -1743,6 +1771,38 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   destination not in the air, or by a path that changes as the aircraft
   moves or lands; in any variant by an aim point that moves after it is fixed; in (d) by no fixing
   at the launch.
+- **R27. A rocket launched at a hovering vehicle (claim 14; Q-3044).** A small flat map with the
+  recorder; a stock rocket launcher and vehicles of a stock hovering type that is the powered unit
+  of a control centre, all of the human-controlled house, with one control centre of that house in
+  operation and a closed gate of that house on the map. The vehicles get their orders by normal
+  input, selling the control centre switches them off (S-0405 claim 13, S-0503 claim 10), and the
+  launcher fires at them by a forced attack, as in R25. Per tick from 10 ticks before the launch,
+  record for each hovering vehicle its position, hover height, heading point *P* or none,
+  destination or none, throttle *T* and whether it is switched off; record the missile's launch
+  tick, its path, its detonation tick and point, and the health of every object within 3 cells of
+  that point before and after the detonation. Variants, each with 5 runs:
+  - (a) a vehicle ordered to a cell at least 4 cells away, switched off while it holds *P* and
+    still above a hover height of 0; the launcher fires only after the record shows it down at
+    hover height 0 and at rest for 30 ticks,
+  - (b) as (a), the launcher fires while it is still above a hover height of 0,
+  - (c) a control: a vehicle given no order, switched off, and fired at after it is down at hover
+    height 0,
+  - (d) a powered vehicle ordered along a path with a turn of at least 90°, the launch timed in the
+    tick after the turn's corner cell; a run counts only when the record shows *P* held and *T* = 0
+    in the launch tick,
+  - (e) a powered vehicle ordered to a cell beyond the closed gate, the launch timed while it waits
+    at the gate (S-0503 claim 12, the closed-friendly-gate row),
+  - (f) the set-up of the M-0003 row that Q-3044 names, replayed in stock with this recorder: for
+    each launch at a switched-off vehicle, its *P* or none in the launch tick and the detonation point.
+
+  In (c) a run counts only when the record shows no *P* and no destination in the launch tick, and
+  in (e) only when it shows a destination and no *P* then. Expected: in (a), (b), (d) and (f) for a
+  vehicle holding *P*, a detonation where claim 19 gives for the aim point *P* of the launch tick,
+  and in (c), (e) and (f) for a vehicle holding none, one for its position in the launch tick. Every
+  vehicle's health loss is S-0303's area damage at its own distance from the detonation point.
+  Falsified by a detonation for the vehicle's position when it held *P* in the launch tick, by one
+  for any other point when it held none, or by a health loss that differs from S-0303's for the
+  recorded distance.
 
 ## Open questions
 
