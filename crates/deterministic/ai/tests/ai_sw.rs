@@ -616,7 +616,10 @@ fn scout_near(w: &mut World, c: CellXY) -> glasnost_sim::world::ObjectId {
     glasnost_sim::econ::shroud::area_reveal(w, HouseId(0), p, 2);
     let scout = testkit::spawn(w, Kind::Infantry, "WALKER", 1, at, 0);
     glasnost_sim::tick::step(w);
-    assert!(glasnost_ai::in_view(w, HouseId(0), scout), "the scout is seen");
+    assert!(
+        glasnost_ai::in_view(w, HouseId(0), scout),
+        "the scout is seen"
+    );
     scout
 }
 
@@ -701,7 +704,10 @@ fn no_storm_beside_any_cell_of_an_own_building() {
     let mut alone = g.world.clone();
     let walker = testkit::spawn(&mut alone, Kind::Infantry, "WALKER", 1, e, 0);
     glasnost_sim::tick::step(&mut alone);
-    assert!(glasnost_ai::in_view(&alone, HouseId(0), walker), "the enemy is seen");
+    assert!(
+        glasnost_ai::in_view(&alone, HouseId(0), walker),
+        "the enemy is seen"
+    );
     assert_eq!(
         fires(&think(&alone), "STRM", &alone),
         vec![e],

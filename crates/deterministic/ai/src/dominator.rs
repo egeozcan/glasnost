@@ -212,9 +212,8 @@ fn worth(
     // spec: S-0612 claim 14 (own objects change no owner) and claim 9 (the area damage, of the imported amount and warhead)
     // design: own AI (#33): the damage to the allies' objects the sweep does not take is loss too, as the mutator counts it
     loss += blast_value(w, c, d.damage, d.warhead, |o| {
-        o.owner.is_some_and(|x| {
-            x == house || (me.allied_with(x) && !ally_taken.contains(&o.id))
-        })
+        o.owner
+            .is_some_and(|x| x == house || (me.allied_with(x) && !ally_taken.contains(&o.id)))
     });
     // spec: S-0612 claims 9 and 10 (the area damage hurts the seen enemy objects that are not taken: buildings, which are never taken (claim 13), units the takeover tests refuse, and takeable units it destroys)
     gain += blast_value(w, c, d.damage, d.warhead, |o| {

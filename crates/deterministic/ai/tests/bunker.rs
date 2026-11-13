@@ -411,7 +411,10 @@ fn show(w: &mut World, foe: ObjectId) {
 /// Whether `foe` stands more than `bunker::ATTACK_REACH` cells from every
 /// cell of bunker `b` (and house 0 sees it).
 fn far_from(w: &World, foe: ObjectId, b: ObjectId) -> bool {
-    assert!(glasnost_ai::in_view(w, HouseId(0), foe), "the enemy is seen");
+    assert!(
+        glasnost_ai::in_view(w, HouseId(0), foe),
+        "the enemy is seen"
+    );
     let f = w.obj(foe).unwrap().pos.cell();
     let o = w.obj(b).unwrap();
     glasnost_sim::econ::placement::foundation_cells(w, o.type_index, o.pos.cell())
