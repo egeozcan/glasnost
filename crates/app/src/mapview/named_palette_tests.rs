@@ -36,10 +36,20 @@ fn named_file() -> Palette6 {
     Palette6 { colors }
 }
 
-/// The test art with `extra` added after it (a repeated section adds its
-/// keys to the earlier one).
+/// The test art and the animation section SLOTA, with each section of
+/// `extra` merged in: its keys go into the section of that name, so that
+/// no section name is repeated.
 fn art_with(extra: &str) -> String {
-    format!("{ART}{extra}")
+    let mut text = format!("{ART}[SLOTA]\nLayer=ground\n");
+    for part in extra.split('[').filter(|p| !p.is_empty()) {
+        let (name, body) = part.split_once("]\n").expect("a section header");
+        let header = format!("[{name}]\n");
+        match text.find(&header) {
+            Some(i) => text.insert_str(i + header.len(), body),
+            None => text.push_str(&format!("{header}{body}")),
+        }
+    }
+    text
 }
 
 /// What a test draws in: the art and rules additions, whether CARX is
@@ -74,8 +84,14 @@ fn context_of(
     glasnost_map::Map,
 ) {
     use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
-    let (mut import, catalogue, mut assets) =
-        context_full(&format!("{RULES}{}", s.rules), &art_with(s.art));
+    let (mut import, catalogue, mut assets) = context_full(
+        &format!("{RULES}[Animations]\n0=SLOTA\n{}", s.rules),
+        &art_with(s.art),
+    );
+    import
+        .arts
+        .insert((Kind::Animations, 0), art_of("SLOTA", "slota.shp"));
+    assets.insert(b"slota.shp", shp((20, 20), 6, (2, 2), (9, 9)));
     if s.voxel {
         let art = import.arts.get_mut(&(Kind::Vehicles, 0)).unwrap();
         art.voxels.insert("body".into(), b"car.vxl".to_vec());
@@ -316,15 +332,10 @@ fn claim_17_an_effect_tint_retints_the_named_palettes() {
 const HUT_MAP: &[u8] = b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
     [Structures]\n0=Neutral,HUTX,256,6,10,0\n";
 
-/// The static scene of [`HUT_MAP`] in setup `s`, with the slot animation
-/// SLOTA as the hut's idle animation, its named palette and the neutral
-/// colour definition.
+/// The static scene of [`HUT_MAP`] in setup `s`, its named palette and the
+/// neutral colour definition.
 fn hut_scene(s: &Setup) -> (super::build::Built, Palette, [u8; 3], PaletteState) {
-    let (mut import, catalogue, mut assets, map) = context_of(s, HUT_MAP);
-    import
-        .arts
-        .insert((Kind::Animations, 0), art_of("SLOTA", "slota.shp"));
-    assets.insert(b"slota.shp", shp((20, 20), 6, (2, 2), (9, 9)));
+    let (import, catalogue, assets, map) = context_of(s, HUT_MAP);
     let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
     let options = Options::default();
     let built = build(&map, &import, &catalogue, &palettes, &assets, &options);
@@ -333,17 +344,13 @@ fn hut_scene(s: &Setup) -> (super::build::Built, Palette, [u8; 3], PaletteState)
     (built, named, hsv, palettes)
 }
 
-/// The rules and art of a hut whose idle slot animation is SLOTA.
-const SLOT_RULES: &str = "[Animations]\n0=SLOTA\n";
-
 /// spec: S-0103 claim 16 (a building's body and sprite parts take its named palette, and so do
 /// its own animations drawn with it, claim 8 row 3); S-0108 claim 11 (the set-up starts the idle
 /// slot)
 #[test]
 fn claim_16_a_building_and_its_own_animations_take_it() {
     let s = Setup {
-        art: "[HUTX]\nPalette=test\nIdleAnim=SLOTA\n[SLOTA]\nLayer=ground\n",
-        rules: SLOT_RULES,
+        art: "[HUTX]\nPalette=test\nIdleAnim=SLOTA\n",
         ..Default::default()
     };
     let (b, named, hsv, _) = hut_scene(&s);
@@ -360,8 +367,7 @@ fn claim_16_a_building_and_its_own_animations_take_it() {
 #[test]
 fn claim_16_a_terrain_palette_building_names_only_its_animations() {
     let s = Setup {
-        art: "[HUTX]\nPalette=test\nTerrainPalette=yes\nIdleAnim=SLOTA\n[SLOTA]\nLayer=ground\n",
-        rules: SLOT_RULES,
+        art: "[HUTX]\nPalette=test\nTerrainPalette=yes\nIdleAnim=SLOTA\n",
         ..Default::default()
     };
     let (b, named, hsv, palettes) = hut_scene(&s);
@@ -377,4 +383,63 @@ fn claim_16_a_terrain_palette_building_names_only_its_animations() {
         !others.is_empty() && others.iter().all(|&s| table(&b.scene, s) != house),
         "the body and sprite parts keep the tile palette"
     );
+}
+
+/// spec: S-0103 claim 17 (each file the four kinds name for the current theater is read with the
+/// game's palettes); claim 16 (other kinds never name one)
+#[test]
+fn claim_17_the_named_files_are_wanted() {
+    let s = Setup {
+        art: "[MANX]\nPalette=test\n[SLOTA]\nPalette=other\n",
+        file_for: None,
+        ..Default::default()
+    };
+    let (import, ..) = context_of(&s, &scene_map_text());
+    let files = super::build::named_palette_files(&import, Theater::Snow);
+    assert_eq!(
+        files.into_iter().collect::<Vec<_>>(),
+        [b"TESTSNO.PAL".to_vec()]
+    );
+}
+
+/// spec: S-0103 claim 16 (an object's own deploy, undeploy or parachute animation takes its
+/// named palette, also for a vehicle drawn as a voxel model, which ignores it itself); claim 8
+/// row 3 (with the owner's colour definition); an animation of no object never takes one
+#[test]
+fn claim_16_own_animations_take_the_objects_named_palette() {
+    use super::build::AnimDraw;
+    let s = Setup {
+        art: "[CARX]\nPalette=test\n",
+        voxel: true,
+        ..Default::default()
+    };
+    with_inputs(&s, |inputs, painter, scene| {
+        let (named, hsv) = named_and_hsv(inputs);
+        let anim = |of: Option<(Kind, usize)>| AnimDraw {
+            idx: 0,
+            frame: 0,
+            stage: 0,
+            end: 0,
+            pos: (2 * 256 + 128, 3 * 256 + 128, 0),
+            carrier: Some((b"Neutral".to_vec(), 1000)),
+            named: of,
+            z_adjust: None,
+        };
+        let (drawn, _) = painter.anims(
+            inputs,
+            scene,
+            &[anim(Some((Kind::Vehicles, 0))), anim(None)],
+        );
+        let shade = |i: usize| lit_shades(&drawn[i].as_ref().expect("drawn").2)[0];
+        assert_eq!(table(scene, shade(0)), expect(&named, hsv, [1000; 3]));
+        assert_eq!(
+            table(scene, shade(1)),
+            expect(&inputs.palettes.unit, hsv, [1000; 3])
+        );
+        // The vehicle itself keeps the ordinary palette.
+        assert_eq!(
+            mobile_table(inputs, painter, scene, &mobile(Kind::Vehicles)),
+            expect(&inputs.palettes.unit, hsv, [1000; 3])
+        );
+    });
 }

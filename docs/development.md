@@ -157,7 +157,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `screen_to_ground_not_exact_inverse` | S-0101 claim 9 | the on state's F6 converts building slot displacements (S-0108 claim 10, `render::projection::screen_to_ground`); the off state's exact inverse is not implemented; the cell under a pixel is F7's pixel formula, the same in both settings |
 | `slot_values_replace_animation_adjustments` | S-0102 claim 17 | the on state is drawn (the slot's depth adjustment and y-sort replace the type's, from the first drawn frame); the off state (the slot's values added to the type's) is not implemented |
 | `parachute_brightness_fixed` | S-0103 claim 8 | the on state is drawn (a parachute keeps the light of its creation tick); the off state is not implemented |
-| `named_palette_true_owner` | S-0103 claim 16 | a disguised object's named palette is not built in either state yet; it comes with #75's follow-up (Q-3019 answered by S-0103 r25) |
+| `named_palette_true_owner` | S-0103 claim 16 | needs S-0516 claim 37 disguise drawing: named palettes are drawn (#75), but no object is drawn as its disguise yet, so neither state can show |
 | `split_effect_priority` | S-0104 claim 2 | objects' height terms take the height-term order, as with the switch on, but every cell is relit with the one global choice (the tint/target order); the off state is not implemented |
 | `chrono_flash_no_reevaluation` | S-0104 claims 2 and 5 | nothing starts a chrono flash |
 | `dominator_height_terms_linger` | S-0104 claim 16 | every change of the ambient or of the global lighting choice relights every cell in full with the chosen set; the lingering height terms are not modelled |

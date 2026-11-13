@@ -1097,6 +1097,31 @@ pub fn anim_files(import: &Import) -> BTreeSet<Vec<u8>> {
         .collect()
 }
 
+/// The named palette files of every infantry, vehicle, aircraft and
+/// building type in `theater`, upper-case (S-0103 claims 16 and 17: each
+/// file named for the current theater is read when the game's palette
+/// files are; the game's types then find theirs among the held files).
+pub fn named_palette_files(
+    import: &Import,
+    theater: glasnost_vfs::theater::Theater,
+) -> BTreeSet<Vec<u8>> {
+    let art = art_document(import);
+    import
+        .arts
+        .iter()
+        // spec: S-0103 claim 16 (only these four kinds name a palette of their own)
+        .filter(|((kind, _), _)| {
+            matches!(
+                kind,
+                Kind::Infantry | Kind::Vehicles | Kind::Aircraft | Kind::Buildings
+            )
+        })
+        // spec: S-0103 Import mapping (Palette, from the type's art section)
+        .filter_map(|(_, a)| art.value(&a.image, b"Palette"))
+        .filter_map(|v| glasnost_render::palette::named_palette_file(v, theater))
+        .collect()
+}
+
 /// The import's art file as a document (empty without one).
 fn art_document(import: &Import) -> Document {
     match &import.art_file {
@@ -1153,13 +1178,30 @@ impl Lights {
     }
 }
 
+/// What a house-coloured drawing's 53-shade table is built from: its
+/// owner's colour definition and, for a type with a named palette, that
+/// palette (its index in [`Painter`]'s named palettes) in place of the unit
+/// palette (S-0103 claims 6, 7, 16 and 17).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct Remap {
+    hsv: [u8; 3],
+    named: Option<u16>,
+}
+
+impl From<[u8; 3]> for Remap {
+    fn from(hsv: [u8; 3]) -> Self {
+        Self { hsv, named: None }
+    }
+}
+
 /// Palette rows added to the scene, by table.
 #[derive(Default)]
 struct Rows {
     tiles: BTreeMap<TileTable, (usize, usize)>,
-    /// The 53-shade house-colour tables by colour definition and the tint
-    /// (‰) they are shaded with (S-0104 claim 3).
-    houses: BTreeMap<([u8; 3], [i32; 3]), (usize, usize)>,
+    /// The 53-shade house-colour and named-palette tables by colour
+    /// definition and source palette, and the tint (‰) they are shaded
+    /// with (S-0104 claim 3; S-0103 claim 17).
+    houses: BTreeMap<(Remap, [i32; 3]), (usize, usize)>,
     /// The start-up tables: `false` the resource table, `true` the mine
     /// table (S-0112 claim 2).
     startup: BTreeMap<bool, (usize, usize)>,
@@ -1319,6 +1361,16 @@ pub struct Painter {
     /// The rendering quirk switches the drawing reads (`docs/development.md`,
     /// *Rendering quirks*).
     view_quirks: ViewQuirks,
+    /// Each type's named palette (S-0103 claims 16 and 17), by import kind
+    /// and registration index: its index in `named`, or `None` for a type
+    /// with none in the current theater. Settled at a type's first use:
+    /// the art and the game's files do not change during a game.
+    named_of: BTreeMap<(Kind, usize), Option<u16>>,
+    /// The named palette files read, by upper-case name: their index in
+    /// `named`, or `None` for a missing or unreadable file.
+    named_files: BTreeMap<Vec<u8>, Option<u16>>,
+    /// The named palettes, loaded (S-0103 claim 17).
+    named: Vec<Palette>,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -1418,6 +1470,11 @@ pub struct AnimDraw {
     /// paratrooper's parachute is drawn with its carrier's house-colour unit
     /// palette (S-0522 claim 18, S-0103 claim 8 row 3).
     pub carrier: Option<(Vec<u8>, i32)>,
+    /// The import type whose named palette it takes with its carrier's
+    /// colour, when it is that object's own animation: a vehicle's deploy
+    /// or undeploy animation, a parachute's carried object (S-0103 claim
+    /// 16).
+    pub named: Option<(Kind, usize)>,
     /// The depth adjustment its creator gave in place of its type's: a
     /// building's shot animation (S-0301 claim 22, F8).
     pub z_adjust: Option<i32>,
@@ -1706,13 +1763,38 @@ impl<'a> Builder<'a> {
         )
     }
 
-    fn house_row(&mut self, hsv: [u8; 3], brightness: i32) -> Shade {
+    fn house_row(&mut self, remap: impl Into<Remap>, brightness: i32) -> Shade {
         let tint = self.p.house_tint();
-        let (base, n) = self
-            .p
-            .house_table_in(&mut self.built.scene, self.palettes, hsv, tint);
+        let (base, n) =
+            self.p
+                .house_table_in(&mut self.built.scene, self.palettes, remap.into(), tint);
         // spec: S-0104 claim 15, S-0110 claim 5 (each pixel takes the row of its light-alpha value)
         Shade::new(base, n, brightness)
+    }
+
+    /// The named palette of type `idx` of kind `kind` in the current
+    /// theater (S-0103 claims 16 and 17): its index among the painter's
+    /// named palettes, or `None` when the type has none.
+    fn named_palette(&mut self, kind: Kind, idx: usize) -> Option<u16> {
+        // spec: S-0103 claim 16 (only an infantry, vehicle, aircraft or building type names a palette of its own)
+        if !matches!(
+            kind,
+            Kind::Infantry | Kind::Vehicles | Kind::Aircraft | Kind::Buildings
+        ) {
+            return None;
+        }
+        if let Some(&n) = self.p.named_of.get(&(kind, idx)) {
+            return n;
+        }
+        // spec: S-0103 Import mapping (Palette, from the type's art section) and claim 17 (the
+        // value with the current theater's suffix and .PAL)
+        let theater = glasnost_convert::map::to_vfs_theater(self.map.theater);
+        let file = self
+            .art_value(kind, idx, b"Palette")
+            .and_then(|v| glasnost_render::palette::named_palette_file(v, theater));
+        let n = file.and_then(|f| self.p.named_file(&f, self.assets, self.palettes));
+        self.p.named_of.insert((kind, idx), n);
+        n
     }
 
     /// The colour definition an owner shows (S-0103 claim 10), and whether
@@ -2756,6 +2838,12 @@ impl<'a> Builder<'a> {
         // spec: S-0108 claim 4 (while the gate moves no unloading or under-door image is drawn)
         let unloading = unloading.filter(|_| moving_gate.is_none());
         let (hsv, _) = self.owner_colour(owner);
+        // spec: S-0103 claim 16 (a building type's named palette: its body and sprite parts unless
+        // it uses the terrain palette, its voxel parts and its own animations drawn with it)
+        let remap = Remap {
+            hsv,
+            named: self.named_palette(Kind::Buildings, i),
+        };
         let z = LEVEL_LEPTONS * i32::from(level);
         let lz = height_lift(z);
         // spec: S-0108 claim 8, S-0009 claim 38 (centred on the top corner of the foundation's top-left cell)
@@ -2782,7 +2870,7 @@ impl<'a> Builder<'a> {
                 b.tile_row(table, look.brightness(ground))
             } else {
                 // spec: S-0104 claim 13 (an ordinary building: U of its top-left foundation cell)
-                b.house_row(hsv, look.brightness(u))
+                b.house_row(remap, look.brightness(u))
             }
         };
         let row = lit(self, super::protection::BuildingLook::default());
@@ -2978,7 +3066,7 @@ impl<'a> Builder<'a> {
         // stored brightness: the protected building's brightness, refreshed on each building turn);
         // S-0519 F7 (the same b₃ is the stored brightness: flash, protection and mark)
         let slot_u = look.brightness(u);
-        self.slot_animations(i, cell, z, slot_u, hsv, damaged, object, ground);
+        self.slot_animations(i, cell, z, slot_u, remap, damaged, object, ground);
         // The building's parts in the object pass: the door image, then its voxel turret or barrel
         // (our placeholder order between the two).
         let mut parts = Vec::new();
@@ -3034,7 +3122,7 @@ impl<'a> Builder<'a> {
                 lz,
                 b,
                 shield_mask,
-                hsv,
+                remap,
                 object,
             ));
         }
@@ -3064,7 +3152,7 @@ impl<'a> Builder<'a> {
         cell: CellXY,
         z: i32,
         u: i32,
-        hsv: [u8; 3],
+        remap: Remap,
         damaged: bool,
         object: u32,
         ground: &mut Vec<GroundEntry>,
@@ -3126,7 +3214,7 @@ impl<'a> Builder<'a> {
             // world units)
             let (dx, dy) = screen_to_ground(def.x, def.y);
             let pos = (256 * cell.x + dx, 256 * cell.y + dy, z);
-            let row = self.anim_row(&t, hsv, u, CellXY::new(pos.0 >> 8, pos.1 >> 8));
+            let row = self.anim_row(&t, remap, u, CellXY::new(pos.0 >> 8, pos.1 >> 8));
             // spec: S-0513 claim 29b (the cell holding the animation's world position: its horizontal coordinates divided by 256, truncated toward zero, height ignored)
             let anim_cell = CellXY::new(pos.0 / 256, pos.1 / 256);
             let detail = self.options.detail.number();
@@ -3320,13 +3408,16 @@ impl<'a> Builder<'a> {
         let row = if let Some((house, light)) = &a.carrier {
             // spec: S-0522 claim 18 and S-0103 claim 8 (an ordinary untiled parachute uses the carried infantry's house-colour unit palette, row 3, at the unscaled ground light of its cell sampled at creation, without extra unit light or an airborne-height addition; the normal-light override, special palettes and the tiled-copy exception stay S-0103 claim 8's)
             let (hsv, _) = self.owner_colour(house);
+            // spec: S-0103 claim 16 (an object's deploy, undeploy or parachute animation takes its
+            // named palette, also for a vehicle that ignores it)
+            let named = a.named.and_then(|(k, i)| self.named_palette(k, i));
             let carried = slots::AnimType {
                 cell_drawer: true,
                 ..(*t).clone()
             };
-            self.anim_row(&carried, hsv, *light, cell)
+            self.anim_row(&carried, Remap { hsv, named }, *light, cell)
         } else {
-            self.anim_row(&unowned, [0, 0, 0], NEUTRAL_BRIGHTNESS, cell)
+            self.anim_row(&unowned, [0, 0, 0].into(), NEUTRAL_BRIGHTNESS, cell)
         };
         // spec: S-0109 claim 20 (an animation other than a building's slot animations has t = 0)
         let code = slots::translucency(&t, self.options.detail.number(), a.stage, a.end);
@@ -3920,10 +4011,10 @@ impl<'a> Builder<'a> {
     }
 
     /// The shade row of a building's slot animation of type `t` (S-0103
-    /// claim 8 rows 3 to 5 and its tiled copies): `hsv` and `u` are its
-    /// building's colour definition and brightness, `cell` the animation's
-    /// cell.
-    fn anim_row(&mut self, t: &slots::AnimType, hsv: [u8; 3], u: i32, cell: CellXY) -> Shade {
+    /// claim 8 rows 3 to 5 and its tiled copies): `remap` and `u` are its
+    /// object's colour definition with its named palette (S-0103 claim 16)
+    /// and its brightness, `cell` the animation's cell.
+    fn anim_row(&mut self, t: &slots::AnimType, remap: Remap, u: i32, cell: CellXY) -> Shade {
         // The brightness of the selected row.
         let b = if t.normal_light {
             // spec: S-0103 claim 8 (the normal-light flag: brightness 1000, tiled copies included)
@@ -3939,8 +4030,9 @@ impl<'a> Builder<'a> {
                 .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
         };
         if t.cell_drawer && !t.tiled {
-            // spec: S-0103 claim 8 row 3 (the owner's 53-shade palette)
-            return self.house_row(hsv, b);
+            // spec: S-0103 claim 8 row 3 (the owner's 53-shade palette); claim 16 (the object's named
+            // palette when it has one)
+            return self.house_row(remap, b);
         }
         if t.alt_palette && !t.tiled {
             let (base, n) = match self.p.rows.alt {
@@ -4003,7 +4095,7 @@ impl<'a> Builder<'a> {
         lz: i32,
         brightness: i32,
         mask: u16,
-        hsv: [u8; 3],
+        remap: Remap,
         object: u32,
     ) -> Vec<Item> {
         let q = VoxelQuirks::default();
@@ -4031,8 +4123,9 @@ impl<'a> Builder<'a> {
         // spec: S-0102 claim 13 (a building's voxel parts: −L(z) + the turret slot depth adjustment)
         let bias = -lz + rule_int(self.import, k, idx, b"TurretAnimZAdjust", 0);
         // spec: S-0104 claim 13 (every part of an ordinary building: U of its top-left cell);
-        // S-0102 claim 34 (a protected building's parts: the adjusted brightness and its mask)
-        let row = self.house_row(hsv, brightness).with_mask(mask);
+        // S-0102 claim 34 (a protected building's parts: the adjusted brightness and its mask);
+        // S-0103 claim 16 (a building's voxel parts take its named palette)
+        let row = self.house_row(remap, brightness).with_mask(mask);
         let model_of = |b: &mut Self, part: &'static str| {
             let file = art.voxels.get(part)?.clone();
             b.voxel_model(&file).map(|m| (m, file, part))
@@ -4357,6 +4450,7 @@ impl<'a> Builder<'a> {
         let cell = CellXY::new(x / 256, y / 256); // spec: S-0204 claim 2 (the cell holding a position)
         let u = self.unit_depth(m.kind, m.idx, cell, z, m.deck);
         let (hsv, _) = self.owner_colour(&m.owner);
+        let named = self.named_palette(m.kind, m.idx);
         let levels = self.p.lights.get(cell).map_or(
             light::CellLevels {
                 unscaled_ground: NEUTRAL_BRIGHTNESS,
@@ -4404,7 +4498,8 @@ impl<'a> Builder<'a> {
                 super::protection::MobileKind::Infantry,
                 m.berserk == Some(true),
             );
-            let row = self.house_row(hsv, lit).with_mask(mask);
+            // spec: S-0103 claim 16 (an infantry type's named palette, at its owner's colour definition)
+            let row = self.house_row(Remap { hsv, named }, lit).with_mask(mask);
             self.infantry_items(m, point, u, row)
         } else {
             let voxel = self
@@ -4435,7 +4530,19 @@ impl<'a> Builder<'a> {
             // take the berserk mask, united with the curtain mask when both apply; a sprite vehicle
             // and an aircraft take none)
             let mask = curtain | masks.berserk_of(m.berserk.is_some(), kind, false);
-            let row = self.house_row(hsv, b).with_mask(mask);
+            let named = match m.kind {
+                // spec: S-0103 claim 16 (a vehicle drawn as a voxel model or as a sprite with a
+                // turret keeps its owner's ordinary palette; one drawn as a sprite without a turret
+                // takes its named palette)
+                Kind::Vehicles
+                    if voxel || rule_bool(self.import, m.kind, m.idx, b"Turret", false) =>
+                {
+                    None
+                }
+                // spec: S-0103 claim 16 (aircraft, their voxel parts included)
+                _ => named,
+            };
+            let row = self.house_row(Remap { hsv, named }, b).with_mask(mask);
             let body = self.vehicle_items(m, point, u, row);
             // spec: S-0402 claim 5a (composited before both the vehicle's shadow and its body)
             let mut items: Vec<Item> = m
@@ -6162,6 +6269,9 @@ impl Painter {
             shadowed_cells: BTreeSet::new(),
             effect_tint: None,
             view_quirks: ViewQuirks::default(),
+            named_of: BTreeMap::new(),
+            named_files: BTreeMap::new(),
+            named: Vec::new(),
         }
     }
 
@@ -6280,27 +6390,64 @@ impl Painter {
         }
     }
 
-    /// The first row and row count of colour definition `hsv`'s house
-    /// table shaded with tint `tint` (‰), adding its rows to `scene` the
-    /// first time.
+    /// The named palette of file `file` (upper-case), read from `assets`
+    /// once: its index in [`Painter::named`], or `None` when the file is
+    /// missing or unreadable.
+    fn named_file(&mut self, file: &[u8], assets: &Assets, palettes: &PaletteState) -> Option<u16> {
+        if let Some(&n) = self.named_files.get(file) {
+            return n;
+        }
+        // spec: S-0103 claim 16 (a missing file: no named palette from it; no other theater's file
+        // or unsuffixed name is tried). design: render (#75) (a file that does not parse as a
+        // palette counts as missing)
+        let n = assets
+            .get(file)
+            .and_then(|b| glasnost_fmt::pal::Palette6::parse(b).ok())
+            .and_then(|f| {
+                let i = u16::try_from(self.named.len()).ok()?;
+                // spec: S-0103 claim 17 (claim 1's multiplication and byte wrap)
+                self.named.push(palettes.load_named(&f));
+                Some(i)
+            });
+        self.named_files.insert(file.to_vec(), n);
+        n
+    }
+
+    /// The first row and row count of `remap`'s 53-shade table shaded with
+    /// tint `tint` (‰), adding its rows to `scene` the first time.
+    ///
+    /// A table is built when it is first used, at the tint in force then.
+    /// S-0103 claim 17 has our engine build the named palettes at game
+    /// start with white tint and retint them at every lighting
+    /// re-evaluation, "normal" choice and trigger-action tint change; the
+    /// shading is a function of the palette and the tint alone (S-0104
+    /// claim 3), so a table built later at today's tint is the one that
+    /// build and retint give.
     fn house_table_in(
         &mut self,
         scene: &mut Scene,
         palettes: &PaletteState,
-        hsv: [u8; 3],
+        remap: Remap,
         tint: [i32; 3],
     ) -> (usize, usize) {
-        if let Some(r) = self.rows.houses.get(&(hsv, tint)) {
+        if let Some(r) = self.rows.houses.get(&(remap, tint)) {
             return *r;
         }
-        let pal = house_palette(&palettes.unit, hsv);
-        // spec: S-0103 claim 7 (indices 240 … 254 are tint-exempt in house-colour palettes)
+        let source = match remap.named.and_then(|i| self.named.get(usize::from(i))) {
+            // spec: S-0103 claim 17 (a named palette: built as the definition's house-colour palette
+            // with the named file in place of the unit palette)
+            Some(named) => named,
+            // spec: S-0103 claim 6 (the house-colour palette: the unit palette with the ramp)
+            None => &palettes.unit,
+        };
+        let pal = house_palette(source, remap.hsv);
+        // spec: S-0103 claims 7 and 17 (indices 240 … 254 are tint-exempt in house-colour and named palettes)
         let t = light::shade_table(&pal, tint, HOUSE_ROWS, Some(TINT_EXEMPT));
         let base = scene.rows.len();
         for row in &t {
             scene.add_row(row565(row));
         }
-        self.rows.houses.insert((hsv, tint), (base, t.len()));
+        self.rows.houses.insert((remap, tint), (base, t.len()));
         (base, t.len())
     }
 
@@ -6308,9 +6455,12 @@ impl Painter {
     /// house-colour tables show now (S-0104 claims 3 and 5; set by
     /// [`Painter::set_effect_tint`]): each drawing shaded by a house table
     /// of another tint takes the same colour definition's table of today's
-    /// tint, keeping its brightness and protection mask. For the drawings
-    /// kept from frame to frame, the static objects of the cell pass among
-    /// them (#75). Returns whether any drawing changed.
+    /// tint, keeping its brightness and protection mask. A named-palette
+    /// drawing takes its named palette's table of today's tint: S-0103
+    /// claim 17 has every event retint every named palette like the
+    /// house-colour palettes. For the drawings kept from frame to frame,
+    /// the static objects of the cell pass among them (#75). Returns
+    /// whether any drawing changed.
     pub fn retint_houses(
         &mut self,
         inputs: &Inputs,
@@ -6318,12 +6468,12 @@ impl Painter {
         items: &mut [Item],
     ) -> bool {
         let tint = self.house_tint();
-        let others: BTreeMap<u32, [u8; 3]> = self
+        let others: BTreeMap<u32, Remap> = self
             .rows
             .houses
             .iter()
             .filter(|((_, t), _)| *t != tint)
-            .map(|((hsv, _), &(base, _))| (base as u32, *hsv))
+            .map(|((remap, _), &(base, _))| (base as u32, *remap))
             .collect();
         if others.is_empty() {
             return false;
@@ -6335,10 +6485,12 @@ impl Painter {
             else {
                 continue;
             };
-            let Some(&hsv) = others.get(&shade.base) else {
+            let Some(&remap) = others.get(&shade.base) else {
                 continue;
             };
-            let (base, n) = self.house_table_in(scene, inputs.palettes, hsv, tint);
+            // spec: S-0103 claim 17 (in our engine every event retints every named palette, with the
+            // house-colour palettes' tint)
+            let (base, n) = self.house_table_in(scene, inputs.palettes, remap, tint);
             shade.base = base as u32;
             shade.rows = n as u16;
             changed = true;
@@ -6360,9 +6512,9 @@ impl Painter {
     /// [`Painter::set_effect_tint`], and the drawings kept from frame to
     /// frame are shaded again by [`Painter::retint_houses`]); claim 10's
     /// and claim 16's height terms and the cell light of the static objects
-    /// of the cell pass are not followed. No named palette is built (which
-    /// objects draw with one is Q-3019), so none is retinted. The house
-    /// tables are all built when the game starts (S-0104 Open questions),
+    /// of the cell pass are not followed. The named palettes' tables take
+    /// the effect tint with the house-colour tables (S-0103 claim 17). The
+    /// house tables are all built when the game starts (S-0104 Open questions),
     /// so claim 2's third column, the tint of a table built while an effect
     /// is in force, never applies to them.
     pub fn relight(
