@@ -9841,6 +9841,11 @@
           "type": "boolean",
           "default": true
         },
+        "jumpjet_crash_lookahead": {
+          "description": "An ordinary (not seized) crashing jumpjet whose movement point lies in another cell uses the look-ahead ground reference, so a listed object can hold its crash up for as long as it stays; off: an ordinary crashing jumpjet always uses the direct reference, so every ordinary crash with a crash rate above 0 reaches its end on terrain.",
+          "type": "boolean",
+          "default": true
+        },
         "jumpjet_falling_touchdown_tracked": {
           "description": "A jumpjet touching down in the bridge or parachute falling state, or no longer alive or in play, stays a tracked flying object; off: every touchdown ends its registration.",
           "type": "boolean",
