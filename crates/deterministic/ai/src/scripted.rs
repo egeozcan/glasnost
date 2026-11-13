@@ -3878,3 +3878,68 @@ mod start_tests {
         assert_eq!(targets.len(), starts.len() - 1, "{targets:?}");
     }
 }
+
+#[cfg(test)]
+mod unblocker_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// Gives infantry type `t` the prerequisite list `prereq`.
+    fn needing(w: &mut World, t: u32, prereq: Vec<tech::Prereq>) {
+        let mut r = (*w.rules_arc()).clone();
+        r.econ.tech.infantry[t as usize].prereq = prereq;
+        w.rules = Some(std::sync::Arc::new(r));
+    }
+
+    // design: own AI (#49): a type with a blocker that no building clears (an upgrade or an unknown name, S-0407 claim 8 (d)) is never unblocked, so no building is climbed for it
+    #[test]
+    fn a_type_with_a_blocker_nothing_clears_has_no_unblocker() {
+        let mut g = Game::new(
+            fixture::rules(),
+            &fixture::map(),
+            "synthetic-skirmish",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the skirmish loads");
+        for _ in 0..900 {
+            g.step();
+        }
+        let mut w = g.world.clone();
+        let house = HouseId(0);
+        let s = Script::new(house, Plan::default());
+        // The scene: a building the house lacks and can build and place now.
+        let b = (0..w.rules().buildings.len() as u32)
+            .map(|index| TypeRef {
+                kind: Kind::Building,
+                index,
+            })
+            .find(|&b| {
+                tech::present_count(&w, house, b) == 0 && s.buildable(&w, b) && s.placeable(&w, b)
+            })
+            .expect("a building the house can add");
+        let t = (0..w.rules().infantry.len() as u32)
+            .find(|&index| {
+                let t = TypeRef {
+                    kind: Kind::Infantry,
+                    index,
+                };
+                tech::unmet_prerequisites(&w, house, t).is_some()
+            })
+            .expect("an infantry type no other condition refuses");
+        let infantry = TypeRef {
+            kind: Kind::Infantry,
+            index: t,
+        };
+        needing(&mut w, t, vec![tech::Prereq::Building(b.index)]);
+        let s = Script::new(house, Plan::default());
+        assert_eq!(s.unblocker(&w, infantry, CLIMB_DEPTH), Some(b));
+        needing(
+            &mut w,
+            t,
+            vec![tech::Prereq::Building(b.index), tech::Prereq::Unmet],
+        );
+        let s = Script::new(house, Plan::default());
+        assert_eq!(s.unblocker(&w, infantry, CLIMB_DEPTH), None);
+    }
+}
