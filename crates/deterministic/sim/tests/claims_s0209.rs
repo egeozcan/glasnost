@@ -703,6 +703,84 @@ fn stationary_friendly_contact_asks() {
     assert!(all_accepted(&w, &friends));
 }
 
+/// [`friends_ahead`] with the whole corridor raised to level 4 (walls at
+/// level 8) and, at x = 3, a one-cell high-bridge deck at level 4 over
+/// level-0 ground: the walker's destination is that deck cell. With
+/// `bridge` false, x = 3 is level-4 ground like the rest (the control).
+fn friends_before_a_deck(bridge: bool) -> (World, ObjectId, Vec<ObjectId>) {
+    let mut s = scene();
+    for x in -4..=9 {
+        s.set_cell(cell(x, -1), 0, 8);
+        s.set_cell(cell(x, 1), 0, 8);
+        s.set_cell(cell(x, 0), 0, 4);
+    }
+    s.set_cell(cell(-4, 0), 0, 8);
+    s.set_cell(cell(9, 0), 0, 8);
+    if bridge {
+        s.set_cell(cell(3, 0), 0, 0);
+    }
+    s.place_infantry(0, "Mope", cell(-2, 0), 0);
+    for sub in 2..=4 {
+        s.place_infantry(0, "Mope", cell(2, 0), sub);
+    }
+    let mut w = s.build();
+    if bridge {
+        let i = w.cells.idx(cell(3, 0)).unwrap();
+        w.cells.deck[i] = true;
+        w.cells.deck_entry[i] = true;
+        w.cells.bridge_axis[i] = glasnost_sim::cells::Axis::X;
+        // spec: S-0212 claim 4 (a deck is read through the first enabled bridge link within 1 cell: the reach region of its first end, here the corridor's)
+        w.cells.links.push(glasnost_sim::cells::BridgeLink {
+            first: cell(4, 0),
+            second: cell(2, 0),
+            along_x: true,
+            enabled: true,
+        });
+        w.regions.dirty = true;
+    }
+    let m = at(&w, Kind::Infantry, cell(-2, 0));
+    open_orders(&mut w);
+    let friends = w.cells.list(cell(2, 0), Layer::Ground).to_vec();
+    assert_eq!(friends.len(), 3);
+    order_move(&mut w, m, cell(3, 0));
+    stand_in(&mut w, m, cell(1, 0));
+    assert_eq!(inf(&w, m, cell(2, 0)), Outcome::StationaryFriendly);
+    (w, m, friends)
+}
+
+// spec: S-0209 claim 8 and F1 (within the close-enough distance, |Δz| < 208 and in contact with nothing the move ends; the walker's locomotor destination, both heights world heights) and S-0208 claim 18 and F9 (a cell destination carrying a high bridge is 414 leptons above the terrain, whatever the walker's layer): a walker at deck height close to a deck destination over low ground gives up, as on flat ground
+#[test]
+fn stationary_friendly_close_to_a_bridge_destination_gives_up() {
+    for bridge in [false, true] {
+        let (mut w, m, friends) = friends_before_a_deck(bridge);
+        let o = w.obj(m).unwrap();
+        assert_eq!(o.layer, Layer::Ground);
+        assert_eq!(
+            o.pos.z,
+            w.surface_at(o.pos.x, o.pos.y),
+            "the walker stands on level-4 ground"
+        );
+        trace::switch_on(&mut w);
+        tick::step(&mut w);
+        assert_eq!(dest(&w, m), None, "the move ends (bridge {bridge})");
+        assert!(steps(&w, m).is_empty());
+        let mine: Vec<trace::What> = trace::take(&w)
+            .into_iter()
+            .filter(|e| e.unit == m)
+            .map(|e| e.what)
+            .collect();
+        assert!(
+            mine.iter().any(|x| matches!(x, trace::What::GaveUp))
+                && !mine.iter().any(|x| matches!(x, trace::What::Failed { .. })),
+            "given up by claim 8, not by a failed search (bridge {bridge}): {mine:?}"
+        );
+        assert!(
+            friends.iter().all(|&f| dest(&w, f).is_none()),
+            "no friend is asked (bridge {bridge})"
+        );
+    }
+}
+
 /// Two idle infantry of house 1 in one cell; returns the world and them.
 fn idle_pair(tune: impl FnOnce(&mut Scene)) -> (World, Vec<ObjectId>) {
     let mut s = scene();
