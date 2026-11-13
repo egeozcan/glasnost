@@ -155,6 +155,8 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     {
         // spec: S-0314 Terms (captured mark: set by a successful ownership change, never cleared)
         ob.combat.captured = true;
+        // spec: S-0509 claim 12 (a building ownership change clears the primary-building mark, S-0213 claim 13, S-0402 Terms) (#223)
+        ob.econ.building.primary = false;
     }
     crate::econ::power::owner_changed(w, id, old);
     // spec: S-0515 claims 3, 4 and 7 (an ownership change: the acquisition bonus from a passive old owner and the income countdown restarted)

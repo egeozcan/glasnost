@@ -414,10 +414,16 @@ fn claim_12_primary_mark_cleared() {
     w.obj_mut(b).unwrap().econ.building.primary = true;
     capture_at(&mut w, "ENGI", 0, b);
     assert_eq!(owner(&w, b), Some(A), "captured");
-    assert!(!w.obj(b).unwrap().econ.building.primary, "a capture clears it");
+    assert!(
+        !w.obj(b).unwrap().econ.building.primary,
+        "a capture clears it"
+    );
     w.obj_mut(b).unwrap().econ.building.primary = true;
     ownership::change(&mut w, b, Some(B), Cause::Trigger);
-    assert!(!w.obj(b).unwrap().econ.building.primary, "a trigger transfer clears it");
+    assert!(
+        !w.obj(b).unwrap().econ.building.primary,
+        "a trigger transfer clears it"
+    );
     w.obj_mut(b).unwrap().econ.building.primary = true;
     ownership::change(&mut w, b, Some(B), Cause::Capture);
     assert!(
