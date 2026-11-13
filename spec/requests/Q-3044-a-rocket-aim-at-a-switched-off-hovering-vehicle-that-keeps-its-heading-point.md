@@ -1,9 +1,9 @@
 ---
 id: Q-3044
 title: Where does a rocket aim at a switched-off hovering vehicle that keeps its heading point?
-status: open
+status: answered
 related: [S-0506, S-0503, S-0306, M-0016, M-0003]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need
