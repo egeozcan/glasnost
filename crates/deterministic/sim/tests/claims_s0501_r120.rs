@@ -237,7 +237,7 @@ fn refused(was: &air::AirState, w: &World, a: ObjectId) -> bool {
 // ---------------------------------------------------------------------------
 // Claim 6: landing where it is; AC4's same-cell runs
 
-// spec: S-0501 claim 6 (r120, Q-2507: an aircraft in flight, moving and not landing that is given no destination gets a new flight point with no destination object: the centre of the cell claim 40's selection gives around the cell it is over, that cell itself when F7 and the flight-reservation test accept it; it flies to that point, its landing starts in that cell, the descent does not steer, and it touches down no farther than claim 24's bound) and claim 8 (r120: setting no destination while it is in flight, moving and not landing makes it land where it is); AC4 same-cell part, run (1)
+// spec: S-0501 claim 6 (r120, Q-2507: an aircraft in flight, moving and not landing that is given no destination gets a new flight point with no destination object: the centre of the cell claim 40's selection gives around the cell it is over, that cell itself when F7 and the flight-reservation test accept it; it flies to that point, its landing starts in that cell, its body is not turned toward the point, and it touches down no farther than claim 24's bound; r183, Q-3041: claim 4's descent move needs a flight point, not a destination, so it draws the descent toward that centre) and claim 8 (r120: setting no destination while it is in flight, moving and not landing makes it land where it is); AC4 same-cell part, run (1)
 #[test]
 fn ac4_run_1_landing_where_it_is_starts_in_the_cell_and_does_not_steer() {
     let (mut w, a, c) = stopped();
@@ -257,27 +257,42 @@ fn ac4_run_1_landing_where_it_is_starts_in_the_cell_and_does_not_steer() {
         "its landing starts in C: {}",
         describe(&w, a)
     );
-    // From the landing start to touchdown: claim 4's forward step alone.
+    // From the landing start to touchdown: claim 4's forward step, then, in
+    // a tick in which it descends, claim 4's descent move of 5 leptons
+    // toward C's centre (r183, Q-3041: it needs a flight point, not a
+    // destination).
     let mode = w.rules().mode;
     let stall = w.rules().quirks.aircraft_unit_step_stall;
     let ti = w.obj(a).unwrap().type_index;
     let v = w.rules().unit(Kind::Aircraft, ti).unwrap().speed;
+    let centre = glasnost_sim::world::Pos::centre(c, 0);
+    let dist = |x: i32, y: i32| {
+        (i64::from(x - centre.x).pow(2) + i64::from(y - centre.y).pow(2)).isqrt()
+    };
     let mut checked = 0;
+    let mut nudged = 0;
     for _ in 0..400 {
         let o = w.obj(a).unwrap().clone();
         let was = o.air.clone().unwrap();
+        let h0 = air::height(&w, a);
         let turning = o.body.turning(w.tick) || o.body.turning(w.tick + 1);
         let f = o.body.value(w.tick);
         step(&mut w);
         let p = w.obj(a).unwrap().pos;
         if !turning {
             let (nx, ny) = air::step(o.pos.x, o.pos.y, f, v, was.cur, stall, mode);
-            assert_eq!(
-                (p.x, p.y),
-                (nx, ny),
-                "the forward step alone, no descent move: {}",
-                describe(&w, a)
-            );
+            let off = (i64::from(p.x - nx).pow(2) + i64::from(p.y - ny).pow(2)).isqrt();
+            if air::height(&w, a) < h0 && dist(nx, ny) > 5 {
+                // spec: S-0501 Constants (descent horizontal nudge 5 leptons; table trigonometry and truncation, so at least 4)
+                assert!(
+                    (4..=5).contains(&off) && dist(p.x, p.y) < dist(nx, ny),
+                    "the forward step and the descent move toward C's centre: {}",
+                    describe(&w, a)
+                );
+                nudged += 1;
+            } else if air::height(&w, a) >= h0 {
+                assert_eq!(off, 0, "the forward step alone: {}", describe(&w, a));
+            }
             checked += 1;
         }
         if st(&w, a).ground {
@@ -286,7 +301,7 @@ fn ac4_run_1_landing_where_it_is_starts_in_the_cell_and_does_not_steer() {
     }
     let s = st(&w, a);
     assert!(s.ground, "a touchdown: {}", describe(&w, a));
-    assert!(checked > 0);
+    assert!(checked > 0 && nudged > 0, "{checked} {nudged}");
     assert!(
         near(w.obj(a).unwrap().pos.cell(), c),
         "in C or a cell next to it: {}",
