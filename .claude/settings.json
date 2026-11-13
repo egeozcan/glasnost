@@ -25,6 +25,13 @@
       "WebFetch(domain:ares.strategy-x.com)",
       "WebFetch(domain:chronodivide.com)",
       "WebFetch(domain:game.chronodivide.com)"
+    ],
+    "allow": [
+      "Bash(git fetch)",
+      "Bash(git fetch *)",
+      "Bash(git merge-base *)",
+      "Bash(git check-ignore *)",
+      "Bash(git grep *)"
     ]
   }
 }
