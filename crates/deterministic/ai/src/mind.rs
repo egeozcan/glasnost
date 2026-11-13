@@ -13,7 +13,8 @@
 //!   building under construction or being sold); the firing check refuses
 //!   the others (claim 4) only once they are in range, so the brain reads
 //!   the test itself. No two controllers are sent at the same
-//!   object in one think;
+//!   object, in one think or across thinks: a controller on its way holds
+//!   its enemy until it stops attacking it;
 //! - does not send an unlimited controller (claim 16) when one more victim
 //!   would bring it to an overload level that damages it: a person reads
 //!   the overload rules and stops before the pulses start ([`safe_more`]).
@@ -96,7 +97,9 @@ pub fn swaps_victim(w: &World, c: ObjectId, t: Target) -> bool {
 impl Special {
     /// Mind control: every idle or guarding controller that is free is sent
     /// at the costliest seen enemy within [`REACH`] cells it may take (then
-    /// the nearest), one controller per enemy per think.
+    /// the nearest), one controller per enemy: an enemy that a controller
+    /// of the house attacks already, from this think or an earlier one, is
+    /// left to it.
     pub(crate) fn mind_control(
         &mut self,
         script: &Script,
@@ -108,7 +111,22 @@ impl Special {
         if enemies.is_empty() {
             return;
         }
-        let mut aimed: Vec<ObjectId> = Vec::new();
+        // design: own AI (#42): an enemy a controller of the house is
+        // already attacking (sent in an earlier think) is taken, so no
+        // second controller is sent at it.
+        let mut aimed: Vec<ObjectId> = own
+            .iter()
+            .filter_map(|&id| {
+                let o = w.obj(id)?;
+                if mind::controller(w, id).is_none() || o.beh.current != Some(Behaviour::Attack) {
+                    return None;
+                }
+                match o.target {
+                    Some(Target::Object(e)) => Some(e),
+                    _ => None,
+                }
+            })
+            .collect();
         for &id in own {
             let guarding = w.obj(id).is_some_and(|o| {
                 o.dest.is_none()
