@@ -1,9 +1,9 @@
 ---
 id: Q-3042
 title: What ends an ordinary jumpjet crash while the look-ahead ground reference is raised by a listed object?
-status: open
+status: answered
 related: [S-0502, S-0312, S-0414]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need
