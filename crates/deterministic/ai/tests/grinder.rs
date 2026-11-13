@@ -457,6 +457,70 @@ fn a_far_unit_that_does_not_move_tries_another_side() {
     assert_eq!(w.obj(far).unwrap().pos.cell(), start, "it never moved");
 }
 
+// design: own AI (#23) and S-0214 claim 11 (a click on a cell out of the unit's reach gives a move to a cell the search finds instead): when the click on the grinder's side moves the unit to another cell, a failure there counts for that side too, so the next think tries another side instead of clicking the same one again (the search may find another cell each time, so a failure kept only for the cell it found never stops the click).
+#[test]
+fn a_far_unit_whose_side_click_is_moved_does_not_repeat_it() {
+    let g = game(99);
+    let (mut w, b) = scene(&g);
+    let far = spawn(&mut w, Kind::Infantry, "WALKER", 0, 16, 6);
+    w.obj_mut(far).unwrap().health /= 5;
+    // A blocked cell on the side facing the unit: out of its reach, so a
+    // click there moves the unit to a cell the search finds beside it.
+    let g0 = w.obj(b).unwrap().pos.cell();
+    let first = CellXY::new(g0.x + 4, g0.y);
+    let i = w.cells.idx(first).expect("on the map");
+    w.cells.category[i] = glasnost_sim::passability::category::BLOCKED;
+    w.regions.dirty = true;
+    glasnost_sim::regions::ensure(&mut w);
+    settle(&mut w);
+    let mut br = brain(&w);
+    let dest = |orders: &[Order]| {
+        orders.iter().rev().find_map(|o| match o {
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Move,
+                dest: Some(Target::Cell(c)),
+                ..
+            } if *actor == far => Some(*c),
+            _ => None,
+        })
+    };
+    // Where a click on the blocked side sends the unit now.
+    let on_first = |w: &World| {
+        let r = glasnost_sim::targeting::click(
+            w,
+            HouseId(0),
+            &[far],
+            glasnost_sim::targeting::ClickOn::Cell(first),
+            glasnost_sim::targeting::Modifiers::default(),
+        );
+        dest(&r.orders)
+    };
+    let start = w.obj(far).unwrap().pos.cell();
+    let mut given: Vec<CellXY> = Vec::new();
+    for k in 0..3 {
+        // The orders are dropped: the unit stays idle on its cell.
+        let orders = br.think(&w);
+        let Some(c) = dest(&orders) else { break };
+        if k == 0 {
+            assert_ne!(c, first, "the click on the blocked side is moved");
+            assert_eq!(Some(c), on_first(&w), "the blocked side is clicked first");
+        } else {
+            assert_ne!(
+                Some(c),
+                on_first(&w),
+                "think {k}: the blocked side is clicked again after {given:?}"
+            );
+        }
+        given.push(c);
+        for _ in 0..15 {
+            testkit::run(&mut w, 1);
+        }
+    }
+    assert!(given.len() > 1, "another side is tried: {given:?}");
+    assert_eq!(w.obj(far).unwrap().pos.cell(), start, "it never moved");
+}
+
 // design: own AI (#8) and S-0411 claim 6 (a building line with an item takes no starting or queuing build order): while the building line makes something else, the house that has a use for a grinder does not order one (the sim would refuse it).
 #[test]
 fn no_grinder_order_while_the_building_line_is_busy() {
