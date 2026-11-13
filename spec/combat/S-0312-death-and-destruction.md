@@ -2,14 +2,14 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 74
+revision: 77
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-12
+approved-on: 2026-11-13
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132,
-Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000]
+Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000, Q-3042]
 supersedes: []
 ---
 
@@ -478,7 +478,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 
 15. **Crashing vehicles and removal.** A destroyed vehicle whose type can crash, and whose height
     above the surface is positive, starts to crash (claim 16) and stays in play until it hits the
-    ground. On a bridge deck that height is measured from the deck (claim 11's reading), so a
+    ground. For a jumpjet, S-0502 claim 18 says when its crash ends; a held-up crash can keep it
+    in play indefinitely, as long as nothing else ends it, which claim 16 and S-0502 claim 18
+    rate medium. On a bridge deck that height is measured from the deck (claim 11's reading), so a
     crashable vehicle standing on a deck cannot start a crash and is removed as below. A vehicle
     already sinking and whose type cannot crash stays in play, including the zero-health
     aftermath of claim 32. For a crashable type, failure to start a crash instead removes it
@@ -491,7 +493,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     - Backing: `measurable` (scenarios D11, its variant h for a deck, and D8's first-hit crashable
       variant)
     - Confidence: high, except for a vehicle on a bridge deck: medium there, claim 11's reading at
-      claim 11's level (D11 variant h, with its control, can fail it)
+      claim 11's level (D11 variant h, with its control, can fail it); and medium that nothing
+      else ends a held-up jumpjet crash, as S-0502 claim 18 rates it
 
 ### Aircraft and crashing
 
@@ -510,11 +513,15 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     crash motion: its growing fall counter supplies a downward contribution, not necessarily
     the net descent, because ordinary altitude adjustment can still apply. That claim also owns
     its sinking branch. A crashable vehicle using jumpjet movement uses the crash motion of
-    S-0502 claim 18, with its magnetic-lift qualifications. S-0502 claim 3's safety
+    S-0502 claim 18, with its magnetic-lift qualifications. For any object using jumpjet
+    movement, the crash start also makes S-0502 claim 18's empty destination assignment at
+    once, inside the hit. A committed jumpjet infantry unit then reroutes with its eligible
+    standing-position draw over 0 to 3; a jumpjet vehicle's reroute takes no draw. S-0502 claim 3's safety
     departure guarantees the next movement update for a pending crash above the surface,
     even without a move order: a dead hovering unit cannot remain suspended merely because
     its order ended. This guarantee is an engine design rule, not established original
-    behaviour. The ordinary non-rocket impact rules below still belong to this claim. Magnetic drops are
+    behaviour. A raised look-ahead ground reference can still hold the fall up in the
+    original (S-0502 claim 18, `quirks.jumpjet_crash_lookahead`). The ordinary non-rocket impact rules below still belong to this claim. Magnetic drops are
     different: S-0607 claims 16 to 19 own a dropped seized unit's impact, including clear-cell
     survival and sinking. Only a vehicle whose type can crash retains this claim's ordinary
     crash-end exception (S-0607 claim 18); a dropped seized aircraft does not (S-0607 claim 19).
@@ -547,7 +554,7 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     pick. The crash start's effects above apply as S-0501 claim 46 states, with one difference in
     credit: its passengers are lost and credited to nobody, since the crash has no attacker, and
     the three tumbling draws are taken.
-    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0507 scenario T14 for uncredited ground-aircraft passenger cleanup, S-0522 scenario P9 for the attacker credit of the passengers lost at the crash start of an aircraft that was shot down (P9 observes only that case), S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9. The original jumpjet idle-crash aftermath remains `unmeasured` under S-0502 claim 3 (diagnostic J15): an ordinary killing hit also clears orders and can invoke its stopped-movement rule, so the otherwise idle case has not been isolated. The pending-crash update guarantee is design, not an oracle observation.
+    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0507 scenario T14 for uncredited ground-aircraft passenger cleanup, S-0522 scenario P9 for the attacker credit of the passengers lost at the crash start of an aircraft that was shot down (P9 observes only that case), S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9. The original jumpjet idle-crash aftermath remains `unmeasured` under S-0502 claim 3 (diagnostic J15): the crash start's destination clear of S-0502 claim 18 can reroute a committed unit, so the otherwise idle case has not been isolated. The destination clear and the held-up crash have S-0502 claim 18's backing (S-0502 scenarios J12 and J31). The pending-crash update guarantee is design, not an oracle observation.
       The fall-back crash of S-0501 claim 46 is `measurable` through S-0501 scenario AC29 part f
       (its health, fall and impact, the score screen's counts, and the absence of debris and of
       the explosion-list animation), and its three tumbling draws through scenario D11 variant
@@ -562,7 +569,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       the attacker credit of the passengers lost at the crash start of an aircraft that was shot
       down, which S-0522 scenario P9 observes (S-0522 claim 15).
       Rocket interception inherits S-0506
-      claim 20's confidence; jumpjet motion inherits S-0502 claim 18's confidence,
+      claim 20's confidence; jumpjet motion is high for its fall, spin and the held-up crash's
+      reference, height per update, speed reset and held-up condition, and medium that nothing else ends a
+      held-up crash, as S-0502 claim 18 rates them; high for the jumpjet crash start's
+      destination clear at the hit, with the infantry reroute draw (S-0502 claim 18),
       medium for the non-rocket impact rules; low for the double death weapon; medium for the
       fall-back crash of S-0501 claim 46, as that claim rates its health 0 at the start, its dead
       fall, its counts and the absent killing-hit effects until AC29 part f runs, and its
@@ -1888,7 +1898,10 @@ a stock situation does this). *Observable:* where the death weapon detonates (im
 of death), and in variant b the amount. *Expected:* the death weapon goes off at the impact point,
 not where the aircraft died; variant b: a detonation with the aircraft's remaining health. Variant
 c (claim 15): a test vehicle type with the crashable flag, killed while above the terrain, off any
-deck (for example in jumpjet flight): it stays in play until it reaches the ground.
+deck (for example in jumpjet flight). For a jumpjet, place no other object in its own cell or the
+neighbouring cells and give the test type a crash rate above 0, so that its crash is not held up
+and does fall (S-0502 claim 18 and its Edge cases): it stays in play until it reaches the
+ground.
 
 *Falsified if:* the death weapon goes off in the air for a non-exploding aircraft, the detonation of
 variant b has an amount other than the aircraft's remaining health, or the vehicle of variant c
@@ -2549,3 +2562,8 @@ and point to claim 15 here; for an aircraft it stays "above the terrain" (claim 
 The former passenger-order question is resolved by applying the existing neutral/special-house
 ruling and the stated exclusion of the team system: claim 25 retains the original's non-team
 *hunt* order. No new project-lead decision is requested.
+
+S-0203 claim 6, whose three passages say a crashing object "stays in play until it hits the
+ground" (citing claims 15 and 16 here): for an object using jumpjet movement, S-0502
+claim 18 says when the crash ends, and a held-up crash can keep it in play indefinitely in the
+original (`quirks.jumpjet_crash_lookahead` on). Those passages can add that cross-reference.
