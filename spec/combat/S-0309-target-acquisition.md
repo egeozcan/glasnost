@@ -2,15 +2,15 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 133
+revision: 140
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-12
+approved-on: 2026-11-13
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
 Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712, Q-2747, Q-2801, Q-2841, Q-2987,
-Q-2988]
+Q-2988, Q-3061]
 supersedes: []
 ---
 
@@ -1120,13 +1120,16 @@ index 1. This is a design rule, not an additional claim about the original.
     not repeat that arrival delay every tick indefinitely. If another fall-back already used the
     common effects on the same tick, the refresh waits for a later fall-back.
 
-    When the object remembered only a target, removal of that target changes the memory to a
-    destination: the cell of the target's last position. The remembered target is cleared, but
+    When the object remembered only a target, the loss of that target changes the memory to a
+    destination: the cell of the target's position at that loss. The target is lost when it is destroyed
+    (at the killing hit, also when it stays in play after that hit, as in claim 27), when it goes
+    off the map, except at a superweapon warp member's departure (claim 27), and when it is
+    removed. The remembered target is cleared, but
     the memory and its engaged mark are kept. A fall-back while engaged resumes *move* to
     that cell by part (b). Arrival there without a further engagement ends the memory as above.
     If the actor is not engaged and falls back while still in *attack*, part (b) removes the
-    memory instead of resuming it. A destroyed object that still exists is not yet a removed
-    target for this rule (S-0312 and S-0203 own removal). No separate attack-move arrival
+    memory instead of resuming it. Whether claim 28's moments or a vehicle thief's take-over also
+    change the memory is open (Open questions). No separate attack-move arrival
     timeout or search-radius extension exists in these cases: an enemy beyond the later resting
     object's search area does not by itself cause a new advance.
     - Backing: `measurable` (scenario A6: part d for the not-engaged destination search,
@@ -1137,10 +1140,13 @@ index 1. This is a design rule, not an additional claim about the original.
       end-of-update check under a plain move order, and part o for conversion of a
       removed target to its last cell and the subsequent fall-back and arrival). The once-per-tick
       limit inherits S-0215 claim 13's backing. The spawner pending-target consequences are
-      `measurable` by scenario A6 part i and S-0506 scenario R19.
+      `measurable` by scenario A6 part i and S-0506 scenario R19. `unmeasured`: the loss at the
+      killing hit of a target that stays in play after it, and the loss when it goes off the map,
+      because part o uses a type removed at once on destruction and no part sends the remembered
+      target off the map.
     - Confidence: high for the refresh context and removal when neither engaged nor in *guard*,
       medium for the searches, resumption, arrival consequences (an infantry unit's end-of-update
-      fall-back as S-0215 claim 22 rates it) and removed-target conversion
+      fall-back as S-0215 claim 22 rates it) and the conversion at each of the three losses
 
 24. **Redirected targets.** Setting a target redirects it in three cases:
 
@@ -1429,7 +1435,8 @@ index 1. This is a design rule, not an additional claim about the original.
 
     When the drop ends an override of the holder (S-0215 claim 10), the revert can make the same
     object the holder's target again, so a destroyed object that stays in play, or an object off the
-    map, can still be held. The removal is expected to drop it again after the revert (medium), so
+    map, can still be held. The object leaves the holder's put-aside target only after this revert
+    (claim 27a), so the revert still finds it there. The removal is expected to drop it again after the revert (medium), so
     that no holder holds a removed object. DECIDED (autonomy, 2026-10-30), for Q-2006 question 3:
     while a holder holds an object that a revert gave it again and that is off the map, or destroyed
     but still in play, our engine treats that target as no target in the holder's firing step: no
@@ -1590,6 +1597,101 @@ index 1. This is a design rule, not an additional claim about the original.
       exception, as S-0513 claim 39a rates them, low for its taking a target that rule's search
       finds, as S-0513 claim 39a rates them; medium for the absence of the timer draw during game
       set-up
+
+27a. **A put-aside object that leaves play (Q-3061).** When an object is destroyed, goes off the
+    map or is removed, every holder that has it as its put-aside target under an override in
+    effect (S-0215 claim 10) loses it from there inside the same action. A destroyed object is lost
+    from there at the killing hit, also when it stays in play after that hit. A put-aside
+    destination that is that object is lost too: from the put-aside slot, or, for a holder whose
+    override claim 27's drop ends, from the destination that the revert gives back (Order within
+    the action). Such a holder whose current target is also the object always has its override
+    ended by that drop, since S-0215 claim 10 reverts it at each of these causes. The departure
+    of a superweapon warp member, at which S-0215 claim 10 makes no revert, is not covered here.
+    - **Order within the action.** Claim 27's drop by a holder whose current target is the object
+      comes first, together with the revert that this drop causes when it ends the holder's
+      override. The loss from the put-aside target and destination comes after them. So a holder
+      whose override that drop ends has already had what was put aside brought back by that
+      revert: the object itself when it was the put-aside target, which the holder then holds
+      again as claim 27 gives for that case, under its DECIDED rule. A put-aside destination that
+      is the object becomes its destination again, and the holder loses it from there later in
+      the same action, after the revert, so that it is left with no destination. DECIDED
+      (autonomy, 2026-11-13), for Q-3061: our engine does the same for an engineer whose restored
+      behaviour is *capture*. The original keeps such an engineer's destination when the object
+      is still alive and not being sold, which at these causes needs a live building to be
+      removed other than by a sale (an erasure by a trigger is one); the kept
+      destination then names an object out of play, so this is not copied, and no switch is
+      offered. The loss from the put-aside slots then empties slots whose override has already
+      ended, and changes nothing for that holder.
+    - **Every other holder**, one whose current target is another object or none, loses the
+      object from its put-aside target (and destination) while its override goes on. Nothing else
+      changes for it at that moment: a put-aside destination that is a cell or another object is
+      kept; no timer draw is taken, since this is not a drop of the holder's current target; and
+      the override stays in effect, so no revert happens then.
+
+    When that override ends later, the revert of S-0215 claim 10 brings back the suspended
+    behaviour, no target, and whatever put-aside destination is left. The holder then does what
+    that behaviour does with no target: a restored *attack* falls back to rest at its next
+    processing (S-0215 claim 23), and S-0215 claims 13 to 15 decide its resting state, for one left
+    with a destination as well (claim 14's destination row with its own exceptions, and claim 23's
+    break-off search where it applies). After
+    the revert it does not fire at the object or at its last place unless a new search, order or
+    retaliation (claim 18) gives it that object or place. Consequences:
+    - An object that goes off the map and comes back onto it before the revert is not given back:
+      it was lost from the put-aside target when it went off the map. The holder can take it again
+      as any other object: by a search, an order or a retaliation (claim 18).
+    - A holder's attack-move memory (claim 23) is not one of the put-aside slots. When the object
+      is destroyed, goes off the map or is removed, a remembered target that is the object is
+      turned in the same action into a remembered destination at the cell of its position then,
+      by claim 23 (d). So a resumed attack move (claim 23 b) moves the holder towards that cell
+      and does not make the object its target again.
+    - The rule is the same for every override: the retaliation of claim 18, the obstacle override
+      of S-0207 claim 15, and an aircraft's.
+    - At the moments of claim 28's drops (the start of cloaking, full cloak, going underground), a
+      holder whose override goes on loses a put-aside target that is that object in the same way
+      unless its house senses the object's cell. Unlike claim 28's drop of a current target, an
+      object of the holder's own house is no exception: the original applies the own-house
+      exception only to the current target, and this difference is copied as it is, since no
+      gameplay reason to change it is known. For such a holder, a put-aside destination that is
+      that object is lost at those moments whatever senses its cell.
+    - An owner change or a locomotor jump of the object, which revert a holder whose current
+      target it is (S-0215 claim 10), takes nothing out of the put-aside target or destination: a
+      later revert gives the object back as the holder's target. A holder's own owner change is
+      claims 30 and 31's: where such a holder keeps its override through the change (claim 31,
+      `quirks.owner_change_keeps_override`), its later revert brings back what is still put aside
+      then, so a put-aside object that left play in between is not brought back.
+    - Backing: `measurable` (scenario A18 part h: run h1 for a destruction by a hit, run h2 for
+      boarding a transport, run h3 for boarding and coming back onto the map before the revert,
+      run h4 for the retaliation override, run h5 for an owner change, run h6 for a removal by a
+      crush; the holder's targeting timer, which A18 records, for the absence of a timer draw, and
+      its target and suspended behaviour for the override still in effect).
+      `unmeasured`: the order within the action, because no part of A18 gives a holder the
+      object as both its current and its put-aside target; the other removals (claim 27's list:
+      erasure by a trigger, an exit at the map edge, an engineer used up, a dropped unit at the
+      end of its fall), because part h removes the object only by a crush; the moments of claim
+      28, an aircraft holder, a put-aside destination that is the object itself, and a holder that
+      keeps its override through its own owner change, because no part of A18 puts an override in
+      effect for such a holder, with such a destination, or before its put-aside target cloaks or
+      goes underground; and the locomotor jump, because no part of A18 has a put-aside object of
+      a teleporting type. `unmeasured` also: the original's kept destination for an engineer in
+      *capture*, because it needs a live building removed other than by a sale, which no part of
+      A18 does, and our engine does not copy it (DECIDED above); and the attack-move memory
+      bullet, because no part of A18 gives the holder an attack-move memory. `unmeasured` also: the put-aside destination that is a cell, kept and
+      given back by the revert, because a read at the end of the revert tick cannot tell the
+      destination the revert gives back from what the holder's own turn later in that tick makes
+      of it (S-0215 claims 13 to 15 and 23).
+    - Confidence: high, for a holder whose current target is another object, under the obstacle
+      override after a destruction by a hit, a going off the map and a removal by a crush (h1,
+      h2, h3, h6) and under the retaliation override after a destruction by a hit (h4): the outcome at the later revert, which gives back no target and is followed by
+      no shot at the object or its last place until a new search, order or retaliation; in the tick in which the object leaves play, no timer
+      draw and the override still in effect; an object back on the map not given back; the
+      object's owner change leaving it put aside (h5). Medium: the attack-move memory bullet; the moment of the loss inside the
+      action, which part h does not read, only its outcome at the revert; the order within the
+      action, after claim 27's drop and revert, and the restored destination's loss that follows
+      it; the other removals; the restored destination and the resting
+      state that follows, which rest on S-0215 claims 13 to 15 and 23; the original's kept
+      destination for an engineer in *capture*; the moments of claim 28
+      with their sensing and own-house rule; a put-aside destination that is the object; an
+      aircraft holder; a holder's own owner change under claim 31; the locomotor jump.
 
 28. **Cloaking and going underground drop a held target, with exceptions.** The drops at cloaking
     are S-0516 claim 14's: at the start of cloaking and again when the object becomes fully cloaked
@@ -2482,7 +2584,12 @@ between the wall target *W*, the best candidate and no target.
   timer draw (scenario A1, part f). The timer reset at a dropped target (claims 27 and 28) is not
   a search draw: it comes inside the action that destroys, removes, cloaks or buries the object,
   at both cloak moments of claim 28. Its place against the destruction's own draws (S-0312
-  claim 1) is open (Open questions). Claim 29's periodic check and its drops take no draw. At a crush the draws follow claim 27's order: per removed
+  claim 1) is open (Open questions). When a building leaves the map without being destroyed,
+  whether by a pack-up (S-0415 claim 13), a completed sale or another removal, every holder drops
+  it as claim 27 gives, with a timer reset draw only where that claim takes one, before the
+  building's foundation cells are recalculated, so before any draw of that recalculation (S-0010
+  claims 12 and 19). This order is medium and `unmeasured`, for the reasons given in S-0415 claim
+  13's backing. Claim 29's periodic check and its drops take no draw. At a crush the draws follow claim 27's order: per removed
   object in the cell layer's listing order, a vehicle's animation picks (S-0210 claim 4) before
   its holders' timer draws, the holders in creation order. Scenario A18 part f tests the
   holders' order and the order between removed objects (medium); the animation picks' place
@@ -3076,7 +3183,7 @@ set in the test map's override sections.
   holding only a target: order an attack move on enemy *X* 20 cells away, with a second enemy
   *Y* 6 cells from the route and within weapon range, where *X* is beyond the search radius and
   reach. *Expected:* a search picks *Y* and the engagement survives tick starts; on the later
-  fall-back it resumes *X*, provided *X* still exists. A run without *Y* keeps *X* while it lives:
+  fall-back it resumes *X*, provided *X* has not been destroyed. A run without *Y* keeps *X* while it lives:
   an unsuccessful search restores *X* within the same tick. A third run moves the engaged target
   beyond reach and leaves another candidate within the search: the next expiry searches again
   and picks that candidate. *Falsified if:* an ordinary next-tick start ends the engagement,
@@ -4372,6 +4479,67 @@ hit or leaves the map. Each part runs 5 times from a fresh game, unless it says 
   and has a destination: in g2, and in g1 where the recorder reads it, the one it had at the end of
   its own turn in that tick. *Falsified if:* *A* has no destination at the end of such a kill tick,
   or, where the recorder reads *A*'s own turn, one different from that read.
+- *Part h (a put-aside object that leaves play, claim 27a, Q-3061):* a human-owned armed vehicle
+  *A* of a driving type without the crusher and omni-crusher flags and not a hunter-seeker type,
+  so that its approach destination is a cell (S-0215 claim 37), and a one-cell-wide corridor
+  between *A* and an unarmed, stationary vehicle *X* of a computer house, far beyond *A*'s weapon's
+  range. An unarmed, stationary vehicle *Y* of the same computer house, with raised health so that
+  *A* needs several shots to kill it, stands in the corridor. No object of that house other than *X* and *Y* is
+  within *A*'s sight or guard range, and its other objects stand far away. A human-owned armed
+  vehicle *K* with a weapon that kills *X* in one hit stands next to *X*. Also record *A*'s current
+  and suspended behaviour and its destination at the end of each tick. *A* is ordered to attack
+  *X*. Once *A* has a destination, its step into *Y*'s cell is refused and it overrides to attack
+  *Y* (S-0207 claim 15), and while *A* fires at *Y*:
+  - (h1) *K* is ordered to attack *X* and kills it.
+  - (h2) instead of *h1*, *X* boards a transport that is not open-topped (a map trigger, timed
+    to fire after *A*'s override begins, gives *X* and the transport a team whose script loads
+    it).
+  - (h3) as *h2*, then the transport carries *X* to a place beyond *A*'s sight and guard range and
+    unloads it there, before *Y* is destroyed.
+  - (h4) the retaliation override in place of the obstacle override, with no corridor and a
+    holder that may retaliate while it holds a target. A human-owned holder may not (S-0215
+    claim 18), so, as in part f of A15 (claim 25 part h), the holder is an armed vehicle *A* of the
+    neutral house in *guard*, whose type has every threat coefficient 0 except the special-threat
+    coefficient (test map), placed by the test map as A15 places neutral-house objects (with the
+    special house instead when the game shows the neutral house allied with the human house). *X*
+    is an unarmed, stationary vehicle of the human house within *A*'s
+    weapon's range, with raised health so that *A* cannot kill it during the run, and *A*'s own
+    search takes it (claim 1). *Y* is an infantry unit of the human house of a type whose special
+    threat value the test map sets above *X*'s, armed with a weapon too weak to kill *A*, with
+    raised health so that *A* needs several shots to kill it. The test map gives *Y*'s type an
+    ammunition of 1, so that *Y* fires once (infantry never regain ammunition, S-0301 claim 11). Once *A* holds *X*, *Y* attacks *A* from
+    beyond *A*'s weapon's range, so that *A* retaliates against *Y* (claim 18, claim 25 part h).
+    The test map sets *A*'s guard range (or, with a guard range of 0, its weapon's reach) below
+    *Y*'s distance when *Y* fires, so that no search of *A* (claim 8) can take *Y* first. *K*, whose weapon the test map gives a damage above *X*'s raised health, is
+    then ordered by force-fire to attack *X* and kills it with one hit.
+  - (h5) as *h1*, but in place of *K*'s kill a map trigger, timed as in *h2*, gives *X* to a
+    third computer house, allied with neither.
+  - (h6) as *h1*, but *X* is crushable and *K* is a human-owned crusher set up as *C* in part b
+    (crusher and omni-crusher flags, ordered to attack *X*), with *X*'s health raised so that *K*'s
+    weapon cannot kill it: *K* removes *X* by a crush. A run in which *K* does not crush *X*
+    decides nothing.
+
+  Then *A* goes on firing at *Y* until *Y* is destroyed. A run decides nothing if *A* never
+  overrides, if the event of the run (in h2, h3 and h5, the trigger) comes before *A*'s override
+  begins, if *Y* is destroyed before or in the tick of that event, or if *A* is hit by anything
+  other than *Y* (in h4, than *Y*'s weapon). In h4, a run also decides nothing if *A* does not
+  retaliate against *Y* while it holds *X*, or if *Y* hits *A* more than once: a later hit could
+  make *A* retaliate again, which puts *Y* aside in place of *X* (S-0215 claims 10 and 18), so *X*
+  would not come back whatever happens at its departure. *Expected:* in the tick in which *X* leaves play
+  (h1 to h4, h6), *A*'s targeting timer is not reset: if it has more than 10 ticks left before
+  that tick's events, it goes on counting down from there (a run in which it has at most 10 left
+  decides nothing for this point), and at the end of that tick *A* still holds *Y* and still has a
+  suspended behaviour. In h1 to h4 and h6, from the tick of *Y*'s
+  destruction *A* holds no target until a new search or order gives it one, and, until a search
+  or order gives it *X* or *X*'s last cell, has no fire event at *X*, at *X*'s last cell or at any
+  place without a target. In h3 *A* does not hold *X* at the end of the revert tick although *X* is on
+  the map. In h5 *A* holds *X* again at the end of the revert tick. Five valid runs per run
+  letter. *Falsified if:* *A*'s targeting timer, with more than 10 ticks left, is reset in the
+  tick in which *X* leaves play, or *A* does not hold *Y* or has no suspended behaviour at the end
+  of that tick; in h1 to h4 and h6 *A* holds *X* at the end of the revert tick, or, after the
+  revert and before any search or order gives it *X* or *X*'s last cell, fires at *X*, its last
+  cell or any place without a target; in h5, *A* does not hold *X* at the end of the revert
+  tick.
 
 **A19: a holder that changes owner (claim 30; Q-2712).** A tiny flat skirmish map, one human house
 *H* and two computer houses *E* and *F*, none allied with another, game speed 6, no engine add-on
@@ -4699,6 +4867,10 @@ Each part runs 5 times from a fresh game.
   lists them and rates the assumption). A scenario that sees a held target
   dropped in a tick that claim 29 and the other claims here do not give should record the
   holder's owner, its target's owner and the holder's behaviour.
+- Claim 23 (d) at claim 28's moments and at a take-over. The original is believed to change a
+  remembered target into a remembered destination at its cell also at the start of cloaking, at
+  full cloak, on going underground and when a vehicle thief takes the object over, whatever
+  senses its cell; low, `unmeasured`: no scenario here does one of these to a remembered target.
 - Q-2006 question 3, the original's side of one case. A held object that a revert restores after
   it is destroyed or goes off the map (claim 27): what the original's holder does with it while
   it stays in play as a dying object or stays off the map, and what the firing check answers for
@@ -4720,6 +4892,15 @@ Each part runs 5 times from a fresh game.
   Q-1761 stays only partly settled: question 3 rests on that row.
 
 ## Changes for other specs
+
+S-0215 claim 10: the target and destination that a revert brings back are those still put aside
+at the revert. Claim 27a here takes an object that leaves play out of the put-aside target (and
+out of the put-aside destination when it is that object) inside the action in which it leaves
+play, after claim 27's drop and the revert that drop causes. So a revert caused by that drop can
+still bring the object back as the holder's target (claim 27), while a destination that it brings
+back and that is the object is lost again inside the action, and a later revert of an override
+that went on brings back no target. Claim 10's sentence "the target and destination put aside by the override come
+back" could say so, and point to claim 27a here. Level and backing: those of claim 27a.
 
 S-0212 claim 4: its backing should distinguish its own pathfinding scenarios from the
 new acquisition fixture in A11 part j here. Map-placed cliff infantry provide a proposed
