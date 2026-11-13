@@ -4,7 +4,7 @@
 use glasnost_num::{F32, F64};
 
 use crate::combat::data::{Ability, TypeCombat};
-use crate::rules::Kind;
+use crate::rules::{Kind, SimRules};
 use crate::world::{ObjectId, World};
 
 /// A veterancy rank (S-0311 Terms).
@@ -43,10 +43,17 @@ pub fn rank(w: &World, id: ObjectId) -> Rank {
 pub fn type_combat(w: &World, id: ObjectId) -> Option<&TypeCombat> {
     let o = w.obj(id)?;
     let r = w.rules.as_deref()?;
-    match o.kind {
-        Kind::Building => r.buildings.get(o.type_index as usize).map(|b| &b.combat),
+    type_combat_in(r, o.kind, o.type_index)
+}
+
+/// The combat fields of a type, read from rules `r` (as [`type_combat`]).
+/// A caller that holds `w.rules_arc()` borrows from it, so the record
+/// outlives later changes to the world without a copy.
+pub fn type_combat_in(r: &SimRules, kind: Kind, type_index: u32) -> Option<&TypeCombat> {
+    match kind {
+        Kind::Building => r.buildings.get(type_index as usize).map(|b| &b.combat),
         Kind::Terrain => None,
-        _ => r.unit(o.kind, o.type_index).map(|u| &u.combat),
+        _ => r.unit(kind, type_index).map(|u| &u.combat),
     }
 }
 

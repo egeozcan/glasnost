@@ -221,14 +221,16 @@ fn own_locomotion(w: &mut World, id: ObjectId) -> bool {
     let t = w.tick;
     let r = w.rules_arc();
     let q = r.quirks;
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return false;
     };
-    let Some(ws) = o.walk.clone() else {
+    let Some((ws_target, ws_arrived)) = o.walk.as_ref().map(|s| (s.target, s.arrived)) else {
         return false;
     };
-    if let Some(target) = ws.target {
-        let here = (o.pos.x, o.pos.y);
+    // The walker as the update began, which the step reads.
+    let (pos, kind, type_index, layer) = (o.pos, o.kind, o.type_index, o.layer);
+    if let Some(target) = ws_target {
+        let here = (pos.x, pos.y);
         let tp = (target.x, target.y);
         // spec: S-0208 F2 (D = trunc(√̃(Δx² + Δy²)); arrival when D < 17)
         let d = root_floor(dist2(here, tp), q.table_root_distance, r.mode);
@@ -296,10 +298,10 @@ fn own_locomotion(w: &mut World, id: ObjectId) -> bool {
             nx += (tp.0 - here.0).signum();
             ny += (tp.1 - here.1).signum();
         }
-        let old_cell = o.pos.cell();
-        let new_pos = Pos::new(nx, ny, o.pos.z);
+        let old_cell = pos.cell();
+        let new_pos = Pos::new(nx, ny, pos.z);
         // spec: S-0206 claim 7 (the infantry body turns at the rate of its rules: 127 with quirks.infantry_fixed_turn_rate)
-        let omega = r.unit(o.kind, o.type_index).map_or(0, |u| u.turn_rate);
+        let omega = r.unit(kind, type_index).map_or(0, |u| u.turn_rate);
         if let Some(ob) = w.obj_mut(id) {
             ob.body.turn_to(f, t, omega);
             ob.pos = new_pos;
@@ -310,7 +312,7 @@ fn own_locomotion(w: &mut World, id: ObjectId) -> bool {
             }
         }
         if new_pos.cell() != old_cell {
-            let layer = entered_layer(w, o.layer, old_cell, new_pos.cell());
+            let layer = entered_layer(w, layer, old_cell, new_pos.cell());
             changed_cell(w, id, old_cell, new_pos.cell(), layer);
         }
         // spec: S-0209 claim 10 (the blockage delay starts afresh only after a walking step)
@@ -320,7 +322,7 @@ fn own_locomotion(w: &mut World, id: ObjectId) -> bool {
         return true;
     }
     // Standing on a standing position.
-    if ws.arrived == Some(t) {
+    if ws_arrived == Some(t) {
         // spec: S-0208 claim 6 (it does not choose its next walking target on its arrival tick)
         return false;
     }

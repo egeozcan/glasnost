@@ -18,7 +18,7 @@ pub fn spin_target(f: u16) -> u16 {
 pub fn tick(w: &mut World, id: ObjectId, facing_error: bool) {
     let t = w.tick;
     let r = w.rules_arc();
-    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(o) = w.obj(id) else { return };
     if o.kind != Kind::Vehicle {
         return;
     }

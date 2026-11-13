@@ -66,7 +66,7 @@ pub fn track_body_stop(w: &mut World, id: ObjectId) {
 /// A vehicle's own firing step (S-0310 claim 9). Returns whether the check
 /// gave a facing error (for the turret rows of S-0206 claim 9).
 pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return false;
     };
     if o.kind != Kind::Vehicle || o.combat.killed {
@@ -76,8 +76,10 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
     let Some(u) = rules.unit(o.kind, o.type_index) else {
         return false;
     };
+    // The destination as the step began, which the reply reads.
+    let dest = o.dest;
     // spec: S-0309 claim 27 (DECIDED: a restored object off the map or destroyed in play is no target in the firing step)
-    let Some(t) = crate::combat::held::firing_target(w, &o) else {
+    let Some(t) = crate::combat::held::firing_target(w, o) else {
         // spec: S-0609 claim 5 (a firing step with no target: spin-down)
         crate::gattling::vehicle_step(w, id, None, false);
         return false;
@@ -85,7 +87,7 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
     // spec: S-0310 claim 9 (the firing check, range test included, for the weapon it would use)
     let slot = choose_slot(w, id, Some(t));
     let answer = check(w, id, Some(t), slot, true);
-    let (facing_error, unloads) = vehicle_reply(w, id, &o, u, t, slot, answer);
+    let (facing_error, unloads) = vehicle_reply(w, id, dest, u, t, slot, answer);
     // spec: S-0609 claim 5 (one update after the step's own reply, so a shot of this step uses the stage before it; an empty slot 0 spins down)
     let slot0 = slot_weapon(w, id, 0).is_some();
     crate::gattling::vehicle_step(w, id, slot0.then_some(answer), unloads);
@@ -99,7 +101,7 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
 fn vehicle_reply(
     w: &mut World,
     id: ObjectId,
-    o: &crate::world::Object,
+    dest: Option<Target>,
     u: &crate::rules::UnitRules,
     t: Target,
     slot: usize,
@@ -137,7 +139,7 @@ fn vehicle_reply(
                 (true, false)
             } else {
                 let moving = crate::occupancy::in_progress(w, id);
-                if o.dest.is_none() && !moving {
+                if dest.is_none() && !moving {
                     // spec: S-0310 claim 9 and S-0206 claim 9 (without a turret: the body turns, the turret follows)
                     let d = dir(w, w.reference_point(id), t);
                     let tick = w.tick;
@@ -218,7 +220,7 @@ pub fn turret_target_rows(w: &World, id: ObjectId, facing_error: bool) -> Vec<u1
 /// the tick.
 // spec: S-0107 claim 11 (four fire-frame fields)
 pub fn infantry_step(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(o) = w.obj(id) else { return };
     if o.kind != Kind::Infantry || o.combat.killed || o.health <= 0 {
         return;
     }
@@ -227,15 +229,19 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
         return;
     };
     let tick = w.tick;
-    let Some(s) = o.infantry.clone() else { return };
+    // The infantry state as the step began, which the step reads.
+    let Some((s_attack, s_prone, s_seq)) = o.infantry.as_ref().map(|s| (s.attack, s.prone, s.seq))
+    else {
+        return;
+    };
     // The stage-delay-0 ending runs before the late start (`tick`,
     // `infantry::stage_delay_zero_end`), and every change of target at
     // once (`infantry::watch_test`, S-0107 r46 claim 11, *Changes of
     // target*), so the firing turn sees them ended.
     let end_attack = |w: &mut World, ask: bool| crate::infantry::end_attack(w, id, ask);
     // spec: S-0309 claim 27 (DECIDED: a restored object off the map or destroyed in play is no target in the firing step)
-    let Some(t) = crate::combat::held::firing_target(w, &o) else {
-        if s.attack {
+    let Some(t) = crate::combat::held::firing_target(w, o) else {
+        if s_attack {
             // spec: S-0107 claim 11 (the attack state ends when the unit has no target) and S-0215 r118 claim 11 (Other endings: no target at the firing turn, in the firing turn)
             end_attack(w, false);
         }
@@ -273,9 +279,9 @@ pub fn infantry_step(w: &mut World, id: ObjectId) {
         let d = dir(w, w.reference_point(id), t);
         let keeps = rules.quirks.set_facing_keeps_target;
         let secondary = slot == 1;
-        let prone = s.prone;
+        let prone = s_prone;
         let has = |q: Seq| u.sequences.get(q.key()).is_some_and(|e| e.count > 0);
-        let deploying = s.seq.is_some_and(Seq::is_deploy);
+        let deploying = s_seq.is_some_and(Seq::is_deploy);
         // spec: S-0107 claim 11 (the firing kind by priority: jumpjet, deploying, secondary prone, secondary, prone, standing)
         let q = if u.jumpjet {
             Seq::FireAirborne
@@ -636,13 +642,13 @@ fn sam_attack(w: &mut World, id: ObjectId) -> i32 {
 /// claim 14).
 pub fn delayed_shot_turn(w: &mut World, id: ObjectId) {
     let tick = w.tick;
-    let Some(o) = w.obj(id).cloned() else { return };
-    let Some(due) = o.combat.delayed_shot else {
+    let Some(due) = w.obj(id).and_then(|o| o.combat.delayed_shot) else {
         return;
     };
     if tick < due {
         return;
     }
+    let Some(o) = w.obj(id).cloned() else { return };
     if let Some(ob) = w.obj_mut(id) {
         ob.combat.delayed_shot = None;
     }

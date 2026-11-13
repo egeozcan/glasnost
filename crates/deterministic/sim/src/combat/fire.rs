@@ -140,10 +140,12 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         // A firing pass that reaches the attempt still makes a round pending (S-0501 claim 15), even if the drop was refused: the shot counts as made.
         return true;
     }
-    let tc = crate::combat::veterancy::type_combat(w, firer)
-        .cloned()
-        .unwrap_or_default();
-    let wr = rules.combat.weapon(weapon).clone();
+    let no_type = crate::combat::data::TypeCombat::default();
+    let tc = w
+        .obj(firer)
+        .and_then(|x| crate::combat::veterancy::type_combat_in(&rules, x.kind, x.type_index))
+        .unwrap_or(&no_type);
+    let wr = rules.combat.weapon(weapon);
     let k = o.combat.burst;
     let b = wr.burst;
     let spray = o.kind != Kind::Building
@@ -230,7 +232,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
             w.rng.ranged(3, 5, half) // spec: S-0301 claim 4 (R(3, 5))
         }
     } else {
-        full_delay(w, firer, &wr)
+        full_delay(w, firer, wr)
     };
     // spec: S-0301 claim 8 (a berserk firer halves the delay, truncated; a disc laser shot is never halved)
     let d = if berserk && !wr.disk_laser { d / 2 } else { d };
@@ -306,7 +308,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         && !tc.manual_reload
         && ob.combat.ammo < tc.ammo
     {
-        ob.combat.reload_left = Some(reload_delay(&tc, ob.combat.ammo));
+        ob.combat.reload_left = Some(reload_delay(tc, ob.combat.ammo));
     }
     // spec: S-0301 claim 13 (a shot that is not a sync shot runs the firing-frame counter at 2F − 1)
     if sync_frames && !was_sync {
@@ -319,7 +321,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         crate::combat::effects::line(w, firer, weapon, fp, shot_target);
     }
     // spec: S-0316 claims 1 and 2 (a shot that put its projectile on the map makes one bolt and its sparks in the tick of the shot, after the report; a firing that launches no projectile, such as a spawner's or a disc laser's, and a void shot make neither; each shot of a burst its own)
-    if launched.is_some() && crate::combat::effects::makes_bolt(&wr) {
+    if launched.is_some() && crate::combat::effects::makes_bolt(wr) {
         crate::combat::effects::bolt(w, firer, weapon, slot, k, fp, shot_target);
     }
     // spec: S-0309 claim 15 and S-0302 claim 18 (a shot lowers the target's expected remaining health)
@@ -446,20 +448,20 @@ fn full_delay(w: &mut World, firer: ObjectId, wr: &crate::combat::data::WeaponRu
 /// weapons (claim 21) and the fraidycat's last round (S-0315 claim 2).
 fn after_shot(w: &mut World, firer: ObjectId, weapon: crate::combat::data::WeaponId) {
     let rules = w.rules_arc();
-    let Some(o) = w.obj(firer).cloned() else {
+    let Some(o) = w.obj(firer) else {
         return;
     };
-    let tc = crate::combat::veterancy::type_combat(w, firer).cloned();
-    let distributed = match o.kind {
+    let (kind, seen, target) = (o.kind, o.beh.seen(), o.target);
+    let distributed = match kind {
         Kind::Building => false,
         _ => rules
-            .unit(o.kind, o.type_index)
+            .unit(kind, o.type_index)
             .is_some_and(|u| u.raw.distributed_fire.unwrap_or(false)),
     };
     // spec: S-0309 claim 20 (a distributed-fire object firing outside attack (a building: in any behaviour) adds the target to its list and drops it)
     if distributed
-        && (o.kind == Kind::Building || o.beh.seen() != Some(crate::rules::Behaviour::Attack))
-        && let Some(Target::Object(x)) = o.target
+        && (kind == Kind::Building || seen != Some(crate::rules::Behaviour::Attack))
+        && let Some(Target::Object(x)) = target
         && let Some(ob) = w.obj_mut(firer)
     {
         ob.combat.fired_at.push(x);
@@ -473,19 +475,19 @@ fn after_shot(w: &mut World, firer: ObjectId, weapon: crate::combat::data::Weapo
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0;
     }
-    let _ = tc;
-    if o.kind == Kind::Infantry {
+    if kind == Kind::Infantry {
         crate::combat::fear::last_round(w, firer);
     }
 }
 
 /// A vehicle's reload in its turn (S-0301 claim 11).
 pub fn reload_turn(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(o) = w.obj(id) else { return };
     if o.kind != Kind::Vehicle {
         return;
     }
-    let Some(tc) = crate::combat::veterancy::type_combat(w, id).cloned() else {
+    let rules = w.rules_arc();
+    let Some(tc) = crate::combat::veterancy::type_combat_in(&rules, o.kind, o.type_index) else {
         return;
     };
     if tc.ammo < 0 {
@@ -503,7 +505,7 @@ pub fn reload_turn(w: &mut World, id: ObjectId) {
     // spec: S-0301 claim 11 (countdown over and a < A: a grows by 1 and the countdown restarts; one round per turn at most)
     if over && ob.combat.ammo < tc.ammo {
         ob.combat.ammo += 1;
-        ob.combat.reload_left = Some(reload_delay(&tc, ob.combat.ammo));
+        ob.combat.reload_left = Some(reload_delay(tc, ob.combat.ammo));
     }
 }
 

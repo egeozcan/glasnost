@@ -378,7 +378,7 @@ pub(crate) fn detonate_in(w: &mut World, det: Detonation, chain: bool) -> Flow<D
     if det.damage == 0 || w.map_flags.inert {
         return Flow::Done(DetonationResult::Missed);
     }
-    let h = rules.combat.warhead(warhead).clone();
+    let h = rules.combat.warhead(warhead);
     let p = det.point;
     let (big_r, k) = radii(w, warhead);
     w.effects.push(Effect::Detonation {
@@ -410,8 +410,8 @@ pub(crate) fn detonate_in(w: &mut World, det: Detonation, chain: bool) -> Flow<D
             .cell(c)
             .map(|cc| cc.overlay)
             .filter(|&o| o != NO_OVERLAY)
-            .and_then(|o| rules.overlays.get(usize::from(o)).cloned());
-        if let Some(ov) = &ov
+            .and_then(|o| rules.overlays.get(usize::from(o)));
+        if let Some(ov) = ov
             // spec: S-0303 claim 17 (a resource overlay whose type has the chain-reaction flag, a warhead with the resource flag, a producer that allows it)
             && ov.tiberium
             && ov.chain_reaction
@@ -422,7 +422,7 @@ pub(crate) fn detonate_in(w: &mut World, det: Detonation, chain: bool) -> Flow<D
             // spec: S-0303 claim 17 (resource reduction by trunc(D / 10)); spec: S-0401 claim 16 (a) (taken by claim 3's rule)
             crate::econ::resource::take_bales(w, c, det.damage / 10);
         }
-        if let Some(ov) = &ov
+        if let Some(ov) = ov
             && ov.wall
         {
             // spec: S-0303 claim 16 (the wall flag, the wood flag on a wood wall, or the absolute flag)
@@ -592,7 +592,7 @@ fn hits(w: &mut World, mut rest: AreaRest, chain: bool) -> Flow<DetonationResult
         }
     }
     let rules = w.rules_arc();
-    let h = rules.combat.warhead(warhead).clone();
+    let h = rules.combat.warhead(warhead);
     let (p, layer, any) = (det.point, rest.layer, rest.any);
     let centre = p.cell();
     if nullified {
@@ -601,7 +601,7 @@ fn hits(w: &mut World, mut rest: AreaRest, chain: bool) -> Flow<DetonationResult
     }
     if h.rocker {
         // spec: S-0303 claim 20 and Observable order (the warhead's rocking takes no draw and is reported to the drawing; it comes after all object hits with their nested detonations, and before the bridge-test draws, the centre-cell exploding overlay and the particle system)
-        rock(w, &det, &h, layer);
+        rock(w, &det, h, layer);
     }
     // spec: S-0303 claim 18 and S-0511 claim 1 (with the game's bridge-destruction setting on, a warhead that damages walls makes destroy attempts on the bridge in the centre cell)
     if crate::econ::setup::bridge_destruction(w) && h.wall {
@@ -609,9 +609,9 @@ fn hits(w: &mut World, mut rest: AreaRest, chain: bool) -> Flow<DetonationResult
     }
     // spec: S-0303 claim 19 (an exploding overlay in the centre cell)
     exploding_overlay(w, centre, &det);
-    if let Some(name) = h.particle.clone() {
+    if let Some(name) = h.particle.as_deref() {
         // spec: S-0303 claim 20 and S-0613 claim 4 (a warhead that names a particle system creates it at P at the end of the detonation, owned by the source house, with its first particle)
-        crate::gas::warhead_system(w, &name, p, det.house);
+        crate::gas::warhead_system(w, name, p, det.house);
     }
     Flow::Done(if any {
         DetonationResult::Hit

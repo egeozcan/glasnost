@@ -411,7 +411,12 @@ pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, 
 /// sequence the fear rules start already holds for the firing rules).
 pub fn fear_turn(w: &mut World, id: ObjectId, in_progress: bool, has_dest: bool) {
     let Some(o) = w.obj(id) else { return };
-    let Some(u) = w.rules().unit(o.kind, o.type_index).cloned() else {
+    // The two flags of the type the rules read.
+    let Some((fearless, fraidycat)) = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .map(|u| (u.fearless, u.fraidycat))
+    else {
         return;
     };
     let human = o.owner.is_some_and(|h| w.houses[usize::from(h.0)].human);
@@ -419,7 +424,7 @@ pub fn fear_turn(w: &mut World, id: ObjectId, in_progress: bool, has_dest: bool)
     // Fear (S-0107 claim 15).
     // spec: S-0107 claim 15 (f′ = f − 1 when f > 0 and the type is not fearless)
     let f = s.fear;
-    let f2 = if f > 0 && !u.fearless { f - 1 } else { f };
+    let f2 = if f > 0 && !fearless { f - 1 } else { f };
     let deploying = s.seq.is_some_and(Seq::is_deploy);
     let falling = o.fall.falling;
     if let Some(st) = w.obj_mut(id).and_then(|o| o.infantry.as_mut()) {
@@ -430,7 +435,7 @@ pub fn fear_turn(w: &mut World, id: ObjectId, in_progress: bool, has_dest: bool)
         // Destination-driven get-up is `destination_assigned`.
         if !s.prone
             && !deploying
-            && !u.fraidycat
+            && !fraidycat
             && (!human || (!has_dest && !in_progress))
             && f2 >= 50
         {
@@ -440,7 +445,7 @@ pub fn fear_turn(w: &mut World, id: ObjectId, in_progress: bool, has_dest: bool)
         }
     }
     // spec: S-0107 claim 15 (Flee row: on every tick a fraidycat that is not deploying, not falling, with no movement in progress and no destination scatters when f′ > 50, after the lie-down and get-up rows) and S-0315 claim 2 (whatever its owner)
-    if u.fraidycat && !deploying && !falling && !in_progress && !has_dest && f2 > 50 {
+    if fraidycat && !deploying && !falling && !in_progress && !has_dest && f2 > 50 {
         // spec: S-0208 Terms (the flee rule's scatter request: forced, no threat point, not move-anywhere)
         crate::scatter::request(
             w,

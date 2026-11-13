@@ -500,27 +500,29 @@ fn target_fraction(w: &World, id: ObjectId, u: &UnitRules, cell: CellXY) -> F64 
 fn update_rho(w: &mut World, id: ObjectId, u: &UnitRules) {
     let r = w.rules_arc();
     let mode = r.mode;
-    let Some(o) = w.obj(id).cloned() else { return };
-    let Some(d) = o.drive.clone() else { return };
+    let Some(o) = w.obj(id) else { return };
+    let Some(d) = o.drive.as_ref() else { return };
+    // The fields the update reads, as it begins.
+    let (pos, crush_slowdown) = (o.pos, o.crush_slowdown);
+    let (d_rho, d_rho_t, exit) = (d.rho, d.rho_t, d.track.as_ref().is_some_and(|t| t.exit));
     let one = F64::from_i64(1, mode);
     let clamp = |x: F64| x.max(F64::ZERO).min(one);
-    let exit = d.track.as_ref().is_some_and(|t| t.exit);
     let (rho, rho_t) = if exit && u.accelerates {
         // spec: S-0417 claim 6 (a type marked to accelerate gets no ordinary acceleration on the exit track)
-        (d.rho, d.rho_t)
+        (d_rho, d_rho_t)
     } else if !u.accelerates {
         // spec: S-0207 claim 10 (acceleration flag off: ρ = clamp(ρₜ, 0, 1))
-        (clamp(d.rho_t), d.rho_t)
+        (clamp(d_rho_t), d_rho_t)
     } else if u.passive {
         // spec: S-0207 claim 10 (passive with acceleration: no case applies)
-        (d.rho, d.rho_t)
+        (d_rho, d_rho_t)
     } else {
         let v = F64::from_i64(i64::from(u.speed), mode);
         // spec: S-0207 claim 10 and Terms (dₘ measures to the move destination)
         let dm = move_destination(w, id).map(|p| {
-            let dx = i64::from(p.x - o.pos.x);
-            let dy = i64::from(p.y - o.pos.y);
-            let dz = i64::from(p.z - o.pos.z);
+            let dx = i64::from(p.x - pos.x);
+            let dy = i64::from(p.y - pos.y);
+            let dz = i64::from(p.z - pos.z);
             // spec: S-0207 F5 (dₘ = ⌊r(Δx² + Δy² + Δz²)⌋)
             root_floor(
                 (dx * dx + dy * dy + dz * dz) as u64,
@@ -530,29 +532,29 @@ fn update_rho(w: &mut World, id: ObjectId, u: &UnitRules) {
         });
         let braking = dm.is_some_and(|dm| dm < i64::from(u.slowdown_distance));
         let floor = f03();
-        if o.crush_slowdown {
+        if crush_slowdown {
             // spec: S-0207 claim 10 case 1 and S-0210 F4 (min(ρₜ, 0.2); the target takes this value)
             let cap = crate::consts::CRUSH_CAP;
-            let x = d.rho_t.min(cap);
+            let x = d_rho_t.min(cap);
             (clamp(x), x)
-        } else if braking && (r.quirks.drive_brake_floor_raises || d.rho.gt(floor)) {
+        } else if braking && (r.quirks.drive_brake_floor_raises || d_rho.gt(floor)) {
             // spec: S-0207 claim 10 case 2 (max(ρ − V × η, F₀.₃))
             (
-                clamp(d.rho.sub(v.mul(u.deceleration, mode), mode).max(floor)),
-                d.rho_t,
+                clamp(d_rho.sub(v.mul(u.deceleration, mode), mode).max(floor)),
+                d_rho_t,
             )
         } else {
             // spec: S-0207 claim 10 cases 4 to 6 (accelerating, decelerating, steady)
-            let x = if d.rho.lt(d.rho_t) {
-                d.rho.add(u.acceleration, mode).min(d.rho_t)
-            } else if d.rho.gt(d.rho_t) {
-                d.rho.sub(v.mul(u.deceleration, mode), mode).max(d.rho_t)
+            let x = if d_rho.lt(d_rho_t) {
+                d_rho.add(u.acceleration, mode).min(d_rho_t)
+            } else if d_rho.gt(d_rho_t) {
+                d_rho.sub(v.mul(u.deceleration, mode), mode).max(d_rho_t)
             } else {
-                d.rho
+                d_rho
             };
             // spec: S-0207 Edge cases (`quirks.drive_brake_floor_raises` off: capped at F₀.₃ within the slowdown distance)
             let x = if braking { x.min(floor) } else { x };
-            (clamp(x), d.rho_t)
+            (clamp(x), d_rho_t)
         }
     };
     if let Some(dd) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
@@ -637,22 +639,23 @@ fn cell_of(x: i32, y: i32) -> CellXY {
 /// point or the track target, where the world height is set (claim 5);
 /// between points (claim 4) the height is kept.
 fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool) {
-    let Some(o) = w.obj(id).cloned() else { return };
-    let old = o.pos.cell();
+    let Some(o) = w.obj(id) else { return };
+    let (pos, old_layer) = (o.pos, o.layer);
+    let old = pos.cell();
     let new = cell_of(x, y);
-    let layer = entered_layer(w, old, new, o.layer);
+    let layer = entered_layer(w, old, new, old_layer);
     let z = if at_point {
         // spec: S-0207 claim 5 (the surface height H, plus 416 leptons on a bridge deck)
         w.surface_at(x, y) + if layer == Layer::Deck { 416 } else { 0 }
     } else {
-        o.pos.z
+        pos.z
     };
     if let Some(ob) = w.obj_mut(id) {
         ob.pos = Pos::new(x, y, z);
         ob.layer = layer;
     }
     if new != old {
-        w.cells.leave(old, o.layer, id);
+        w.cells.leave(old, old_layer, id);
         w.cells.enter(new, layer, id, false);
         // spec: S-0212 claims 13 and 16a (recorded in a cell of another threat block: its threat amount moves there)
         crate::threat::relisted(w, id, new);
@@ -698,25 +701,31 @@ fn checked_outcome(w: &World, id: ObjectId, u: &UnitRules, from: CellXY, to: Cel
 /// 15). Returns `false` when the step cannot begin this tick.
 fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
     let t = w.tick;
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return false;
     };
     let Some(&d) = o.path.steps.first() else {
         return false;
     };
+    // The vehicle as the step begins, which the tests below read.
+    let (here, facing) = (o.pos.cell(), o.body.value(t));
+    let turn = o
+        .drive
+        .as_ref()
+        .and_then(|x| x.turn.filter(|_| x.turning_in_place));
     if crate::spawn::track_held(w, id) {
         // spec: S-0207 claim 6 and S-0506 claim 10 (a launching vehicle begins no track: it waits, destination kept; precedence against other waits not established, checked first here)
         wait(w, id);
         trace::record(w, id, || trace::What::Waited { why: "launching" });
         return false;
     }
-    let first = neighbour(o.pos.cell(), d);
+    let first = neighbour(here, d);
     if let Some(gate) = process::closed_friendly_gate(w, id, first) {
         trace::step(
             w,
             id,
             trace::Mover::Drive,
-            o.pos.cell(),
+            here,
             first,
             Outcome::ClosedFriendlyGate,
             false,
@@ -726,13 +735,11 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
         wait(w, id);
         return false;
     }
-    if o.body.value(t) != facing_of(d) {
+    if facing != facing_of(d) {
         turn_in_place(w, id, u, d);
         return false;
     }
-    if let Some((t0, dur)) = o.drive.as_ref().and_then(|x| x.turn)
-        && o.drive.as_ref().is_some_and(|x| x.turning_in_place)
-    {
+    if let Some((t0, dur)) = turn {
         // spec: S-0206 claim 12 (a turn completing at once begins the track in tick t₀ + 1; otherwise in t₀ + Θ)
         let begin = if dur == 0 { t0 + 1 } else { t0 + dur };
         if t < begin {
@@ -778,12 +785,14 @@ fn turn_in_place(w: &mut World, id: ObjectId, u: &UnitRules, d: u8) {
 fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_curve: bool) -> bool {
     let t = w.tick;
     let r = w.rules_arc();
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return false;
     };
     let Some(&d) = o.path.steps.first() else {
         return false;
     };
+    // The stored path as the check begins, which the track below reads.
+    let (e, steps_len) = (o.path.steps.get(1).copied(), o.path.steps.len());
     let here = o.pos.cell();
     let first = neighbour(here, d);
     let outcome = checked_outcome(w, id, u, here, first);
@@ -870,7 +879,6 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
         }
     }
     // spec: S-0207 claim 7 (the next step chooses the track; crush mode drives straight)
-    let e = o.path.steps.get(1).copied();
     let second = neighbour(first, e.unwrap_or(d));
     let crush = crush_mode(w, id, u, first, second);
     // spec: S-0207 claim 15 (after the search of T5's obstacle row the step check cannot begin a two-cell curve)
@@ -965,7 +973,7 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
     };
     // spec: S-0212 claim 20 (the drive locomotor recomputes as it begins the last stored step, heading point beyond 512)
     let used = if two { 2 } else { 1 };
-    let last_step = o.path.steps.len() <= used;
+    let last_step = steps_len <= used;
     let rho_t = target_fraction(w, id, u, first);
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.drain(..used.min(ob.path.steps.len()));
@@ -995,22 +1003,22 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
     if occupancy::is_crusher(w, id) {
         crate::crush::warn_ahead(w, id, first);
     }
-    if last_step && let Some(hp) = path::heading_point(w, id) {
-        let o2 = w.obj(id).cloned();
-        if let Some(o2) = o2 {
-            let dx = i64::from(hp.x - o2.pos.x);
-            let dy = i64::from(hp.y - o2.pos.y);
-            let dz = i64::from(hp.z - o2.pos.z);
-            // spec: S-0212 F6c (the heading point more than 512 leptons away)
-            let dist = root_floor(
-                (dx * dx + dy * dy + dz * dz) as u64,
-                r.quirks.table_root_distance,
-                r.mode,
-            );
-            // spec: S-0212 claim 20 (the heading point more than 512 leptons away)
-            if dist > 512 && hp.cell() != target_cell {
-                refresh_from_target(w, id, target_cell);
-            }
+    if last_step
+        && let Some(hp) = path::heading_point(w, id)
+        && let Some(pos) = w.obj(id).map(|o2| o2.pos)
+    {
+        let dx = i64::from(hp.x - pos.x);
+        let dy = i64::from(hp.y - pos.y);
+        let dz = i64::from(hp.z - pos.z);
+        // spec: S-0212 F6c (the heading point more than 512 leptons away)
+        let dist = root_floor(
+            (dx * dx + dy * dy + dz * dz) as u64,
+            r.quirks.table_root_distance,
+            r.mode,
+        );
+        // spec: S-0212 claim 20 (the heading point more than 512 leptons away)
+        if dist > 512 && hp.cell() != target_cell {
+            refresh_from_target(w, id, target_cell);
         }
     }
     true
@@ -1557,18 +1565,20 @@ pub fn begin_bunker_track(
 fn spend(w: &mut World, id: ObjectId) -> bool {
     let r = w.rules_arc();
     let mode = r.mode;
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return false;
     };
-    let Some(dd) = o.drive.clone() else {
+    let Some(dd) = o.drive.as_ref() else {
         return false;
     };
+    // The vehicle and its track as the spending begins, which it reads.
+    let (pos, budget, between_steps) = (o.pos, dd.budget, dd.between_steps);
     let Some(tr) = dd.track.clone() else {
         return false;
     };
     let pts = tr.points();
     let remaining = pts.len() - tr.next + 1; // the target included
-    let mut a = dd.budget;
+    let mut a = budget;
     // spec: S-0207 claim 3 (k = 0 when A ≤ 7, else the largest k with A − 7k ≥ 1, at most the points left)
     let k = if a <= 7 {
         0
@@ -1578,9 +1588,9 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
     a -= 7 * k as i32; // spec: S-0207 claim 3 (7 of the budget per point)
     let mut next = tr.next + k;
     let mut last = tr.last;
-    if k > 0 && dd.between_steps && o.pos.cell() != tr.target_cell {
+    if k > 0 && between_steps && pos.cell() != tr.target_cell {
         // spec: S-0209 claim 1 (passing the first point of a track while between steps clears the flag of the cell it is leaving; a bunker track that ends in the cell it starts in leaves none, S-0606 tables T1 and T2)
-        release(w, id, o.pos.cell());
+        release(w, id, pos.cell());
         if let Some(d2) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
             // spec: S-0209 Terms (between steps until it next advances along a track)
             d2.between_steps = false;
@@ -1697,10 +1707,10 @@ fn move_goes_on(w: &World, id: ObjectId) -> bool {
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let t = w.tick;
     let r = w.rules_arc();
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return false;
     };
-    let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
+    let Some(u) = r.unit(o.kind, o.type_index) else {
         return false;
     };
     if o.drive.is_none() {
@@ -1708,28 +1718,31 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     }
     // spec: S-0207 claim 25 (a destination assigned or removed without the assignment hook is taken before the movement)
     take(w, id, false);
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return false;
     };
-    let Some(dd) = o.drive.clone() else {
+    let Some(dd) = o.drive.as_ref() else {
         return false;
     };
-    let before = (o.pos.x, o.pos.y);
+    // The vehicle as it stands after the take, which the update reads.
+    let (on_track, turning_in_place) = (dd.track.is_some(), dd.turning_in_place);
+    let (pos, no_dest, no_steps) = (o.pos, o.dest.is_none(), o.path.steps.is_empty());
+    let before = (pos.x, pos.y);
     let cap = r.quirks.drive_track_end_cap;
-    if dd.track.is_some() {
+    if on_track {
         // spec: S-0207 claim 12 (a tick begun on a track: one update, s earned once)
-        update_rho(w, id, &u);
-        let s = progress(w, id, &u);
+        update_rho(w, id, u);
+        let s = progress(w, id, u);
         record_step(w, id, s);
         add_budget(w, id, s);
         let mut ended = spend_and_stop(w, id);
         let mut finished = usize::from(ended);
         while ended && move_goes_on(w, id) {
             // spec: S-0207 claim 12 (the move goes on: a second update, the next track begins this tick)
-            if !begin_track(w, id, &u) {
+            if !begin_track(w, id, u) {
                 break;
             }
-            update_rho(w, id, &u);
+            update_rho(w, id, u);
             ended = spend_and_stop(w, id);
             finished += usize::from(ended);
             // spec: S-0207 claim 12 (at most two tracks when the tick began on one; quirks.drive_track_end_cap)
@@ -1741,10 +1754,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             arrive_or_rest(w, id);
         }
     } else {
-        if o.dest.is_none() {
-            if dd.turning_in_place
-                && let Some(d2) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut())
-            {
+        if no_dest {
+            if turning_in_place && let Some(d2) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
                 // spec: S-0207 claim 11 (revision 39, Q-1160 question 2: a destination cancelled during the pre-step turn leaves no heading point and no independent pre-step movement hold; the cancelled step is not taken; the cancellation neither stops the body's turn nor retargets it, so the body completes its existing turn without displacement) and S-0206 Terms (a vehicle standing still with neither a move destination nor a next point is not being moved, even while its body turns)
                 d2.turning_in_place = false;
                 d2.turn = None;
@@ -1762,9 +1773,9 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             }
             return false;
         }
-        if o.path.steps.is_empty() {
+        if no_steps {
             let goal = path::goal_cell(w, id);
-            if goal == Some(o.pos.cell()) || goal.is_none() {
+            if goal == Some(pos.cell()) || goal.is_none() {
                 // spec: S-0207 claim 26 (a building goal in its supplied point's cell is kept: cell equality alone removes neither destination)
                 arrive_or_rest(w, id);
                 return false;
@@ -1775,26 +1786,26 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 return false;
             }
             // spec: S-0207 claim 15 (a fresh search that finds a path looks at the new path's first cell)
-            if fresh_search(w, id, &u) != Search::Found {
+            if fresh_search(w, id, u) != Search::Found {
                 return false;
             }
         }
-        if !begin_track(w, id, &u) {
+        if !begin_track(w, id, u) {
             return false;
         }
         // spec: S-0207 claim 12 (a tick begun without a track: one update towards the new track, s once)
-        update_rho(w, id, &u);
-        let s = progress(w, id, &u);
+        update_rho(w, id, u);
+        let s = progress(w, id, u);
         record_step(w, id, s);
         add_budget(w, id, s);
         let ended = spend_and_stop(w, id);
         let mut more = ended && move_goes_on(w, id);
         // spec: S-0207 claim 12 (a tick begun without a track finishes at most one; quirks.drive_track_end_cap off: no limit)
         while more && !cap {
-            if !begin_track(w, id, &u) {
+            if !begin_track(w, id, u) {
                 break;
             }
-            update_rho(w, id, &u);
+            update_rho(w, id, u);
             more = spend_and_stop(w, id) && move_goes_on(w, id);
         }
         if ended && !move_goes_on(w, id) {
