@@ -17,9 +17,9 @@ use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, World};
 
 /// The skirmish ruleset with one superweapon type per kind word and the
-/// building that gives it (test data of our own): IRON, SHLD, SPYW, CHRN
-/// (first stage, linked) and CHWP (second stage), the giving buildings
-/// IRONB, SHLDB, SPYB and CHRNB (both teleport stages), none of which a
+/// building that gives it (test data of our own): STRM, IRON, SHLD, SPYW,
+/// CHRN (first stage, linked) and CHWP (second stage), the giving buildings
+/// STRMB, IRONB, SHLDB, SPYB and CHRNB (both teleport stages), none of which a
 /// house can build. Every charge time is 0.1 minutes and none depends on
 /// power.
 fn rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
@@ -40,6 +40,7 @@ fn rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
     chwp.post_click = Some(true);
     chwp.pre_dependent = Some("ChronoSphere".into());
     for (n, t) in [
+        ("STRM", sw("LightningStorm", "LightningStorm")),
         ("IRON", sw("IronCurtain", "IronCurtain")),
         ("SHLD", sw("ForceShield", "ForceShield")),
         ("SPYW", sw("SpyPlane", "SpyPlane")),
@@ -60,6 +61,7 @@ fn rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
         x
     };
     for (n, b) in [
+        ("STRMB", giver("STRM", None)),
         ("IRONB", giver("IRON", None)),
         ("SHLDB", giver("SHLD", None)),
         ("SPYB", giver("SPYW", None)),
@@ -591,5 +593,80 @@ fn a_hidden_tank_does_not_move_the_landing() {
         fires(&think(&w2), "CHWP", &w2),
         dest,
         "the landing is where it was"
+    );
+}
+
+/// The cells building `b` stands on (its foundation from its top-left cell).
+fn foundation(w: &World, b: glasnost_sim::world::ObjectId) -> Vec<CellXY> {
+    let o = w.obj(b).unwrap();
+    glasnost_sim::econ::placement::foundation_cells(w, o.type_index, o.pos.cell())
+}
+
+// design: own AI (#30): the teleport's landing block holds none of the cells a seen building stands on, not only none of their top-left cells: a plant whose last cell is the block's corner moves the landing. The plant is the house's own, which it sees anywhere and which is no goal.
+#[test]
+fn a_building_reaching_into_the_landing_moves_it() {
+    let (w, _) = picked((10, 8));
+    let dest = fires(&think(&w), "CHWP", &w);
+    assert_eq!(dest.len(), 1, "the second stage: {dest:?}");
+    let c = dest[0];
+    let mut w2 = w.clone();
+    let plant = testkit::spawn(
+        &mut w2,
+        Kind::Building,
+        "POWR",
+        0,
+        CellXY::new(c.x - 2, c.y - 2),
+        0,
+    );
+    let cells = foundation(&w2, plant);
+    assert!(
+        cells.contains(&CellXY::new(c.x - 1, c.y - 1)),
+        "the plant reaches into the block: {cells:?}"
+    );
+    let again = fires(&think(&w2), "CHWP", &w2);
+    assert_eq!(again.len(), 1, "the second stage: {again:?}");
+    let d = again[0];
+    assert!(
+        cells
+            .iter()
+            .all(|f| (f.x - d.x).abs() > 1 || (f.y - d.y).abs() > 1),
+        "the landing {d:?} overlaps the plant {cells:?}"
+    );
+}
+
+// design: own AI (#30): a storm is not aimed within STRIKE_RADIUS of any cell of the house's own building, its top-left cell or another.
+#[test]
+fn no_storm_beside_any_cell_of_an_own_building() {
+    let (g, yard) = ready_until("STRMB", Some("STRM"));
+    let b = spot(yard, 12, 12);
+    // An enemy diagonal to the plant's last cell, beyond the radius (3) of
+    // its top-left cell.
+    let e = spot(b, 3, 3);
+    let mut g = g;
+    let p = glasnost_sim::world::Pos::centre(e, 0);
+    glasnost_sim::econ::shroud::area_reveal(&mut g.world, HouseId(0), p, 4);
+    let mut alone = g.world.clone();
+    let walker = testkit::spawn(&mut alone, Kind::Infantry, "WALKER", 1, e, 0);
+    glasnost_sim::tick::step(&mut alone);
+    assert!(glasnost_ai::in_view(&alone, HouseId(0), walker), "the enemy is seen");
+    assert_eq!(
+        fires(&think(&alone), "STRM", &alone),
+        vec![e],
+        "the storm on the enemy"
+    );
+    let mut w = g.world.clone();
+    let plant = testkit::spawn(&mut w, Kind::Building, "POWR", 0, b, 0);
+    testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, e, 0);
+    glasnost_sim::tick::step(&mut w);
+    let cells = foundation(&w, plant);
+    let near = |c: CellXY| {
+        cells
+            .iter()
+            .any(|f| (f.x - c.x).pow(2) + (f.y - c.y).pow(2) <= 9)
+    };
+    let shots = fires(&think(&w), "STRM", &w);
+    assert!(
+        shots.iter().all(|&c| !near(c)),
+        "a storm beside the plant {cells:?}: {shots:?}"
     );
 }
