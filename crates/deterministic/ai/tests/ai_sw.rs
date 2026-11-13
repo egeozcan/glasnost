@@ -596,6 +596,49 @@ fn a_hidden_tank_does_not_move_the_landing() {
     );
 }
 
+/// An enemy scout (house 1) on a free cell near `c` that house 0 sees.
+fn scout_near(w: &mut World, c: CellXY) -> glasnost_sim::world::ObjectId {
+    let at = (3..12)
+        .map(|d| CellXY::new(c.x + d, c.y))
+        .find(|&x| free(w, x))
+        .expect("a free cell for the scout");
+    let p = glasnost_sim::world::Pos::centre(at, 0);
+    glasnost_sim::econ::shroud::area_reveal(w, HouseId(0), p, 2);
+    let scout = testkit::spawn(w, Kind::Infantry, "WALKER", 1, at, 0);
+    glasnost_sim::tick::step(w);
+    assert!(glasnost_ai::in_view(w, HouseId(0), scout), "the scout is seen");
+    scout
+}
+
+// design: own AI (#31): the teleport lands next to the enemy base, not next to the nearest seen enemy unit: an enemy scout by the house's own base does not move the landing there.
+#[test]
+fn a_scout_at_home_does_not_pull_the_landing() {
+    let (mut w, c) = picked((10, 8));
+    let scout = scout_near(&mut w, c);
+    let s = w.obj(scout).unwrap().pos.cell();
+    let dest = fires(&think(&w), "CHWP", &w);
+    assert_eq!(dest.len(), 1, "the second stage: {dest:?}");
+    let d = dest[0];
+    assert!(
+        (d.x - s.x).abs().max((d.y - s.y).abs()) > 9,
+        "the landing {d:?} is by the scout {s:?}"
+    );
+}
+
+// design: own AI (#31): the spy plane goes at a cell the house does not see, as the psychic reveal does: an enemy scout seen by the house's base does not draw it.
+#[test]
+fn a_scout_at_home_does_not_draw_the_spy_plane() {
+    let (g, yard) = ready_until("SPYB", Some("SPYW"));
+    let mut w = g.world.clone();
+    scout_near(&mut w, yard);
+    let cells = fires(&think(&w), "SPYW", &w);
+    assert_eq!(cells.len(), 1, "one spy plane order: {cells:?}");
+    assert!(
+        !glasnost_sim::econ::shroud::seen(&w, HouseId(0), cells[0]),
+        "the spy plane goes at a seen cell: {cells:?}"
+    );
+}
+
 /// The cells building `b` stands on (its foundation from its top-left cell).
 fn foundation(w: &World, b: glasnost_sim::world::ObjectId) -> Vec<CellXY> {
     let o = w.obj(b).unwrap();
