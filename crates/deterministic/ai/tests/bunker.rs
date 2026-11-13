@@ -253,6 +253,39 @@ fn a_bunkered_deploy_fire_vehicle_is_not_deployed_out() {
     assert_eq!(br.special_uses().deploys, 0);
 }
 
+// design: own AI (#18): a vehicle is not sent into a bunker it would be let out of at the next think: not into a bunker at or below the retreat percentage, and not while a seen enemy stands near the base (the attack reason), here an enemy building it cannot reach from the bunker.
+#[test]
+fn no_vehicle_is_sent_in_to_be_let_out_again() {
+    let g = game(99);
+    // A badly damaged bunker.
+    let (mut w, b) = scene(&g);
+    let gun = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 5, 9);
+    let s = glasnost_sim::combat::damage::strength(&w, b);
+    w.obj_mut(b).unwrap().health = s * RETREAT_PERCENT / 100;
+    settle(&mut w);
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert_eq!(entered(&orders, gun), None, "retreat: {orders:?}");
+    assert_eq!(br.special_uses().bunker_entries, 0, "retreat");
+    // A seen enemy building near the base.
+    let (mut w, b) = scene(&g);
+    let gun = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 5, 9);
+    let h = home(&w);
+    let c = CellXY::new(h.x - 4, h.y + 12);
+    testkit::spawn(&mut w, Kind::Building, "POWR", 1, c, 0);
+    glasnost_sim::econ::shroud::area_reveal(
+        &mut w,
+        HouseId(0),
+        glasnost_sim::world::Pos::centre(c, 0),
+        3,
+    );
+    settle(&mut w);
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert_ne!(entered(&orders, gun), Some(b), "attack: {orders:?}");
+    assert_eq!(br.special_uses().bunker_entries, 0, "attack");
+}
+
 // S-0606, PLAN §4.7: the house builds tank bunkers once it can, no more than it wants.
 #[test]
 fn the_house_builds_bunkers() {
