@@ -191,7 +191,7 @@ pub fn theater_label(t: Theater) -> &'static str {
 pub fn map_info_of(doc: &Document) -> MapInfo {
     let quirks = glasnost_convert::map::MapQuirks::default();
     let f = glasnost_convert::map::list_facts(doc, quirks);
-    // spec: S-0009 claim 25 (the numbered markers come from the header block, quirks.preview_markers_from_header; with the switch off, where they go is not specified, so none are drawn)
+    // spec: S-0009 claim 25 (the numbered markers come from the header block, quirks.preview_markers_from_header; with the switch off, where they go is not specified, so none are drawn: Q-3064)
     let marks = quirks.preview_markers_from_header.then(|| Marks {
         count: f.header.count,
         origin: f.header.origin,

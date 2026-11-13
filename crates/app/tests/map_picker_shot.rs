@@ -227,6 +227,11 @@ fn the_setup_screen_draws_its_map_choice() {
         press(&mut c, SetupHit::Filter(FilterKind::Players, 1));
         press(&mut c, SetupHit::Filter(FilterKind::Sort, 1));
         shoot(&mut c, &format!("picker-filter-{name}.png"));
+        // A click on a filter ended the typing; a click on the search field
+        // starts it again.
+        c.typed("x");
+        assert!(c.shell.picker.query.search.is_empty());
+        press(&mut c, SetupHit::SearchField);
         c.typed("nothing like it");
         shoot(&mut c, &format!("picker-none-{name}.png"));
         c.key(Key::Escape, true);

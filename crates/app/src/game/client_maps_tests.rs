@@ -50,6 +50,21 @@ fn maps() -> Vec<Made> {
     ]
 }
 
+/// The picker's facts of an invented map, read as the install reads them.
+fn info(ini: &str, preview: Option<Vec<u8>>) -> install::MapInfo {
+    let text = MapText {
+        ini: ini.into(),
+        preview,
+        ..Default::default()
+    }
+    .text();
+    install::map_info_of(&Document::parse(
+        text.as_bytes(),
+        Default::default(),
+        &mut Vec::new(),
+    ))
+}
+
 fn install() -> Install {
     let file = |id| FileRef {
         archive: ArchiveId(0),
@@ -96,19 +111,7 @@ fn install() -> Install {
             .collect(),
         map_info: made
             .iter()
-            .map(|(_, _, ini, preview)| {
-                let text = MapText {
-                    ini: (*ini).into(),
-                    preview: preview.clone(),
-                    ..Default::default()
-                }
-                .text();
-                install::map_info_of(&Document::parse(
-                    text.as_bytes(),
-                    Default::default(),
-                    &mut Vec::new(),
-                ))
-            })
+            .map(|(_, _, ini, preview)| info(ini, preview.clone()))
             .collect(),
         rules_hash: "rules-synthetic".into(),
         names: Default::default(),
@@ -197,6 +200,59 @@ fn the_preview_is_decoded_off_the_frame_and_uploaded_once() {
     c.update(0);
     let px = c.frame_rgba();
     assert_eq!(px.len(), (c.size.0 * c.size.1 * 4) as usize);
+}
+
+/// Another install read: its previews are decoded and uploaded afresh, not
+/// taken from the last install's maps of the same index.
+#[test]
+fn another_install_drops_the_kept_previews() {
+    let mut c = client();
+    c.update(0);
+    let (_, images) = c.frame();
+    assert_eq!(uploads(&images).len(), 1);
+    let mut other = install();
+    other.map_info[0] = info(
+        "[Preview]\nSize=0,0,2,1\n",
+        Some(vec![0, 255, 0, 0, 255, 0]),
+    );
+    c.done(Done::Prepared(Vfs::default(), Ok(Box::new(other))));
+    let (_, images) = c.frame();
+    assert!(uploads(&images).is_empty(), "decoded in the next update");
+    c.update(0);
+    let (_, images) = c.frame();
+    assert_eq!(uploads(&images), [(2, 1, [0, 255, 0, 255].repeat(2))]);
+}
+
+/// A click on a filter ends the search's typing, as a click off a field
+/// does on the multiplayer screen; a click on the search starts it again.
+#[test]
+fn a_click_off_the_search_ends_its_typing() {
+    let mut c = client();
+    c.setup_press(SetupHit::OpenMaps);
+    let _ = c.frame();
+    assert!(c.typing());
+    let r = c
+        .setup_targets
+        .rect_of(&SetupHit::Filter(FilterKind::Players, 1))
+        .unwrap();
+    click(&mut c, r);
+    assert_eq!(c.shell.picker.query.players, 2);
+    assert!(!c.typing());
+    c.typed("x");
+    assert!(c.shell.picker.query.search.is_empty());
+    let _ = c.frame();
+    let r = c.setup_targets.rect_of(&SetupHit::SearchField).unwrap();
+    click(&mut c, r);
+    assert!(c.typing());
+    c.typed("amb");
+    assert_eq!(c.shell.picker.query.search, "amb");
+}
+
+fn click(c: &mut Client, r: Rect) {
+    let r = c.ui_scale().rect(r);
+    let p = Point::new(r.x + r.w / 2, r.y + r.h / 2);
+    c.pointer_down(Button::Left, p);
+    c.pointer_up(Button::Left, p, Modifiers::default());
 }
 
 /// A map without a preview shows the placeholder; a block that does not

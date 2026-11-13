@@ -508,6 +508,8 @@ impl Client {
                     Ok(i) => {
                         self.status = format!("Install ready: {}.", i.summary);
                         self.install = Some(*i);
+                        // Another install's maps: its previews are not these.
+                        self.previews = maps::Previews::default();
                     }
                     Err(e) => self.status = e,
                 }
@@ -975,7 +977,13 @@ impl Client {
                 }
             }
             Screen::Setup => {
-                if let Some(hit) = self.setup_targets.hit(q) {
+                let hit = self.setup_targets.hit(q);
+                if self.shell.picker.open {
+                    // design: map picker (lead's request 2026-11-13): as on the multiplayer screen, a click off the search field ends its typing
+                    self.shell.picker.typing =
+                        matches!(hit, Some(SetupHit::SearchField | SetupHit::ClearSearch));
+                }
+                if let Some(hit) = hit {
                     self.setup_focus.at = Some(hit);
                     self.setup_press(hit);
                 }
@@ -1606,6 +1614,9 @@ impl Client {
 
     /// The whole frame drawn on the CPU (tests and local snapshots).
     pub fn frame_rgba(&mut self) -> Vec<u8> {
+        // The CPU images are this path's own: the shown preview is sent
+        // again, whatever a GPU frame got before.
+        self.previews.forget_upload();
         let (list, images) = self.frame();
         for (id, w, h, rgba) in images.changed {
             self.cpu_images.insert(

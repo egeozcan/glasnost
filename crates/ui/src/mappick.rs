@@ -519,6 +519,8 @@ pub fn draw_preview(d: &mut DrawList, r: Rect, shown: &Shown<'_>, empty: &str) {
         PreviewShow::Image { id, size } => {
             let drawn = fit_image(size, r.inset(2));
             d.image(id, drawn);
+            // design: map picker (lead's request 2026-11-13): S-0009's (left, top) and (pw, ph) are the fitted preview's place and size in interface pixels, scaled with the rest of the screen
+
             let Some(m) = shown.marks else {
                 return;
             };
