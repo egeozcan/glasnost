@@ -1,7 +1,7 @@
 //! Claim test for S-0506 claim 14 (#191, Q-3044): the heading point of a
-//! moving hovering vehicle is the point its locomotor moves it to (S-0503's
-//! *P*), not its position; a switched-off one that keeps *P* is aimed at its
-//! position. Synthetic rules and map; every name and number is invented.
+//! hovering vehicle is the point its locomotor moves it to (S-0503's *P*)
+//! whenever it holds one, powered or switched off, not its position.
+//! Synthetic rules and map; every name and number is invented.
 
 mod common;
 
@@ -63,7 +63,7 @@ fn hover_world() -> (World, ObjectId) {
     (w, id)
 }
 
-// spec: S-0506 claim 14 (a unit's heading point: the point its locomotor is moving it to, the end of the step it is on); S-0207 Terms and S-0503 Terms (a hovering vehicle's heading point P, the next cell centre); Q-3044 (interim: P while it is powered)
+// spec: S-0506 claim 14 (a unit's heading point: the point its locomotor is moving it to, the end of the step it is on); S-0207 Terms and S-0503 Terms (a hovering vehicle's heading point P, the next cell centre); S-0506 claim 14 (r41, Q-3044: P whenever it holds one)
 #[test]
 fn rocket_aim_at_a_moving_hover_is_its_heading_point() {
     let (mut w, id) = hover_world();
@@ -91,9 +91,9 @@ fn rocket_aim_at_a_moving_hover_is_its_heading_point() {
     );
 }
 
-// spec: S-0506 claim 14 (its position when it is not moving); S-0503 claim 10 (a switch-off's stop request keeps the heading point), Terms (powered) and F1 (T = 0 when not powered); Q-3044 (interim: P only while powered, so a settled switched-off hover that keeps P is aimed at its position, as M-0016's stock rows for a switched-off hover against rockets show)
-#[test]
-fn rocket_aim_at_a_switched_off_hover_is_its_position() {
+/// A HOVER ordered to cell (5, 0), switched off once it holds a heading
+/// point away from it.
+fn switched_off_hover() -> (World, ObjectId) {
     let (mut w, id) = hover_world();
     common::order_move(&mut w, id, cell(5, 0));
     // Run until the hover has a heading point and is away from it.
@@ -103,7 +103,25 @@ fn rocket_aim_at_a_switched_off_hover_is_its_position() {
         p.is_some_and(|p| (p.x - o.pos.x).abs() + (p.y - o.pos.y).abs() > 64)
     });
     glasnost_sim::hover::switched(&mut w, id, true);
-    // Let it settle; it keeps its heading point and stops travelling.
+    (w, id)
+}
+
+// spec: S-0506 claim 14 (r41, Q-3044: a hovering vehicle's heading point is P whenever it holds one, whatever its power, throttle or moving; a switched-off vehicle that holds P gives P, still above a hover height of 0 or already down at 0, although it may never travel there); S-0503 claim 10 (the switch-off keeps P)
+#[test]
+fn rocket_aim_at_a_switched_off_hover_is_its_heading_point() {
+    let (mut w, id) = switched_off_hover();
+    // Still above a hover height of 0 (R27 (b)).
+    let o = w.obj(id).unwrap();
+    let p = o.hover.as_ref().unwrap().point.expect("P is kept");
+    assert!(glasnost_sim::hover::switched_off(&w, id), "switched off");
+    assert!(glasnost_sim::hover::hover_height(&w, id) > 0, "above 0");
+    let aim = rocket::heading_point(&w, Target::Object(id)).unwrap();
+    assert_eq!(
+        (aim.x, aim.y, aim.z),
+        (p.x, p.y, p.z),
+        "a switched-off hover above height 0 is aimed at P"
+    );
+    // Settled at hover height 0, at rest (R27 (a)).
     common::run(&mut w, 300);
     let o = w.obj(id).unwrap();
     let p = o
@@ -115,11 +133,28 @@ fn rocket_aim_at_a_switched_off_hover_is_its_position() {
     assert_ne!((p.x, p.y), (o.pos.x, o.pos.y), "it never reaches it");
     assert_eq!(glasnost_sim::hover::hover_height(&w, id), 0, "settled");
     assert!(!glasnost_sim::hover::powered(&w, id), "not powered");
-    assert!(glasnost_sim::hover::moving(&w, id), "moving: it keeps P");
+    let aim = rocket::heading_point(&w, Target::Object(id)).unwrap();
+    assert_eq!(
+        (aim.x, aim.y, aim.z),
+        (p.x, p.y, p.z),
+        "the rocket aim is the settled switched-off hover's P, not its position"
+    );
+}
+
+// spec: S-0506 claim 14 (r41: with quirks.rocket_aim_at_heading_point off the aim point is the vehicle's position in each of these cases)
+#[test]
+fn rocket_aim_at_a_switched_off_hover_with_the_switch_off_is_its_position() {
+    let (mut w, id) = switched_off_hover();
+    common::run(&mut w, 300);
+    let mut rules = (*w.rules_arc()).clone();
+    rules.quirks.rocket_aim_at_heading_point = false;
+    w.rules = Some(std::sync::Arc::new(rules));
+    let o = w.obj(id).unwrap();
+    assert!(o.hover.as_ref().unwrap().point.is_some(), "P is kept");
     let aim = rocket::heading_point(&w, Target::Object(id)).unwrap();
     assert_eq!(
         (aim.x, aim.y, aim.z),
         (o.pos.x, o.pos.y, o.pos.z),
-        "the rocket aim is the switched-off hover's position"
+        "the switch off aims at the position"
     );
 }
