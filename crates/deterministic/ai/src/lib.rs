@@ -76,9 +76,44 @@ pub fn in_view(
     // design: own AI (#36): the house's own and its allies' objects are known to it; the cloak test is asked of the others
     let friend = o.owner.is_some_and(|h| h == house || me.allied_with(h));
     o.on_map
-        && glasnost_sim::econ::shroud::explored(w, house, o.pos.cell())
+        && explored_part(w, house, o)
         // spec: S-0516 Terms and claim 28 (a cloaked object the house does not sense is hidden from it)
         && (friend || !glasnost_sim::cloak::hidden_from(w, id, Some(house)))
+}
+
+/// Whether the house has explored a cell of the object: any cell of a
+/// building's foundation (S-0406 claim 2), a unit's own cell. A person sees
+/// a large building from whichever side the house has explored (#37).
+fn explored_part(
+    w: &glasnost_sim::world::World,
+    house: glasnost_sim::world::HouseId,
+    o: &glasnost_sim::world::Object,
+) -> bool {
+    use glasnost_sim::econ::shroud;
+    let at = o.pos.cell();
+    if o.kind != glasnost_sim::rules::Kind::Building {
+        return shroud::explored(w, house, at);
+    }
+    // design: own AI (#37): the top-left cell first, then the rest of the foundation
+    shroud::explored(w, house, at)
+        || glasnost_sim::econ::placement::foundation_cells(w, o.type_index, at)
+            .into_iter()
+            .any(|c| shroud::explored(w, house, c))
+}
+
+/// Whether an enemy unit appears to house `house` as its disguise rather
+/// than as itself: it appears disguised to the house (S-0516 claim 35) and
+/// the house is shown the disguise now (claim 37: not during a running fake
+/// blink, not under the house's detector coverage). A person takes it for
+/// what it shows (#37).
+pub fn shown_as_disguise(
+    w: &glasnost_sim::world::World,
+    house: glasnost_sim::world::HouseId,
+    id: glasnost_sim::world::ObjectId,
+) -> bool {
+    // spec: S-0516 claims 35 and 37 (appears disguised to the house, and the disguise is what it is shown)
+    glasnost_sim::cloak::appears_disguised(w, id, Some(house))
+        && glasnost_sim::cloak::view::shown_disguise(w, id, Some(house)).is_some()
 }
 
 /// Whether a build order for `t` would be applied now: the type is
