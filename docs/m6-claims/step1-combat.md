@@ -97,7 +97,7 @@ New quirk switches: none.
 | Claim | Bucket | Change | Code location / evidence |
 |---|---|---|---|
 | Terms, *Airborne, floor-bound* | b | Ordinary objects keep the 208-lepton test. Aircraft use S-0501 claim 18's in-the-air answer, as qualified in claim 26. | `combat/weapon.rs:24-30` `airborne_by_height`. |
-| 26 (new) | b | For aircraft, *airborne* = S-0501 claim 18's in-the-air answer. Ordinary aircraft keep the 208-lepton test. For the game-wide V3-rocket and dreadnought-missile types, the locomotor's own in-the-air answer replaces the height test, and floor-bound is its opposite. Applies to claims 3, 6, 7 and 8 b. | Ordinary aircraft already use height: `combat/weapon.rs:24`, used at `combat/range.rs:23, 71, 166`. The rocket exceptions need S-0506 rocket locomotion (b). |
+| 26 (new) | b | For aircraft, *airborne* = S-0501 claim 18's in-the-air answer. Ordinary aircraft keep the 208-lepton test. For the game-wide V3-rocket and dreadnought-missile types, the locomotor's own in-the-air answer replaces the height test, and floor-bound is its opposite. Applies to claims 3, 6, 7 and 8 b. | Ordinary aircraft already use height: `combat/weapon.rs:24`, used at `combat/range.rs:23, 71, 166`. The rocket exceptions needed S-0506 rocket locomotion (b). Built by sim issues S7 (#253): `weapon::range_airborne` and `weapon::range_floor_bound` give those two types the phase answer, read by `range` and the projectile and targeting-mode rows of `check`; test `claims_s0506.rs::a_rocket_in_ascent_below_208_is_not_measured_on_the_ground`. |
 
 New quirk switches: none.
 
