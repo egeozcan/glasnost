@@ -132,6 +132,53 @@ fn a_holding_lifter_lets_go_over_an_enemy_building() {
     let _ = under;
 }
 
+// design: own AI (#24) and S-0607 claims 13 and 16 (a vehicle let go in the air drops where it is, and the infantry under it are removed): a held vehicle near its lifter is not let go over the house's own infantry.
+#[test]
+fn a_held_vehicle_is_not_let_go_over_own_infantry() {
+    let g = game();
+    let mut w = g.world.clone();
+    let l = spawn(&mut w, Kind::Vehicle, "MAGN", 0, 0, 4);
+    let v = spawn(&mut w, Kind::Vehicle, "GUNR", 1, 7, 4);
+    settle(&mut w);
+    let mut br = brain(&w);
+    for o in br.think(&w) {
+        if o.actor() == Some(l) {
+            orders::issue(&mut w, HouseId(0), o);
+        }
+    }
+    let close = |w: &World| {
+        let (Some(lo), Some(vo)) = (w.obj(l), w.obj(v)) else {
+            return false;
+        };
+        let (dx, dy) = (
+            i64::from(vo.pos.x - lo.pos.x),
+            i64::from(vo.pos.y - lo.pos.y),
+        );
+        dx * dx + dy * dy <= glasnost_ai::lifter::LET_GO * glasnost_ai::lifter::LET_GO
+    };
+    // The sim alone until a think finds the held vehicle near the lifter.
+    let mut found = false;
+    for _ in 0..1500 {
+        tick::step(&mut w);
+        if br.thinks_at(w.tick) && lift::grips(&w, l, v) && close(&w) {
+            found = true;
+            break;
+        }
+    }
+    assert!(found, "the lifter pulled the vehicle near");
+    let under = w.obj(v).unwrap().pos.cell();
+    let own = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, under, 0);
+    assert_eq!(w.obj(own).map(|o| o.pos.cell()), Some(under));
+    let at = w.obj(l).unwrap().pos.cell();
+    let out = br.think(&w);
+    assert!(
+        !out.iter().any(|o| matches!(o,
+            Order::Behaviour { actor, behaviour: Behaviour::Move, dest: Some(Target::Cell(c)), .. }
+                if *actor == l && *c == at)),
+        "let go over own infantry: {out:?}"
+    );
+}
+
 // design: own AI (#13): a lifter is no wave unit: an idle lifter at home is not sent with an attack wave, and does not count toward the wave's size (it drove to the enemy base with every wave, its attack-move passed the lifter filter).
 #[test]
 fn a_lifter_does_not_go_with_a_wave() {
