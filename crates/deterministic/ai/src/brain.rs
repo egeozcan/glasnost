@@ -28,8 +28,8 @@
 //!   paradrop (S-0522) is fired at a free usable land cell near home, and
 //!   the paratroopers that land join its army; a ready iron curtain goes on
 //!   a group of its own armed vehicles fighting seen enemies, a force shield
-//!   on its buildings with seen enemies at them, a spy plane at the enemy
-//!   base, and the teleport takes a group of its armed vehicles (first
+//!   on its buildings with seen enemies at them, a spy plane at an enemy
+//!   base it does not see (the psychic reveal's cell), and the teleport takes a group of its armed vehicles (first
 //!   stage) to a free block next to the enemy base (second stage), each with
 //!   the order a person gives; a ready psychic reveal (S-0610) goes on the
 //!   enemy start cell nearest home that the house does not see (then on
@@ -1143,7 +1143,8 @@ impl Brain {
                     c
                 }),
                 Some(SwKind::ForceShield) => self.shield_cell(w),
-                Some(SwKind::SpyPlane) => self.script.attack_goal(w),
+                // design: own AI (#31): a cell the house does not see, as the psychic reveal's
+                Some(SwKind::SpyPlane) => crate::psychic::reveal_cell(&self.script, w),
                 Some(SwKind::Chrono) => self.teleport_cells(w, h, false),
                 Some(SwKind::ChronoWarp) => self.teleport_cells(w, h, true),
                 Some(SwKind::PsychicReveal) => crate::psychic::reveal_cell(&self.script, w),
@@ -1455,9 +1456,11 @@ impl Brain {
     /// The teleport's second-stage cell: the first cell, ring by ring
     /// around the enemy base from [`LAND_RINGS`]'s nearest ring outwards,
     /// in cell order within a ring, whose whole effect block is usable
-    /// land with nothing standing on it.
+    /// land with nothing standing on it. The enemy base is the nearest seen
+    /// enemy building, or the start cell waves go to ([`Script::base_goal`]).
     fn landing_cell(&self, w: &World) -> Option<CellXY> {
-        let goal = self.script.attack_goal(w)?;
+        // design: own AI (#31): next to an enemy base, not the nearest seen enemy of any kind
+        let goal = self.script.base_goal(w)?;
         let taken = self.seen_taken(w);
         let free = |c: CellXY| {
             w.cells.usable(c)
