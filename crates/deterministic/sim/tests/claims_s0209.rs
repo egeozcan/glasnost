@@ -1475,7 +1475,7 @@ fn walker_targets_wall() {
     assert!(o.path.steps.is_empty());
 }
 
-// spec: S-0209 claim 4 (row WP3 overrides: clear; a blocked value listed before the override decides)
+// spec: S-0209 claim 4 (row WP3 overrides: clear; row WP4: the other occupants of a mission-target building's cell give none unless being erased; a blocked value listed before the override decides; scenario C17)
 #[test]
 fn walker_mission_target_override() {
     let (mut w, m) = asked(Kind::Infantry, "Mope", |s| {
@@ -1489,12 +1489,32 @@ fn walker_mission_target_override() {
         o.dest = Some(Target::Object(shed));
     }
     assert_eq!(inf(&w, m, there()), Outcome::Clear);
-    // An enemy aircraft listed ahead of the building gives the unarmed
-    // walker blocked (row WP22), which beats the override.
+    // An enemy aircraft listed ahead of the mission-target building gives
+    // none (row WP4), so the building's override decides: clear (C17 (a)).
     let ty = w.rules().index_of(Kind::Aircraft, "Kite").unwrap();
     let k = objects::create(&mut w, Kind::Aircraft, ty, Some(HouseId(1)));
     objects::place(&mut w, k, Pos::centre(there(), 0), Default::default());
     assert_eq!(w.cells.list(there(), Layer::Ground)[0], k);
+    assert_eq!(inf(&w, m, there()), Outcome::Clear);
+    // A mission target that is the building's cell: the same (row WP4's
+    // reference-point form).
+    w.obj_mut(m).unwrap().dest = Some(Target::Cell(there()));
+    assert_eq!(inf(&w, m, there()), Outcome::Clear);
+    // While the aircraft is being erased its own row decides: an enemy
+    // object gives the unarmed walker blocked (row WP22), which beats the
+    // override (C17 (b)).
+    w.obj_mut(m).unwrap().dest = Some(Target::Object(shed));
+    w.temporal.locks.insert(
+        k,
+        glasnost_sim::temporal::Lock {
+            leader: shed,
+            joiners: Vec::new(),
+            amount: 1_000_000,
+            was_off: false,
+            suspended: false,
+        },
+    );
+    assert!(glasnost_sim::econ::power::being_erased(&w, k));
     assert_eq!(inf(&w, m, there()), Outcome::Blocked);
 }
 
