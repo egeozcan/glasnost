@@ -1,9 +1,9 @@
 ---
 id: Q-3069
 title: Does a ground firer's range test against a cruising aircraft count the full flight height?
-status: open
+status: answered
 related: [S-0307, S-0306, S-0309, S-0506]
-answered-by: []
+answered-by: [S-0307]
 ---
 
 ## Need
