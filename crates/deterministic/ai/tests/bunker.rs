@@ -401,3 +401,78 @@ fn a_switched_off_yard_makes_nothing_startable() {
     }
     assert!(glasnost_ai::startable(&w, HouseId(0), bunk));
 }
+
+/// Reveals the area around `foe` to house 0.
+fn show(w: &mut World, foe: ObjectId) {
+    let at = w.obj(foe).expect("the enemy is there").pos;
+    glasnost_sim::econ::shroud::area_reveal(w, HouseId(0), at, 3);
+}
+
+/// Whether `foe` stands more than `bunker::ATTACK_REACH` cells from every
+/// cell of bunker `b` (and house 0 sees it).
+fn far_from(w: &World, foe: ObjectId, b: ObjectId) -> bool {
+    assert!(glasnost_ai::in_view(w, HouseId(0), foe), "the enemy is seen");
+    let f = w.obj(foe).unwrap().pos.cell();
+    let o = w.obj(b).unwrap();
+    glasnost_sim::econ::placement::foundation_cells(w, o.type_index, o.pos.cell())
+        .iter()
+        .all(|c| {
+            let (dx, dy) = (i64::from(c.x - f.x), i64::from(c.y - f.y));
+            dx * dx + dy * dy > bunker::ATTACK_REACH * bunker::ATTACK_REACH
+        })
+}
+
+// design: own AI (#427): the bunker's exit and entry look at the threat near the bunker itself: an enemy by another building of the house, far from the bunker, neither lets the bunkered vehicle out nor keeps an idle one from going in (the bunker is most useful as an enemy comes near it, not when one comes near the base elsewhere).
+#[test]
+fn an_enemy_far_from_the_bunker_neither_lets_out_nor_holds_back() {
+    let g = game(99);
+    // Exit.
+    let (mut w, b) = scene(&g);
+    let a = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 4, 9);
+    bunker_in(&mut w, a, b);
+    spawn(&mut w, Kind::Building, "POWR", 0, 12, -6);
+    let foe = spawn(&mut w, Kind::Vehicle, "GUNR", 1, 18, -6);
+    settle(&mut w);
+    show(&mut w, foe);
+    assert!(far_from(&w, foe, b));
+    w.obj_mut(a).unwrap().target = None;
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert!(!deployed(&orders, a), "let out: {orders:?}");
+    // Entry.
+    let (mut w, b) = scene(&g);
+    let gun = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 5, 9);
+    spawn(&mut w, Kind::Building, "POWR", 0, 12, -6);
+    let foe = spawn(&mut w, Kind::Vehicle, "GUNR", 1, 18, -6);
+    settle(&mut w);
+    show(&mut w, foe);
+    assert!(far_from(&w, foe, b));
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert_eq!(entered(&orders, gun), Some(b), "not sent in: {orders:?}");
+    assert_eq!(br.special_uses().bunker_entries, 1);
+}
+
+// design: own AI (#427): an enemy whose target is the bunker lets the bunkered vehicle out to attack (it has no target of its own on it), though it stands beyond ATTACK_REACH of the bunker and of every other building of the house.
+#[test]
+fn an_enemy_aiming_at_the_bunker_lets_the_vehicle_out() {
+    let g = game(99);
+    let (mut w, b) = scene(&g);
+    let a = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 4, 9);
+    bunker_in(&mut w, a, b);
+    let foe = spawn(&mut w, Kind::Vehicle, "GUNR", 1, 14, 6);
+    settle(&mut w);
+    show(&mut w, foe);
+    assert!(far_from(&w, foe, b));
+    let base_far = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(0)) && o.kind == Kind::Building && o.on_map)
+        .all(|o| far_from(&w, foe, o.id));
+    assert!(base_far, "the enemy is far from every building");
+    w.obj_mut(foe).unwrap().target = Some(Target::Object(b));
+    w.obj_mut(a).unwrap().target = None;
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert!(deployed(&orders, a), "{orders:?}");
+}
