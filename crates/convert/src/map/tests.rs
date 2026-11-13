@@ -410,6 +410,125 @@ fn preview_and_header() {
     );
 }
 
+/// The map list's facts of a map text, and its full decode.
+fn facts_and_decode(text: &str) -> (ListFacts, Decoded) {
+    let doc = Document::parse(text.as_bytes(), Quirks::default(), &mut Vec::new());
+    (
+        list_facts(&doc, MapQuirks::default()),
+        decode(&doc, &DecodeContext::default()),
+    )
+}
+
+/// The map list's lazy preview gives the full decoder's preview, and the
+/// size, theater and header the full decoder reads.
+/// spec: S-0009 claims 24, 25 and 30 (preview pixels, header, map size), S-0012 claims 8 to 10 (chunks expanded, overlong stream cut)
+#[test]
+fn list_facts_match_the_full_decode() {
+    let pixels: Vec<u8> = (0..4 * 3 * 3).map(|i| (i * 7) as u8).collect();
+    for (stream, why) in [
+        (pixels.clone(), "exact"),
+        (pixels[..20].to_vec(), "short: the rest black"),
+        (
+            [pixels.clone(), vec![1; 9]].concat(),
+            "long: the rest unread",
+        ),
+    ] {
+        let m = MapText {
+            ini: format!(
+                "{BASE}[Preview]\nSize=0,0,4,3\n[Header]\nNumberStartingPoints=2\nWidth=10\nHeight=10\nStartX=1\nStartY=1\nWaypoint1=3,4\n"
+            ),
+            preview: Some(stream),
+            ..Default::default()
+        };
+        let (f, d) = facts_and_decode(&m.text());
+        let src = f.preview.as_ref().expect("a preview");
+        assert_eq!(src.size, (4, 3));
+        assert_eq!(Some(src.decode()), d.map.preview, "{why}");
+        assert_eq!(f.header, d.map.header);
+        assert_eq!(f.size, (10, 6));
+        assert_eq!(f.theater, Theater::Snow);
+    }
+}
+
+/// No usable preview: no size entry (S-0009 claim 30), dimensions that are
+/// not positive (S-0012 Edge cases), no preview block (S-0009 Import
+/// mapping, `[PreviewPack]` absent: no preview).
+#[test]
+fn list_facts_without_a_usable_preview() {
+    let with = |ini: &str, stream: Option<Vec<u8>>| {
+        let m = MapText {
+            ini: format!("{BASE}{ini}"),
+            preview: stream,
+            ..Default::default()
+        };
+        facts_and_decode(&m.text())
+    };
+    let (f, d) = with("", Some(vec![9; 12]));
+    assert!(
+        f.preview.is_none() && d.map.preview.is_none(),
+        "no size entry"
+    );
+    let (f, d) = with("[Preview]\nSize=0,0,0,5\n", Some(vec![9; 12]));
+    assert!(f.preview.is_none() && d.map.preview.is_none(), "zero width");
+    let (f, _) = with("[Preview]\nSize=0,0,-4,5\n", Some(vec![9; 12]));
+    assert!(f.preview.is_none(), "negative width");
+    let (f, _) = with("[Preview]\nSize=0,0,2,2\n", None);
+    assert!(f.preview.is_none(), "no preview block");
+    // No header block: count, origin and extent −1 (S-0009 claim 25).
+    assert_eq!(f.header.count, -1);
+    // An unknown theater is temperate (S-0009 Edge cases); absent too.
+    let (f, _) = facts_and_decode("[Map]\nSize=0,0,7,9\nTheater=nowhere\n");
+    assert_eq!((f.theater, f.size), (Theater::Temperate, (7, 9)));
+    // spec: S-0009 Edge cases (quirks.absent_rect_is_zero: an absent map size reads as 0,0,0,0) and Constants (map size default 1,1,50,50 for the numbers a value does not supply)
+    let (f, _) = facts_and_decode("[Map]\n");
+    assert_eq!((f.theater, f.size), (Theater::Temperate, (0, 0)));
+    let (f, _) = facts_and_decode("[Map]\nSize=3\n");
+    assert_eq!(f.size, (50, 50));
+}
+
+/// A preview block whose chunks do not expand still gives the image: no
+/// valid chunk leaves every pixel black (S-0012 claims 9 and 10, S-0009
+/// claim 24), as the full decoder does.
+#[test]
+fn a_broken_preview_block_decodes_black() {
+    let text = format!("{BASE}[Preview]\nSize=0,0,2,2\n[PreviewPack]\n1=QUJDREVGR0hJSktM\n");
+    let (f, d) = facts_and_decode(&text);
+    let p = f.preview.expect("a preview size and packed bytes").decode();
+    assert_eq!((p.width, p.height), (2, 2));
+    assert_eq!(p.rgb, vec![0; 12]);
+    assert_eq!(Some(p), d.map.preview);
+}
+
+/// The full decoder's preview warnings are unchanged by the split.
+/// spec: S-0009 claim 24 (short stream: black rest, warned), S-0012 claim 8 (overlong stream: warned)
+#[test]
+fn preview_warnings_are_kept() {
+    let warned = |stream: Vec<u8>| {
+        let m = MapText {
+            ini: format!("{BASE}[Preview]\nSize=0,0,2,2\n"),
+            preview: Some(stream),
+            ..Default::default()
+        };
+        decode_text(&m.text())
+            .warnings
+            .into_iter()
+            .map(|w| w.text)
+            .filter(|t| t.contains("preview"))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        warned(vec![1; 5]),
+        ["the preview stream ends before the last pixel; the rest is black (S-0009 claim 24)"]
+    );
+    assert_eq!(
+        warned(vec![1; 13]),
+        [
+            "the preview stream is longer than its pixels need; the rest is not read (S-0012 claim 8)"
+        ]
+    );
+    assert!(warned(vec![1; 12]).is_empty());
+}
+
 /// spec: S-0401 claim 4 and Import mapping ([Basic] TiberiumGrowthEnabled, the map growth switch; absent: on)
 #[test]
 fn map_growth_switch() {
@@ -793,6 +912,9 @@ fn hostile_maps_never_panic() {
         }
         let doc = Document::parse(&t, Quirks::default(), &mut Vec::new());
         let _ = decode(&doc, &DecodeContext::default());
+        if let Some(p) = list_facts(&doc, MapQuirks::default()).preview {
+            let _ = p.decode();
+        }
     }
 }
 

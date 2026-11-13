@@ -55,8 +55,10 @@ pub struct MapQuirks {
     /// `quirks.lobby_counts_zero_waypoint` (claim 23), consulted by the game
     /// client's map list (`glasnost_app::game::install::start_count`).
     pub lobby_counts_zero_waypoint: bool,
-    /// `quirks.preview_markers_from_header` (claim 25). Not consulted yet:
-    /// our engine draws no preview markers.
+    /// `quirks.preview_markers_from_header` (claim 25), consulted by the
+    /// game client's map picker: on, the preview's markers come from the
+    /// header; off, the picker draws none (projecting the waypoint cells
+    /// onto the preview is not specified).
     pub preview_markers_from_header: bool,
     /// `quirks.map_pack_line_limit` (S-0012 claim 1): each packed entry's
     /// value is cut to 127 characters; off: the full value.
@@ -353,6 +355,28 @@ impl Decoder<'_> {
     /// `None` when the block has no packed bytes (absent, empty, or its text
     /// rejected), otherwise the bytes of its valid chunks.
     fn pack(&mut self, name: &[u8], codec: PackCodec) -> Option<Vec<u8>> {
+        let packed = self.pack_text(name)?;
+        let line = self.doc.section(name).map(|s| s.line());
+        let (bytes, problem) = unpack_prefix(&packed, codec);
+        if let Some(p) = problem {
+            // spec: S-0012 claims 9 and 10 (keep the earlier chunks, stop the block, warn naming block and chunk)
+            self.warn(
+                line,
+                format!(
+                    "[{}]: chunk {}: {}; the block stops there (S-0012 claims 9 and 10)",
+                    show(name),
+                    p.chunk + 1,
+                    p.what
+                ),
+            );
+        }
+        Some(bytes)
+    }
+
+    /// A map block's packed bytes before its chunks are expanded: its text
+    /// joined and decoded (S-0012 claims 1 and 2). `None` when the block
+    /// has none (absent, empty, or its text rejected).
+    fn pack_text(&mut self, name: &[u8]) -> Option<Vec<u8>> {
         let section = self.doc.section(name)?;
         let line = Some(section.line());
         let q = self.ctx.quirks;
@@ -422,20 +446,7 @@ impl Decoder<'_> {
         if decoded.bytes.is_empty() {
             return None;
         }
-        let (bytes, problem) = unpack_prefix(&decoded.bytes, codec);
-        if let Some(p) = problem {
-            // spec: S-0012 claims 9 and 10 (keep the earlier chunks, stop the block, warn naming block and chunk)
-            self.warn(
-                line,
-                format!(
-                    "[{}]: chunk {}: {}; the block stops there (S-0012 claims 9 and 10)",
-                    show(name),
-                    p.chunk + 1,
-                    p.what
-                ),
-            );
-        }
-        Some(bytes)
+        Some(decoded.bytes)
     }
 
     /// The terrain stream (S-0009 claims 7 and 8).
@@ -793,6 +804,30 @@ impl Decoder<'_> {
 
     /// The preview (S-0009 claim 24).
     fn preview(&mut self) -> Option<Preview> {
+        let (width, height) = self.preview_size()?;
+        let data = self
+            .pack(b"PreviewPack", PackCodec::Lzo)
+            .unwrap_or_default();
+        let (rgb, fit) = preview_pixels(width, height, &data);
+        let line = self.doc.section(b"PreviewPack").map(|s| s.line());
+        match fit {
+            PixelFit::Short => self.warn(
+                line,
+                "the preview stream ends before the last pixel; the rest is black (S-0009 claim 24)",
+            ),
+            // spec: S-0012 claim 8 (an overlong preview is ignored beyond its required bytes, with a warning)
+            PixelFit::Long => self.warn(
+                line,
+                "the preview stream is longer than its pixels need; the rest is not read (S-0012 claim 8)",
+            ),
+            PixelFit::Exact => {}
+        }
+        Some(Preview { width, height, rgb })
+    }
+
+    /// The preview's width and height (S-0009 claims 24 and 30), `None`
+    /// when they give no preview.
+    fn preview_size(&mut self) -> Option<(u32, u32)> {
         // spec: S-0009 claim 30 ([Preview] Size, absent: 0,0,0,0)
         let size = value::rect(
             self.doc.value(b"Preview", b"Size"),
@@ -820,26 +855,7 @@ impl Decoder<'_> {
             );
             return None;
         }
-        let data = self
-            .pack(b"PreviewPack", PackCodec::Lzo)
-            .unwrap_or_default();
-        let mut rgb = vec![0u8; n];
-        // spec: S-0009 claim 24 (only pixels whose three values are present show their colour; the rest black)
-        let complete = data.len().min(n) / 3 * 3;
-        rgb[..complete].copy_from_slice(&data[..complete]);
-        if data.len() < n {
-            self.warn(
-                self.doc.section(b"PreviewPack").map(|s| s.line()),
-                "the preview stream ends before the last pixel; the rest is black (S-0009 claim 24)",
-            );
-        } else if data.len() > n {
-            // spec: S-0012 claim 8 (an overlong preview is ignored beyond its required bytes, with a warning)
-            self.warn(
-                self.doc.section(b"PreviewPack").map(|s| s.line()),
-                "the preview stream is longer than its pixels need; the rest is not read (S-0012 claim 8)",
-            );
-        }
-        Some(Preview { width, height, rgb })
+        Some((width, height))
     }
 
     fn decimal_scaled(
@@ -1377,6 +1393,112 @@ pub fn to_vfs_theater(t: Theater) -> glasnost_vfs::theater::Theater {
 /// Whether `doc` looks like a map: it has `[Map]` and `[IsoMapPack5]`.
 pub fn is_map(doc: &Document) -> bool {
     doc.section(b"Map").is_some() && doc.section(b"IsoMapPack5").is_some()
+}
+
+/// How a decoded preview stream fits its image.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PixelFit {
+    /// Exactly the pixels' bytes.
+    Exact,
+    /// It ends before the last pixel.
+    Short,
+    /// It holds more than the pixels need.
+    Long,
+}
+
+/// The preview's pixels from its decoded stream (S-0009 claim 24, S-0012
+/// claim 8). `width × height × 3` is within the decoding limit.
+fn preview_pixels(width: u32, height: u32, data: &[u8]) -> (Vec<u8>, PixelFit) {
+    let n = width as usize * height as usize * 3;
+    let mut rgb = vec![0u8; n];
+    // spec: S-0009 claim 24 (only pixels whose three values are present show their colour; the rest black)
+    let complete = data.len().min(n) / 3 * 3;
+    rgb[..complete].copy_from_slice(&data[..complete]);
+    let fit = match data.len().cmp(&n) {
+        std::cmp::Ordering::Less => PixelFit::Short,
+        std::cmp::Ordering::Equal => PixelFit::Exact,
+        // spec: S-0012 claim 8 (an overlong preview is ignored beyond its required bytes)
+        std::cmp::Ordering::Greater => PixelFit::Long,
+    };
+    (rgb, fit)
+}
+
+/// A map's embedded preview as the map list keeps it: its size and its
+/// block's packed bytes, expanded only when the preview is shown, so that a
+/// list of hundreds of maps holds no pictures (design: map picker (lead's
+/// request 2026-11-13)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PreviewSource {
+    /// Width and height: the third and fourth numbers of the preview size
+    /// entry (S-0009 claim 24).
+    pub size: (u32, u32),
+    /// The preview block's text decoded (S-0012 claims 1 and 2), its chunks
+    /// not yet expanded.
+    pub packed: Vec<u8>,
+}
+
+impl PreviewSource {
+    /// The preview: the block's valid chunks expanded (S-0012 claims 9 and
+    /// 10), the pixels read as S-0009 claim 24 says; a stream that ends
+    /// early leaves the rest black. Gives what [`decode`] gives as the
+    /// map's preview.
+    pub fn decode(&self) -> Preview {
+        let (data, _) = unpack_prefix(&self.packed, PackCodec::Lzo);
+        let (width, height) = self.size;
+        let (rgb, _) = preview_pixels(width, height, &data);
+        Preview { width, height, rgb }
+    }
+}
+
+/// What a map list shows of a map besides its name and start count: read
+/// from the document without decoding the rest of the map.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ListFacts {
+    /// Width and height of the map size entry (S-0009 claim 30).
+    pub size: (i32, i32),
+    /// The theater (S-0009 Import mapping and Edge cases: absent or unknown
+    /// is temperate).
+    pub theater: Theater,
+    /// The header block (S-0009 claim 25): the preview's markers.
+    pub header: Header,
+    /// The embedded preview, when the map has one: a valid preview size
+    /// (S-0009 claim 30, S-0012 Edge cases) and a preview block with
+    /// packed bytes (S-0009 Import mapping, `[PreviewPack]` absent: no
+    /// preview).
+    pub preview: Option<PreviewSource>,
+}
+
+/// The map-list facts of `doc` under `quirks` ([`ListFacts`]). Warnings
+/// are not kept: the map is decoded in full, with its warnings, when a game
+/// starts on it.
+pub fn list_facts(doc: &Document, quirks: MapQuirks) -> ListFacts {
+    let ctx = DecodeContext {
+        quirks,
+        ..DecodeContext::default()
+    };
+    let mut d = Decoder {
+        doc,
+        ctx: &ctx,
+        warnings: Vec::new(),
+    };
+    // spec: S-0009 claim 30 ([Map] Size, numbers not supplied come from 1,1,50,50)
+    let size = value::rect(
+        doc.value(b"Map", b"Size"),
+        SIZE_FALLBACK,
+        quirks.absent_rect_is_zero,
+    );
+    let theater = d.theater();
+    let header = d.header();
+    let preview = d.preview_size().and_then(|size| {
+        let packed = d.pack_text(b"PreviewPack")?;
+        Some(PreviewSource { size, packed })
+    });
+    ListFacts {
+        size: (size[2], size[3]),
+        theater,
+        header,
+        preview,
+    }
 }
 
 pub mod synth;
