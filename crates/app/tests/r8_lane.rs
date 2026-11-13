@@ -283,6 +283,12 @@ fn infantry() {
     let mut same = 0;
     let mut drawn_same = 0;
     let mut shown = 0;
+    // The pairs on one point at the first tick (the starting stacks), and
+    // every later pair not among them or of two houses.
+    let mut first: Option<std::collections::BTreeSet<(ObjectId, ObjectId)>> = None;
+    let mut later = std::collections::BTreeSet::new();
+    let mut cross = std::collections::BTreeSet::new();
+    let mut later_shown = 0;
     for t in 0..1500 {
         lane.ticks(1);
         let w = lane.world();
@@ -291,9 +297,29 @@ fn infantry() {
             .values()
             .filter(|o| o.kind == Kind::Infantry && o.on_map)
             .collect();
+        let mut now = std::collections::BTreeSet::new();
         for (i, a) in inf.iter().enumerate() {
             for b in &inf[i + 1..] {
                 if a.pos.x == b.pos.x && a.pos.y == b.pos.y && a.pos.z == b.pos.z {
+                    now.insert((a.id, b.id));
+                    if a.owner != b.owner {
+                        cross.insert((a.id, b.id));
+                    }
+                    let start = first.as_ref().is_some_and(|f| f.contains(&(a.id, b.id)));
+                    if first.is_some() && !start && later.insert((a.id, b.id)) && later_shown < 8 {
+                        later_shown += 1;
+                        let c = a.pos.cell();
+                        println!(
+                            "tick {}: a pair on one point not there at the first tick, cell {c:?}, \
+                             offset in cell ({}, {}), one house: {}, behaviours {:?} / {:?}",
+                            w.tick,
+                            a.pos.x - 256 * c.x,
+                            a.pos.y - 256 * c.y,
+                            a.owner == b.owner,
+                            a.beh.current,
+                            b.beh.current,
+                        );
+                    }
                     same += 1;
                     if shown < 8 {
                         shown += 1;
@@ -313,6 +339,10 @@ fn infantry() {
                     }
                 }
             }
+        }
+        if first.is_none() {
+            println!("pairs on one point at the first tick: {}", now.len());
+            first = Some(now);
         }
         if t % 10 == 0 {
             let drawn: Vec<(Pos, Option<(i32, i32)>)> =
@@ -339,6 +369,11 @@ fn infantry() {
         "infantry placed {}, left {left}; pair-ticks on one point {same}; \
          pairs at different points drawn at one point (every 10 ticks) {drawn_same}",
         ids.len()
+    );
+    println!(
+        "pairs on one point not there at the first tick: {}; pairs of two houses on one point: {}",
+        later.len(),
+        cross.len()
     );
 }
 
