@@ -1401,7 +1401,10 @@ fn claim_14_killed_docked_vessel_frees_its_place_at_the_killing_hit() {
         tick::step(&mut w);
     }
     kill(&mut w, skiff);
-    assert!(naval::sinking(&w, skiff), "the killed vessel sinks, in play");
+    assert!(
+        naval::sinking(&w, skiff),
+        "the killed vessel sinks, in play"
+    );
     assert_eq!(w.obj(skiff).unwrap().health, 1);
     let contact_after_kill = w.obj(skiff).unwrap().contact;
     let other = at(&mut w, "SKIFF", 0, -4, 0);
@@ -1421,7 +1424,10 @@ fn claim_14_killed_docked_vessel_frees_its_place_at_the_killing_hit() {
     assert_eq!(contact_after_kill, None, "the killing hit frees the place");
     assert!(accepts_other, "the place is free for another vessel");
     assert_eq!(paid, 0, "no repair step is paid for the wreck");
-    assert_eq!(max_health, 1, "the wreck's health is not raised by the yard");
+    assert_eq!(
+        max_health, 1,
+        "the wreck's health is not raised by the yard"
+    );
 }
 
 /// Kills a fresh SKIFF, runs 20 ticks of its descent, then hits it again
