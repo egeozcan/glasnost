@@ -33,14 +33,17 @@ fn game() -> Game {
 
 /// The skirmish on `rules` (the scenario's, or a test's own copy).
 fn game_with(rules: std::sync::Arc<glasnost_sim::rules::SimRules>) -> Game {
-    let mut g = Game::new(
-        rules,
-        &kit::map(),
-        kit::MAP_NAME,
-        fixture::catalogue(),
-        kit::setup(5),
-    )
-    .expect("the M7b skirmish loads");
+    game_on(rules, &kit::map(), kit::setup(5))
+}
+
+/// [`game_with`] on map `map` with setup `setup`.
+fn game_on(
+    rules: std::sync::Arc<glasnost_sim::rules::SimRules>,
+    map: &glasnost_map::Map,
+    setup: glasnost_sim::world::GameSetup,
+) -> Game {
+    let mut g = Game::new(rules, map, kit::MAP_NAME, fixture::catalogue(), setup)
+        .expect("the M7b skirmish loads");
     let disc = g.world.rules().index_of(Kind::Vehicle, "DISC").unwrap();
     let discs: Vec<ObjectId> = g
         .world
@@ -520,5 +523,78 @@ fn a_beta_brain_never_fires_it() {
         u.iter()
             .filter(|(h, _)| *h == HouseId(1))
             .all(|(_, x)| x.dominator_launches == 0)
+    );
+}
+
+// design: own AI (#33) and S-0612 claim 9 (the area damage hurts every object in its radius): the damage to an ally's objects the launch does not take counts as loss, as the house's own does. Wounded allied walkers immune to the takeover (S-0612 claim 13) stand on every cell around a lone enemy walker; the damage would destroy more allied value than the launch gains, and it holds fire, after the hold too.
+#[test]
+fn holds_fire_where_the_damage_destroys_an_allys_units() {
+    use glasnost_sim::econ::setup::{self, HouseValues, Player, Settings};
+    let mut rs = kit::ruleset();
+    let mut ward = rs.sim.infantry.get("CROWD").unwrap().clone();
+    ward.combat.immune_to_psionics = Some(true);
+    rs.sim.infantry.insert("WARD".into(), ward);
+    rs.registries
+        .entry("infantry".into())
+        .or_default()
+        .push("WARD".into());
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&rs, kit::MAP_NAME));
+    // A third start, north of the middle, for Gamma: a house with no AI on
+    // Alpha's lobby team, so allied (S-0412 claim 8).
+    let mut map = kit::map();
+    let c = fixture::at(0, -30);
+    map.waypoints.insert(2, (c.x as i16, c.y as i16));
+    let player = |name: &str, country: &str, start: u32, ai: bool, team: u8| Player {
+        name: name.into(),
+        country: country.into(),
+        start: Some(start),
+        ai,
+        values: HouseValues {
+            team: Some(team),
+            ..Default::default()
+        },
+    };
+    let s = setup::skirmish(
+        &rules,
+        &[
+            player("Alpha", "Alphaland", 0, true, 1),
+            player("Beta", "Betaland", 1, true, 2),
+            player("Gamma", "Alphaland", 2, false, 1),
+        ],
+        Settings {
+            credits: Some(glasnost_ai::fixture_m7a::CREDITS),
+            ..Default::default()
+        },
+        0,
+        5,
+    );
+    let mut w = armed_on(game_on(rules, &map, s));
+    assert!(w.allied(Some(HouseId(0)), Some(HouseId(2))), "allied");
+    group(&mut w, 1, &[(6, 6)]);
+    let r = w.rules().superweapons.domination.range;
+    let around: Vec<(i32, i32)> = (-r..=r)
+        .flat_map(|dx| (-r..=r).map(move |dy| (dx, dy)))
+        .filter(|&(dx, dy)| (dx, dy) != (0, 0))
+        // spec: S-0303 Terms (the ring metric) and S-0612 claim 11 (the swept rings up to the capture range)
+        .filter(|&(dx, dy)| {
+            let (a, b) = (dx.abs(), dy.abs());
+            a.max(b) + a.min(b) / 2 <= r
+        })
+        .map(|(dx, dy)| (6 + dx, 6 + dy))
+        .collect();
+    for (dx, dy) in around {
+        let id = spawn(&mut w, Kind::Infantry, "WARD", 2, dx, dy);
+        w.objects.get_mut(&id).unwrap().health = 1;
+    }
+    let p = glasnost_ai::dominator::probe(&w, HouseId(0));
+    assert!(
+        fired(&brain(&w).think(&w), &w).is_empty(),
+        "fired at once: {p:?}"
+    );
+    hold_over(&mut w);
+    let p = glasnost_ai::dominator::probe(&w, HouseId(0));
+    assert!(
+        fired(&brain(&w).think(&w), &w).is_empty(),
+        "fired after the hold: {p:?}"
     );
 }

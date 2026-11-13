@@ -39,11 +39,25 @@ fn rules() -> Arc<SimRules> {
         "SPYB".to_string(),
         "DERR".to_string(),
         "LAB".to_string(),
+        "BANK".to_string(),
     ]);
     r.registries
         .entry("countries".into())
         .or_default()
         .push("Neutral".to_string());
+    // A crate overlay (as in tests/crates.rs).
+    r.registries
+        .entry("overlays".into())
+        .or_default()
+        .push("CRT".into());
+    r.sim.overlays.insert(
+        "CRT".into(),
+        glasnost_rules::sim::OverlayType {
+            has_art: Some(true),
+            crate_: Some(true),
+            ..Default::default()
+        },
+    );
     r.sim.countries.insert(
         "Neutral".into(),
         glasnost_rules::sim::Country {
@@ -122,6 +136,18 @@ fn rules() -> Arc<SimRules> {
     };
     spyb.econ.power = Some(100);
     r.sim.buildings.insert("SPYB".into(), spyb);
+    // spec: S-0510 claim 3 (E5: a building with storage above 0 gives the cash row)
+    r.sim.buildings.insert(
+        "BANK".into(),
+        BuildingType {
+            strength: Some(400),
+            foundation: Some([2, 2]),
+            spyable: Some(true),
+            storage: Some(1000),
+            tech_level: Some(99),
+            ..Default::default()
+        },
+    );
     r.sim.buildings.insert(
         "CAPT".into(),
         BuildingType {
@@ -1042,4 +1068,205 @@ fn an_engineer_for_a_tech_building_takes_an_escort() {
         assert_eq!(escort, escorted, "{dx}: {orders:?}");
         assert_eq!(brain.special_uses().escorts, u32::from(escorted));
     }
+}
+
+/// Cloaks building `b` fully (S-0516 Terms: a building at fade level 11 to
+/// 15 is hidden) and checks it is hidden from house 0.
+fn cloak(w: &mut World, b: ObjectId) {
+    let o = w.obj_mut(b).expect("the building");
+    o.cloak.state = glasnost_sim::cloak::CloakState::Cloaked;
+    o.cloak.stage = 15;
+    assert!(glasnost_sim::cloak::hidden_from(w, b, Some(HouseId(0))));
+}
+
+// design: own AI (#36) and S-0516 Terms (a fully cloaked building not sensed by the house is hidden from it): an engineer is not sent at a cloaked enemy building, and none is ordered for it.
+#[test]
+fn an_engineer_does_not_go_for_a_cloaked_building() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = engineer_scene(&g);
+    cloak(&mut w, target);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!garrison_orders(&orders, unit, target), "{orders:?}");
+    glasnost_sim::objects::remove(&mut w, unit);
+    w.houses[0].credits = 5000;
+    let home = home_of(&w);
+    testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "PILL",
+        0,
+        glasnost_map::CellXY::new(home.x + 5, home.y),
+        0,
+    );
+    run_to_think(&mut w, 20);
+    cloak(&mut w, target);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!orders_engineer(&w, &orders), "{orders:?}");
+}
+
+// design: own AI (#36) and S-0516 Terms: no engineer is ordered for a cloaked tech building that pays.
+#[test]
+fn no_engineer_is_ordered_for_a_cloaked_tech_building() {
+    let mut g = game_with_neutral(5);
+    ready(&mut g);
+    let (mut w, derricks) = derrick_scene(&g, 1);
+    cloak(&mut w, derricks[0]);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!orders_engineer(&w, &orders), "{orders:?}");
+}
+
+/// A world copy with an idle spy of house 0 and a building `name` of house
+/// 1 in its sight; also returns the objects.
+fn spy_scene(g: &Game, name: &str) -> (World, ObjectId, ObjectId) {
+    spy_scene_of(g, name, 1)
+}
+
+/// [`spy_scene`] with the building owned by house `owner`.
+fn spy_scene_of(g: &Game, name: &str, owner: u8) -> (World, ObjectId, ObjectId) {
+    let mut w = g.world.clone();
+    let home = home_of(&w);
+    let target = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        name,
+        owner,
+        glasnost_map::CellXY::new(home.x + 7, home.y + 7),
+        0,
+    );
+    let unit = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "SPYU",
+        0,
+        glasnost_map::CellXY::new(home.x + 5, home.y + 5),
+        0,
+    );
+    reveal(&mut w, 0, glasnost_map::CellXY::new(home.x + 7, home.y + 7));
+    run_to_think(&mut w, 2);
+    (w, target, unit)
+}
+
+// design: own AI (#36) and S-0516 Terms: a spy is not sent into a cloaked enemy building.
+#[test]
+fn a_spy_does_not_go_for_a_cloaked_building() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = spy_scene(&g, "SPYB");
+    cloak(&mut w, target);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!garrison_orders(&orders, unit, target), "{orders:?}");
+}
+
+// design: own AI (#36): the house does not know the victim's credits, so a spy goes for a building with the cash row (S-0510 claim 3, E5) whatever the victim holds.
+#[test]
+fn a_spy_goes_for_cash_whatever_the_victim_holds() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = spy_scene(&g, "BANK");
+    w.houses[1].credits = 0;
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+}
+
+// design: own AI (#37): a building is seen when any cell of its foundation is explored, not only its top-left cell: an engineer is sent at an enemy building the house has explored all of but that cell.
+#[test]
+fn a_building_is_seen_by_any_of_its_cells() {
+    let mut g = game(5);
+    ready(&mut g);
+    let mut w = g.world.clone();
+    let home = home_of(&w);
+    let unit = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "ENGI",
+        0,
+        glasnost_map::CellXY::new(home.x + 3, home.y + 3),
+        0,
+    );
+    let explored =
+        |w: &World, c: glasnost_map::CellXY| glasnost_sim::econ::shroud::explored(w, HouseId(0), c);
+    let cells = |c: glasnost_map::CellXY| {
+        [(0, 0), (1, 0), (0, 1), (1, 1)]
+            .map(|(dx, dy)| glasnost_map::CellXY::new(c.x + dx, c.y + dy))
+    };
+    // The nearest 2 × 2 spot on the edge of what the house has explored:
+    // its top-left cell shrouded, its bottom-right cell explored, usable
+    // ground and nothing on it.
+    let spot = (0..2 * fixture::SIZE)
+        .flat_map(|y| (0..2 * fixture::SIZE).map(move |x| glasnost_map::CellXY::new(x, y)))
+        .filter(|&c| {
+            !explored(&w, c)
+                && explored(&w, glasnost_map::CellXY::new(c.x + 1, c.y + 1))
+                && cells(c)
+                    .iter()
+                    .all(|&x| w.cells.usable(x) && w.objects.values().all(|o| o.pos.cell() != x))
+        })
+        .min_by_key(|&c| ((c.x - home.x).pow(2) + (c.y - home.y).pow(2), c.y, c.x))
+        .expect("a spot on the edge of the explored area");
+    let target = testkit::spawn(&mut w, Kind::Building, "CAPT", 1, spot, 0);
+    run_to_think(&mut w, 2);
+    assert!(!explored(&w, spot), "the top-left cell is shrouded");
+    assert!(
+        explored(&w, glasnost_map::CellXY::new(spot.x + 1, spot.y + 1)),
+        "the bottom-right cell is explored"
+    );
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+}
+
+// design: own AI (#39): a spy goes only into an enemy player's building, as the purchase test asks: not into a passive house's building, whose infiltration would spend the spy on a house that does not play.
+#[test]
+fn a_spy_does_not_go_into_a_passive_houses_building() {
+    let mut g = game_with_neutral(5);
+    ready(&mut g);
+    let neutral = g
+        .world
+        .houses
+        .iter()
+        .position(|h| h.role == glasnost_sim::world::HouseRole::Neutral)
+        .expect("a neutral house") as u8;
+    let (w, target, unit) = spy_scene_of(&g, "SPYB", neutral);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!garrison_orders(&orders, unit, target), "{orders:?}");
+}
+
+// design: own AI (#47): the special modules see the orders given earlier in the same think, so a unit gets one job: a spy sent into an enemy building is not also sent to a crate beside it (the later order would win).
+#[test]
+fn a_spy_sent_into_a_building_is_not_sent_to_a_crate() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = spy_scene(&g, "SPYB");
+    let at = w.obj(unit).unwrap().pos.cell();
+    let c = (1..6)
+        .flat_map(|d| [(d, 0), (0, d), (-d, 0), (0, -d)])
+        .map(|(dx, dy)| glasnost_map::CellXY::new(at.x + dx, at.y + dy))
+        .find(|&c| w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c))
+        .expect("a free cell by the spy");
+    // A crate on the cell, as in tests/crates.rs.
+    let overlay = w
+        .rules()
+        .overlays
+        .iter()
+        .position(|o| o.crate_)
+        .expect("the crate overlay") as u8;
+    w.cells.grid.get_mut(c).expect("the cell").overlay = overlay;
+    w.crates.places.insert(
+        0,
+        glasnost_sim::crates::Place {
+            cell: c,
+            start: w.tick,
+            life: 100_000,
+            trigger: false,
+        },
+    );
+    assert!(glasnost_sim::econ::shroud::explored(&w, HouseId(0), c));
+    assert!(
+        glasnost_sim::crates::is_crate(&w, c),
+        "the crate is on the map"
+    );
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+    let mine: Vec<&Order> = orders.iter().filter(|o| o.actor() == Some(unit)).collect();
+    assert_eq!(mine.len(), 1, "one order for the spy: {mine:?}");
 }

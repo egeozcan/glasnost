@@ -8,7 +8,7 @@
 //! seat sees: the type's fields (the sidebar and the game's help show what a
 //! building does), the owner of a building on a cell the house has explored.
 
-use glasnost_sim::econ::{setup, shroud};
+use glasnost_sim::econ::setup;
 use glasnost_sim::rules::Kind;
 use glasnost_sim::structures::tech;
 use glasnost_sim::world::{HouseId, ObjectId, World};
@@ -48,7 +48,7 @@ pub fn rank(w: &World, b: ObjectId) -> u8 {
 pub fn paying_in_sight(w: &World, house: HouseId) -> Vec<ObjectId> {
     w.objects
         .values()
-        .filter(|o| rank(w, o.id) == 0 && shroud::explored(w, house, o.pos.cell()))
+        .filter(|o| rank(w, o.id) == 0 && crate::in_view(w, house, o.id))
         .map(|o| o.id)
         .collect()
 }
@@ -58,5 +58,5 @@ pub fn paying_in_sight(w: &World, house: HouseId) -> Vec<ObjectId> {
 pub fn in_sight(w: &World, house: HouseId) -> bool {
     w.objects
         .values()
-        .any(|o| passive_tech(w, o.id) && shroud::explored(w, house, o.pos.cell()))
+        .any(|o| passive_tech(w, o.id) && crate::in_view(w, house, o.id))
 }

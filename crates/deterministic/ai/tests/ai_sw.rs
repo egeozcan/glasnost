@@ -17,9 +17,9 @@ use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, World};
 
 /// The skirmish ruleset with one superweapon type per kind word and the
-/// building that gives it (test data of our own): IRON, SHLD, SPYW, CHRN
-/// (first stage, linked) and CHWP (second stage), the giving buildings
-/// IRONB, SHLDB, SPYB and CHRNB (both teleport stages), none of which a
+/// building that gives it (test data of our own): STRM, IRON, SHLD, SPYW,
+/// CHRN (first stage, linked) and CHWP (second stage), the giving buildings
+/// STRMB, IRONB, SHLDB, SPYB and CHRNB (both teleport stages), none of which a
 /// house can build. Every charge time is 0.1 minutes and none depends on
 /// power.
 fn rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
@@ -40,6 +40,7 @@ fn rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
     chwp.post_click = Some(true);
     chwp.pre_dependent = Some("ChronoSphere".into());
     for (n, t) in [
+        ("STRM", sw("LightningStorm", "LightningStorm")),
         ("IRON", sw("IronCurtain", "IronCurtain")),
         ("SHLD", sw("ForceShield", "ForceShield")),
         ("SPYW", sw("SpyPlane", "SpyPlane")),
@@ -60,6 +61,7 @@ fn rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
         x
     };
     for (n, b) in [
+        ("STRMB", giver("STRM", None)),
         ("IRONB", giver("IRON", None)),
         ("SHLDB", giver("SHLD", None)),
         ("SPYB", giver("SPYW", None)),
@@ -87,12 +89,22 @@ fn ready(giver: &str) -> (Game, CellXY) {
 /// thought again (the brain fires a ready record at once, and its order is
 /// pending in the world: a fixed wait of 400 ticks can end after that).
 fn ready_until(giver: &str, until: Option<&str>) -> (Game, CellXY) {
+    ready_in(giver, until, &fixture::map(), fixture::setup(5))
+}
+
+/// [`ready_until`] on map `map` with setup `setup`.
+fn ready_in(
+    giver: &str,
+    until: Option<&str>,
+    map: &glasnost_map::Map,
+    setup: glasnost_sim::world::GameSetup,
+) -> (Game, CellXY) {
     let mut g = Game::new(
         rules(),
-        &fixture::map(),
+        map,
         "synthetic-sw-kinds",
         fixture::catalogue(),
-        fixture::setup(5),
+        setup,
     )
     .expect("the synthetic skirmish loads");
     while g.world.tick < 3000
@@ -510,4 +522,274 @@ fn picks_again_when_the_group_has_left_the_source() {
         "no teleport from a source the group has left"
     );
     assert_eq!(fires(&orders, "CHRN", &w), vec![moved], "a new pick");
+}
+
+/// Cloaks unit `id` fully (S-0516 Terms) and checks house 0 does not
+/// sense it.
+fn cloak(w: &mut World, id: glasnost_sim::world::ObjectId) {
+    w.obj_mut(id).unwrap().cloak.state = glasnost_sim::cloak::CloakState::Cloaked;
+    assert!(glasnost_sim::cloak::hidden_from(w, id, Some(HouseId(0))));
+}
+
+// design: own AI (#38) and S-0513 claim 34 (the teleport leaves a protected object in place): a group of the house's vehicles under its iron curtain is not picked as a teleport source.
+#[test]
+fn does_not_teleport_a_curtained_group() {
+    let (g, yard) = ready("CHRNB");
+    let c = spot(yard, 10, 8);
+    let mut w = g.world.clone();
+    group(&mut w, c);
+    glasnost_sim::tick::step(&mut w);
+    let tick = w.tick;
+    let ids: Vec<_> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(0)) && o.kind == Kind::Vehicle)
+        .filter(|o| (o.pos.cell().x - c.x).abs() <= 1 && (o.pos.cell().y - c.y).abs() <= 1)
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(ids.len(), 3, "the group");
+    for id in ids {
+        w.obj_mut(id).unwrap().sw.protection = Some(glasnost_sim::superweapons::Protection {
+            start: tick,
+            duration: 300,
+            kind: glasnost_sim::superweapons::ProtectKind::Curtain,
+            tint: Default::default(),
+        });
+        assert!(glasnost_sim::superweapons::protected(&w, id));
+    }
+    let orders = think(&w);
+    assert!(
+        fires(&orders, "CHRN", &w).is_empty(),
+        "no first stage on a curtained group: {orders:?}"
+    );
+}
+
+// design: own AI (#38): the teleport's source block is held back only by another house's unit the house sees: a cloaked enemy tank or an enemy building beside the group does not change the pick.
+#[test]
+fn a_hidden_tank_or_a_building_beside_a_group_does_not_stop_the_teleport() {
+    let (g, yard) = ready("CHRNB");
+    let c = spot(yard, 10, 8);
+    for what in ["tank", "building"] {
+        let mut w = g.world.clone();
+        group(&mut w, c);
+        let beside = CellXY::new(c.x - 1, c.y - 1);
+        assert!(free(&w, beside), "{what}: a free cell beside the group");
+        if what == "tank" {
+            let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, beside, 0);
+            glasnost_sim::tick::step(&mut w);
+            cloak(&mut w, tank);
+        } else {
+            testkit::spawn(&mut w, Kind::Building, "PILL", 1, beside, 0);
+            glasnost_sim::tick::step(&mut w);
+        }
+        assert_eq!(
+            fires(&think(&w), "CHRN", &w),
+            vec![c],
+            "{what}: the first stage on the group"
+        );
+    }
+}
+
+// design: own AI (#38): the teleport's landing block is chosen by what the house sees: a cloaked enemy tank standing on it does not move it.
+#[test]
+fn a_hidden_tank_does_not_move_the_landing() {
+    let (w, _) = picked((10, 8));
+    let dest = fires(&think(&w), "CHWP", &w);
+    assert_eq!(dest.len(), 1, "the second stage: {dest:?}");
+    let mut w2 = w.clone();
+    let tank = testkit::spawn(&mut w2, Kind::Vehicle, "GUNR", 1, dest[0], 0);
+    cloak(&mut w2, tank);
+    assert_eq!(
+        fires(&think(&w2), "CHWP", &w2),
+        dest,
+        "the landing is where it was"
+    );
+}
+
+/// An enemy scout (house 1) on a free cell near `c` that house 0 sees.
+fn scout_near(w: &mut World, c: CellXY) -> glasnost_sim::world::ObjectId {
+    let at = (3..12)
+        .map(|d| CellXY::new(c.x + d, c.y))
+        .find(|&x| free(w, x))
+        .expect("a free cell for the scout");
+    let p = glasnost_sim::world::Pos::centre(at, 0);
+    glasnost_sim::econ::shroud::area_reveal(w, HouseId(0), p, 2);
+    let scout = testkit::spawn(w, Kind::Infantry, "WALKER", 1, at, 0);
+    glasnost_sim::tick::step(w);
+    assert!(
+        glasnost_ai::in_view(w, HouseId(0), scout),
+        "the scout is seen"
+    );
+    scout
+}
+
+// design: own AI (#31): the teleport lands next to the enemy base, not next to the nearest seen enemy unit: an enemy scout by the house's own base does not move the landing there.
+#[test]
+fn a_scout_at_home_does_not_pull_the_landing() {
+    let (mut w, c) = picked((10, 8));
+    let scout = scout_near(&mut w, c);
+    let s = w.obj(scout).unwrap().pos.cell();
+    let dest = fires(&think(&w), "CHWP", &w);
+    assert_eq!(dest.len(), 1, "the second stage: {dest:?}");
+    let d = dest[0];
+    assert!(
+        (d.x - s.x).abs().max((d.y - s.y).abs()) > 9,
+        "the landing {d:?} is by the scout {s:?}"
+    );
+}
+
+// design: own AI (#31): the spy plane goes at a cell the house does not see, as the psychic reveal does: an enemy scout seen by the house's base does not draw it.
+#[test]
+fn a_scout_at_home_does_not_draw_the_spy_plane() {
+    let (g, yard) = ready_until("SPYB", Some("SPYW"));
+    let mut w = g.world.clone();
+    scout_near(&mut w, yard);
+    let cells = fires(&think(&w), "SPYW", &w);
+    assert_eq!(cells.len(), 1, "one spy plane order: {cells:?}");
+    assert!(
+        !glasnost_sim::econ::shroud::seen(&w, HouseId(0), cells[0]),
+        "the spy plane goes at a seen cell: {cells:?}"
+    );
+}
+
+/// The cells building `b` stands on (its foundation from its top-left cell).
+fn foundation(w: &World, b: glasnost_sim::world::ObjectId) -> Vec<CellXY> {
+    let o = w.obj(b).unwrap();
+    glasnost_sim::econ::placement::foundation_cells(w, o.type_index, o.pos.cell())
+}
+
+// design: own AI (#30): the teleport's landing block holds none of the cells a seen building stands on, not only none of their top-left cells: a plant whose last cell is the block's corner moves the landing. The plant is the house's own, which it sees anywhere and which is no goal.
+#[test]
+fn a_building_reaching_into_the_landing_moves_it() {
+    let (w, _) = picked((10, 8));
+    let dest = fires(&think(&w), "CHWP", &w);
+    assert_eq!(dest.len(), 1, "the second stage: {dest:?}");
+    let c = dest[0];
+    let mut w2 = w.clone();
+    let plant = testkit::spawn(
+        &mut w2,
+        Kind::Building,
+        "POWR",
+        0,
+        CellXY::new(c.x - 2, c.y - 2),
+        0,
+    );
+    let cells = foundation(&w2, plant);
+    assert!(
+        cells.contains(&CellXY::new(c.x - 1, c.y - 1)),
+        "the plant reaches into the block: {cells:?}"
+    );
+    let again = fires(&think(&w2), "CHWP", &w2);
+    assert_eq!(again.len(), 1, "the second stage: {again:?}");
+    let d = again[0];
+    assert!(
+        cells
+            .iter()
+            .all(|f| (f.x - d.x).abs() > 1 || (f.y - d.y).abs() > 1),
+        "the landing {d:?} overlaps the plant {cells:?}"
+    );
+}
+
+// design: own AI (#30): a storm is not aimed within STRIKE_RADIUS of any cell of the house's own building, its top-left cell or another.
+#[test]
+fn no_storm_beside_any_cell_of_an_own_building() {
+    let (g, yard) = ready_until("STRMB", Some("STRM"));
+    let b = spot(yard, 12, 12);
+    // An enemy diagonal to the plant's last cell, beyond the radius (3) of
+    // its top-left cell.
+    let e = spot(b, 3, 3);
+    let mut g = g;
+    let p = glasnost_sim::world::Pos::centre(e, 0);
+    glasnost_sim::econ::shroud::area_reveal(&mut g.world, HouseId(0), p, 4);
+    let mut alone = g.world.clone();
+    let walker = testkit::spawn(&mut alone, Kind::Infantry, "WALKER", 1, e, 0);
+    glasnost_sim::tick::step(&mut alone);
+    assert!(
+        glasnost_ai::in_view(&alone, HouseId(0), walker),
+        "the enemy is seen"
+    );
+    assert_eq!(
+        fires(&think(&alone), "STRM", &alone),
+        vec![e],
+        "the storm on the enemy"
+    );
+    let mut w = g.world.clone();
+    let plant = testkit::spawn(&mut w, Kind::Building, "POWR", 0, b, 0);
+    testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, e, 0);
+    glasnost_sim::tick::step(&mut w);
+    let cells = foundation(&w, plant);
+    let near = |c: CellXY| {
+        cells
+            .iter()
+            .any(|f| (f.x - c.x).pow(2) + (f.y - c.y).pow(2) <= 9)
+    };
+    let shots = fires(&think(&w), "STRM", &w);
+    assert!(
+        shots.iter().all(|&c| !near(c)),
+        "a storm beside the plant {cells:?}: {shots:?}"
+    );
+}
+
+/// The synthetic map with a third start (waypoint 2, north of the middle)
+/// and three houses: Alpha (0) and Gamma (2, a house with no AI) on lobby
+/// team 1, so allied (S-0412 claim 8), and Beta (1) on team 2.
+fn allied_three() -> (glasnost_map::Map, glasnost_sim::world::GameSetup) {
+    use glasnost_sim::econ::setup::{self, HouseValues, Player, Settings};
+    let mut m = fixture::map();
+    let c = fixture::at(0, -30);
+    m.waypoints.insert(2, (c.x as i16, c.y as i16));
+    let player = |name: &str, country: &str, start: u32, ai: bool, team: u8| Player {
+        name: name.into(),
+        country: country.into(),
+        start: Some(start),
+        ai,
+        values: HouseValues {
+            team: Some(team),
+            ..Default::default()
+        },
+    };
+    let s = setup::skirmish(
+        &rules(),
+        &[
+            player("Alpha", "Alphaland", 0, true, 1),
+            player("Beta", "Betaland", 1, true, 2),
+            player("Gamma", "Alphaland", 2, false, 1),
+        ],
+        Settings::default(),
+        0,
+        5,
+    );
+    (m, s)
+}
+
+// design: own AI (#32): a storm is not aimed within STRIKE_RADIUS of an allied house's object either, as of the house's own.
+#[test]
+fn no_storm_beside_an_allys_unit() {
+    let (map, setup) = allied_three();
+    let (mut g, yard) = ready_in("STRMB", Some("STRM"), &map, setup);
+    assert!(g.world.allied(Some(HouseId(0)), Some(HouseId(2))), "allied");
+    let e = spot(yard, 15, 15);
+    let p = glasnost_sim::world::Pos::centre(e, 0);
+    glasnost_sim::econ::shroud::area_reveal(&mut g.world, HouseId(0), p, 4);
+    let mut alone = g.world.clone();
+    testkit::spawn(&mut alone, Kind::Infantry, "WALKER", 1, e, 0);
+    glasnost_sim::tick::step(&mut alone);
+    assert_eq!(
+        fires(&think(&alone), "STRM", &alone),
+        vec![e],
+        "the storm on the enemy"
+    );
+    let mut w = g.world.clone();
+    testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, e, 0);
+    let a = spot(e, 1, 1);
+    let ally = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 2, a, 0);
+    glasnost_sim::tick::step(&mut w);
+    let at = w.obj(ally).unwrap().pos.cell();
+    let shots = fires(&think(&w), "STRM", &w);
+    assert!(
+        shots
+            .iter()
+            .all(|&c| (c.x - at.x).pow(2) + (c.y - at.y).pow(2) > 9),
+        "a storm beside the ally's tank at {at:?}: {shots:?}"
+    );
 }

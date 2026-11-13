@@ -28,8 +28,8 @@
 //!   paradrop (S-0522) is fired at a free usable land cell near home, and
 //!   the paratroopers that land join its army; a ready iron curtain goes on
 //!   a group of its own armed vehicles fighting seen enemies, a force shield
-//!   on its buildings with seen enemies at them, a spy plane at the enemy
-//!   base, and the teleport takes a group of its armed vehicles (first
+//!   on its buildings with seen enemies at them, a spy plane at an enemy
+//!   base it does not see (the psychic reveal's cell), and the teleport takes a group of its armed vehicles (first
 //!   stage) to a free block next to the enemy base (second stage), each with
 //!   the order a person gives; a ready psychic reveal (S-0610) goes on the
 //!   enemy start cell nearest home that the house does not see (then on
@@ -1143,7 +1143,8 @@ impl Brain {
                     c
                 }),
                 Some(SwKind::ForceShield) => self.shield_cell(w),
-                Some(SwKind::SpyPlane) => self.script.attack_goal(w),
+                // design: own AI (#31): a cell the house does not see, as the psychic reveal's
+                Some(SwKind::SpyPlane) => crate::psychic::reveal_cell(&self.script, w),
                 Some(SwKind::Chrono) => self.teleport_cells(w, h, false),
                 Some(SwKind::ChronoWarp) => self.teleport_cells(w, h, true),
                 Some(SwKind::PsychicReveal) => crate::psychic::reveal_cell(&self.script, w),
@@ -1200,10 +1201,7 @@ impl Brain {
     fn teleport_cells(&self, w: &World, h: HouseId, second: bool) -> Option<CellXY> {
         let source = Self::fresh_source(w, h);
         // design: own AI (#2): a picked block the vehicles have left is not sent; the first stage picks the block they now stand in
-        let holds = source.is_some_and(|s| {
-            self.vehicle_block(w, false, TELEPORT_MIN, Some(s))
-                .is_some()
-        });
+        let holds = source.is_some_and(|s| self.vehicle_block(w, TELEPORT_MIN, Some(s)).is_some());
         match (second, holds) {
             (false, false) => self.group_cell(w),
             (true, true) => self.landing_cell(w),
@@ -1220,32 +1218,37 @@ impl Brain {
     }
 
     /// The cell of an effect block (S-0513 claim 4: the cell and its eight
-    /// neighbours) holding the most of the house's armed vehicles, at least
-    /// `min`, with none of its infantry or organic units (the teleport
-    /// kills organic units, claim 35) and no unit of anyone else (it would
+    /// neighbours) holding the most of the house's armed vehicles that a
+    /// teleport would move (not protected: the warp leaves a protected
+    /// object in place, claim 34), at least `min`, with none of its
+    /// infantry or organic units (the teleport kills organic units, claim
+    /// 35) and no ground unit of anyone else that the house sees (it would
     /// send them too); the first in cell order on equal counts. With
-    /// `fight`, a seen enemy must be within [`FIGHT`] cells. With `only`,
-    /// that cell is the one block asked about.
-    fn vehicle_block(
-        &self,
-        w: &World,
-        fight: bool,
-        min: usize,
-        only: Option<CellXY>,
-    ) -> Option<CellXY> {
+    /// `only`, that cell is the one block asked about.
+    fn vehicle_block(&self, w: &World, min: usize, only: Option<CellXY>) -> Option<CellXY> {
         let house = self.house();
-        let enemies = self.script.seen_enemies(w);
-        let mine: Vec<(CellXY, bool)> = w
+        // The house's units: cell, army vehicle, and whether a teleport would move it.
+        let mine: Vec<(CellXY, bool, bool)> = w
             .objects
             .values()
             .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Building)
             .filter(|o| o.owner == Some(house))
-            .map(|o| (o.pos.cell(), self.army_vehicle(w, o)))
+            // design: own AI (#38) and S-0513 claim 34 (a protected object stays in place): a curtained vehicle is not counted
+            .map(|o| {
+                (
+                    o.pos.cell(),
+                    self.army_vehicle(w, o),
+                    !glasnost_sim::superweapons::protected(w, o.id),
+                )
+            })
             .collect();
+        // design: own AI (#38): another house's infantry or vehicle the house sees; not a building or an aircraft, which the block does not hold back
         let others: Vec<CellXY> = w
             .objects
             .values()
             .filter(|o| o.on_map && o.health > 0 && o.owner != Some(house))
+            .filter(|o| matches!(o.kind, Kind::Infantry | Kind::Vehicle))
+            .filter(|o| crate::in_view(w, house, o.id))
             .map(|o| o.pos.cell())
             .collect();
         let near = |a: CellXY, b: CellXY| (a.x - b.x).abs() <= 1 && (a.y - b.y).abs() <= 1;
@@ -1253,18 +1256,19 @@ impl Brain {
             Some(c) => vec![c],
             None => mine
                 .iter()
-                .filter(|&&(_, army)| army)
-                .map(|&(c, _)| c)
+                .filter(|&&(_, army, moved)| army && moved)
+                .map(|&(c, _, _)| c)
                 .collect(),
         };
         cells
             .into_iter()
-            .filter(|&c| !fight || enemies.iter().any(|&(_, e)| dist2(e, c) <= FIGHT * FIGHT))
-            .filter(|&c| !mine.iter().any(|&(m, army)| !army && near(m, c)))
+            .filter(|&c| !mine.iter().any(|&(m, army, _)| !army && near(m, c)))
             .filter(|&c| !others.iter().any(|&o| near(o, c)))
             .map(|c| {
                 (
-                    mine.iter().filter(|&&(m, army)| army && near(m, c)).count(),
+                    mine.iter()
+                        .filter(|&&(m, army, moved)| army && moved && near(m, c))
+                        .count(),
                     c,
                 )
             })
@@ -1319,6 +1323,8 @@ impl Brain {
             ids.into_iter()
                 .filter_map(|id| w.obj(id))
                 .filter(|o| o.health > 0)
+                // design: own AI (#38): of other houses' objects, those the house sees
+                .filter(|o| friend(o.owner) || crate::in_view(w, house, o.id))
                 .collect::<Vec<_>>()
         };
         let attacked: Vec<ObjectId> = enemies
@@ -1390,7 +1396,7 @@ impl Brain {
 
     /// A teleport source's cell: a block of the house's armed vehicles.
     fn group_cell(&self, w: &World) -> Option<CellXY> {
-        self.vehicle_block(w, false, TELEPORT_MIN, None)
+        self.vehicle_block(w, TELEPORT_MIN, None)
     }
 
     /// A force shield's cell: the reference cell of one of the house's
@@ -1450,15 +1456,12 @@ impl Brain {
     /// The teleport's second-stage cell: the first cell, ring by ring
     /// around the enemy base from [`LAND_RINGS`]'s nearest ring outwards,
     /// in cell order within a ring, whose whole effect block is usable
-    /// land with nothing standing on it.
+    /// land with nothing standing on it. The enemy base is the nearest seen
+    /// enemy building, or the start cell waves go to ([`Script::base_goal`]).
     fn landing_cell(&self, w: &World) -> Option<CellXY> {
-        let goal = self.script.attack_goal(w)?;
-        let taken: std::collections::BTreeSet<CellXY> = w
-            .objects
-            .values()
-            .filter(|o| o.on_map)
-            .map(|o| o.pos.cell())
-            .collect();
+        // design: own AI (#31): next to an enemy base, not the nearest seen enemy of any kind
+        let goal = self.script.base_goal(w)?;
+        let taken = self.seen_taken(w);
         let free = |c: CellXY| {
             w.cells.usable(c)
                 && !taken.contains(&c)
@@ -1477,17 +1480,28 @@ impl Brain {
         })
     }
 
+    /// The cells on which the house sees an object standing
+    /// ([`crate::in_view`]): a person picks a free cell by what is drawn
+    /// there, and the map's ground is known to every player (#38); every
+    /// cell of a building (#30).
+    fn seen_taken(&self, w: &World) -> std::collections::BTreeSet<CellXY> {
+        let house = self.house();
+        w.objects
+            .values()
+            .filter(|o| o.on_map)
+            // design: own AI (#38): only objects the house sees
+            .filter(|o| crate::in_view(w, house, o.id))
+            // design: own AI (#30): a building's whole foundation
+            .flat_map(|o| crate::cells_of(w, o))
+            .collect()
+    }
+
     /// A paradrop's cell: the first cell, ring by ring around home from
     /// [`DROP_RINGS`]'s nearest ring outwards, in cell order within a ring,
     /// that is inside the usable area and holds no object.
     fn drop_cell(&self, w: &World) -> Option<CellXY> {
         let home = self.script.home(w)?;
-        let taken: std::collections::BTreeSet<CellXY> = w
-            .objects
-            .values()
-            .filter(|o| o.on_map)
-            .map(|o| o.pos.cell())
-            .collect();
+        let taken = self.seen_taken(w);
         (DROP_RINGS.0..=DROP_RINGS.1).find_map(|r| {
             (-r..=r)
                 .flat_map(|dy| (-r..=r).map(move |dx| (dx, dy)))
@@ -1498,15 +1512,20 @@ impl Brain {
     }
 
     /// The seen enemy's cell with the most seen enemies within
-    /// [`STRIKE_RADIUS`] and none of the house's own objects; the first in
-    /// cell order on equal counts.
+    /// [`STRIKE_RADIUS`] and no cell of the house's or its allies' objects;
+    /// the first in cell order on equal counts.
     fn strike_cell(&self, w: &World) -> Option<CellXY> {
+        let house = self.house();
+        let me = &w.houses[usize::from(house.0)];
         let enemies = self.script.seen_enemies(w);
-        let own: Vec<CellXY> = self
-            .script
-            .own(w)
-            .into_iter()
-            .filter_map(|id| w.obj(id).map(|o| o.pos.cell()))
+        let own: Vec<CellXY> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0)
+            // design: own AI (#32): the allies' objects too, which the house sees wherever they stand (`crate::in_view`)
+            .filter(|o| o.owner.is_some_and(|h| h == house || me.allied_with(h)))
+            // design: own AI (#30): every cell a building stands on
+            .flat_map(|o| crate::cells_of(w, o))
             .collect();
         let r2 = STRIKE_RADIUS * STRIKE_RADIUS;
         enemies
@@ -2027,6 +2046,8 @@ impl Brain {
             .zone;
         let mine = regions::reach_in(w, from, fz);
         let goal = zone.map(|z| (z, regions::reach_in(w, center, z)));
+        // design: own AI (#38): free of every object the house sees standing there
+        let taken = self.seen_taken(w);
         w.cells
             .grid
             .iter()
@@ -2036,7 +2057,7 @@ impl Brain {
                     && d <= far * far
                     && cell.land != land::WATER
                     && w.cells.usable(*c)
-                    && w.cells.occ(*c, Layer::Ground).is_some_and(|o| o.empty())
+                    && !taken.contains(c)
             })
             .map(|(c, _)| c)
             // From a cell outside every region (a factory's exit) any

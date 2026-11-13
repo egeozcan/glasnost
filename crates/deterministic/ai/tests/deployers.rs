@@ -402,3 +402,15 @@ fn deploys_a_radiation_immune_unit_near_an_enemy_and_packs_it_up_without_one() {
         assert_eq!(deploys(&brain.think(&w), unit), packs, "{enemy:?}");
     }
 }
+
+// design: own AI (#47) and S-0213 claim 3 (the behaviour orders are applied after the others, so a later order for the same unit replaces the deploy): an in-place vehicle deployed for a seen enemy is given the deploy order and no other order in the same think.
+#[test]
+fn a_deployed_vehicle_gets_no_second_order() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (w, unit) = scene(&g, Kind::Vehicle, "DEPT", Some(5));
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(deploys(&orders, unit), "{orders:?}");
+    let mine: Vec<&Order> = orders.iter().filter(|o| o.actor() == Some(unit)).collect();
+    assert_eq!(mine.len(), 1, "one order for the vehicle: {mine:?}");
+}

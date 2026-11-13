@@ -258,3 +258,27 @@ fn builds_a_lifter_with_a_war_factory() {
     assert!(built);
     assert!(br.special_uses().lifter_builds >= 1);
 }
+
+// design: own AI (#45): a vehicle another lifter of the house already aims at is not chosen again, whichever lifter comes first in the think: the free lifter goes for the other enemy vehicle.
+#[test]
+fn two_lifters_do_not_go_for_one_vehicle() {
+    let g = game();
+    let mut w = g.world.clone();
+    let first = spawn(&mut w, Kind::Vehicle, "MAGN", 0, 0, 4);
+    let second = spawn(&mut w, Kind::Vehicle, "MAGN", 0, 1, 5);
+    settle(&mut w);
+    // The enemies come after the settling ticks, so that neither lifter has
+    // seized one of them on its own.
+    let a = spawn(&mut w, Kind::Vehicle, "GUNR", 1, 5, 6);
+    let b = spawn(&mut w, Kind::Vehicle, "GUNR", 1, 4, 4);
+    assert!(lift::gripped_unit(&w, first).is_none() && lift::gripped_unit(&w, second).is_none());
+    // The first lifter's own pick, alone.
+    let alone = attacked(&brain(&w).think(&w), first).expect("the first lifter's pick");
+    let other = if alone == a { b } else { a };
+    // The second lifter aims at that vehicle already.
+    w.obj_mut(second).unwrap().target = Some(Target::Object(alone));
+    let mut br = brain(&w);
+    let out = br.think(&w);
+    assert_eq!(attacked(&out, first), Some(other), "{out:?}");
+    assert_eq!(br.special_uses().lift_orders, 1, "one lift order: {out:?}");
+}

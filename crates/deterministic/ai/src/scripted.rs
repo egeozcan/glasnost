@@ -1396,13 +1396,16 @@ impl Script {
         yes
     }
 
-    /// Whether `t` is at its build limit for the house now
-    /// ([`tech::at_limit`]), the answer kept for the rest of a think.
+    /// Whether a build order for `t` would be refused at issue now by its
+    /// build limit or by claim 16's test, a full pad total for a dock-bound
+    /// aircraft among them ([`tech::refused_at_issue`]), the answer kept for
+    /// the rest of a think.
     fn at_limit(&self, w: &World, t: TypeRef) -> bool {
         if let Some(yes) = self.placed.limited(t) {
             return yes;
         }
-        let yes = tech::at_limit(w, self.house, t);
+        // spec: S-0407 claims 13 and 16 *At issue* (design: own AI, #426: a candidate the sidebar would refuse at issue is not chosen)
+        let yes = tech::refused_at_issue(w, self.house, t);
         self.placed.put_limited(t, yes);
         yes
     }
@@ -2799,7 +2802,9 @@ impl Script {
     /// Enemy objects on cells the house has explored, with their cells: fog
     /// of war is off in a skirmish (S-0409 claim 19), so a person in the
     /// house's seat sees what stands on every explored cell, except a
-    /// cloaked object the house does not sense (S-0516 claim 28).
+    /// cloaked object the house does not sense (S-0516 claim 28) and a
+    /// unit it is shown as its disguise (claims 35 and 37); a building is
+    /// seen by any explored cell of its foundation (#37).
     /// One scan a think, the list kept for the rest of it (design: own AI,
     /// #53 and #59).
     pub(crate) fn seen_enemies(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
@@ -2824,9 +2829,11 @@ impl Script {
                     && !me.allied_with(owner)
                     && h.role == glasnost_sim::world::HouseRole::Player;
                 let c = o.pos.cell();
-                // A cloaked enemy the house does not sense is not seen (S-0516 claim 28: not drawn for it).
-                let hidden = || glasnost_sim::cloak::hidden_from(w, o.id, Some(self.house));
-                (enemy && !hidden() && shroud::explored(w, self.house, c)).then_some((o.id, c))
+                // A cloaked enemy the house does not sense is not seen (S-0516 claim 28: not drawn for it); a building by any explored cell of it (`crate::in_view`, #37).
+                let seen = || crate::in_view(w, self.house, o.id);
+                // design: own AI (#37): an enemy unit the house is shown as its disguise is taken for what it shows (S-0516 claims 35 and 37)
+                let disguised = || crate::shown_as_disguise(w, self.house, o.id);
+                (enemy && seen() && !disguised()).then_some((o.id, c))
             })
             .collect()
     }
@@ -3535,8 +3542,10 @@ mod place_cell_tests {
                     && !me.allied_with(owner)
                     && h.role == glasnost_sim::world::HouseRole::Player;
                 let c = o.pos.cell();
-                let hidden = glasnost_sim::cloak::hidden_from(w, o.id, Some(s.house));
-                (enemy && !hidden && shroud::explored(w, s.house, c)).then_some((o.id, c))
+                // The view rule of #37: any explored cell of a building, no disguise shown.
+                let seen =
+                    crate::in_view(w, s.house, o.id) && !crate::shown_as_disguise(w, s.house, o.id);
+                (enemy && seen).then_some((o.id, c))
             })
             .collect()
     }

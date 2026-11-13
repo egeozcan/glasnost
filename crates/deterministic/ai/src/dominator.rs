@@ -18,8 +18,8 @@
 //!   destroy of the seen enemy objects it does not take (buildings, which
 //!   are never taken, refused units, and takeable units the damage itself
 //!   destroys: claims 9, 10 and 13); loss, the allied value the sweep would
-//!   take, and the part of the house's own value the area damage is
-//!   expected to destroy. What the sweep takes is the simulation's own
+//!   take, and the part of the house's and its allies' value the area
+//!   damage is expected to destroy (of what the sweep does not take). What the sweep takes is the simulation's own
 //!   preview of claims 11 to 13 (`glasnost_sim::domination::preview`: the
 //!   swept cells and layers, the objects examined from each cell's start
 //!   object, and the takeover tests), cut to the enemy units the house sees:
@@ -187,6 +187,8 @@ fn worth(
     let taken = glasnost_sim::domination::preview(w, house, c);
     let (mut gain, mut loss, mut n) = (0, 0, 0);
     let mut destroyed: BTreeSet<ObjectId> = BTreeSet::new();
+    // The allied objects the sweep takes: counted whole, not again by the damage.
+    let mut ally_taken: BTreeSet<ObjectId> = BTreeSet::new();
     let wrecks = wrecks(w, house, c, seen);
     for id in taken {
         let Some(o) = w.obj(id) else { continue };
@@ -204,10 +206,15 @@ fn worth(
         } else if o.owner.is_some_and(|x| x != house && me.allied_with(x)) {
             // spec: S-0612 claim 13 (allied objects are taken over)
             loss += value(w, o);
+            ally_taken.insert(id);
         }
     }
     // spec: S-0612 claim 14 (own objects change no owner) and claim 9 (the area damage, of the imported amount and warhead)
-    loss += blast_loss(w, &[house], c, d.damage, d.warhead, true);
+    // design: own AI (#33): the damage to the allies' objects the sweep does not take is loss too, as the mutator counts it
+    loss += blast_value(w, c, d.damage, d.warhead, |o| {
+        o.owner
+            .is_some_and(|x| x == house || (me.allied_with(x) && !ally_taken.contains(&o.id)))
+    });
     // spec: S-0612 claims 9 and 10 (the area damage hurts the seen enemy objects that are not taken: buildings, which are never taken (claim 13), units the takeover tests refuse, and takeable units it destroys)
     gain += blast_value(w, c, d.damage, d.warhead, |o| {
         seen.contains(&o.id) && (!takeable.contains(&o.id) || destroyed.contains(&o.id))

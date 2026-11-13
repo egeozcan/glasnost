@@ -18,7 +18,7 @@
 //!   transports carrying passengers, mind controllers and magnetic lifters
 //!   (S-0607, kept at home by `lifter`) are never sent. Nor is a vehicle
 //!   sent where it would be let out again at once: not into a bunker down
-//!   to [`RETREAT_PERCENT`], and none while the base is under attack;
+//!   to [`RETREAT_PERCENT`], and not into one under threat (see *attack*);
 //! - **lets them out with a deploy click** (the bunkered vehicle's deploy
 //!   cursor, S-0214 table VD row VD5, which gives it *unload*: S-0606
 //!   claim 12) to:
@@ -26,11 +26,13 @@
 //!     so it can drive to a repair depot;
 //!   - *retreat*: the bunker is down to [`RETREAT_PERCENT`] of its strength,
 //!     so the vehicle is not caught when it falls;
-//!   - *attack*: an enemy is seen within [`ATTACK_REACH`] cells of the
-//!     bunker or of another building of the house, and the vehicle has no
-//!     target (it cannot reach it from where it stands);
+//!   - *attack*: the bunker is under threat, a seen enemy within
+//!     [`ATTACK_REACH`] cells of it or one whose target is the bunker, and
+//!     the vehicle has no target (it cannot reach it from where it stands).
+//!     An enemy near another building of the house does not count: the
+//!     bunker is most useful as an enemy comes near it (#427);
 //!   - *join*: the vehicle has sat in its bunker for [`JOIN_AFTER`] ticks,
-//!     has nothing to shoot and sees no enemy near the base: the bunker guards
+//!     has nothing to shoot and its bunker is under no threat: the bunker guards
 //!     nothing, so the vehicle comes out to go with the next wave, and an
 //!     idle vehicle may take its place. A vehicle let out is not sent back
 //!     in for [`REENTRY_PAUSE`] ticks.
@@ -77,8 +79,8 @@ pub const REPAIR_PERCENT: i32 = 40; // nocite: tuning of our own opponent
 /// strength is let out.
 pub const RETREAT_PERCENT: i32 = 25; // nocite: tuning of our own opponent
 
-/// Cells from a bunker, or from another building of the house, within
-/// which a seen enemy the vehicle has no target on lets it out to attack.
+/// Cells from a bunker within which a seen enemy the vehicle has no target
+/// on lets it out to attack.
 pub const ATTACK_REACH: i64 = 10; // nocite: tuning of our own opponent
 
 /// Ticks a vehicle sits in its bunker with nothing to do before it is let
@@ -206,24 +208,24 @@ fn percent(w: &World, id: ObjectId) -> i32 {
     })
 }
 
-/// Whether a seen enemy stands within [`ATTACK_REACH`] cells of a building
-/// of the house (the base is under attack, maybe where a bunkered vehicle
-/// cannot reach).
-fn base_attacked(script: &Script, w: &World) -> bool {
-    let base: Vec<CellXY> = w
-        .objects
-        .values()
-        .filter(|o| o.owner == Some(script.house) && o.kind == Kind::Building && o.on_map)
-        .map(|o| o.pos.cell())
-        .collect();
-    script.seen_enemies(w).iter().any(|&(_, c)| {
-        base.iter()
-            .any(|&h| dist2(c, h) <= ATTACK_REACH * ATTACK_REACH)
+/// Whether bunker `b` is under threat: a seen enemy stands within
+/// [`ATTACK_REACH`] cells of one of its cells, or a seen enemy's target is
+/// the bunker (a person sees the shots come in).
+fn threatened(w: &World, b: ObjectId, enemies: &[(ObjectId, CellXY)]) -> bool {
+    let Some(bo) = w.obj(b) else { return false };
+    let cells = crate::cells_of(w, bo);
+    enemies.iter().any(|&(e, c)| {
+        // design: own AI (#427): the threat near the bunker itself, not near any building of the house
+        cells
+            .iter()
+            .any(|&x| dist2(c, x) <= ATTACK_REACH * ATTACK_REACH)
+            || w.obj(e)
+                .is_some_and(|o| o.target == Some(Target::Object(b)))
     })
 }
 
 /// Why bunkered vehicle `v` in bunker `b` is let out, if it is, with
-/// `attacked` the base test of [`base_attacked`].
+/// `attacked` the bunker test of [`threatened`].
 fn exit_reason(
     w: &World,
     v: ObjectId,
@@ -240,8 +242,7 @@ fn exit_reason(
     if w.obj(v)?.target.is_some() {
         return None;
     }
-    // An enemy near the bunker or near any other building of the house
-    // (the base is under attack where the vehicle cannot reach).
+    // An enemy near the bunker or aiming at it, out of the vehicle's reach.
     if attacked {
         return Some("attack");
     }
@@ -277,8 +278,13 @@ impl Special {
             return;
         }
         let mods = Modifiers::default();
-        // Asked once for the think: the exits and the entries both read it.
-        let attacked = base_attacked(script, w);
+        // Asked once a bunker for the think: the exits and the entries both read it.
+        let enemies = script.seen_enemies(w);
+        let attacked: BTreeMap<ObjectId, bool> = buildings
+            .iter()
+            .map(|&b| (b, threatened(w, b, &enemies)))
+            .collect();
+        let attacked = |b: ObjectId| attacked.get(&b).copied().unwrap_or(false);
         for &b in &buildings {
             let Some(v) = bunker::occupant(w, b) else {
                 continue;
@@ -293,7 +299,7 @@ impl Special {
                 .inside_since
                 .get(&v)
                 .is_some_and(|&t| now - t >= JOIN_AFTER);
-            if exit_reason(w, v, b, joins, attacked).is_some()
+            if exit_reason(w, v, b, joins, attacked(b)).is_some()
                 && targeting::cursor(w, house, &[v], ClickOn::Object(v), mods) == Action::Deploy
             {
                 out.push(Order::Deploy { actor: v });
@@ -301,13 +307,15 @@ impl Special {
                 self.count_bunker_exit();
             }
         }
-        // design: own AI (#18): no vehicle is sent in while it would be let out at the next think: not into a bunker down to RETREAT_PERCENT, and none while the base is under attack (the vehicle would come out to defend it); every idle vehicle near the base went in and out in turn
-        if attacked {
-            return;
-        }
+        // design: own AI (#18): no vehicle is sent in while it would be let out at the next think: not into a bunker down to RETREAT_PERCENT, and not into one under threat (the vehicle would come out to fight); every idle vehicle near the base went in and out in turn
+        // design: own AI (#427): the same bunker test as the exit's, so the threat near that bunker
         let mut sent: Vec<ObjectId> = Vec::new();
         for &b in &buildings {
-            if taken(w, b) || bunker::occupant(w, b).is_some() || percent(w, b) <= RETREAT_PERCENT {
+            if taken(w, b)
+                || bunker::occupant(w, b).is_some()
+                || percent(w, b) <= RETREAT_PERCENT
+                || attacked(b)
+            {
                 continue;
             }
             let Some(at) = w.obj(b).map(|o| o.pos.cell()) else {

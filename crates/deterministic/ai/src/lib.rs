@@ -60,12 +60,91 @@ pub mod special;
 pub mod tech_buildings;
 pub mod terror;
 
+/// Whether house `house` sees object `id` where it stands, as a person in
+/// its seat does: on the map, and either the house's own or an ally's, or
+/// on a cell the house has explored (fog of war is off in a skirmish,
+/// S-0409 claim 19) and not hidden from it by a cloak it does not sense
+/// (S-0516 Terms and claim 28: not drawn for it). The special abilities ask
+/// this before they aim at a building (#36), the superweapon and ferry
+/// cell choosers before they call a cell free (#38).
+pub fn in_view(
+    w: &glasnost_sim::world::World,
+    house: glasnost_sim::world::HouseId,
+    id: glasnost_sim::world::ObjectId,
+) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let me = &w.houses[usize::from(house.0)];
+    // design: own AI (#36): the house's own and its allies' objects are known to it; the cloak test is asked of the others
+    let friend = o.owner.is_some_and(|h| h == house || me.allied_with(h));
+    // design: own AI (#38): the house's own and its allies' objects are seen wherever they stand
+    o.on_map
+        && (friend
+            || (explored_part(w, house, o)
+                // spec: S-0516 Terms and claim 28 (a cloaked object the house does not sense is hidden from it)
+                && !glasnost_sim::cloak::hidden_from(w, id, Some(house))))
+}
+
+/// Whether the house has explored a cell of the object: any cell of a
+/// building's foundation (S-0406 claim 2), a unit's own cell. A person sees
+/// a large building from whichever side the house has explored (#37).
+fn explored_part(
+    w: &glasnost_sim::world::World,
+    house: glasnost_sim::world::HouseId,
+    o: &glasnost_sim::world::Object,
+) -> bool {
+    use glasnost_sim::econ::shroud;
+    // design: own AI (#37): any cell the object stands on; its own cell first, the foundation only when that one is unexplored
+    shroud::explored(w, house, o.pos.cell())
+        || (o.kind == glasnost_sim::rules::Kind::Building
+            && cells_of(w, o)
+                .into_iter()
+                .any(|c| shroud::explored(w, house, c)))
+}
+
+/// The cells object `o` stands on: a building's foundation from its
+/// top-left cell (its position, S-0204 claim 4), any other object's own
+/// cell.
+pub(crate) fn cells_of(
+    w: &glasnost_sim::world::World,
+    o: &glasnost_sim::world::Object,
+) -> Vec<glasnost_map::CellXY> {
+    let at = o.pos.cell();
+    if o.kind != glasnost_sim::rules::Kind::Building {
+        return vec![at];
+    }
+    // design: own AI (#30): every foundation cell, the top-left one included
+    let mut cells = glasnost_sim::econ::placement::foundation_cells(w, o.type_index, at);
+    if !cells.contains(&at) {
+        cells.push(at);
+    }
+    cells
+}
+
+/// Whether an enemy unit appears to house `house` as its disguise rather
+/// than as itself: it appears disguised to the house (S-0516 claim 35) and
+/// the house is shown the disguise now (claim 37: not during a running fake
+/// blink, not under the house's detector coverage). A person takes it for
+/// what it shows (#37).
+pub fn shown_as_disguise(
+    w: &glasnost_sim::world::World,
+    house: glasnost_sim::world::HouseId,
+    id: glasnost_sim::world::ObjectId,
+) -> bool {
+    // spec: S-0516 claims 35 and 37 (appears disguised to the house, and the disguise is what it is shown)
+    glasnost_sim::cloak::appears_disguised(w, id, Some(house))
+        && glasnost_sim::cloak::view::shown_disguise(w, id, Some(house)).is_some()
+}
+
 /// Whether a build order for `t` would be applied now: the type is
 /// buildable (S-0411 Terms) and a switched-on factory building of the house
 /// could start it. A person sees a switched-off factory (a building locked
 /// by a temporal beam, say) and does not click a cameo the order would be
 /// refused for, so the M7a build choices ask this rather than
-/// buildability alone.
+/// buildability alone. The order must also pass the sidebar's legality
+/// when issued (S-0411 claim 4): offered, not at limit and not refused by
+/// claim 16's test (a full pad total for a dock-bound aircraft), and not on
+/// a busy building line, so a special builder never gives an order the
+/// sim refuses at every think (#426).
 pub fn startable(
     w: &glasnost_sim::world::World,
     house: glasnost_sim::world::HouseId,
@@ -80,4 +159,10 @@ pub fn startable(
                 && !b.econ.building.switched_off
                 && tech::could_start(w, b, t)
         })
+        // spec: S-0411 claim 4 and S-0407 claims 13 and 16 (the legality a build order meets when issued; design: own AI, #426, asks it before ordering)
+        && glasnost_sim::econ::sidebar::legal(
+            w,
+            house,
+            &glasnost_sim::orders::Order::Build { what: t },
+        )
 }

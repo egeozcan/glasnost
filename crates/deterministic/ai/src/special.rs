@@ -16,7 +16,7 @@
 
 use glasnost_map::CellXY;
 use glasnost_sim::combat::effects::InfiltrationRow;
-use glasnost_sim::econ::{TypeRef, production, shroud, tech};
+use glasnost_sim::econ::{TypeRef, production, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::probe::{Phase, Probe};
 use glasnost_sim::rules::Kind;
@@ -265,44 +265,71 @@ impl Special {
             }
         };
         let house = script.house;
-        let own = script.own(w);
+        let mut own = script.own(w);
         let home = script.home(w);
         self.memory.review(w);
         let mut start = out.len();
+        // design: own AI (#47): each module sees only the house's units no earlier module of this think gave an order, so a unit gets one job (the later order would win, and the earlier module's counters and bookkeeping would be wrong)
+        let free = |own: &mut Vec<ObjectId>, out: &[Order]| {
+            let given: std::collections::BTreeSet<ObjectId> = out
+                .get(start..)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(Order::actor)
+                .collect();
+            own.retain(|id| !given.contains(id));
+        };
         mark("ai:special:garrison");
         self.garrison(house, &own, home, w, out);
+        free(&mut own, out);
         mark("ai:special:engineers");
         self.engineers(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:spies");
         self.spies(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:jumpjets");
         self.jumpjets(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:deployers");
         self.deployers(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:radiation");
         self.radiation(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:chrono");
         self.chrono(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:linked");
         self.linked(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:terror");
         self.terror(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:crates");
         self.crates(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:berserk");
         self.berserk(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:mind_control");
         self.mind_control(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:absorbers");
         self.absorbers(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:grinders");
         self.grinders(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:bunkers");
         self.bunkers(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:lifters");
         self.lifters(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:drainers");
         self.drainers(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:gunners");
         self.gunners(script, &own, w, out, &mut start);
         self.memory.offer(out.get(start..).unwrap_or_default());
@@ -540,11 +567,10 @@ impl Special {
         self.uses.jumps += 1;
     }
 
-    /// Whether the house's object `b` stands on a cell the house has
-    /// explored (what it can see, so what it may click).
+    /// Whether the house sees object `b` ([`crate::in_view`]: an explored
+    /// cell and no cloak hiding it; what it can see, so what it may click).
     fn seen(w: &World, house: HouseId, b: ObjectId) -> bool {
-        w.obj(b)
-            .is_some_and(|o| o.on_map && shroud::explored(w, house, o.pos.cell()))
+        crate::in_view(w, house, b)
     }
 
     /// Infantry en route to enter building `b`: own units in *capture* with
@@ -899,7 +925,7 @@ impl Special {
                     .buildings
                     .get(o.type_index as usize)
                     .is_some_and(|b| b.raw.capturable.unwrap_or(false))
-                && shroud::explored(w, house, o.pos.cell())
+                && Self::seen(w, house, o.id)
         })
     }
 }
@@ -908,16 +934,17 @@ impl Special {
     /// How worth infiltrating a building is to `house`, lower first: the
     /// first of its effect rows (S-0510 claim 3) ranked by what a person
     /// wants: stolen technology, a factory flag it does not have yet, the
-    /// victim's money, its power, a superweapon, its radar.
+    /// victim's money, its power, a superweapon, its radar. The victim's
+    /// credits are not asked: the house cannot see them (#36).
     fn infiltration_rank(w: &World, house: HouseId, b: ObjectId) -> Option<u8> {
         let me = w.houses.get(usize::from(house.0))?;
-        let owner = w.obj(b)?.owner?;
-        let credits = w.houses.get(usize::from(owner.0)).map_or(0, |h| h.credits);
+        w.obj(b)?.owner?;
         spy::rows(w, b).first().and_then(|row| match row {
             InfiltrationRow::Tech => Some(0),
             InfiltrationRow::VehicleFactory if !me.infiltrated_vehicle_factory => Some(1),
             InfiltrationRow::InfantryFactory if !me.infiltrated_infantry_factory => Some(1),
-            InfiltrationRow::Cash if credits > 0 => Some(2), // nocite: our opponent's preference order
+            // design: own AI (#36): the cash row whatever the victim holds, which the house does not see
+            InfiltrationRow::Cash => Some(2), // nocite: our opponent's preference order
             InfiltrationRow::Power => Some(3), // nocite: our opponent's preference order
             InfiltrationRow::Superweapon => Some(4), // nocite: our opponent's preference order
             InfiltrationRow::Radar => Some(5), // nocite: our opponent's preference order
@@ -932,6 +959,8 @@ impl Special {
         w.objects
             .values()
             .filter(|o| o.kind == Kind::Building && o.on_map && o.health > 0)
+            // design: own AI (#39): an enemy player's building, as the purchase test asks
+            .filter(|o| Self::enemy_player(w, house, o.owner))
             .map(|o| o.id)
             .filter(|&b| Self::seen(w, house, b))
             .filter_map(|b| {
@@ -995,20 +1024,26 @@ impl Special {
     /// Whether the house sees an enemy building with a worthwhile
     /// infiltration effect.
     fn infiltratable_in_sight(w: &World, house: HouseId) -> bool {
-        let me = &w.houses[usize::from(house.0)];
         w.objects.values().any(|o| {
             o.kind == Kind::Building
                 && o.on_map
                 && o.health > 0
-                && o.owner.is_some_and(|h| {
-                    h != house
-                        && !me.allied_with(h)
-                        && w.houses
-                            .get(usize::from(h.0))
-                            .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
-                })
-                && shroud::explored(w, house, o.pos.cell())
+                && Self::enemy_player(w, house, o.owner)
+                && Self::seen(w, house, o.id)
                 && Self::infiltration_rank(w, house, o.id).is_some()
+        })
+    }
+
+    /// Whether `owner` is a player house that is neither `house` nor one
+    /// of its allies: the only owner whose building a spy enters (#39).
+    fn enemy_player(w: &World, house: HouseId, owner: Option<HouseId>) -> bool {
+        let me = &w.houses[usize::from(house.0)];
+        owner.is_some_and(|h| {
+            h != house
+                && !me.allied_with(h)
+                && w.houses
+                    .get(usize::from(h.0))
+                    .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
         })
     }
 }
