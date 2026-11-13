@@ -352,7 +352,7 @@ fn no_match_keeps_start_off() {
 
 /// The wheel and a touch drag scroll the open picker's list.
 #[test]
-fn the_wheel_scrolls_the_picker() {
+fn the_wheel_and_a_drag_scroll_the_picker() {
     let mut c = client();
     // Too few maps to scroll: the wheel does nothing, and stays out of the
     // game.
@@ -376,6 +376,24 @@ fn the_wheel_scrolls_the_picker() {
     assert_eq!(c.shell.picker.scroll, 0);
     c.picker_rows(-5);
     assert_eq!(c.shell.picker.scroll, 5);
+    // A finger dragged up the list by three rows shows three later rows
+    // (the content follows the finger); dragged back down, the earlier ones.
+    let pitch = c.picker_pitch();
+    let p = Point::new(100, 200);
+    let mods = Modifiers::default();
+    c.touch(touch::Phase::Start, 1, p, 1000, mods);
+    c.touch(
+        touch::Phase::Move,
+        1,
+        Point::new(p.x, p.y - 3 * pitch),
+        1010,
+        mods,
+    );
+    assert_eq!(c.shell.picker.scroll, 8, "finger up: later rows");
+    c.touch(touch::Phase::Move, 1, p, 1020, mods);
+    assert_eq!(c.shell.picker.scroll, 5, "finger down: earlier rows");
+    c.touch(touch::Phase::End, 1, p, 1030, mods);
+    assert!(c.shell.picker.open, "a drag is no click");
 }
 
 /// The search and filters are kept in the settings as they change, and a
