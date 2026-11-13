@@ -232,9 +232,10 @@ const DOCK_ANIMS: &[(&str, &str)] = &[
     ("special_anim_four_damaged", "SpecialAnimFourDamaged"),
 ];
 
-/// The slots whose names the repair depot's slot model reads (S-0108
-/// claim 20), by art base key.
+/// The slots whose names the simulation's slot model reads (S-0108 claim
+/// 20; S-0402 claim 11), by art base key.
 const SLOT_MODEL_BASES: &[&str] = &[
+    "PreProductionAnim",
     "ProductionAnim",
     "SpecialAnim",
     "SpecialAnimTwo",
@@ -1689,9 +1690,9 @@ impl Builder<'_> {
         self.slot_names(kind, index, t, econ);
     }
 
-    /// The *production* and *special-1* to *special-3* slot names of
-    /// S-0108's Import mapping, for the repair depot's slot model (S-0108
-    /// claim 20): at each read of the image sections, a non-empty value
+    /// The *pre-production*, *production* and *special-1* to *special-3*
+    /// slot names of S-0108's Import mapping, for the simulation's slot
+    /// model (S-0108 claim 20, S-0402 claim 11): at each read of the image sections, a non-empty value
     /// replaces the held name and an empty damaged name then takes the
     /// held normal name.
     fn slot_names(&mut self, kind: Kind, index: usize, t: &TypeRec, econ: &mut Rec) {

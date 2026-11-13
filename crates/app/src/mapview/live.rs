@@ -2046,9 +2046,10 @@ impl Live {
                 ))
             })
             .collect();
-        // spec: S-0108 claim 20 (a repair depot's production and special-1 to special-3 slot animations are simulation state; the drawing shows them as the simulation plays them)
+        // spec: S-0108 claim 20 and S-0402 claim 11 (a repair depot's production and special-1 to special-3 slot animations, and the docking, payment and unloading animations beside an unloading harvester, are simulation state; the drawing shows them as the simulation plays them)
         for d in glasnost_sim::depot_anim::draws(&self.world, id) {
             let slot = match d.slot {
+                glasnost_sim::depot::DepotSlot::PreProduction => slot_play::Slot::PreProduction,
                 glasnost_sim::depot::DepotSlot::Production => slot_play::Slot::Production,
                 glasnost_sim::depot::DepotSlot::Special1 => slot_play::Slot::Special1,
                 glasnost_sim::depot::DepotSlot::Special2 => slot_play::Slot::Special2,

@@ -1,11 +1,14 @@
-//! A repair depot's slot model (S-0108 claim 20; S-0314 claims 6 and 22;
-//! S-0504 claim 8): the *production* and *special-1* to *special-3* slot
-//! animations of a repair depot, including a naval yard with the repair
-//! flag, as deterministic simulation state.
+//! The building slot model (S-0108 Terms and claims 12 and 25): the
+//! *production* and *special-1* to *special-3* slot animations of a repair
+//! depot, including a naval yard with the repair flag (S-0108 claim 20;
+//! S-0314 claims 6 and 22; S-0504 claim 8), and the docking, payment and
+//! unloading animations (*pre-production*, *special-1* and *production*) of
+//! the building beside an unloading harvester (S-0402 claim 11), as
+//! deterministic simulation state.
 //!
 //! Each running slot animation is an animation object of the update order
-//! (S-0109 claims 5 and 29): created at the repair-cycle event that starts
-//! it, with its creation draws on the scenario stream (S-0109 claim 28,
+//! (S-0109 claims 5 and 29): created at the repair-cycle or unloading event
+//! that starts it, with its creation draws on the scenario stream (S-0109 claim 28,
 //! S-0202 claim 10), first updated later in that turn pass after the
 //! objects already in the order, and played by S-0109's stage clock with
 //! its duration from the art data. Visibility and drawing never change it.
@@ -16,9 +19,10 @@
 //!
 //! Not modelled here: S-0108 claim 13's power rules and claim 14's
 //! special-outage slot (no slot of this model freezes or starts with
-//! power), and the roles a type may combine with the repair flag (delayed
-//! fire, silo fill, recycling, bunker), whose own starts are the client's
-//! or absent.
+//! power: an unpowered refinery's unloading animation plays on, where
+//! claim 13 freezes it and so holds the harvester), and the roles a type
+//! may combine with the repair flag (delayed fire, silo fill, recycling,
+//! bunker), whose own starts are the client's or absent.
 
 use std::collections::BTreeMap;
 
@@ -55,6 +59,7 @@ pub struct DepotAnimWorld {
 /// The art base key of a slot (S-0108 Import mapping).
 fn base(slot: DepotSlot) -> &'static str {
     match slot {
+        DepotSlot::PreProduction => "PreProductionAnim",
         DepotSlot::Production => "ProductionAnim",
         DepotSlot::Special1 => "SpecialAnim",
         DepotSlot::Special2 => "SpecialAnimTwo",
@@ -264,16 +269,56 @@ pub fn production_or_special2(w: &World, k: ObjectId) -> bool {
     running(w, k, DepotSlot::Production) || running(w, k, DepotSlot::Special2)
 }
 
-/// Depot `k`'s every-tick slot checks, in its own turn after its behaviour
-/// processing (our placement; S-0108 claims 12 and 20).
+/// The start row of *unload* (S-0402 claim 11): building `b` in the
+/// harvester's neighbouring cell plays its docking animation.
+pub(crate) fn docking(w: &mut World, b: ObjectId) {
+    // spec: S-0402 Terms and claim 11 (the docking animation is the building's pre-production animation, normal or damaged form; none when its art gives none)
+    start(w, b, DepotSlot::PreProduction);
+}
+
+/// A payment row of *unload* (S-0402 claim 11): building `b` plays its
+/// payment animation unless that is already playing.
+pub(crate) fn payment(w: &mut World, b: ObjectId) {
+    // spec: S-0402 Terms and claim 11 (the payment animation is the building's special animation, played at a payment unless it is already playing)
+    if !running(w, b, DepotSlot::Special1) {
+        start(w, b, DepotSlot::Special1);
+    }
+}
+
+/// The empty-load row of *unload* (S-0402 claim 11): building `b`'s
+/// payment animation, if playing, is stopped, and a refinery-flag building
+/// (`refinery`) plays its unloading animation.
+pub(crate) fn load_emptied(w: &mut World, b: ObjectId, refinery: bool) {
+    // spec: S-0402 claim 11 (load empty: the building's payment animation, if playing, is stopped)
+    stop(w, b, DepotSlot::Special1);
+    if refinery {
+        // spec: S-0402 Terms and claim 11 (a refinery-flag building plays its unloading animation, its production animation)
+        start(w, b, DepotSlot::Production);
+    }
+}
+
+/// Whether building `b` is playing its unloading animation (S-0402 claim
+/// 11's *finishing* row; the caller tests the refinery flag).
+pub(crate) fn unloading_playing(w: &World, b: ObjectId) -> bool {
+    running(w, b, DepotSlot::Production)
+}
+
+/// Building `k`'s every-tick slot checks, in its own turn after its
+/// behaviour processing (our placement; S-0108 claims 12 and 20): the
+/// condition swap for a depot or a building with a modelled slot running,
+/// and the repair depot's every-tick row.
 pub fn building_turn(w: &mut World, k: ObjectId) {
-    if !crate::depot::is_depot(w, k) {
+    let depot = crate::depot::is_depot(w, k);
+    if !depot && w.obj(k).is_none_or(|o| o.depot.slots.is_empty()) {
         return;
     }
     let d = damaged(w, k);
     if w.obj(k).is_some_and(|o| o.depot.slot_damaged != d) {
-        // spec: S-0108 claim 12 (the damaged state differs from the slot condition: the swap; here at the depot's own turn)
+        // spec: S-0108 claim 12 (the damaged state differs from the slot condition: the swap; here at the building's own turn)
         swap(w, k, d);
+    }
+    if !depot {
+        return;
     }
     let naval = w
         .obj(k)
@@ -322,6 +367,10 @@ pub fn anim_turn(w: &mut World, id: ObjectId) {
     if let Some(o) = w.obj_mut(k) {
         o.depot.slots.remove(&a.slot);
     }
+    if !crate::depot::is_depot(w, k) {
+        // spec: S-0108 claim 20 (only the listed kinds react to special-1 or special-3 ending; a building beside an unloading harvester is none of them, S-0402 claim 11)
+        return;
+    }
     match a.slot {
         DepotSlot::Special1 => {
             if in_repair(w, k) && in_contact(w, k) {
@@ -334,8 +383,8 @@ pub fn anim_turn(w: &mut World, id: ObjectId) {
         }
         // spec: S-0108 claim 20 (special-3 finishes on its own: idle starts, normal or damaged variant)
         DepotSlot::Special3 => report(w, k, false, true),
-        // spec: S-0108 claim 20 (no row reacts to production or special-2 ending)
-        DepotSlot::Production | DepotSlot::Special2 => {}
+        // spec: S-0108 claim 20 (no row reacts to production or special-2 ending); a depot never starts pre-production
+        DepotSlot::PreProduction | DepotSlot::Production | DepotSlot::Special2 => {}
     }
 }
 
