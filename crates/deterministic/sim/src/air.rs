@@ -215,6 +215,14 @@ pub struct AirState {
     /// The destination the locomotor was last given (claim 8: a new one
     /// makes an aircraft on the ground take off).
     pub flying_to: Option<Target>,
+    /// For an object held in [`AirState::flying_to`], its heading point at
+    /// the last hand-over (claims 8, 40 and 53): nothing reads the object's
+    /// position or heading point again for the flight between hand-overs.
+    pub handed: Option<Pos>,
+    /// The destination object left play since the flight point was last
+    /// handed over (claim 53): its flight flies on to that point with no
+    /// destination object, and *move* reads it.
+    pub lost: bool,
     /// The held flight point's world height was replaced by the terrain
     /// height there plus the cruise height when the point was accepted
     /// (claim 6: the aircraft then had a target and ammunition). Fixed with
@@ -980,6 +988,17 @@ pub(crate) fn destination_taken(w: &mut World, id: ObjectId, dest: Option<Target
         return;
     }
     pad_accepted(w, id, dest);
+    if let Some(d) = dest
+        && st(w, id).flying_to == dest
+        && !ignores(w, id, d)
+    {
+        // spec: S-0501 claims 8 and 53 (r183: the destination the flight already holds, given again by an order, a processing or another rule, is handed to the flight once more, so its heading point is taken again; claim 8's exception, when it ignores the hand-over, keeps the earlier point)
+        let handed = handed_point(w, id, d);
+        if let Some(a) = st_mut(w, id) {
+            a.handed = handed;
+            a.lost = false;
+        }
+    }
     if dest.is_some()
         && let Some(a) = st_mut(w, id)
         && a.origin
@@ -1293,7 +1312,12 @@ pub fn flight_point(w: &World, id: ObjectId, d: Target) -> Pos {
         Some(a) if a.flying_to == Some(d) => a.raised,
         _ => raise_now(w, id),
     };
-    point_with(w, id, d, raised)
+    // spec: S-0501 claim 53 (r183, Q-3041: nothing reads the object's position or heading point again for the flight between hand-overs: the held object's heading point is the one taken at the last hand-over) and claims 8 and 40
+    let handed = match held {
+        Some(a) if a.flying_to == Some(d) && matches!(d, Target::Object(_)) => a.handed,
+        _ => None,
+    };
+    point_from(w, id, d, raised, handed)
 }
 
 /// Whether a movement point accepted now has its height replaced (claim
@@ -1302,10 +1326,12 @@ fn raise_now(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| o.target.is_some()) && ammo_left(w, id)
 }
 
-/// [`flight_point`] with the height replacement given.
-fn point_with(w: &World, id: ObjectId, d: Target, raised: bool) -> Pos {
+/// [`flight_point`] with the height replacement given and the
+/// destination's heading point `handed` at the last hand-over, or read now
+/// when `None`.
+fn point_from(w: &World, id: ObjectId, d: Target, raised: bool, handed: Option<Pos>) -> Pos {
     // spec: S-0501 claim 40 (the destination's heading point with the aircraft as requesting actor: a cell's centre at its surface, a mobile object's next movement point or position, a building's centre)
-    let mut p = heading_point_for(w, id, d);
+    let mut p = handed.unwrap_or_else(|| heading_point_for(w, id, d));
     // spec: S-0501 claim 6 (a movement point accepted while the aircraft has a target and ammunition: its world height becomes the terrain height there plus the cruise height)
     if raised {
         let cruise = ty(w, id).map_or(0, |t| t.cruise);
@@ -1432,7 +1458,7 @@ fn flight_target(w: &World, id: ObjectId) -> Option<Target> {
         if let Target::Object(x) = d
             && w.obj(x).is_none()
         {
-            // spec: S-0501 claim 24 (a destination that is gone leaves the aircraft none) and claim 32 (it keeps flying in its current stage until its next processing); Q-3041 (interim: a destination naming an object no longer in play gives the movement updates no flight point; the destination stays until that processing) (#160)
+            // spec: S-0501 claim 53 (r183: no movement update reads the gone object; `destination_lost` clears such a destination when the object leaves play, so this guards only an object taken out of the world by a path that skips that moment, for which there is no point to read) (#160)
             return None;
         }
         return Some(d);
@@ -2260,8 +2286,11 @@ fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
         return;
     }
     let raised = raise_now(w, id);
+    let handed = dest.and_then(|d| handed_point(w, id, d));
     if let Some(a) = st_mut(w, id) {
         a.flying_to = dest;
+        a.handed = handed;
+        a.lost = false;
         a.own_point = false;
         a.ignored = None;
         // spec: S-0501 claim 7 (r120: the hold after a refused touchdown that forgot the destination lasts until it gets a destination; r146, Q-2676: so does the survivor's origin point, the destination handed to its flight as any destination is, claim 8)
@@ -2281,6 +2310,71 @@ fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
             crate::combat::effects::layer_refile(w, id);
         }
     }
+}
+
+/// Claim 53 (r183, Q-3041): object `gone` leaves play (at its killing hit,
+/// going off the map or its removal; [`crate::combat::held::holders_drop`]
+/// calls this after any revert). Every aircraft holding it as destination
+/// loses it now, without the destination assignment, so claim 6's
+/// land-where-it-is does not follow: its flight is not told. A destination
+/// not yet handed to the flight (a revert, or an assignment earlier in the
+/// tick) is handed over first, unless claim 8's exception ignores it, so
+/// its flight point is the object's heading point now. The flight keeps
+/// its point as one held with no destination object and its unfinished
+/// flight; [`AirState::lost`] records the loss for *move*.
+pub(crate) fn destination_lost(w: &mut World, gone: ObjectId) {
+    let lost = Target::Object(gone);
+    // spec: S-0501 claim 53 (every aircraft that holds the object as its destination, whatever its behaviour and however the object left play; in key order, which is creation order)
+    let ids: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Aircraft && o.air.is_some() && o.dest == Some(lost))
+        .map(|o| o.id)
+        .collect();
+    for id in ids {
+        let a = st(w, id);
+        if a.flying_to != Some(lost)
+            && a.ignored != Some(lost)
+            && let Some(t) = ty(w, id)
+        {
+            // spec: S-0501 claim 53 (the revert's destination is one the aircraft gets in claim 8's sense: its flight point is whatever that hand-over leaves, the object's heading point at the moment of the loss unless claim 8's exception ignores it) and claim 8 (an assignment is a hand-over: at the order, at a processing that gives one, or by another rule)
+            give_point(w, id, &t, Some(lost));
+        }
+        let held = st(w, id).flying_to == Some(lost) && st(w, id).handed.is_none();
+        // spec: S-0501 claim 53 (no movement update reads the gone object: a building's heading point, read at each update since it does not move, is kept as it is now)
+        let now = held.then(|| heading_point_for(w, id, lost));
+        if let Some(o) = w.obj_mut(id) {
+            // spec: S-0501 claim 53 (from that moment in the tick it does not hold that object as its destination; no destination assignment is made)
+            o.dest = None;
+        }
+        if let Some(a) = st_mut(w, id) {
+            if now.is_some() {
+                a.handed = now;
+            }
+            if a.ignored == Some(lost) {
+                a.ignored = None;
+            }
+            // spec: S-0501 claim 53 (its flight point and unfinished flight stay as they were: its movement updates go on toward that point as toward any flight point held with no destination object, claims 4, 5, 6 and 42)
+            if a.flying_to.is_some() {
+                a.own_point = true;
+            }
+            a.lost = true;
+        }
+    }
+}
+
+/// The heading point of a mobile destination object, taken when it is
+/// handed to the flight (claims 8, 40 and 53); `None` for a cell or a
+/// building, whose heading point does not move (S-0506 claim 14: a cell's
+/// centre, a building's centre) and is read as before.
+fn handed_point(w: &World, id: ObjectId, d: Target) -> Option<Pos> {
+    let Target::Object(k) = d else { return None };
+    let o = w.obj(k)?;
+    if o.kind == Kind::Building {
+        return None;
+    }
+    // spec: S-0501 claim 53 (r183, Q-3041: when the hand-over that set the flight point gave the object as destination, the point is the object's heading point at that hand-over, claim 40; nothing reads it again for the flight between hand-overs)
+    Some(heading_point_for(w, id, d))
 }
 
 /// Claim 8's exception: whether landing aircraft `id`'s flight ignores
@@ -2420,6 +2514,8 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
         a = st(w, id);
     } else if alive
         && dest.is_some()
+        // spec: S-0501 claim 53 (r183: the flight point a loss left is held with no destination; nothing hands it to the flight again)
+        && !(a.lost && o.dest.is_none())
         && !a.landing
         && !a.taking_off
         && low_release_at_height_0(w, id, &a)
@@ -2594,17 +2690,16 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
         if a.taking_off && nh >= a.held {
             a.taking_off = false;
         }
-        // spec: S-0501 claim 4 (a living descending aircraft with a destination moves 5 more leptons toward its destination cell's centre, after the forward step and the height reduction, except in enter toward a helipad building)
-        // spec: S-0501 claim 6 (r120, Q-2507: with no destination the descent move does not apply: landing where it is, the descent does not steer toward the flight point) and claim 8 (r120: an ignored destination is still the destination, so the descent move draws it toward that destination's cell centre)
-        let own_dest = o.dest;
+        // spec: S-0501 claim 4 (r183: a living descending aircraft that holds a flight point, with or without a destination object, moves 5 more leptons toward the centre of its flight point's cell, after the forward step and the height reduction, except during enter while its destination is a helipad building)
+        // spec: S-0501 claims 6 and 8 (r183, Q-3041: the descent move needs a flight point, not a destination: landing where it is, after an ignored destination, and after a destination object left play, claim 53, it draws the aircraft toward the cell of the flight point it holds)
         let toward_helipad = o.beh.current == Some(Behaviour::Enter)
-            && matches!(own_dest, Some(Target::Object(k)) if helipad(w, k));
+            && matches!(o.dest, Some(Target::Object(k)) if helipad(w, k));
         if alive
             && nh < h
             && !toward_helipad
-            && let Some(od) = own_dest
+            && let Some(p) = dp
         {
-            let c = flight_point(w, id, od).cell();
+            let c = p.cell();
             let centre = Pos::centre(c, 0);
             let now = w.obj(id).map_or(o.pos, |x| x.pos);
             // spec: S-0501 claim 4 (the direction by S-0204 claim 8, F3's facing conversion and table trigonometry with step length 5, no clamp; the world height kept)
@@ -4173,7 +4268,7 @@ fn move_(w: &mut World, id: ObjectId) -> i32 {
         .and_then(|o| o.dest)
         .is_some_and(|d| matches!(d, Target::Object(k) if w.obj(k).is_none()));
     if lost {
-        // spec: S-0501 claim 32 (an approaching aircraft whose destination is lost falls back to rest, looking for another pad)
+        // spec: S-0501 claim 32 (an approaching aircraft whose destination is lost falls back to rest, looking for another pad); claim 53 clears such a destination when the object leaves play, so this guards only an object taken out of the world by a path that skips that moment
         set_dest(w, id, None);
         fall_back(w, id);
         return standard(w, id);
@@ -4183,6 +4278,15 @@ fn move_(w: &mut World, id: ObjectId) -> i32 {
         .map_or((false, 0), |o| (o.beh.expired, o.beh.start_tick));
     // spec: S-0501 claim 40 (the selection runs at the first processing of every such move, also one started inside another behaviour's processing, such as the fall-back at a run's end, whose start timer that processing's delay replaced, S-0215 claims 2 and 3)
     let first = expired || st(w, id).first_moved != Some(start);
+    let s = st(w, id);
+    if s.lost && w.obj(id).is_some_and(|o| o.dest.is_none()) && (first || s.regive == Some(start)) {
+        // spec: S-0501 claim 53 (r183, Q-3041: in an ordinary move, a loss of the destination object before the move's second processing, the one that gives its flight point once more, makes its next processing fall back to rest, claim 18)
+        if let Some(a) = st_mut(w, id) {
+            a.regive = None;
+        }
+        fall_back(w, id);
+        return standard(w, id);
+    }
     if first && let Some(a) = st_mut(w, id) {
         a.first_moved = Some(start);
     }

@@ -120,10 +120,6 @@ pub struct JumpState {
     /// The order-level destination the point was taken from: a change of it
     /// is a new order.
     pub order: Option<Target>,
-    /// The order-level destination the own-cell filter (claim 23) last
-    /// ignored: the locomotor does not take it later (Q-3043 interim).
-    #[serde(default)]
-    pub filtered: Option<Target>,
     /// The current speed *v*<sub>c</sub> (leptons per tick).
     pub vc: F64,
     /// The maximum speed *v*<sub>m</sub>.
@@ -164,7 +160,6 @@ impl JumpState {
             moving: false,
             dest: None,
             order: None,
-            filtered: None,
             vc: F64::ZERO,
             vm: F64::ZERO,
             ht: 0,
@@ -811,15 +806,14 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
     if let Some(t) = dest
         && own_cell_filtered(w, id, t)
     {
-        // spec: S-0502 claim 23 and S-0213 claim 21 (outside an ion storm, a jumpjet-type infantry unit ignores a nonempty destination assignment whose cell equals its current cell, before any movement-point search, also while grounded; the order's other effects stand; the locomotor keeps its preceding order and point); Q-3043 (interim: the ignored destination is recorded so the locomotor does not take it later, #190)
-        upd(w, id, |j| j.filtered = dest);
+        // spec: S-0502 claim 23 and S-0213 claim 21 (outside an ion storm, a jumpjet-type infantry unit ignores a nonempty destination assignment whose cell equals its current cell, before any movement-point search, also while grounded; the order's other effects stand); S-0502 claim 23 (r24, Q-3043: the ignored assignment has no effect at all: the order-level destination keeps its preceding value, here the one the locomotor last took, since a rule that wrote the field without the assignment hook left no other; the point, commitment and flight state are unchanged) (#190)
+        let kept = st(w, id).and_then(|j| j.order);
+        if let Some(o) = w.obj_mut(id) {
+            o.dest = kept;
+        }
         return;
     }
-    upd(w, id, |j| {
-        j.order = dest;
-        // Q-3043 (interim: an assignment that passes the filter ends the record, #190)
-        j.filtered = None;
-    });
+    upd(w, id, |j| j.order = dest);
     match dest {
         Some(t) => {
             // spec: S-0207 claim 27 and S-0502 claim 27 (the one-application suppression skips this nonempty movement point; the order-level destination changes without it)
@@ -1355,7 +1349,11 @@ fn height_step(w: &World, id: ObjectId, j: &mut JumpState, f: &JumpFields, mode:
     let over_dest = j.dest.is_some_and(|d| d.cell() == p.cell());
     // spec: S-0502 claim 9 and F3 (revision 14: the look-ahead in every state except grounded and descending, crashing included even at zero speed, when the movement point, not the order-level destination, is in another cell, and always for a balloon-hover type; otherwise, no movement point included, the direct reference)
     let elsewhere = j.dest.is_some_and(|d| d.cell() != p.cell());
+    // spec: S-0502 F3, claim 18 and Edge cases (r24, Q-3042: crashing has no exception, so a listed object can hold the crash up; quirks.jumpjet_crash_lookahead off: an ordinary, not seized, crashing jumpjet always uses the direct reference)
+    let plain_crash =
+        phase == Phase::Crashing && !w.rules().quirks.jumpjet_crash_lookahead && !seized(w, id);
     let look = !matches!(phase, Phase::Grounded | Phase::Descending)
+        && !plain_crash
         && (elsewhere || balloon_vehicle(w, id));
     let g = if look {
         look_ahead(w, id, j, mode)
@@ -1381,8 +1379,10 @@ fn height_step(w: &World, id: ObjectId, j: &mut JumpState, f: &JumpFields, mode:
         p.z
     };
     z = z.max(direct);
-    // spec: S-0502 claim 8 and F4 (ground hold: not over its destination cell and the height above the reference below half the desired height, truncated toward zero, sets the current speed to 0)
-    if !over_dest && u.max(0) < hd / 2 {
+    // spec: S-0502 claim 8 and F4 (r24, Q-3042: ground hold: with u from before the step, u_h = u when u ≤ h_d and max(u, 0) when u > h_d; not over its movement point's cell and u_h < trunc(h_d / 2) sets the current speed to 0, so for a negative h_d, as in crashing, exactly when u ≤ h_d)
+    let uh = if u <= hd { u } else { u.max(0) };
+    // spec: S-0502 claim 8 and F4 (r24: u_h < trunc(h_d / 2) and not over the movement point's cell)
+    if !over_dest && uh < hd / 2 {
         j.vc = F64::ZERO;
     }
     z

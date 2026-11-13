@@ -1910,6 +1910,10 @@ pub struct Quirks {
     // spec: S-0502 claim 9, F3 and Edge cases
     #[serde(default = "on")]
     pub jumpjet_lookahead_bridge: bool,
+    /// An ordinary (not seized) crashing jumpjet whose movement point lies in another cell uses the look-ahead ground reference, so a listed object can hold its crash up for as long as it stays; off: an ordinary crashing jumpjet always uses the direct reference, so every ordinary crash with a crash rate above 0 reaches its end on terrain.
+    // spec: S-0502 claim 18, F3 and Edge cases (r24, Q-3042)
+    #[serde(default = "on")]
+    pub jumpjet_crash_lookahead: bool,
     /// A jumpjet that cannot land and finds no cell nearby destroys itself; off: it clears its movement point and commitment and, at a height above the surface of 1 lepton or more, re-enters *hovering* over its current cell, neither descending nor flying on, while at 0 or less it stays put and becomes *grounded*, even from *ascending* (every seized set-down unit hovering in this outcome, by any route, then follows S-0607 claims 9 and 20).
     // spec: S-0502 claim 17 and Edge cases
     #[serde(default = "on")]
@@ -2782,6 +2786,7 @@ impl Default for Quirks {
             erasure_refused_hit_side_effects: true,
             jumpjet_bridge_early_cruise_height: true,
             jumpjet_lookahead_bridge: true,
+            jumpjet_crash_lookahead: true,
             jumpjet_no_cell_self_destruct: true,
             jumpjet_step_truncation: true,
             jumpjet_turn_slowdown_one_sided: true,
@@ -4058,6 +4063,7 @@ impl Quirks {
                 self.jumpjet_bridge_early_cruise_height,
             ),
             ("jumpjet_lookahead_bridge", self.jumpjet_lookahead_bridge),
+            ("jumpjet_crash_lookahead", self.jumpjet_crash_lookahead),
             (
                 "jumpjet_no_cell_self_destruct",
                 self.jumpjet_no_cell_self_destruct,

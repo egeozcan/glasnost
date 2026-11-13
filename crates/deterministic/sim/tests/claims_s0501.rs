@@ -1435,6 +1435,8 @@ fn guided_point(w: &World, a: ObjectId) -> Option<Pos> {
     let d = match o.dest {
         Some(d) => d,
         None if attack && o.target.is_some() && s.unfinished => s.flying_to?,
+        // spec: S-0501 claims 6 and 53 (a flight point held with no destination object: landing where it is, or after the destination object left play)
+        None if s.own_point => s.flying_to?,
         None => return None,
     };
     Some(air::flight_point(w, a, d))
@@ -4417,48 +4419,234 @@ fn claim_45_below_the_cruise_height_with_a_target_queues_attack() {
     assert_eq!(o.target, Some(Target::Object(v)));
 }
 
-// spec: S-0501 claim 32 (after the loss of its target the aircraft keeps flying in its current T1 stage until its next attack processing), claim 24 (a destination that is gone leaves the aircraft none) and claim 42 (guidance requests facings only toward a flight point); Q-3041 (interim: a destination whose object is gone gives the movement updates no flight point) (#160)
-#[test]
-fn a_strafer_whose_destination_object_is_removed_does_not_steer_to_the_origin() {
+/// A STRAFE built at its pad, given an attack on VICTIM `v` at (12, 0) of
+/// house 1, run until the first tick at whose end its destination is `v`
+/// and its flight holds it (the hand-over).
+fn strafing(moving: bool) -> (World, ObjectId, ObjectId) {
     let (mut w, _k, a) = built("STRAFE");
     assert!(air::strafer(&w, a));
     let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 12, 0);
+    if moving {
+        // V crosses the strafer's line at right angles (AC37 part c).
+        assert!(orders::issue(
+            &mut w,
+            HouseId(1),
+            Order::Behaviour {
+                actor: v,
+                behaviour: Behaviour::Move,
+                attack_move: false,
+                target: None,
+                dest: Some(Target::Cell(testkit::mid(SIZE, 12, 14))),
+            }
+        ));
+    }
     click(&mut w, a, ClickOn::Object(v));
     // T1's choosing row gives the strafer its target as destination.
-    assert!(run_until(&mut w, 200, |w| {
+    assert!(run_until(&mut w, 400, |w| {
         w.obj(a).unwrap().dest == Some(Target::Object(v))
+            && st(w, a).flying_to == Some(Target::Object(v))
     }));
-    step(&mut w);
-    let d = Target::Object(v);
+    (w, a, v)
+}
+
+/// Kills `v` with one hit.
+fn kill(w: &mut World, v: ObjectId) {
+    glasnost_sim::combat::damage::apply(w, v, hit(1_000_000));
+}
+
+/// Runs `a` on after the loss of its destination object until its flight
+/// is handed another point, checking each tick that it holds no
+/// destination, flies to `p` with no destination object, and that claim
+/// 42's guidance steers its body toward `p`. Returns the ticks run.
+fn flies_on_to(w: &mut World, a: ObjectId, lost: Target, p: Pos) -> i32 {
+    let mut ticks = 0;
+    while ticks < 400 {
+        step(w);
+        ticks += 1;
+        let s = st(w, a);
+        if s.flying_to != Some(lost) {
+            // A later hand-over.
+            break;
+        }
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.dest, None, "no destination: {}", describe(w, a));
+        assert_eq!(air::flight_point(w, a, lost), p, "the kept flight point");
+        if let Some(g) = guided_point(w, a) {
+            assert_eq!(g, p, "guidance toward the kept point");
+            assert_eq!(
+                o.body.target,
+                bearing(w, o.pos, p),
+                "body toward the kept point: {}",
+                describe(w, a)
+            );
+        }
+    }
+    ticks
+}
+
+// spec: S-0501 claim 53 (r183, Q-3041: the aircraft loses the object as its destination at the killing hit; its flight is not told: the flight point last handed to it, the target's heading point at the processing that made the target its destination, and its unfinished flight stay; its movement updates go on toward that point with claim 5's slowing and claim 42's guidance; AC37 part a) and claim 32 (the loss of its target as well)
+#[test]
+fn claim_53_ac37_a_a_strafer_flies_on_to_its_killed_targets_point() {
+    let (mut w, a, v) = strafing(false);
+    let p = air::flight_point(&w, a, Target::Object(v));
+    let at = w.obj(v).unwrap().pos;
+    assert_eq!((p.x, p.y), (at.x, at.y), "V stands still at P");
+    kill(&mut w, v);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, None, "the target is lost at the hit");
+    assert_eq!(o.dest, None, "the destination is lost at the hit");
+    let s = st(&w, a);
+    assert_eq!(
+        s.flying_to,
+        Some(Target::Object(v)),
+        "the flight is not told"
+    );
+    assert!(s.unfinished, "its flight stays unfinished");
+    let ticks = flies_on_to(&mut w, a, Target::Object(v), p);
+    assert!(ticks > 1, "the strafer flew on until its next processing");
+    assert!(ticks < 400, "its next processing decides");
+}
+
+// spec: S-0501 claim 53 (r183, Q-3041: the same for a removal: the loss at the removal, and no movement update reads the gone object, so it never steers to the map's origin)
+#[test]
+fn claim_53_a_strafer_whose_destination_object_is_removed_flies_on_to_its_point() {
+    let (mut w, a, v) = strafing(false);
+    let p = air::flight_point(&w, a, Target::Object(v));
     glasnost_sim::objects::remove(&mut w, v);
     let o = w.obj(a).unwrap();
     assert_eq!(o.target, None, "the target is dropped at the removal");
+    assert_eq!(o.dest, None, "the destination is lost at the removal");
+    let ticks = flies_on_to(&mut w, a, Target::Object(v), p);
+    assert!(ticks > 1 && ticks < 400);
+}
+
+// spec: S-0501 claim 53 (r183, Q-3041: nothing reads the object's position or heading point again for the flight between hand-overs; the point is the object's heading point at the last hand-over, not resampled at the loss; AC37 part c) and claims 8 and 40 (the destination's heading point and the flight point stay fixed from one hand-over to the next)
+#[test]
+fn claim_53_ac37_c_the_point_is_the_heading_point_at_the_hand_over() {
+    let (mut w, a, v) = strafing(true);
+    let x1 = air::flight_point(&w, a, Target::Object(v));
+    // Run until V's heading point differs from X1 with no new hand-over.
+    // (The flight point's height is claim 6's armed replacement; compare the
+    // planar point.)
+    let moved = run_until(&mut w, 200, |w| {
+        glasnost_sim::rocket::heading_point(w, Target::Object(v))
+            .is_some_and(|x| (x.x, x.y) != (x1.x, x1.y))
+    });
+    assert!(moved, "V's heading point moves on");
     assert_eq!(
-        o.dest,
-        Some(d),
-        "the destination still names the removed object"
+        w.obj(a).unwrap().dest,
+        Some(Target::Object(v)),
+        "the same destination"
     );
-    let requested = o.body.target;
-    let origin = direction(-i64::from(o.pos.x), -i64::from(o.pos.y), true);
-    assert_ne!(requested, origin, "the set-up does not face the origin");
-    let mut ticks = 0;
-    while w.obj(a).is_some_and(|o| o.dest == Some(d)) && ticks < 400 {
-        step(&mut w);
-        ticks += 1;
-        let o = w.obj(a).unwrap();
-        if o.dest != Some(d) {
-            // The next processing has replaced the destination.
-            break;
+    let p = air::flight_point(&w, a, Target::Object(v));
+    let x2 = glasnost_sim::rocket::heading_point(&w, Target::Object(v)).unwrap();
+    assert_ne!(
+        (p.x, p.y),
+        (x2.x, x2.y),
+        "the flight point is not read again from V between hand-overs"
+    );
+    kill(&mut w, v);
+    assert_eq!(w.obj(a).unwrap().dest, None);
+    assert_eq!(
+        air::flight_point(&w, a, Target::Object(v)),
+        p,
+        "not resampled at the loss"
+    );
+    flies_on_to(&mut w, a, Target::Object(v), p);
+}
+
+/// AC37 part b's setting: BSCOUT `a` (SCOUT made pad-bound by the test
+/// rules; its house has no pad) on the ground at (−4, 6) is given a *move*
+/// onto SCOUT `v`, lifted at (8, −6) and flying on toward (−4, −18); returns
+/// (world, a, v) once claim 40's selection has kept `v` as its destination
+/// at the move's first processing (a pad-bound aircraft passes the
+/// reservation test, claim 39).
+fn moving_onto_an_aircraft() -> (World, ObjectId, ObjectId) {
+    let mut r = rules();
+    let mut b = flyer(None, 0);
+    b.econ.airport_bound = Some(true);
+    push(&mut r, "aircraft", "BSCOUT");
+    r.sim.aircraft.insert("BSCOUT".into(), b);
+    let mut w = game(&r);
+    ready(&mut w);
+    let v = lifted(&mut w, "SCOUT", 8, -6);
+    let a = put(&mut w, Kind::Aircraft, "BSCOUT", 0, -4, 6);
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        Order::Behaviour {
+            actor: a,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Object(v)),
         }
+    ));
+    assert!(st(&w, a).regive.is_none(), "no processing yet");
+    assert!(run_until(&mut w, 20, |w| st(w, a).regive.is_some()));
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Move));
+    assert_eq!(w.obj(a).unwrap().dest, Some(Target::Object(v)), "kept");
+    (w, a, v)
+}
+
+// spec: S-0501 claim 53 (r183, Q-3041: in an ordinary move, a loss after the move's second processing does not end the move: with no destination it waits for its locomotor to report stopped and flies on to the flight point; one of a landable type marked as holding height that slows toward the point stays at the point with move current; AC37 part b's setting). Here V's heading point is its position at cruise height (our S-0506 claim 14 for an aircraft unit), so the point is in the air, more than 120 leptons above the terrain, and A holds height there (claim 6)
+#[test]
+fn claim_53_ac37_b_a_move_that_loses_its_destination_after_the_second_processing_flies_on() {
+    let (mut w, a, v) = moving_onto_an_aircraft();
+    assert!(run_until(&mut w, 200, |w| st(w, a).regive.is_none()));
+    step(&mut w);
+    let p = air::flight_point(&w, a, Target::Object(v));
+    kill(&mut w, v);
+    assert!(w.obj(v).is_some(), "V stays in play, crashing");
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.dest, None, "lost at the hit");
+    assert_eq!(o.beh.current, Some(Behaviour::Move), "the move goes on");
+    for _ in 0..3000 {
+        step(&mut w);
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.beh.current, Some(Behaviour::Move), "{}", describe(&w, a));
+        assert_eq!(o.dest, None, "no destination: {}", describe(&w, a));
         assert_eq!(
-            o.body.target,
-            requested,
-            "no facing request toward a flight point of the removed object: {}",
-            describe(&w, a)
+            air::flight_point(&w, a, Target::Object(v)),
+            p,
+            "the kept point"
         );
+        if let Some(g) = guided_point(&w, a) {
+            assert_eq!(g, p, "toward the kept point");
+        }
     }
-    assert!(ticks > 1, "the strafer waited with the destination");
-    assert!(ticks < 400, "its next processing replaces the destination");
+    let o = w.obj(a).unwrap();
+    let s = st(&w, a);
+    assert!(s.holding && !s.landing, "holding height at the point");
+    assert_eq!(s.cur, glasnost_num::F64::ZERO, "slowed to a stop");
+    let d = (i64::from(o.pos.x - p.x).pow(2) + i64::from(o.pos.y - p.y).pow(2)).isqrt();
+    assert!(d < 256, "it stays at the point: {}", describe(&w, a));
+}
+
+// spec: S-0501 claim 53 (r183, Q-3041: a loss before the move's second processing makes its next processing fall back to rest, claim 18); for this unarmed pad-bound aircraft in flight whose house has no pad, the fall-back's row gives a landing spot and a new move (claim 18, T2)
+#[test]
+fn claim_53_a_move_that_loses_its_destination_before_the_second_processing_falls_back() {
+    let (mut w, a, v) = moving_onto_an_aircraft();
+    assert!(st(&w, a).regive.is_some(), "before the second processing");
+    kill(&mut w, v);
+    assert_eq!(w.obj(a).unwrap().dest, None, "lost at the hit");
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Move));
+    assert!(
+        run_until(&mut w, 60, |w| w.obj(a).unwrap().dest.is_some()),
+        "its next processing falls back to rest: {}",
+        describe(&w, a)
+    );
+    let o = w.obj(a).unwrap();
+    assert!(
+        matches!(o.dest, Some(Target::Cell(_))),
+        "the fall-back's landing spot"
+    );
+    assert_eq!(
+        st(&w, a).flying_to,
+        o.dest,
+        "handed to the flight: {}",
+        describe(&w, a)
+    );
 }
 
 // spec: S-0501 claim 24 (r134, Q-2649: neither the report after a touchdown nor the pad's answer to it requests a facing) and claim 25 (the landing direction's one named use is claim 42's aiming request) (#162)

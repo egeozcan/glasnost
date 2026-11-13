@@ -75,7 +75,12 @@ fn claim_18_crash_start() {
     let before = w.rng.taken();
     kill(&mut w, i);
     assert!(w.obj(i).is_some() && jump::crashing(&w, i));
-    assert_eq!(w.rng.taken(), before, "no tumbling draw for infantry");
+    // spec: S-0502 claim 18 (r24, Q-3042: no tumbling draw for infantry; the crash start's empty assignment reroutes infantry with a commitment under claim 17, with its one draw over 0 to 3)
+    assert_eq!(
+        w.rng.taken(),
+        before + 1,
+        "no tumbling draw for infantry, only the reroute's draw"
+    );
     // On the ground, or without the crash flag, it leaves play at once.
     let mut w = game();
     let g = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);

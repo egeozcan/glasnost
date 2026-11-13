@@ -677,6 +677,10 @@ pub fn start_crash(w: &mut World, id: ObjectId, hit: Option<&Hit>) -> bool {
             .push(crate::combat::effects::Effect::CrashTumble { id, u1, sense, u3 });
     }
     upd(w, id, |j| j.crash_started = true);
+    // spec: S-0502 claim 18 (r24, Q-3042: starting a crash makes one empty destination assignment at once, inside the hit, so before the next movement update; an ordinary assignment, so claims 24, 27 and 28 decide its effect: infantry with a commitment reroutes under claim 17 with its draw over 0 to 3, a vehicle only when its order-level destination is not empty or a refresh is pending, with no draw, and a balloon-hover vehicle can reject it) and S-0312 claim 16 (r77: for any object using jumpjet movement); a seized unit returned above (S-0607). Only infantry draws for it and only a non-infantry object takes the tumbling draws, so their order shows in no stream
+    if !super::clear_rejected(w, id) {
+        crate::econ::assign_destination(w, id, None);
+    }
     true
 }
 
@@ -694,8 +698,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     }
     // An order-level destination changed without the assignment hook (a rule that writes the field) is a new order.
     let dest = w.obj(id).and_then(|o| o.dest);
-    // spec: S-0502 claim 23 and S-0213 claim 21 (a filtered own-cell assignment is ignored); Q-3043 (interim: the order-level destination keeps the filtered one, which the locomotor does not take later, #190)
-    if st(w, id).is_some_and(|j| j.order != dest && !(dest.is_some() && j.filtered == dest)) {
+    if st(w, id).is_some_and(|j| j.order != dest) {
         take_destination(w, id);
     }
     let Some(j) = st(w, id) else { return false };

@@ -84,7 +84,7 @@ fn claim_4_crashing_is_not_falling() {
     assert!(jump::placement_qualifies(&w, low));
 }
 
-// spec: S-0502 claim 23 and S-0213 claim 21 (revision 6, answers Q-1011): outside an ion storm a jumpjet-type infantry unit ignores a nonempty destination assignment whose cell equals its current cell, also while grounded, before any search or draw; the order's destination on the object stands
+// spec: S-0502 claim 23 and S-0213 claim 21 (revision 6, answers Q-1011): outside an ion storm a jumpjet-type infantry unit ignores a nonempty destination assignment whose cell equals its current cell, also while grounded, before any search or draw; S-0502 claim 23 (r24, Q-3043: the order-level destination keeps its preceding value, here empty)
 #[test]
 fn claim_23_infantry_own_cell_order_is_ignored() {
     let mut w = game();
@@ -92,16 +92,13 @@ fn claim_23_infantry_own_cell_order_is_ignored() {
     let before = j(&w, u).clone();
     let taken = w.rng.taken();
     go(&mut w, u, at(0, 0));
-    let mut now = j(&w, u).clone();
-    // Q-3043 (interim: the filtered destination is recorded so the locomotor does not take it later, #190)
-    assert_eq!(now.filtered, Some(Target::Cell(at(0, 0))));
-    now.filtered = None;
+    let now = j(&w, u).clone();
     assert_eq!(now, before, "the locomotor takes nothing");
     assert_eq!(w.rng.taken(), taken, "no standing-position draw");
     assert_eq!(
         w.obj(u).unwrap().dest,
-        Some(Target::Cell(at(0, 0))),
-        "the order-level destination is the object's"
+        None,
+        "the order-level destination keeps its preceding value"
     );
     for _ in 0..40 {
         step(&mut w);

@@ -111,6 +111,8 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
             crate::infantry::destination_assigned(w, x, before);
         }
     }
+    // spec: S-0501 claim 53 (r183, Q-3041: an aircraft loses the object as its destination at the moments claim 32 gives for the loss of a target, the killing hit, going off the map and removal; a revert comes first, in the same moment, before the loss clears the object as destination)
+    crate::air::destination_lost(w, gone);
 }
 
 /// Whether object `x`, held as a target, is one that only a revert can

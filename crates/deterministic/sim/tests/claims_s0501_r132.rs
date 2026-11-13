@@ -634,7 +634,7 @@ fn claim_7_the_landing_check_refuses_a_pad_bound_flight_point_off_its_pad() {
 // ---------------------------------------------------------------------------
 // Claim 6: given no destination while landing (Q-2576); AC4 runs (4), (5)
 
-// spec: S-0501 claim 6 (r132, Q-2576: a landing aircraft is always moving; given no destination it gets the same selection around the cell it is over, and when the selected cell is its flight point's cell its flight ignores the centre: its landing goes on with that flight point kept, and with no destination claim 4's descent move does not apply); AC4 same-cell part, run (4)
+// spec: S-0501 claim 6 (r132, Q-2576: a landing aircraft is always moving; given no destination it gets the same selection around the cell it is over, and when the selected cell is its flight point's cell its flight ignores the centre: its landing goes on with that flight point kept; r183, Q-3041: claim 4's descent move needs a flight point, not a destination, so it draws the descent toward that point's cell centre); AC4 same-cell part, run (4)
 #[test]
 fn ac4_run_4_given_no_destination_over_its_flight_points_cell_the_landing_goes_on() {
     let (mut w, a, c) = stopped(&rules());
@@ -648,8 +648,12 @@ fn ac4_run_4_given_no_destination_over_its_flight_points_cell_the_landing_goes_o
     let stall = w.rules().quirks.aircraft_unit_step_stall;
     let ti = w.obj(a).unwrap().type_index;
     let v = w.rules().unit(Kind::Aircraft, ti).unwrap().speed;
+    let centre = glasnost_sim::world::Pos::centre(c, 0);
+    let dist =
+        |x: i32, y: i32| (i64::from(x - centre.x).pow(2) + i64::from(y - centre.y).pow(2)).isqrt();
     let mut h = air::height(&w, a);
     let mut checked = 0;
+    let mut nudged = 0;
     for _ in 0..400 {
         let o = w.obj(a).unwrap().clone();
         let was = o.air.clone().unwrap();
@@ -659,11 +663,23 @@ fn ac4_run_4_given_no_destination_over_its_flight_points_cell_the_landing_goes_o
         let s = st(&w, a);
         let nh = air::height(&w, a);
         assert!(!s.taking_off && nh <= h, "no take-off: {}", describe(&w, a));
+        let descended = nh < h;
         h = nh;
         if !turning {
             let p = w.obj(a).unwrap().pos;
             let (nx, ny) = air::step(o.pos.x, o.pos.y, f, v, was.cur, stall, mode);
-            assert_eq!((p.x, p.y), (nx, ny), "the forward step alone");
+            let off = (i64::from(p.x - nx).pow(2) + i64::from(p.y - ny).pow(2)).isqrt();
+            if descended && dist(nx, ny) > 5 {
+                // spec: S-0501 Constants (descent horizontal nudge 5 leptons; table trigonometry and truncation, so at least 4)
+                assert!(
+                    (4..=5).contains(&off) && dist(p.x, p.y) < dist(nx, ny),
+                    "the forward step and the descent move toward C's centre: {}",
+                    describe(&w, a)
+                );
+                nudged += 1;
+            } else if !descended {
+                assert_eq!(off, 0, "the forward step alone");
+            }
             checked += 1;
         }
         if s.ground {
@@ -674,7 +690,7 @@ fn ac4_run_4_given_no_destination_over_its_flight_points_cell_the_landing_goes_o
         assert_eq!(w.obj(a).unwrap().dest, None);
     }
     assert!(st(&w, a).ground, "a touchdown: {}", describe(&w, a));
-    assert!(checked > 0);
+    assert!(checked > 0 && nudged > 0, "{checked} {nudged}");
 }
 
 // spec: S-0501 claim 6 (r120, Q-2507: an aircraft in flight, moving and not landing, with attack current and no target: the cleared destination gives the flight an F8 landing spot as its flight point, with no destination object) and claim 41 (F8 always gives a cell); intake 96's seam

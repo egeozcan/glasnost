@@ -701,14 +701,16 @@ fn ac4_same_cell_a_landing_aircraft_ignores_a_destination_in_its_cell() {
             step(&mut w);
         }
         assert!(issue(&mut w, 0, Order::Stop { actor: a }));
-        // A landing where it is, and once it no longer moves across the
-        // ground: while it still slows down it can leave the cell (Q-2507).
+        // A landing where it is, and once its forward step has ended: while
+        // it still slows down it can leave the cell (Q-2507); after that only
+        // claim 4's descent move draws it toward its flight point's cell
+        // centre (r183, Q-3041: the descent move needs a flight point, not a
+        // destination).
         let mut started = false;
         for _ in 0..300 {
-            let p = w.obj(a).unwrap().pos;
             step(&mut w);
-            let q = w.obj(a).unwrap().pos;
-            if st(&w, a).landing && air::height(&w, a) > 0 && (p.x, p.y) == (q.x, q.y) {
+            let s = st(&w, a);
+            if s.landing && air::height(&w, a) > 0 && s.cur == glasnost_num::F64::ZERO {
                 started = true;
                 break;
             }
