@@ -265,44 +265,71 @@ impl Special {
             }
         };
         let house = script.house;
-        let own = script.own(w);
+        let mut own = script.own(w);
         let home = script.home(w);
         self.memory.review(w);
         let mut start = out.len();
+        // design: own AI (#47): each module sees only the house's units no earlier module of this think gave an order, so a unit gets one job (the later order would win, and the earlier module's counters and bookkeeping would be wrong)
+        let free = |own: &mut Vec<ObjectId>, out: &[Order]| {
+            let given: std::collections::BTreeSet<ObjectId> = out
+                .get(start..)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(Order::actor)
+                .collect();
+            own.retain(|id| !given.contains(id));
+        };
         mark("ai:special:garrison");
         self.garrison(house, &own, home, w, out);
+        free(&mut own, out);
         mark("ai:special:engineers");
         self.engineers(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:spies");
         self.spies(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:jumpjets");
         self.jumpjets(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:deployers");
         self.deployers(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:radiation");
         self.radiation(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:chrono");
         self.chrono(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:linked");
         self.linked(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:terror");
         self.terror(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:crates");
         self.crates(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:berserk");
         self.berserk(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:mind_control");
         self.mind_control(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:absorbers");
         self.absorbers(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:grinders");
         self.grinders(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:bunkers");
         self.bunkers(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:lifters");
         self.lifters(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:drainers");
         self.drainers(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:gunners");
         self.gunners(script, &own, w, out, &mut start);
         self.memory.offer(out.get(start..).unwrap_or_default());
