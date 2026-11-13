@@ -52,9 +52,15 @@ fn a_shot_down_strike_aircraft_is_unlinked_at_its_killing_hit() {
     );
     let k = w.tick;
     let o = w.obj(x).expect("the wreck stays in play while it falls");
-    assert!(damage::dead(o) && air::crashing(&w, x), "destroyed, crashing");
+    assert!(
+        damage::dead(o) && air::crashing(&w, x),
+        "destroyed, crashing"
+    );
     let s = w.strike.strikes[&d].clone();
-    assert!(!strike::linked(&w, x), "claim 20: unlinked at its killing hit");
+    assert!(
+        !strike::linked(&w, x),
+        "claim 20: unlinked at its killing hit"
+    );
     assert!(
         !s.progress && s.end == k && s.ended,
         "claim 20: idle at the kill tick {k} with e = {k}; got progress {} end {}",

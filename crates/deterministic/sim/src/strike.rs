@@ -335,8 +335,23 @@ fn redirect(w: &mut World, d: ObjectId, x: ObjectId) {
 
 /// An object leaves play (claims 19 and 20): a strike aircraft is unlinked,
 /// the last one ends the strike; a designator ends its strike; a marked
-/// building cancels it.
+/// building cancels it. For an object already handled at its killing hit
+/// ([`killed`]) only the marked building's cancel can remain.
 pub fn leaving(w: &mut World, id: ObjectId) {
+    end_for(w, id, true);
+}
+
+/// An object is destroyed, at its killing hit (claim 20, #161): a strike
+/// aircraft stops being linked, the last one ends the strike; a designator
+/// ends its strike. A destroyed marked building is cancelled through the
+/// designator's loss of its target in the same tick ([`sweep`], claim 19).
+pub fn killed(w: &mut World, id: ObjectId) {
+    // spec: S-0519 claim 20 (a strike aircraft stops being linked when it is destroyed or removed from play; the designator's strike ends from its killing hit) (#161)
+    end_for(w, id, false);
+}
+
+/// Claims 19 and 20 for `id`; `marked`: also the marked building's cancel.
+fn end_for(w: &mut World, id: ObjectId, marked: bool) {
     if w.strike.strikes.is_empty() {
         return;
     }
@@ -349,11 +364,11 @@ pub fn leaving(w: &mut World, id: ObjectId) {
     let ds: Vec<ObjectId> = w.strike.strikes.keys().copied().collect();
     for d in ds {
         // spec: S-0519 claim 19 (the marked building destroyed or removed cancels)
-        let marked_gone = w
-            .strike
-            .strikes
-            .get(&d)
-            .is_some_and(|s| s.target == Some(id))
+        let marked_gone = marked
+            && w.strike
+                .strikes
+                .get(&d)
+                .is_some_and(|s| s.target == Some(id))
             && w.obj(id).is_some_and(|o| o.kind == Kind::Building);
         if marked_gone {
             cancel(w, d);
