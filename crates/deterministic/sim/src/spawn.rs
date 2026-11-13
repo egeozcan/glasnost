@@ -1393,24 +1393,27 @@ pub fn target_lost(w: &mut World, id: ObjectId) {
 /// The controllers' side of the loss of `id` (S-0506 claims 11 and 25).
 fn target_gone(w: &mut World, id: ObjectId) {
     let gone = Some(Target::Object(id));
+    // One walk finds both lists: clearing the pending targets below leaves
+    // every controller target as it was, so the losers are the same as
+    // when looked for after it.
+    let mut holders: Vec<ObjectId> = Vec::new();
+    let mut losers: Vec<ObjectId> = Vec::new();
+    for (&k, o) in &w.objects {
+        if let Some(c) = o.spawn.as_ref() {
+            if c.pending == gone {
+                holders.push(k);
+            }
+            if c.target == gone {
+                losers.push(k);
+            }
+        }
+    }
     // spec: S-0506 claim 25 (loss notification for the pending target clears it at once, whatever the own target)
-    let holders: Vec<ObjectId> = w
-        .objects
-        .iter()
-        .filter(|(_, o)| o.spawn.as_ref().is_some_and(|c| c.pending == gone))
-        .map(|(&k, _)| k)
-        .collect();
     for s in holders {
         if let Some(c) = w.obj_mut(s).and_then(|o| o.spawn.as_mut()) {
             c.pending = None;
         }
     }
-    let losers: Vec<ObjectId> = w
-        .objects
-        .iter()
-        .filter(|(_, o)| o.spawn.as_ref().is_some_and(|c| c.target == gone))
-        .map(|(&k, _)| k)
-        .collect();
     for s in losers {
         // spec: S-0506 claims 11 and 12 (the controller target is cleared as it is lost, before any reset, so a reset releases with no target and its missiles get F8's cell; cleared too while a pending target waits, at each loss event alike)
         let waits = controller_mut(w, s).is_some_and(|c| {
