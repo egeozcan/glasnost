@@ -847,9 +847,15 @@ pub fn docking_cell(w: &World, refinery: ObjectId) -> Option<CellXY> {
 }
 
 /// Whether a harvester is tethered to the refinery it holds contact with
-/// (S-0402 claim 10).
+/// (S-0402 claim 10). The tether link is with that refinery (glossary
+/// *tether link*): a contact with anything else, such as a depot, is not
+/// this tether (#185).
 pub(crate) fn tethered(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| o.contact.is_some()) && st(w, id).tethered
+    // spec: S-0402 claims 10 and 11 and glossary tether link (the harvester and the refinery it docks with are tethered; S-0213 table T3 (b): an order that breaks off that contact ends the tether)
+    w.obj(id)
+        .and_then(|o| o.contact)
+        .is_some_and(|c| live_holders(w, c).contains(&id))
+        && st(w, id).tethered
 }
 
 /// The harvesters docked with a refinery (S-0408 Terms): those holding a
