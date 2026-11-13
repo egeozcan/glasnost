@@ -16,7 +16,9 @@
 //!   permission of S-0606 claim 2 decides it, so only bunker-eligible
 //!   vehicles are chosen). Harvesters, slave miners, construction vehicles,
 //!   transports carrying passengers, mind controllers and magnetic lifters
-//!   (S-0607, kept at home by `lifter`) are never sent;
+//!   (S-0607, kept at home by `lifter`) are never sent. Nor is a vehicle
+//!   sent where it would be let out again at once: not into a bunker down
+//!   to [`RETREAT_PERCENT`], and none while the base is under attack;
 //! - **lets them out with a deploy click** (the bunkered vehicle's deploy
 //!   cursor, S-0214 table VD row VD5, which gives it *unload*: S-0606
 //!   claim 12) to:
@@ -204,13 +206,30 @@ fn percent(w: &World, id: ObjectId) -> i32 {
     })
 }
 
-/// Why bunkered vehicle `v` in bunker `b` is let out, if it is.
+/// Whether a seen enemy stands within [`ATTACK_REACH`] cells of a building
+/// of the house (the base is under attack, maybe where a bunkered vehicle
+/// cannot reach).
+fn base_attacked(script: &Script, w: &World) -> bool {
+    let base: Vec<CellXY> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(script.house) && o.kind == Kind::Building && o.on_map)
+        .map(|o| o.pos.cell())
+        .collect();
+    script.seen_enemies(w).iter().any(|&(_, c)| {
+        base.iter()
+            .any(|&h| dist2(c, h) <= ATTACK_REACH * ATTACK_REACH)
+    })
+}
+
+/// Why bunkered vehicle `v` in bunker `b` is let out, if it is, with
+/// `attacked` the base test of [`base_attacked`].
 fn exit_reason(
-    script: &Script,
     w: &World,
     v: ObjectId,
     b: ObjectId,
     joins: bool,
+    attacked: bool,
 ) -> Option<&'static str> {
     if percent(w, v) <= REPAIR_PERCENT {
         return Some("repair");
@@ -223,17 +242,7 @@ fn exit_reason(
     }
     // An enemy near the bunker or near any other building of the house
     // (the base is under attack where the vehicle cannot reach).
-    let base: Vec<CellXY> = w
-        .objects
-        .values()
-        .filter(|o| o.owner == Some(script.house) && o.kind == Kind::Building && o.on_map)
-        .map(|o| o.pos.cell())
-        .collect();
-    let near = script.seen_enemies(w).iter().any(|&(_, c)| {
-        base.iter()
-            .any(|&h| dist2(c, h) <= ATTACK_REACH * ATTACK_REACH)
-    });
-    if near {
+    if attacked {
         return Some("attack");
     }
     joins.then_some("join")
@@ -268,6 +277,8 @@ impl Special {
             return;
         }
         let mods = Modifiers::default();
+        // Asked once for the think: the exits and the entries both read it.
+        let attacked = base_attacked(script, w);
         for &b in &buildings {
             let Some(v) = bunker::occupant(w, b) else {
                 continue;
@@ -282,7 +293,7 @@ impl Special {
                 .inside_since
                 .get(&v)
                 .is_some_and(|&t| now - t >= JOIN_AFTER);
-            if exit_reason(script, w, v, b, joins).is_some()
+            if exit_reason(w, v, b, joins, attacked).is_some()
                 && targeting::cursor(w, house, &[v], ClickOn::Object(v), mods) == Action::Deploy
             {
                 out.push(Order::Deploy { actor: v });
@@ -290,9 +301,13 @@ impl Special {
                 self.count_bunker_exit();
             }
         }
+        // design: own AI (#18): no vehicle is sent in while it would be let out at the next think: not into a bunker down to RETREAT_PERCENT, and none while the base is under attack (the vehicle would come out to defend it); every idle vehicle near the base went in and out in turn
+        if attacked {
+            return;
+        }
         let mut sent: Vec<ObjectId> = Vec::new();
         for &b in &buildings {
-            if taken(w, b) || bunker::occupant(w, b).is_some() {
+            if taken(w, b) || bunker::occupant(w, b).is_some() || percent(w, b) <= RETREAT_PERCENT {
                 continue;
             }
             let Some(at) = w.obj(b).map(|o| o.pos.cell()) else {
