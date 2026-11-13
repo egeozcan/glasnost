@@ -847,6 +847,116 @@ fn a_type_at_its_build_limit_is_not_ordered() {
     assert_eq!(refused, 0, "no refused GUN2 build order");
 }
 
+// design: own AI (#426) and S-0407 claims 13 and 16 *At issue* (a build order is refused when issued at limit or when claim 16's test refuses it; for a dock-bound aircraft type, when the house's pad aircraft fill its docking places, S-0501 claim 30 and F12): with the house's one docking place taken by its jet, no build order the brains give is refused by the sidebar's legality (S-0411 claim 4), so none is given again at every think.
+#[test]
+fn no_build_order_is_refused_at_issue() {
+    let map = fixture::map();
+    let mut r = fixture::ruleset();
+    // spec: S-0407 claim 16 (the pad-aircraft list: a dock-bound type on it counts toward the pad total's use)
+    r.sim.general.economy.pad_aircraft = Some(vec!["JET".into()]);
+    // spec: S-0407 F3 (a dock-bound aircraft type: refused when D ≥ T)
+    r.sim
+        .aircraft
+        .get_mut("JET")
+        .expect("JET")
+        .econ
+        .airport_bound = Some(true);
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-pads"));
+    let mut g = Game::new(
+        rules,
+        &map,
+        "synthetic-pads",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    while g.world.tick < 12_000 {
+        g.step();
+    }
+    let mut w = g.world.clone();
+    let home = w
+        .objects
+        .values()
+        .find(|o| {
+            o.owner == Some(HouseId(0))
+                && o.kind == Kind::Building
+                && w.rules().buildings[o.type_index as usize].name == "YARD"
+        })
+        .map(|o| o.pos.cell())
+        .expect("house 0's yard");
+    // A radar, a pad with one docking place and a jet on it: the pad total is full (S-0501 claim 30).
+    let free = |w: &World, c: glasnost_map::CellXY, n: i32| {
+        (0..n).all(|dy| {
+            (0..n).all(|dx| {
+                let x = glasnost_map::CellXY::new(c.x + dx, c.y + dy);
+                w.cells.usable(x) && w.objects.values().all(|o| o.pos.cell() != x)
+            })
+        })
+    };
+    let mut spots = (4..30).flat_map(|r| {
+        [(r, 0), (-r, 0), (0, r), (0, -r)]
+            .map(|(dx, dy)| glasnost_map::CellXY::new(home.x + dx, home.y + dy))
+    });
+    for name in ["RADR", "HPAD"] {
+        let c = spots
+            .by_ref()
+            .find(|&c| free(&w, c, 3))
+            .expect("a free spot");
+        testkit::spawn(&mut w, Kind::Building, name, 0, c, 0);
+    }
+    let c = spots
+        .by_ref()
+        .find(|&c| free(&w, c, 1))
+        .expect("a free spot");
+    testkit::spawn(&mut w, Kind::Aircraft, "JET", 0, c, 0);
+    w.houses[0].credits = 20_000;
+    testkit::run(&mut w, 30);
+    let jet = glasnost_sim::econ::TypeRef {
+        kind: Kind::Aircraft,
+        index: w.rules().index_of(Kind::Aircraft, "JET").expect("JET"),
+    };
+    assert!(tech::offered(&w, HouseId(0), jet), "the jet is offered");
+    assert!(
+        tech::refused_at_issue(&w, HouseId(0), jet),
+        "the pad is full: a jet build order is refused at issue (pad total {}, pad list {:?}, jets {})",
+        w.houses[0].econ.tech.pad_total,
+        w.rules().econ.tech.pad_aircraft,
+        w.objects
+            .values()
+            .filter(|o| o.owner == Some(HouseId(0)) && o.kind == Kind::Aircraft)
+            .count()
+    );
+    let mut brains: Vec<Brain> = (0..2)
+        .map(|h| Brain::with_plan(&w, &map, HouseId(h), fixture::plan()))
+        .collect();
+    let mut refused: BTreeMap<(u8, Kind, u32), (i32, u32)> = BTreeMap::new();
+    let end = w.tick + 900;
+    while w.tick < end {
+        for b in &mut brains {
+            let h = b.house();
+            for o in b.think(&w) {
+                let built = match &o {
+                    Order::Build { what } => Some(*what),
+                    _ => None,
+                };
+                let legal = glasnost_sim::econ::sidebar::legal(&w, h, &o);
+                let taken = glasnost_sim::orders::issue(&mut w, h, o);
+                if let Some(t) = built
+                    && !(legal && taken)
+                {
+                    let e = refused.entry((h.0, t.kind, t.index)).or_insert((w.tick, 0));
+                    e.1 += 1;
+                }
+            }
+        }
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert!(
+        refused.is_empty(),
+        "build orders refused at issue, by (house, kind, index): (first tick, count) {refused:?}"
+    );
+}
+
 // spec: S-0314 claim 24 (our AI sends a vehicle to a depot only by an ordinary enter order): a damaged idle army vehicle of a house with an accepting repair depot is given an enter order on it; a healthy one is not.
 #[test]
 fn sends_damaged_vehicles_to_a_depot() {
