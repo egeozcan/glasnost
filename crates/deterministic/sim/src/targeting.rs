@@ -1884,8 +1884,8 @@ fn attackable_cell(w: &World, actor: ObjectId, c: CellXY) -> bool {
         .then(|| rules.overlays.get(usize::from(cell.overlay)))
         .flatten();
     // spec: S-0214 *attackable cell* (i) (the overlay type is a legal target; or a destroyable-cliff cell and the warhead lacks the fire flag)
-    let first = overlay.is_some_and(|o| o.legal_target)
-        || (cliff && !warhead.is_some_and(|h| h.fire));
+    let first =
+        overlay.is_some_and(|o| o.legal_target) || (cliff && !warhead.is_some_and(|h| h.fire));
     if !first {
         return false;
     }
@@ -1894,7 +1894,10 @@ fn attackable_cell(w: &World, actor: ObjectId, c: CellXY) -> bool {
         return true;
     };
     // spec: S-0214 *attackable cell* (ii) (the cell belongs to a house not allied with the actor; a wall of no house belongs to none)
-    let owner = w.cells.idx(c).and_then(|i| w.cells.wall_owner.get(i).copied().flatten());
+    let owner = w
+        .cells
+        .idx(c)
+        .and_then(|i| w.cells.wall_owner.get(i).copied().flatten());
     let actor_house = w.obj(actor).and_then(|a| a.owner);
     let enemy = owner.is_some() && !w.allied(actor_house, owner);
     // spec: S-0214 *attackable cell* (ii) and Import mapping (a wall the warhead can damage: the wall flag, or the wood flag and the overlay's armour class wood)
