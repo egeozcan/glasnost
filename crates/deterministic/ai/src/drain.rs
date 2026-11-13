@@ -409,4 +409,86 @@ mod filter_tests {
             "{with} with drainers, {without} without"
         );
     }
+
+    // design: own AI (#43): another house's drainer on its way to the same building does not hide the claim of the house's own drainer; a second own drainer's attack on that building is still left out.
+    #[test]
+    fn another_houses_claim_does_not_hide_an_own_claim() {
+        use glasnost_sim::econ::setup::{self, Player, Settings};
+        // The M7b duel's map and rules with a third player, Gamma, at a
+        // third start south of the middle.
+        let mut map = fixture_m7b::map();
+        let c = fixture::at(0, 20);
+        map.waypoints.insert(2, (c.x as i16, c.y as i16));
+        let player = |name: &str, country: &str, start: u32| Player {
+            name: name.into(),
+            country: country.into(),
+            start: Some(start),
+            ai: true,
+            values: Default::default(),
+        };
+        let three = setup::skirmish(
+            &fixture_m7b::rules(),
+            &[
+                player("Alpha", "Alphaland", 0),
+                player("Beta", "Betaland", 1),
+                player("Gamma", "Alphaland", 2),
+            ],
+            Settings::default(),
+            0,
+            5,
+        );
+        let mut g = Game::new(
+            fixture_m7b::rules(),
+            &map,
+            fixture_m7b::MAP_NAME,
+            fixture::catalogue(),
+            three,
+        )
+        .expect("the three-player game loads");
+        while g.world.tick <= g.world.orders_blocked_through {
+            g.step();
+        }
+        let w = &mut g.world;
+        // A house that neither player counts as allied, and that neither
+        // counts it so: it owns the building both drain.
+        let third = (2..w.houses.len())
+            .map(|h| HouseId(h as u8))
+            .find(|&h| {
+                [HouseId(0), HouseId(1)]
+                    .into_iter()
+                    .all(|p| !w.allied(Some(p), Some(h)) && !w.allied(Some(h), Some(p)))
+            })
+            .expect("a third house");
+        let home = w
+            .objects
+            .values()
+            .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+            .map(|o| o.pos.cell())
+            .expect("house 0 on the map");
+        let at = |dx: i32, dy: i32| glasnost_map::CellXY::new(home.x + dx, home.y + dy);
+        let p = glasnost_sim::testkit::spawn(w, Kind::Building, "PROC", third.0, at(6, 6), 0);
+        // House 0's drainer on its way to the refinery (the lower id), then
+        // house 1's (a higher id), then a second one of house 0.
+        let ours = glasnost_sim::testkit::spawn(w, Kind::Vehicle, "DISC", 0, at(0, 4), 0);
+        let theirs = glasnost_sim::testkit::spawn(w, Kind::Vehicle, "DISC", 1, at(2, 4), 0);
+        let second = glasnost_sim::testkit::spawn(w, Kind::Vehicle, "DISC", 0, at(1, 4), 0);
+        for d in [ours, theirs] {
+            let o = w.obj_mut(d).expect("the disc");
+            o.beh.current = Some(Behaviour::Attack);
+            o.target = Some(Target::Object(p));
+        }
+        let w = &g.world;
+        assert!(ours < theirs);
+        assert!(on_the_way(w, ours) && on_the_way(w, theirs));
+        assert!(drain_target(w, second, p));
+        let mut out = vec![Order::Behaviour {
+            actor: second,
+            behaviour: Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(p)),
+            dest: None,
+        }];
+        filter_orders(w, &mut out);
+        assert!(out.is_empty(), "{out:?}");
+    }
 }
