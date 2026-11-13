@@ -541,7 +541,7 @@ fn install_stand_in(w: &mut World, x: ObjectId, k: StandIn) {
         // spec: S-0607 claim 23 and Edge cases (quirks.lift_standin_unmarked_cell off: the unit keeps the vehicle-present mark of its own cell at the seize, as a vehicle at rest does; its stand-in's movement then clears and marks cells as usual)
         w.cells.claim_vehicle(c, layer, true);
         if let Some(d) = w.obj_mut(x).and_then(|o| o.drive.as_mut()) {
-            d.claims = vec![c];
+            d.claims = vec![(c, layer)];
         }
     }
 }
@@ -1713,7 +1713,7 @@ fn own_marks_back(w: &mut World, id: ObjectId) {
             }
             if let Some(ob) = w.obj_mut(id) {
                 if let Some(d) = ob.drive.as_mut() {
-                    d.claims = vec![c];
+                    d.claims = vec![(c, layer)];
                 }
                 if let Some(h) = ob.hover.as_mut() {
                     h.claims = vec![(c, layer)];

@@ -1515,13 +1515,20 @@ pub fn escape(w: &mut World, t: ObjectId, hit: &crate::combat::damage::Hit) {
     // spec: S-0312 claim 12 and S-0209 claim 4 (the dying vehicle contributes neither a listed blocker nor its vehicle-present flag to these escape tests; other occupants count normally)
     let at = w.cells.list(c, to.layer).iter().position(|&x| x == t);
     w.cells.leave(c, to.layer, t);
-    let flag = to.drive.as_ref().is_some_and(|d| d.claims.contains(&c))
-        || to
-            .hover
-            .as_ref()
-            .is_some_and(|h| h.claims.contains(&(c, to.layer)));
-    if flag {
-        w.cells.claim_vehicle(c, to.layer, false);
+    // spec: S-0209 claim 1 (the flag is cleared in the record it was set in)
+    let drive_flag = to
+        .drive
+        .as_ref()
+        .and_then(|d| d.claims.iter().find(|x| x.0 == c))
+        .map(|x| x.1);
+    let hover_flag = to
+        .hover
+        .as_ref()
+        .is_some_and(|h| h.claims.contains(&(c, to.layer)))
+        .then_some(to.layer);
+    let flag = drive_flag.or(hover_flag);
+    if let Some(l) = flag {
+        w.cells.claim_vehicle(c, l, false);
     }
     for p in passengers(w, t) {
         if let Some(tb) = w.obj_mut(t) {
@@ -1572,8 +1579,8 @@ pub fn escape(w: &mut World, t: ObjectId, hit: &crate::combat::damage::Hit) {
             ob.beh.queue(Some(Behaviour::Hunt));
         }
     }
-    if flag {
-        w.cells.claim_vehicle(c, to.layer, true);
+    if let Some(l) = flag {
+        w.cells.claim_vehicle(c, l, true);
     }
     if let Some(at) = at {
         w.cells.restore(c, to.layer, t, at);

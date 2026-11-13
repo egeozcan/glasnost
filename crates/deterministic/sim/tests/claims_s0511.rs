@@ -281,6 +281,10 @@ fn onto_deck(w: &mut World, id: ObjectId) {
     let o = w.obj_mut(id).unwrap();
     o.layer = Layer::Deck;
     o.pos.z += 416;
+    // The driving claim moves with the flag, to the deck record (S-0209 claim 1).
+    if let Some(d) = o.drive.as_mut() {
+        d.claims = vec![(c, Layer::Deck)];
+    }
 }
 
 /// A repeating tag over one trigger whose only event is the bridge-
@@ -1739,9 +1743,13 @@ fn bridge_state_save_round_trip() {
 // Sim issues S6 (#420): reservations dropped from a lost deck (#165).
 
 fn walker_mark(w: &World, c: CellXY, l: Layer, id: ObjectId) -> bool {
-    w.cells.occ(c, l).unwrap().marks.iter().flatten().any(|m| {
-        matches!(m.by, glasnost_sim::cells::Marker::Infantry(who, _) if who == id)
-    })
+    w.cells
+        .occ(c, l)
+        .unwrap()
+        .marks
+        .iter()
+        .flatten()
+        .any(|m| matches!(m.by, glasnost_sim::cells::Marker::Infantry(who, _) if who == id))
 }
 
 // spec: S-0511 claim 9 (movement reservations are cleared at the locomotor's heading point, at that point's stored height: a moving walker's deck reservation in a lost section's cell)
@@ -1800,7 +1808,7 @@ fn claim_9_moving_vehicle_drop_clears_its_deck_reservation() {
         let o = w.obj_mut(cart).unwrap();
         let last = (o.pos.x, o.pos.y);
         let d = o.drive.as_mut().unwrap();
-        d.claims = vec![c];
+        d.claims = vec![(c, Layer::Deck)];
         d.between_steps = false;
         d.track = Some(glasnost_sim::drive::Track {
             d: 2,
@@ -1870,7 +1878,11 @@ fn claim_6_a_painted_over_reference_cell_floods_nothing() {
     assert!(!bridges::attempt(&mut w, at(4, -1)));
     assert_eq!(count_tile(&w, 0), ground, "no ground cell rewritten");
     assert_eq!(tile_at(&w, at(-20, 15)), 0, "ground far from the pier");
-    assert_eq!(pier_k(&w, at(4, -1)), Some(0), "the hit cell keeps its state");
+    assert_eq!(
+        pier_k(&w, at(4, -1)),
+        Some(0),
+        "the hit cell keeps its state"
+    );
 }
 
 // spec: S-0511 claim 6 (a collapse lowers the pier's own cells); Q-3046 (interim: no pier at the reference cell, no collapse and no success)
@@ -1887,7 +1899,11 @@ fn claim_6_a_painted_over_reference_cell_in_state_3_collapses_nothing() {
         !bridges::attempt(&mut w, at(4, -1)),
         "no pier at the reference cell: no success"
     );
-    assert_eq!(w.cells.cell(far).unwrap().level, 9, "far ground not lowered");
+    assert_eq!(
+        w.cells.cell(far).unwrap().level,
+        9,
+        "far ground not lowered"
+    );
     assert_eq!(count_tile(&w, t + 4), 0, "no collapsed pier tile written");
     assert_eq!(pier_k(&w, at(4, -1)), Some(3));
 }

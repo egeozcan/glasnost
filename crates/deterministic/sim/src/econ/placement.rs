@@ -370,7 +370,7 @@ fn ignored_claims(w: &World, ignore: Option<ObjectId>, c: CellXY) -> u8 {
     let drive = o
         .drive
         .as_ref()
-        .map_or(0, |d| u8::from(d.claims.contains(&c)));
+        .map_or(0, |d| u8::from(d.claims.contains(&(c, Layer::Ground))));
     // spec: S-0415 claim 3 (the deploying vehicle does not count as being in the way) and S-0503 claim 19 (a hover's deploy attempt takes the cell test at the cell where it stopped: its own vehicle-present flags there, S-0503 claim 13, do not count)
     let hover = o.hover.as_ref().map_or(0, |h| {
         h.claims

@@ -110,7 +110,8 @@ fn move_marks(w: &mut World, c: CellXY, id: ObjectId, o: &crate::world::Object) 
                 let point = h.point;
                 let mut kept = Vec::new();
                 for &(cl, l) in &h.claims {
-                    let at_point = point.is_some_and(|p| (cl, l) == (p.cell(), dropped_layer(w, p)));
+                    let at_point =
+                        point.is_some_and(|p| (cl, l) == (p.cell(), dropped_layer(w, p)));
                     if at_point || (cl, l) == (c, Layer::Deck) {
                         // spec: S-0511 claim 9 (the reservation at the heading point, at its stored height, and the deck flag of the cell it leaves are cleared)
                         w.cells.claim_vehicle(cl, l, false);
@@ -128,19 +129,9 @@ fn move_marks(w: &mut World, c: CellXY, id: ObjectId, o: &crate::world::Object) 
                     hs.claims = kept;
                 }
             } else if let Some(d) = o.drive.as_ref() {
-                // The drive claims carry no layer of their own: they were
-                // made in the vehicle's layer, the deck.
-                let heading = d.track.as_ref().map(|t| {
-                    let p = Pos::new(t.target.0, t.target.1, t.height);
-                    (t.target_cell, dropped_layer(w, p))
-                });
-                for &cl in &d.claims {
-                    // spec: S-0511 claim 9 and S-0207 claim 24 (the heading point's reservation is cleared in the layer of its stored height, the track-start height; the deck flag of the cell it leaves is cleared)
-                    let layer = match heading {
-                        Some((hc, l)) if hc == cl => l,
-                        _ => Layer::Deck,
-                    };
-                    w.cells.claim_vehicle(cl, layer, false);
+                for &(cl, l) in &d.claims {
+                    // spec: S-0511 claim 9 and S-0209 claim 1 (the heading point's reservation, set in the layer of the position at that point, and the deck flag of the cell it leaves are cleared, each in the record it was set in)
+                    w.cells.claim_vehicle(cl, l, false);
                 }
                 let stationary = d.track.is_none();
                 if stationary {
@@ -148,7 +139,11 @@ fn move_marks(w: &mut World, c: CellXY, id: ObjectId, o: &crate::world::Object) 
                     w.cells.claim_vehicle(c, Layer::Ground, true);
                 }
                 if let Some(ds) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
-                    ds.claims = if stationary { vec![c] } else { Vec::new() };
+                    ds.claims = if stationary {
+                        vec![(c, Layer::Ground)]
+                    } else {
+                        Vec::new()
+                    };
                 }
             }
         }
@@ -168,7 +163,11 @@ fn dropped_layer(w: &World, p: Pos) -> Layer {
         .idx(p.cell())
         .is_some_and(|i| w.cells.deck[i] || w.cells.bridge_body[i]);
     // spec: S-0511 claims 5 and 9, S-0208 claim 19 and Constants (the stored height at least 416 above the terrain surface at the point, in a cell whose deck is or was there)
-    if decked && p.z >= w.surface_at(p.x, p.y).wrapping_add(crate::teleport::DECK_HEIGHT) {
+    if decked
+        && p.z
+            >= w.surface_at(p.x, p.y)
+                .wrapping_add(crate::teleport::DECK_HEIGHT)
+    {
         Layer::Deck
     } else {
         Layer::Ground

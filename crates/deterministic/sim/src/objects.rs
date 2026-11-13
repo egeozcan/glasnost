@@ -393,7 +393,7 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
                 w.cells.claim_vehicle(cell, o.layer, true);
                 // The claim is the vehicle's own, released when it leaves the cell.
                 if let Some(d) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
-                    d.claims = vec![cell];
+                    d.claims = vec![(cell, o.layer)];
                 }
                 // spec: S-0503 claim 13 (a newly created hover starts between steps, its flag at its actual position; Q-0691 answered)
                 if let Some(h) = w.obj_mut(id).and_then(|ob| ob.hover.as_mut()) {

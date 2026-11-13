@@ -1495,7 +1495,7 @@ pub fn install_temporary_drive(w: &mut World, u: ObjectId) {
         // spec: S-0207 claim 21 (installing temporary driving clears neither the remembered ground reservation nor the actual mark: the actual cell's mark passes to driving, which clears it on departure)
         for m in crate::teleport::removal_marks(w, u) {
             if m == actual {
-                handed.push(m.0);
+                handed.push(m);
             } else {
                 // spec: S-0207 Edge cases (a ground-reservation quirk off keeps no separate reservation)
                 w.cells.claim_vehicle(m.0, m.1, false);

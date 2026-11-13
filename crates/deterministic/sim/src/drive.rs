@@ -81,8 +81,9 @@ pub struct DriveState {
     pub turning_in_place: bool,
     /// Tick in which the turn in place was given, and its duration.
     pub turn: Option<(i32, i32)>,
-    /// Cells whose vehicle-present flag it set (S-0209 claim 1).
-    pub claims: Vec<CellXY>,
+    /// Cells whose vehicle-present flag it set, each with the record layer
+    /// it was set in (S-0209 claim 1).
+    pub claims: Vec<(CellXY, Layer)>,
     /// Between steps (S-0209 Terms).
     pub between_steps: bool,
     /// Tick of the last movement.
@@ -365,37 +366,65 @@ pub(crate) fn held_claims(w: &World, id: ObjectId) -> Vec<(CellXY, Layer)> {
         Some(o) => o
             .drive
             .as_ref()
-            .map(|d| d.claims.iter().map(|&c| (c, o.layer)).collect())
+            .map(|d| d.claims.clone())
             .unwrap_or_default(),
         None => Vec::new(),
     }
 }
 
-/// Sets the vehicle-present flag of `c` for the vehicle (S-0209 claim 1).
-fn claim(w: &mut World, id: ObjectId, c: CellXY) {
+/// Sets the vehicle-present flag of `c` for the vehicle in the record of
+/// `layer`, the cell layer its position is in there (S-0209 claim 1).
+fn claim(w: &mut World, id: ObjectId, c: CellXY, layer: Layer) {
     let Some(o) = w.obj(id) else { return };
-    let layer = o.layer;
-    if o.drive.as_ref().is_some_and(|d| d.claims.contains(&c)) {
+    if o.drive
+        .as_ref()
+        .is_some_and(|d| d.claims.iter().any(|x| x.0 == c))
+    {
         return;
     }
     w.cells.claim_vehicle(c, layer, true);
     if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
-        d.claims.push(c);
+        d.claims.push((c, layer));
         d.claims.sort();
     }
 }
 
-/// Clears the vehicle's flag of `c`, in the cell layer of its position
-/// (S-0209 claim 1).
+/// Clears the vehicle's flag of `c` (S-0209 claim 1), in the record it was
+/// set in: the cell layer of its position there, which is the layer of
+/// its position when the flag is cleared.
 fn release(w: &mut World, id: ObjectId, c: CellXY) {
     let Some(o) = w.obj(id) else { return };
-    let layer = o.layer;
-    if !o.drive.as_ref().is_some_and(|d| d.claims.contains(&c)) {
+    let Some(&(_, layer)) = o
+        .drive
+        .as_ref()
+        .and_then(|d| d.claims.iter().find(|x| x.0 == c))
+    else {
         return;
-    }
+    };
     w.cells.claim_vehicle(c, layer, false);
     if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
-        d.claims.retain(|x| *x != c);
+        d.claims.retain(|x| x.0 != c);
+    }
+}
+
+/// The cell layer of a driving vehicle's position after it crosses from
+/// cell `old` into cell `new` while in `layer` (S-0207 claim 5): onto the
+/// deck into a high-bridge cell exactly 4 levels below the cell left, off
+/// it into a cell that is not a high-bridge cell, otherwise unchanged.
+pub(crate) fn entered_layer(w: &World, old: CellXY, new: CellXY, layer: Layer) -> Layer {
+    if new == old {
+        return layer;
+    }
+    let high = |c: CellXY| w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
+    let level = |c: CellXY| w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+    // spec: S-0207 claim 5 (onto the deck: into a high-bridge cell exactly 4 levels below the cell left)
+    if high(new) && level(new) == level(old) - 4 {
+        Layer::Deck
+    } else if high(old) && !high(new) {
+        // spec: S-0207 claim 5 (off the deck: from a high-bridge cell into one that is not)
+        Layer::Ground
+    } else {
+        layer
     }
 }
 
@@ -602,18 +631,7 @@ fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool) {
     let Some(o) = w.obj(id).cloned() else { return };
     let old = o.pos.cell();
     let new = cell_of(x, y);
-    let mut layer = o.layer;
-    if new != old {
-        let high = |c: CellXY| w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
-        let level = |c: CellXY| w.cells.cell(c).map_or(0, |x| i32::from(x.level));
-        // spec: S-0207 claim 5 (onto the deck: into a high-bridge cell exactly 4 levels below the cell left)
-        if high(new) && level(new) == level(old) - 4 {
-            layer = Layer::Deck;
-        } else if high(old) && !high(new) {
-            // spec: S-0207 claim 5 (off the deck: from a high-bridge cell into one that is not)
-            layer = Layer::Ground;
-        }
-    }
+    let layer = entered_layer(w, old, new, o.layer);
     let z = if at_point {
         // spec: S-0207 claim 5 (the surface height H, plus 416 leptons on a bridge deck)
         w.surface_at(x, y) + if layer == Layer::Deck { 416 } else { 0 }
@@ -963,9 +981,7 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
         ob.path.blocked_since = None;
     }
     // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once; a two-cell curve both cells)
-    for c in cells {
-        claim(w, id, c);
-    }
+    claim_track(w, id, &cells);
     // spec: S-0210 claim 7 (a crusher warns the infantry of the first cell each time it begins a track, crush mode or not)
     if occupancy::is_crusher(w, id) {
         crate::crush::warn_ahead(w, id, first);
@@ -1462,7 +1478,23 @@ pub fn begin_exit_track(w: &mut World, id: ObjectId, e: CellXY) {
         }
     }
     // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once)
-    claim(w, id, e);
+    claim_track(w, id, &[e]);
+}
+
+/// Sets the flags of a track's cells, in order (S-0209 claim 1): each in
+/// the record of the cell layer the vehicle's position will be in there,
+/// by S-0207 claim 5's rule from the cell before it. So a step onto the
+/// deck sets the deck flag and a step off it the ground flag, the records
+/// the flags are later cleared from and that the step's own entry check
+/// reads (S-0209 Terms, *cell layer*).
+fn claim_track(w: &mut World, id: ObjectId, cells: &[CellXY]) {
+    let Some(o) = w.obj(id) else { return };
+    let (mut prev, mut layer) = (o.pos.cell(), o.layer);
+    for &c in cells {
+        layer = entered_layer(w, prev, c, layer);
+        claim(w, id, c, layer);
+        prev = c;
+    }
 }
 
 /// Puts a vehicle on a tank bunker's entry or release track toward
@@ -1507,7 +1539,7 @@ pub fn begin_bunker_track(
         }
     }
     // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once)
-    claim(w, id, cell);
+    claim_track(w, id, &[cell]);
 }
 
 /// Spends the budget on the current track (S-0207 claims 3 to 5). Returns

@@ -37,8 +37,14 @@ fn bridge_scene() -> Scene {
 
 /// The (ground, deck) vehicle-present counts of cell (0, y).
 fn counts(w: &World, y: i32) -> (u8, u8) {
-    let g = w.cells.occ(cell(0, y), Layer::Ground).map_or(0, |o| o.vehicles);
-    let d = w.cells.occ(cell(0, y), Layer::Deck).map_or(0, |o| o.vehicles);
+    let g = w
+        .cells
+        .occ(cell(0, y), Layer::Ground)
+        .map_or(0, |o| o.vehicles);
+    let d = w
+        .cells
+        .occ(cell(0, y), Layer::Deck)
+        .map_or(0, |o| o.vehicles);
     (g, d)
 }
 
