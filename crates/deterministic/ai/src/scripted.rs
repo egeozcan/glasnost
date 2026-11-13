@@ -899,6 +899,14 @@ struct Watch {
     /// [`INCOME_WINDOW`] ticks, once one has passed.
     #[serde(default)]
     income: Option<i64>,
+    /// The world's next object id at the last think: objects made since
+    /// have ids from it on (#50).
+    #[serde(default)]
+    next_id: Option<u32>,
+    /// The house's buildings being sold at the last think, with the refund
+    /// each pays when it goes (#50).
+    #[serde(default)]
+    sales: BTreeMap<ObjectId, i32>,
 }
 
 impl Script {
@@ -1490,7 +1498,11 @@ impl Script {
     /// the balance for an item started since); an item gone from the lines
     /// paid the rest of its balance when its object is still there (done
     /// and released or placed), and was cancelled, its payments refunded
-    /// (S-0404 claim 6, at an unchanged price), when not. A fall of the
+    /// (S-0404 claim 6, at an unchanged price), when not. An own object made
+    /// since the last think and no longer on a line was started and done in
+    /// between, and paid its whole start price. The refund of a building
+    /// seen in its sale at the last think and gone now is no income
+    /// (#50). A fall of the
     /// credits that no payment explains (a drain, S-0608) is no income.
     /// Every [`INCOME_WINDOW`] ticks the window's sum becomes
     /// [`Script::income`]. M8 step B5: a house that kept every harvester it
@@ -1525,7 +1537,41 @@ impl Script {
                 -(i64::from(start) - i64::from(owed))
             };
         }
-        let gained = i64::from(credits) - i64::from(self.watch.credits) + paid;
+        // design: own AI (#50): an item started and done between two thinks
+        // (an own object made since the last think, with a start price and
+        // no longer on a line) paid its whole start price meanwhile (S-0404
+        // claims 2 and 4).
+        if let Some(first) = self.watch.next_id {
+            paid += w
+                .objects
+                .range(ObjectId(first)..)
+                .filter(|(id, o)| o.owner == Some(self.house) && !now.contains_key(id))
+                .filter_map(|(_, o)| o.econ.start_price)
+                .map(i64::from)
+                .sum::<i64>();
+        }
+        // design: own AI (#50): the refund of a building the house sold
+        // (S-0408 claim 1, paid when the build-down ends and the building
+        // goes, S-0408 claims 6 and 17) is no income. A building seen in
+        // its sale at a think and gone at the next paid it; one sold
+        // whole between two thinks, or an upgrade sold off (claim 5), is
+        // not seen.
+        let refunds: i64 = self
+            .watch
+            .sales
+            .iter()
+            .filter(|&(id, _)| w.obj(*id).is_none_or(|o| o.owner != Some(self.house)))
+            .map(|(_, &r)| i64::from(r))
+            .sum();
+        self.watch.sales = w
+            .objects
+            .values()
+            .filter(|o| o.owner == Some(self.house) && o.kind == Kind::Building)
+            .filter(|o| o.econ.sale.as_ref().is_some_and(|s| !s.packs))
+            .map(|o| (o.id, sell::refund(w, self.house, tech::type_of(o))))
+            .collect();
+        self.watch.next_id = Some(w.next_id);
+        let gained = i64::from(credits) - i64::from(self.watch.credits) + paid - refunds;
         self.watch.earned += gained.max(0);
         self.watch.owed = now;
         // A window ends at each multiple of INCOME_WINDOW; the watch reads it at the first think at or after it (thinks come every THINK_PERIOD ticks, at the house's phase).
@@ -1628,6 +1674,11 @@ impl Script {
                 .flatten()
         });
         if let Some(actor) = sale {
+            // design: own AI (#50): its refund is no income at the think after it goes
+            if let Some(o) = w.obj(actor) {
+                let r = sell::refund(w, self.house, tech::type_of(o));
+                self.watch.sales.insert(actor, r);
+            }
             out.push(Order::Sell { actor });
             self.watch.last_sale = Some(t);
             self.watch.stall_since = Some(t);
