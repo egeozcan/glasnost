@@ -1,9 +1,9 @@
 ---
 id: Q-3064
 title: Where the map selection screen's preview markers go with quirks.preview_markers_from_header off
-status: open
+status: answered
 related: [S-0009]
-answered-by: []
+answered-by: [S-0009]
 ---
 
 ## Need
