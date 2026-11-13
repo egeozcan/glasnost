@@ -85,7 +85,7 @@ fn move_marks(w: &mut World, c: CellXY, id: ObjectId, o: &crate::world::Object) 
         Kind::Infantry => {
             if let Some(t) = o.walk.as_ref().and_then(|s| s.target) {
                 // spec: S-0511 claim 9 (movement reservations are cleared at the locomotor's heading point, at that point's stored height)
-                let layer = crate::teleport::reservation_layer(w, t);
+                let layer = dropped_layer(w, t);
                 w.cells.clear_infantry(t.cell(), layer, id, q);
                 return;
             }
@@ -110,9 +110,7 @@ fn move_marks(w: &mut World, c: CellXY, id: ObjectId, o: &crate::world::Object) 
                 let point = h.point;
                 let mut kept = Vec::new();
                 for &(cl, l) in &h.claims {
-                    let at_point = point.is_some_and(|p| {
-                        (cl, l) == (p.cell(), crate::teleport::reservation_layer(w, p))
-                    });
+                    let at_point = point.is_some_and(|p| (cl, l) == (p.cell(), dropped_layer(w, p)));
                     if at_point || (cl, l) == (c, Layer::Deck) {
                         // spec: S-0511 claim 9 (the reservation at the heading point, at its stored height, and the deck flag of the cell it leaves are cleared)
                         w.cells.claim_vehicle(cl, l, false);
@@ -134,7 +132,7 @@ fn move_marks(w: &mut World, c: CellXY, id: ObjectId, o: &crate::world::Object) 
                 // made in the vehicle's layer, the deck.
                 let heading = d.track.as_ref().map(|t| {
                     let p = Pos::new(t.target.0, t.target.1, t.height);
-                    (t.target_cell, crate::teleport::reservation_layer(w, p))
+                    (t.target_cell, dropped_layer(w, p))
                 });
                 for &cl in &d.claims {
                     // spec: S-0511 claim 9 and S-0207 claim 24 (the heading point's reservation is cleared in the layer of its stored height, the track-start height; the deck flag of the cell it leaves is cleared)
@@ -155,6 +153,25 @@ fn move_marks(w: &mut World, c: CellXY, id: ObjectId, o: &crate::world::Object) 
             }
         }
         _ => {}
+    }
+}
+
+/// The record layer of a reservation at point `p` of a unit dropped from a
+/// lost deck (claim 9): the deck when the point's stored height is at least
+/// 416 leptons above the terrain surface there, in a cell whose deck is or
+/// was there. Claim 5 has already taken the high-bridge mark off the lost
+/// section's cells and given them the bridge-body mark, so the reservation
+/// made on the deck is found by either mark.
+fn dropped_layer(w: &World, p: Pos) -> Layer {
+    let decked = w
+        .cells
+        .idx(p.cell())
+        .is_some_and(|i| w.cells.deck[i] || w.cells.bridge_body[i]);
+    // spec: S-0511 claims 5 and 9, S-0208 claim 19 and Constants (the stored height at least 416 above the terrain surface at the point, in a cell whose deck is or was there)
+    if decked && p.z >= w.surface_at(p.x, p.y).wrapping_add(crate::teleport::DECK_HEIGHT) {
+        Layer::Deck
+    } else {
+        Layer::Ground
     }
 }
 
