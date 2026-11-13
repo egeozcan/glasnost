@@ -238,3 +238,50 @@ fn the_setup_screen_draws_its_map_choice() {
         shoot(&mut c, &format!("setup-none-{name}.png"));
     }
 }
+
+/// The picker drawn through the window's GPU path (`GpuDraw`) offscreen,
+/// where the preview goes up as an image by its id like the battlefield's:
+/// `picker-gpu-640.png`, with the count of pixels that differ from the CPU
+/// frame. Local lane: it needs a GPU adapter.
+#[test]
+#[ignore = "local lane: needs a GPU adapter"]
+fn the_picker_draws_its_preview_on_the_gpu() {
+    use glasnost_render::gpu;
+    use glasnost_render::offscreen::{OFFSCREEN_FORMAT, render_rgba};
+    use glasnost_render::wgpu;
+    let Some((device, queue)) = gpu::shared_device().ok().map(|g| (g.device, g.queue)) else {
+        println!("no GPU adapter: no GPU shot");
+        return;
+    };
+    let mut c = client((640, 480));
+    let r = c.menu_targets.rect_of(&MenuHit::Skirmish).unwrap();
+    click(&mut c, r);
+    press(&mut c, SetupHit::OpenMaps);
+    settle(&mut c);
+    let cpu = c.frame_rgba();
+    let (w, h) = (c.size.0 as u32, c.size.1 as u32);
+    let mut draw = glasnost_app::game::GpuDraw::new(&device, OFFSCREEN_FORMAT);
+    draw.set_screen(1, (w, h));
+    // A new device: the kept preview goes up again.
+    c.new_device();
+    c.painter.dirty = true;
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("picker frame"),
+    });
+    draw.prepare(&device, &queue, &mut c, (w, h), &mut encoder);
+    queue.submit([encoder.finish()]);
+    let rgba = render_rgba(&device, &queue, w, h, |pass| draw.draw(pass));
+    let differ = (0..(w * h) as usize)
+        .filter(|i| rgba[i * 4..i * 4 + 3] != cpu[i * 4..i * 4 + 3])
+        .count();
+    if let Ok(dir) = std::env::var("GLASNOST_SHOT_DIR") {
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = std::path::Path::new(&dir).join("picker-gpu-640.png");
+        std::fs::write(path, png::png(w, h, &rgba)).unwrap();
+    }
+    println!(
+        "picker-gpu-640.png: {differ} of {} pixels differ from the CPU frame",
+        w * h
+    );
+    assert_eq!(differ, 0, "the GPU picker matches the CPU frame");
+}
