@@ -106,11 +106,14 @@ pub fn availability(w: &mut World, h: HouseId, except: Option<ObjectId>) {
             && giving
                 .iter()
                 .any(|&b| w.obj(b).is_some_and(|o| !o.econ.building.switched_off));
-        let ty = w.rules().superweapons.types[i as usize].clone();
+        let (ty_powered, ty_manual) = {
+            let ty = &w.rules().superweapons.types[i as usize];
+            (ty.powered, ty.manual)
+        };
         let Some(r) = record_mut(w, h, i) else {
             continue;
         };
-        if !powered && ty.powered && !r.suspended {
+        if !powered && ty_powered && !r.suspended {
             // spec: S-0512 claim 6 (not powered, power-dependent, not yet suspended: suspended; the clock stops and keeps its remaining time)
             r.suspended = true;
             r.stop(t);
@@ -118,7 +121,7 @@ pub fn availability(w: &mut World, h: HouseId, except: Option<ObjectId>) {
         } else if powered && r.suspended {
             // spec: S-0512 claim 6 (powered and suspended: resumed; an ordinary clock runs again from the time it kept, a manual-charge clock stays stopped)
             r.suspended = false;
-            if !r.running && !ty.manual {
+            if !r.running && !ty_manual {
                 r.start = t;
                 r.running = true;
             }
@@ -166,7 +169,10 @@ pub fn grants(w: &mut World, h: HouseId) {
 /// permanent trigger grant (claim 13).
 fn grant_by_building(w: &mut World, h: HouseId, i: u32, never_suspended: bool) {
     let t = w.tick;
-    let ty = w.rules().superweapons.types[i as usize].clone();
+    let (ty_powered, ty_charge, ty_manual) = {
+        let ty = &w.rules().superweapons.types[i as usize];
+        (ty.powered, ty.charge, ty.manual)
+    };
     let suspended = if never_suspended {
         // spec: S-0512 claim 13 (never suspended at the grant)
         false
@@ -179,7 +185,7 @@ fn grant_by_building(w: &mut World, h: HouseId, i: u32, never_suspended: bool) {
         let on = giving(w, h, i, None)
             .iter()
             .any(|&b| w.obj(b).is_some_and(|o| !o.econ.building.switched_off));
-        ty.powered && (low || !on)
+        ty_powered && (low || !on)
     };
     let seq = next_seq(w);
     let Some(r) = record_mut(w, h, i) else { return };
@@ -188,10 +194,10 @@ fn grant_by_building(w: &mut World, h: HouseId, i: u32, never_suspended: bool) {
     r.ready = false;
     r.one_time = false;
     r.silent = false;
-    r.remain = ty.charge;
+    r.remain = ty_charge;
     r.start = t;
     // spec: S-0512 claim 20 (a manual-charge record is granted with its clock stopped at the full T)
-    r.running = !ty.manual && !suspended;
+    r.running = !ty_manual && !suspended;
     r.suspended = suspended;
     // spec: S-0512 claim 19 (a drain-mode record is granted in charging with the full T)
     r.drain = DrainState::Charging;
@@ -203,7 +209,10 @@ fn grant_by_building(w: &mut World, h: HouseId, i: u32, never_suspended: bool) {
 pub fn complete(w: &mut World, h: HouseId) {
     let t = w.tick;
     for i in 0..type_count(w) {
-        let ty = w.rules().superweapons.types[i as usize].clone();
+        let (drain, charge) = {
+            let ty = &w.rules().superweapons.types[i as usize];
+            (ty.drain, ty.charge)
+        };
         let mut announce = false;
         {
             let Some(r) = record_mut(w, h, i) else {
@@ -213,7 +222,7 @@ pub fn complete(w: &mut World, h: HouseId) {
             if !(r.granted && !r.suspended && !r.ready && r.running && r.remaining(t) == 0) {
                 continue;
             }
-            if ty.drain {
+            if drain {
                 match r.drain {
                     DrainState::Charging => {
                         // spec: S-0512 claim 19 (expiry in charging makes it ready, with no announcement and no new ready tick)
@@ -223,7 +232,7 @@ pub fn complete(w: &mut World, h: HouseId) {
                     DrainState::Active => {
                         // spec: S-0512 claim 19 (expiry in active, while not suspended, moves to charging with the full T, without an effect-ending action)
                         r.drain = DrainState::Charging;
-                        r.restart(t, ty.charge, true);
+                        r.restart(t, charge, true);
                     }
                     DrainState::Ready => {}
                 }
@@ -354,7 +363,7 @@ pub fn one_time_grant(w: &mut World, h: HouseId, i: u32) {
         return;
     }
     let t = w.tick;
-    let ty = w.rules().superweapons.types[i as usize].clone();
+    let ty_drain = w.rules().superweapons.types[i as usize].drain;
     let keep_stale = w.rules().quirks.one_time_grant_keeps_stale_suspension;
     if record(w, h, i).is_some_and(|r| r.granted) {
         // spec: S-0512 claim 12 (a one-time grant on a granted record does nothing)
@@ -375,7 +384,7 @@ pub fn one_time_grant(w: &mut World, h: HouseId, i: u32) {
     r.start = t;
     r.running = true;
     // spec: S-0512 claim 19 (a one-time drain-mode record is granted in ready)
-    r.drain = if ty.drain {
+    r.drain = if ty_drain {
         DrainState::Ready
     } else {
         DrainState::Charging

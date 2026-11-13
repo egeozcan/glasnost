@@ -295,14 +295,14 @@ pub fn update(w: &mut World) {
     }
     // spec: S-0513 claim 18 and T1 (in every weather update, in every storm state, pending clouds strike first, newest first)
     for i in (0..w.sw.clouds.len()).rev() {
-        let c = w.sw.clouds[i].clone();
-        let f = frames(w, &c);
+        let c = &w.sw.clouds[i];
         // spec: S-0513 claim 18 (strikes once its cloud stage exceeds ⌊F / 2⌋, F the frame count of its image; an ordinary cloud with F ≤ 2 is removed first and never strikes)
-        if c.pending && stage(&c, t) > f / 2 {
+        if c.pending && stage(c, t) > frames(w, c) / 2 {
+            let cell = c.cell;
             if let Some(x) = w.sw.clouds.get_mut(i) {
                 x.pending = false;
             }
-            strike(w, c.cell);
+            strike(w, cell);
         }
     }
     // spec: S-0513 claims 16 and 46 (a cloud is present until a weather update finds its cloud stage at least F − 1; claim 19: removed in that update)
