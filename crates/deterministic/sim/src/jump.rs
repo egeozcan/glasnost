@@ -1381,6 +1381,7 @@ fn height_step(w: &World, id: ObjectId, j: &mut JumpState, f: &JumpFields, mode:
     z = z.max(direct);
     // spec: S-0502 claim 8 and F4 (r24, Q-3042: ground hold: with u from before the step, u_h = u when u ≤ h_d and max(u, 0) when u > h_d; not over its movement point's cell and u_h < trunc(h_d / 2) sets the current speed to 0, so for a negative h_d, as in crashing, exactly when u ≤ h_d)
     let uh = if u <= hd { u } else { u.max(0) };
+    // spec: S-0502 claim 8 and F4 (r24: u_h < trunc(h_d / 2) and not over the movement point's cell)
     if !over_dest && uh < hd / 2 {
         j.vc = F64::ZERO;
     }
