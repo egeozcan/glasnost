@@ -307,7 +307,7 @@ pub fn at_chain_point(w: &World, id: ObjectId) -> bool {
 /// Releases every vehicle-present claim of a vehicle.
 pub fn release_claims(w: &mut World, id: ObjectId) {
     let claims = held_claims(w, id);
-    for (c, layer) in claims {
+    for &(c, layer) in &claims {
         w.cells.claim_vehicle(c, layer, false);
     }
     if let Some(o) = w.obj_mut(id) {
@@ -322,6 +322,13 @@ pub fn release_claims(w: &mut World, id: ObjectId) {
             t.held = None;
             t.deck_mark = None;
         }
+        if let Some(j) = o.jump.as_mut()
+            && j.mark
+                .is_some_and(|m| m.position.is_none() && claims.contains(&(m.cell, m.layer)))
+        {
+            // spec: S-0502 claim 4 (the released vehicle mark is no longer held, so the jumpjet does not release it again) (#188)
+            j.mark = None;
+        }
     }
 }
 
@@ -335,6 +342,21 @@ pub(crate) fn held_claims(w: &World, id: ObjectId) -> Vec<(CellXY, Layer)> {
             .as_ref()
             .map(|h| h.claims.clone())
             .unwrap_or_default(),
+        // spec: S-0502 claim 4 (a jumpjet vehicle's vehicle-present flag is its actual-position mark, which hovering and cruising do not hold) and S-0209 claim 1 (a vehicle at rest below keeps its own flag) (#188)
+        Some(o)
+            if o.jump.is_some()
+                && w.rules()
+                    .unit(o.kind, o.type_index)
+                    .is_some_and(|u| u.locomotor == crate::rules::Locomotor::Jump) =>
+        {
+            o.jump
+                .as_ref()
+                .and_then(|j| j.mark)
+                .filter(|m| m.position.is_none())
+                .map(|m| (m.cell, m.layer))
+                .into_iter()
+                .collect()
+        }
         // spec: S-0209 claim 1 (a vehicle taken out of a cell's list while between steps clears that cell's flag; one without the driving locomotor never advanced)
         // spec: S-0207 claim 20 (a) and (e) (a teleporting vehicle's mark is on the cell of its landing point until the jump, in its reservation record; after it, the remembered reservation and any deck mark)
         Some(o) if o.drive.is_none() && o.kind == Kind::Vehicle => {
