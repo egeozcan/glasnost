@@ -932,6 +932,8 @@ impl Special {
         w.objects
             .values()
             .filter(|o| o.kind == Kind::Building && o.on_map && o.health > 0)
+            // design: own AI (#39): an enemy player's building, as the purchase test asks
+            .filter(|o| Self::enemy_player(w, house, o.owner))
             .map(|o| o.id)
             .filter(|&b| Self::seen(w, house, b))
             .filter_map(|b| {
@@ -995,20 +997,26 @@ impl Special {
     /// Whether the house sees an enemy building with a worthwhile
     /// infiltration effect.
     fn infiltratable_in_sight(w: &World, house: HouseId) -> bool {
-        let me = &w.houses[usize::from(house.0)];
         w.objects.values().any(|o| {
             o.kind == Kind::Building
                 && o.on_map
                 && o.health > 0
-                && o.owner.is_some_and(|h| {
-                    h != house
-                        && !me.allied_with(h)
-                        && w.houses
-                            .get(usize::from(h.0))
-                            .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
-                })
+                && Self::enemy_player(w, house, o.owner)
                 && Self::seen(w, house, o.id)
                 && Self::infiltration_rank(w, house, o.id).is_some()
+        })
+    }
+
+    /// Whether `owner` is a player house that is neither `house` nor one
+    /// of its allies: the only owner whose building a spy enters (#39).
+    fn enemy_player(w: &World, house: HouseId, owner: Option<HouseId>) -> bool {
+        let me = &w.houses[usize::from(house.0)];
+        owner.is_some_and(|h| {
+            h != house
+                && !me.allied_with(h)
+                && w.houses
+                    .get(usize::from(h.0))
+                    .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
         })
     }
 }
