@@ -232,6 +232,7 @@ fn draw(ctx: &Context, w: &World, a: ObjectId, fire: Pos, with_rules: bool) -> D
         end: 0,
         pos: (fire.x, fire.y, fire.z),
         carrier: None,
+        named: None,
         z_adjust: None,
     };
     let (drawn, _) = painter.anims(&inputs, &mut scene, &[anim]);

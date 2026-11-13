@@ -447,6 +447,9 @@ pub struct MapRenderer {
     row_count: usize,
     /// The scene's [`Scene::rewrites`] when last uploaded or synced.
     rewrites_seen: u64,
+    /// The scene's [`Scene::row_rewrites`] when last uploaded or synced
+    /// (design: render (#107)).
+    row_rewrites_seen: u64,
     target_format: wgpu::TextureFormat,
     rows: wgpu::Texture,
     /// The light-alpha texture and its size.
@@ -730,6 +733,7 @@ impl MapRenderer {
             shelves,
             row_count: scene.rows.len(),
             rewrites_seen: scene.rewrites,
+            row_rewrites_seen: scene.row_rewrites,
             target_format,
             rows: rows_texture,
             alpha: (alpha, (1, 1)),
@@ -763,9 +767,10 @@ impl MapRenderer {
     /// are written again, into their own slots or, at another size, into
     /// new ones (their old places are freed), and palette rows appended to
     /// [`Scene::rows`] are written into the row texture's room, or replace
-    /// it with a roomier one when it is full (design: render (#107)). Images
-    /// and rows already
-    /// uploaded must otherwise be unchanged. When nothing fits, the atlas
+    /// it with a roomier one when it is full, and rows rewritten in place
+    /// ([`Scene::replace_rows`]) are written again (design: render (#107)).
+    /// Images and rows already uploaded must otherwise be unchanged. When
+    /// nothing fits, the atlas
     /// grows (design: render (#105)). Fails when it cannot grow any more
     /// (the device's layer limit) or the scene lost images; upload the
     /// scene anew then, which packs only the images it holds.
@@ -822,11 +827,36 @@ impl MapRenderer {
             let bytes = bytemuck::cast_slice::<i8, u8>(&img.values);
             self.write(queue, slot, img.width, img.height, bytes);
         }
+        if scene.row_rewrites != self.row_rewrites_seen {
+            // design: render (#107): rows rewritten in place (a freed table's rows taken by
+            // another) are written again, in runs of neighbouring rows
+            let held = self.row_count.min(scene.rows.len());
+            let mut run: Option<(usize, usize)> = None;
+            for (&r, &at) in &scene.rows_rewritten {
+                let r = r as usize;
+                if at <= self.row_rewrites_seen || r >= held {
+                    continue;
+                }
+                run = match run {
+                    Some((start, end)) if end == r => Some((start, r + 1)),
+                    Some((start, end)) => {
+                        self.write_row_range(queue, scene, start, end);
+                        Some((r, r + 1))
+                    }
+                    None => Some((r, r + 1)),
+                };
+            }
+            if let Some((start, end)) = run {
+                self.write_row_range(queue, scene, start, end);
+            }
+            self.row_rewrites_seen = scene.row_rewrites;
+        }
         let room = (self.rows.width() / 256 * self.rows_per_column) as usize;
         if scene.rows.len() > self.row_count && scene.rows.len() <= room {
             // design: render (#107): rows appended within the texture's room are written on
             // their own
-            self.write_rows(queue, scene);
+            self.write_row_range(queue, scene, self.row_count, scene.rows.len());
+            self.row_count = scene.rows.len();
         } else if scene.rows.len() != self.row_count {
             let (rows, per_column) =
                 rows_texture(device, queue, scene, row_side(device), self.target_format)?;
@@ -848,14 +878,15 @@ impl MapRenderer {
         Ok(())
     }
 
-    /// Writes the rows `scene` appended since the last upload into the row
-    /// texture's room, a run of rows per column (design: render (#107)).
-    fn write_rows(&mut self, queue: &wgpu::Queue, scene: &Scene) {
+    /// Writes `scene`'s rows `start .. end` into the row texture, which has
+    /// room for them, a run of rows per column (design: render (#107)).
+    fn write_row_range(&mut self, queue: &wgpu::Queue, scene: &Scene, start: usize, end: usize) {
         let per_column = self.rows_per_column as usize;
-        let mut r = self.row_count;
-        while r < scene.rows.len() {
+        let last = end.min(scene.rows.len());
+        let mut r = start;
+        while r < last {
             let (col, y) = (r / per_column, r % per_column);
-            let end = scene.rows.len().min((col + 1) * per_column);
+            let end = last.min((col + 1) * per_column);
             let bytes: Vec<u8> = scene.rows[r..end].iter().flat_map(row_texels).collect();
             let n = (end - r) as u32;
             queue.write_texture(
@@ -885,7 +916,6 @@ impl MapRenderer {
             self.stats.upload_bytes += bytes.len() as u64;
             r = end;
         }
-        self.row_count = scene.rows.len();
     }
 
     /// A place in the atlas for a `size` image: [`Slot::ABSENT`] for an

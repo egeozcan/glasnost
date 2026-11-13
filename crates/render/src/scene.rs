@@ -242,6 +242,13 @@ pub struct Scene {
     pub rewritten: std::collections::BTreeMap<u32, u64>,
     /// The number of in-place rewrites so far.
     pub rewrites: u64,
+    /// The palette rows rewritten in place by [`Scene::replace_rows`]: each
+    /// row with the value of [`Scene::row_rewrites`] at its last rewrite,
+    /// so that an uploader can find those rewritten since it last looked
+    /// (design: render (#107)).
+    pub rows_rewritten: std::collections::BTreeMap<u32, u64>,
+    /// The number of in-place row rewrites so far.
+    pub row_rewrites: u64,
 }
 
 impl Scene {
@@ -295,6 +302,21 @@ impl Scene {
     pub fn add_row(&mut self, row: Row565) -> usize {
         self.rows.push(row);
         self.rows.len() - 1
+    }
+
+    /// Replaces the rows from `base` on with `rows` in place, and records
+    /// the rewrite so that an uploader writes them again (design: render
+    /// (#107)). Returns false, changing nothing, when they do not all exist.
+    pub fn replace_rows(&mut self, base: usize, rows: &[Row565]) -> bool {
+        let Some(old) = self.rows.get_mut(base..base + rows.len()) else {
+            return false;
+        };
+        old.copy_from_slice(rows);
+        self.row_rewrites += 1;
+        for r in base..base + rows.len() {
+            self.rows_rewritten.insert(r as u32, self.row_rewrites);
+        }
+        true
     }
 
     /// The world rectangle (left, top, right, bottom; right and bottom

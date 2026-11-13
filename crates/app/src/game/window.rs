@@ -4,6 +4,7 @@
 //! starting) or on the web on the page's event loop.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use glasnost_render::batch2d::Batch2d;
 use glasnost_render::gpu::{self, BackendChoice};
@@ -159,6 +160,7 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
         probed: None,
         display_probed: String::new(),
         hidden: Hidden::default(),
+        recovery: Recovery::default(),
     };
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -212,9 +214,32 @@ struct GameApp {
     display_probed: String,
     /// Whether the window is hidden, so that it asks for no redraw (#99).
     hidden: Hidden,
+    /// Rebuilds of a lost device or surface (design: render (#100)).
+    recovery: Recovery,
 }
 
 impl GameApp {
+    /// Rebuilds a lost surface and device from the kept instance (design:
+    /// render (#100)); the result comes back as the start's does. No frame
+    /// is drawn meanwhile.
+    fn rebuild(&mut self) {
+        let Some(g) = self.gfx.take() else {
+            return;
+        };
+        log::warn!("the graphics device or surface was lost; rebuilding them");
+        let proxy = self.proxy.clone();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let result = pollster::block_on(g.rebuild());
+            let _ = proxy.send_event(GameEvent::Graphics(Box::new(result)));
+        }
+        #[cfg(target_arch = "wasm32")]
+        wasm_bindgen_futures::spawn_local(async move {
+            let result = g.rebuild().await;
+            let _ = proxy.send_event(GameEvent::Graphics(Box::new(result)));
+        });
+    }
+
     fn modifiers(&self) -> Modifiers {
         // spec: S-0214 claim 23 (Alt force-move, Ctrl force-fire, Shift force-select, either side; no Cmd binding)
         Modifiers {
@@ -367,6 +392,8 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     log::info!("game rendering with {}", gfx.backend);
                     // The battlefield is drawn on the GPU from here on.
                     self.client.cpu_map = false;
+                    // design: render (#100): a new device (the first, or a rebuilt one) gets every upload again
+                    self.client.new_device();
                     if let Some(b) = self.bench.as_mut() {
                         b.device = gfx.device_label.clone();
                         b.gpu_timer = gfx.timer.is_some();
@@ -550,6 +577,22 @@ impl ApplicationHandler<GameEvent> for GameApp {
                         None
                     }
                 };
+                let lost = self.gfx.as_ref().is_some_and(Gfx::lost);
+                match self.recovery.before_frame(lost) {
+                    Lost::Draw => {}
+                    Lost::Rebuild => {
+                        self.rebuild();
+                        return;
+                    }
+                    Lost::GiveUp => {
+                        Status::Error(format!(
+                            "the graphics device was lost and did not come back after {MAX_REBUILDS} rebuilds"
+                        ))
+                        .publish();
+                        event_loop.exit();
+                        return;
+                    }
+                }
                 let Some(g) = &mut self.gfx else {
                     return;
                 };
@@ -561,6 +604,9 @@ impl ApplicationHandler<GameEvent> for GameApp {
                         return;
                     }
                 };
+                if drawn == Drawn::Yes {
+                    self.recovery.presented();
+                }
                 if let Some(b) = self.bench.as_mut() {
                     if !b.finished() {
                         b.after_frame(&self.client, end, drawn == Drawn::Yes);
@@ -699,6 +745,56 @@ impl Fallback {
 /// session) or another game started.
 fn renderer_goes(kept: Option<u64>, in_game: bool, serial: u64) -> bool {
     kept.is_some_and(|k| !in_game || k != serial)
+}
+
+/// Device rebuilds in a row, with no frame presented between them, before
+/// the window gives up and says so (design: render (#100)).
+const MAX_REBUILDS: u32 = 3; // design: render (#100)
+
+/// What the window does before a frame (design: render (#100)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Lost {
+    /// Nothing is lost: draw.
+    Draw,
+    /// The device or the surface was lost: rebuild them from the kept
+    /// instance, then draw.
+    Rebuild,
+    /// Rebuilt [`MAX_REBUILDS`] times in a row without a presented frame:
+    /// stop and say why.
+    GiveUp,
+}
+
+/// The window's rebuilds of a lost device or surface (design: render
+/// (#100)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Recovery {
+    /// Rebuilds since the last presented frame.
+    rebuilds: u32,
+}
+
+impl Recovery {
+    /// Before a frame; `lost`: whether the device or the surface was lost.
+    fn before_frame(&mut self, lost: bool) -> Lost {
+        if !lost {
+            return Lost::Draw;
+        }
+        if self.rebuilds >= MAX_REBUILDS {
+            return Lost::GiveUp;
+        }
+        self.rebuilds += 1;
+        Lost::Rebuild
+    }
+
+    /// A frame was presented: the device works.
+    fn presented(&mut self) {
+        self.rebuilds = 0;
+    }
+}
+
+/// Whether a device-lost callback's `reason` is a loss under us: not our
+/// own drop or destroy of the device (design: render (#100)).
+fn lost_under_us(reason: wgpu::DeviceLostReason) -> bool {
+    !matches!(reason, wgpu::DeviceLostReason::Destroyed)
 }
 
 /// Light-alpha values kept between frames, with what they came from.
@@ -984,6 +1080,17 @@ struct Gfx {
     backend: &'static str,
     webgpu_extras: bool,
     frames_presented: u64,
+    /// Kept to make a new surface and device after a loss (design: render
+    /// (#100)).
+    instance: wgpu::Instance,
+    /// The benchmark's frames, with or without vsync: how the device was
+    /// asked for.
+    timing: Option<bool>,
+    /// Set by the device-lost callback when the device was lost under us
+    /// (design: render (#100)).
+    device_lost: Arc<AtomicBool>,
+    /// The surface said it was lost (design: render (#100)).
+    surface_lost: bool,
 }
 
 impl Gfx {
@@ -995,6 +1102,45 @@ impl Gfx {
         timing: Option<bool>,
     ) -> Result<Self, String> {
         let instance = gpu::create_instance(backend, display).await;
+        Self::on(instance, window, timing, 0).await
+    }
+
+    /// A new surface and device from the kept instance after a loss, the old
+    /// ones dropped first (design: render (#100)). The presented frames
+    /// count on.
+    async fn rebuild(self) -> Result<Self, String> {
+        let Self {
+            timer,
+            draw,
+            surface,
+            queue,
+            device,
+            instance,
+            window,
+            timing,
+            frames_presented,
+            ..
+        } = self;
+        drop(timer);
+        drop(draw);
+        drop(surface);
+        drop(queue);
+        drop(device);
+        Self::on(instance, window, timing, frames_presented).await
+    }
+
+    /// Whether the device or the surface was lost (design: render (#100)).
+    fn lost(&self) -> bool {
+        self.surface_lost || self.device_lost.load(Ordering::Relaxed)
+    }
+
+    /// The surface, device and drawer for `window` from `instance`.
+    async fn on(
+        instance: wgpu::Instance,
+        window: Arc<Window>,
+        timing: Option<bool>,
+        frames_presented: u64,
+    ) -> Result<Self, String> {
         let surface = instance
             .create_surface(window.clone())
             .map_err(|e| format!("could not create a drawing surface: {e}"))?;
@@ -1010,6 +1156,15 @@ impl Gfx {
             None => gpu::request_device(&adapter).await,
         }
         .map_err(|e| e.to_string())?;
+        // design: render (#100): a loss under us is rebuilt before the next frame; our own drop is none
+        let device_lost = Arc::new(AtomicBool::new(false));
+        let flag = device_lost.clone();
+        device.set_device_lost_callback(move |reason, message| {
+            if lost_under_us(reason) {
+                log::warn!("the graphics device was lost ({reason:?}): {message}");
+                flag.store(true, Ordering::Relaxed);
+            }
+        });
         let size = window.inner_size();
         let mut config = surface
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
@@ -1046,7 +1201,11 @@ impl Gfx {
             draw,
             backend: gpu::backend_label(info.backend),
             webgpu_extras,
-            frames_presented: 0,
+            frames_presented,
+            instance,
+            timing,
+            device_lost,
+            surface_lost: false,
         };
         gfx.resize(size.width, size.height);
         Ok(gfx)
@@ -1073,8 +1232,13 @@ impl Gfx {
             | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
             wgpu::CurrentSurfaceTexture::Timeout => return Ok((end, Drawn::Again)),
             wgpu::CurrentSurfaceTexture::Occluded => return Ok((end, Drawn::Hidden)),
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+            wgpu::CurrentSurfaceTexture::Outdated => {
                 self.surface.configure(&self.device, &self.config);
+                return Ok((end, Drawn::Again));
+            }
+            // design: render (#100): a lost surface is made anew with its device before the next frame, not reconfigured
+            wgpu::CurrentSurfaceTexture::Lost => {
+                self.surface_lost = true;
                 return Ok((end, Drawn::Again));
             }
             wgpu::CurrentSurfaceTexture::Validation => {
@@ -1280,5 +1444,32 @@ mod tests {
         assert!(!renderer_goes(Some(1), true, 1));
         assert!(renderer_goes(Some(1), false, 1), "the game is over");
         assert!(renderer_goes(Some(1), true, 2), "another game started");
+    }
+
+    /// #100. design: render (#100): a lost device or surface is rebuilt
+    /// before the next frame; a presented frame clears the count; rebuilt
+    /// `MAX_REBUILDS` times in a row without one, the window gives up.
+    #[test]
+    fn a_lost_device_is_rebuilt_until_it_keeps_failing() {
+        let mut r = Recovery::default();
+        assert_eq!(r.before_frame(false), Lost::Draw);
+        assert_eq!(r.before_frame(true), Lost::Rebuild);
+        assert_eq!(r.before_frame(false), Lost::Draw);
+        r.presented();
+        for _ in 0..MAX_REBUILDS {
+            assert_eq!(r.before_frame(true), Lost::Rebuild);
+        }
+        assert_eq!(r.before_frame(true), Lost::GiveUp, "no frame between");
+        assert_eq!(r.before_frame(true), Lost::GiveUp);
+        r.presented();
+        assert_eq!(r.before_frame(true), Lost::Rebuild, "a frame came");
+    }
+
+    /// #100. design: render (#100): our own drop or destroy of a device
+    /// is not a loss; any other reason is.
+    #[test]
+    fn our_own_destroy_is_no_loss() {
+        assert!(lost_under_us(wgpu::DeviceLostReason::Unknown));
+        assert!(!lost_under_us(wgpu::DeviceLostReason::Destroyed));
     }
 }

@@ -322,6 +322,8 @@ pub async fn load_with(
         // The animations a game creates in play (S-0109).
         wanted.extend(build::anim_files(&import));
     }
+    // spec: S-0103 claim 17 (each named palette file for the current theater is read with the game's palettes)
+    wanted.extend(build::named_palette_files(&import, theater));
     let skirmish = started.is_ok() && options.game == build::GameMode::Skirmish;
     if skirmish {
         wanted.extend(build::game_files(&import));

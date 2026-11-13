@@ -237,6 +237,35 @@ impl PaletteState {
         };
         self.loaded = Some(theater);
     }
+
+    /// A named palette file loaded as a palette (S-0103 claim 17: its
+    /// components receive claim 1's multiplication and byte wrap).
+    pub fn load_named(&self, file: &Palette6) -> Palette {
+        // spec: S-0103 claim 17 (the named file's components receive claim 1's multiplication and byte wrap)
+        palette_from_file(file, &self.quirks)
+    }
+}
+
+/// The longest art `Palette` value that selects a file: the bytes after it
+/// are ignored (S-0103 Import mapping).
+pub const NAMED_PALETTE_MAX: usize = 31; // spec: S-0103 Import mapping (bytes after the 31st are ignored)
+
+/// The file a type's art `Palette` value `value` names in `theater`
+/// (S-0103 claim 17 and Import mapping), upper-case: its first 31 bytes,
+/// the theater's suffix *X* and `.PAL`, appended even to a value that
+/// already ends in a file extension. `None` for an empty value, which
+/// names no palette.
+pub fn named_palette_file(value: &[u8], theater: Theater) -> Option<Vec<u8>> {
+    // spec: S-0103 Import mapping (absent or empty: no named palette)
+    if value.is_empty() {
+        return None;
+    }
+    // spec: S-0103 Import mapping (bytes after the 31st are ignored)
+    let mut name = value[..value.len().min(NAMED_PALETTE_MAX)].to_ascii_uppercase();
+    // spec: S-0103 claim 17 (the value followed by the current theater's suffix X and .PAL; always appended)
+    name.extend_from_slice(theater.extension().as_bytes());
+    name.extend_from_slice(b".PAL");
+    Some(name)
 }
 
 /// Single-precision σ_0 … σ_15 of S-0103 Constants, as bit patterns.
@@ -741,6 +770,36 @@ mod tests {
         s.start_game(Theater::Temperate, |_| Some(file_of(9)));
         assert_eq!(s.theater.colors[0], Rgb8::new(36, 36, 36));
         assert_eq!(s.resource.colors[0], Rgb8::new(28, 28, 28));
+    }
+
+    /// spec: S-0103 claim 17 and Import mapping (the art value's first 31 bytes, the current
+    /// theater's suffix and `.PAL`, appended even after an extension; empty names none)
+    #[test]
+    fn named_palette_file_names() {
+        let n = |v: &[u8], t| named_palette_file(v, t).map(|f| String::from_utf8(f).unwrap());
+        assert_eq!(
+            n(b"test", Theater::Temperate).as_deref(),
+            Some("TESTTEM.PAL")
+        );
+        assert_eq!(n(b"Test", Theater::Lunar).as_deref(), Some("TESTLUN.PAL"));
+        assert_eq!(n(b"x.pal", Theater::Snow).as_deref(), Some("X.PALSNO.PAL"));
+        assert_eq!(n(b"", Theater::Urban), None);
+        let long = [b'a'; 40];
+        let f = n(&long, Theater::Desert).unwrap();
+        assert_eq!(f.len(), NAMED_PALETTE_MAX + "DES.PAL".len());
+        assert!(f.ends_with("ADES.PAL"));
+    }
+
+    /// spec: S-0103 claim 17 (a named file receives claim 1's multiplication and byte wrap)
+    #[test]
+    fn named_palette_is_loaded_like_a_palette_file() {
+        let q = PaletteQuirks::default();
+        let s = PaletteState::at_program_start(Some(&file_of(3)), None, q);
+        let mut f = file_of(5);
+        f.colors[7] = [64, 65, 63];
+        let p = s.load_named(&f);
+        assert_eq!(p.colors[0], Rgb8::new(20, 20, 20));
+        assert_eq!(p.colors[7], Rgb8::new(0, 4, 252));
     }
 
     /// spec: S-0103 claim 10

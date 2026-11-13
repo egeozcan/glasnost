@@ -18,6 +18,8 @@ pub mod live;
 #[cfg(test)]
 mod live_tests;
 pub mod load;
+#[cfg(test)]
+mod named_palette_tests;
 pub mod particles;
 pub mod piece_pool;
 #[cfg(test)]

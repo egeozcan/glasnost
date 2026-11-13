@@ -623,3 +623,24 @@ fn the_painter_atlas_takes_the_device_side() {
     assert!(c.session.as_ref().unwrap().draws_cursor());
     assert!(before == after, "the same picture in the smaller atlas");
 }
+
+/// #100. design: render (#100): a new device after a loss holds none of the
+/// uploads, so the palettes, the whole atlas and the radar image go with the
+/// next frame, with no tick between.
+#[test]
+fn a_new_device_gets_everything_again() {
+    let mut c = cursor_game();
+    let radar = |c: &mut Client| {
+        let (_, images) = c.frame();
+        images.changed.iter().any(|(id, ..)| *id == RADAR_IMAGE)
+    };
+    radar(&mut c);
+    assert!(!radar(&mut c), "the radar goes once a tick");
+    // What the old device's uploads left: nothing to send.
+    c.painter.dirty = false;
+    c.painter.atlas.uploaded();
+    c.new_device();
+    assert!(c.painter.dirty, "the palettes");
+    assert!(c.painter.atlas.dirty(), "the atlas");
+    assert!(radar(&mut c), "the radar, in the same tick");
+}

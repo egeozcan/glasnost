@@ -542,6 +542,7 @@ const NAMED: &[(&str, &[&str])] = &[
             "AltPalette",
             "BombParachute",
             "IsVeins",
+            "Palette",
             "Parachute",
             "ShouldUseCellDrawer",
             "TerrainPalette",
@@ -764,7 +765,7 @@ pub fn rows(base: &Document, art: &Document, layered: &Layered) -> Vec<Row> {
             let (mut outcome, mut spec, mut note) = classify(lookup_cat, &key, &sim);
             if category.starts_with("art") {
                 // Art-file keys that S-0007 and S-0103 interpret.
-                const ART_RENDER: [&str; 18] = [
+                const ART_RENDER: [&str; 19] = [
                     // spec: S-0007 Import mapping, S-0103 Import mapping (art database keys)
                     "Voxel",
                     "Theater",
@@ -784,10 +785,11 @@ pub fn rows(base: &Document, art: &Document, layered: &Layered) -> Vec<Row> {
                     "AlternateArcticArt",
                     "TerrainPalette",
                     "AltPalette",
+                    "Palette",
                 ];
                 if ART_RENDER.contains(&key.as_str()) || key == "Image" {
                     outcome = Outcome::Render;
-                    spec = if matches!(key.as_str(), "TerrainPalette" | "AltPalette") {
+                    spec = if matches!(key.as_str(), "TerrainPalette" | "AltPalette" | "Palette") {
                         "S-0103".into()
                     } else {
                         "S-0007".into()

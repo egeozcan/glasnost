@@ -642,6 +642,10 @@ struct LiveAnim {
     /// Its carrier's house name and the cell light sampled when it was
     /// attached (S-0522 claim 18).
     carrier: Option<(Vec<u8>, i32)>,
+    /// The simulation type whose named palette it takes, when it is that
+    /// object's own animation: a vehicle's deploy or undeploy animation, a
+    /// parachute's carried object (S-0103 claim 16).
+    named: Option<(SimKind, u32)>,
     /// The burning walker it shows (S-0615 claims 4 to 11), if any: its
     /// position and image frame are the simulation's walker's.
     walker: Option<ObjectId>,
@@ -1687,9 +1691,10 @@ impl Live {
                             a.shooter = Some(firer);
                             // spec: S-0301 claim 22 (no palette of its object)
                             a.carrier = None;
-                        } else if let Some(h) = house {
-                            // spec: S-0103 claim 8 row 3 (a unit's deploy or undeploy animation: the owner's house-colour palette, at brightness 1000)
+                        } else if let Some((h, ty)) = house {
+                            // spec: S-0103 claim 8 row 3 (a unit's deploy or undeploy animation: the owner's house-colour palette, at brightness 1000); claim 16 (its type's named palette)
                             a.carrier = Some((h, NEUTRAL_LIGHT));
+                            a.named = Some(ty);
                         }
                     }
                 }
@@ -2345,6 +2350,7 @@ impl Live {
             first_update,
             owner: None,
             carrier: None,
+            named: None,
             walker: None,
             drainer: None,
             maker: None,
@@ -2358,13 +2364,19 @@ impl Live {
         sprite
     }
 
-    /// The owner's house name of the vehicle at `pos` whose deploying
-    /// presentation (S-0517 claims 4 and 6) is the animation `name`, if one
-    /// is there: the animation is that unit's own deploy or undeploy
-    /// animation (S-0103 claim 8 row 3).
-    fn deploying_owner(&self, name: &str, pos: glasnost_sim::world::Pos) -> Option<Vec<u8>> {
+    /// The owner's house name and the type of the vehicle at `pos` whose
+    /// deploying presentation (S-0517 claims 4 and 6) is the animation
+    /// `name`, if one is there: the animation is that unit's own deploy or
+    /// undeploy animation (S-0103 claim 8 row 3), drawn with its type's
+    /// named palette (claim 16).
+    fn deploying_owner(
+        &self,
+        name: &str,
+        pos: glasnost_sim::world::Pos,
+    ) -> Option<(Vec<u8>, (SimKind, u32))> {
         let w = &self.world;
-        w.objects
+        let o = w
+            .objects
             .values()
             .filter(|o| o.pos == pos && o.kind == SimKind::Vehicle)
             .find(|o| {
@@ -2372,10 +2384,9 @@ impl Live {
                     .unit(o.kind, o.type_index)
                     .and_then(|u| u.deploying_anim.as_deref())
                     .is_some_and(|d| d.eq_ignore_ascii_case(name))
-            })
-            .and_then(|o| o.owner)
-            .and_then(|h| w.houses.get(usize::from(h.0)))
-            .map(|h| h.name.as_bytes().to_vec())
+            })?;
+        let house = w.houses.get(usize::from(o.owner?.0))?;
+        Some((house.name.as_bytes().to_vec(), (o.kind, o.type_index)))
     }
 
     /// A paratrooper's parachute (S-0522 claim 13): the parachute type
@@ -2412,12 +2423,13 @@ impl Live {
             // spec: S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
             a.layer = super::slots::Layer::Ground;
             // spec: S-0522 claim 18 (the parachute is in the ground render layer and orders against the unit by S-0102 claims 5 and 6 with its sort adjustment; its palette is the carrier's house-colour unit palette, its brightness the unscaled ground light of the carrier's cell sampled now, at creation)
-            let house = self
-                .world
-                .obj(trooper)
+            let carried = self.world.obj(trooper);
+            let house = carried
                 .and_then(|o| o.owner)
                 .and_then(|h| self.world.houses.get(usize::from(h.0)))
                 .map(|h| h.name.as_bytes().to_vec());
+            // spec: S-0103 claim 16 (the parachute of a carried object takes that object's named palette)
+            a.named = carried.map(|o| (o.kind, o.type_index));
             let light = self.painter.ground_light(pos.cell());
             a.carrier = house.map(|h| (h, light));
         }
@@ -2828,12 +2840,14 @@ impl Live {
                 // spec: S-0109 claims 5 and 29 (created before or during the turn pass: first update
                 // in the creation tick; the lost update of claim 29 needs playback in the simulation)
                 let sprite = self.create_anim(&name_bytes(name), *pos, now, *delay, *reverse);
-                if let Some(house) = self.deploying_owner(name, *pos)
+                if let Some((house, ty)) = self.deploying_owner(name, *pos)
                     && let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial)
                 {
                     // spec: S-0103 claim 8 row 3 (a unit's deploy or undeploy animation is drawn with
-                    // its object: the owner's house-colour palette, at brightness 1000)
+                    // its object: the owner's house-colour palette, at brightness 1000); claim 16 (its
+                    // type's named palette, also for a vehicle that ignores it)
                     a.carrier = Some((house, NEUTRAL_LIGHT));
+                    a.named = Some(ty);
                 }
                 if z_adjust.is_some()
                     && let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial)
@@ -3613,6 +3627,17 @@ impl Live {
                 .retint_houses(inputs, scene, &mut self.live_overlays);
             self.house_tint = house_tint;
         }
+        if relit || retinted {
+            // design: render (#107): the tables no cell chooses and no kept drawing takes give
+            // their rows back; this frame's other drawings are made below from today's tables
+            self.painter.free_unused_rows(
+                self.cell_pass
+                    .iter()
+                    .chain(self.static_ground.iter().flat_map(|g| g.items.iter()))
+                    .chain(self.static_layered.iter().flat_map(|(_, g)| g.items.iter()))
+                    .chain(self.live_overlays.iter()),
+            );
+        }
         if gone != self.gone || relit || retinted {
             scene.items.clear();
             scene.items.extend(
@@ -3733,6 +3758,10 @@ impl Live {
                         end: a.player.play.end,
                         pos: (a.pos.x, a.pos.y, a.pos.z),
                         carrier: a.carrier.clone(),
+                        named: a.named.and_then(|k| {
+                            let idx = self.types.get(&k).copied().flatten()?;
+                            Some((import_kind(k.0)?, idx))
+                        }),
                         z_adjust: a.z_adjust,
                     },
                 ))

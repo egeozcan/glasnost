@@ -229,7 +229,7 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     (
         "named_palette_true_owner",
-        "S-0103 claim 16 (r25, Q-3019): a disguised object's named palette is not built in either state yet; it comes with #75's follow-up",
+        "S-0103 claim 16: needs S-0516 claim 37 disguise drawing; named palettes are drawn, but no object is drawn as its disguise yet, so neither state can show",
     ),
     // S-0104
     (

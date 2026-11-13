@@ -1562,6 +1562,16 @@ impl Client {
         (out, FrameImages { changed })
     }
 
+    /// A new GPU device draws the frames from now on (the first, or one
+    /// rebuilt after a loss): it holds none of what was uploaded, so the
+    /// palettes, the sprite atlas and the radar image are sent again with
+    /// the next frame (design: render (#100)).
+    pub fn new_device(&mut self) {
+        self.painter.dirty = true;
+        self.painter.atlas.touch();
+        self.radar_tick = -1;
+    }
+
     /// Gives the painter an atlas of `side` × `side`, the device's sprite
     /// atlas side, from now on (design: render (#103)). A painter of
     /// another side is replaced: the running game's art is registered in
