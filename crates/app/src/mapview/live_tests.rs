@@ -6375,6 +6375,110 @@ fn claim_3_an_effect_tint_replaces_the_house_tables_tint() {
     });
 }
 
+/// The palette rows each lit drawing of `items` takes, as it would draw.
+fn resolved_tables(scene: &Scene, items: &[glasnost_render::scene::Item]) -> Vec<Vec<[u16; 256]>> {
+    items
+        .iter()
+        .filter_map(|i| match i.paint {
+            Paint::Lit(s) | Paint::LitDiamond(s) | Paint::Translucent(s, _) => {
+                Some(scene.rows[s.base as usize..][..usize::from(s.rows)].to_vec())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// design: render (#107): the tile tables no cell chooses after a relight
+/// give their rows to the next relight's tables, so the scene's rows stay
+/// bounded however many tints the light passes through; the drawings kept
+/// from frame to frame draw as before.
+#[test]
+fn relit_tile_tables_give_their_rows_back() {
+    with_rules_inputs(false, RULES, |inputs, painter, scene| {
+        let mut held = scene.items.clone();
+        assert!(
+            held.iter()
+                .any(|i| matches!(i.paint, Paint::LitDiamond(_) | Paint::Lit(_))),
+            "the cell pass has lit tiles"
+        );
+        let normal = inputs.map.lighting.normal;
+        let relight = |painter: &mut super::build::Painter,
+                       scene: &mut Scene,
+                       held: &mut Vec<glasnost_render::scene::Item>,
+                       k: i32| {
+            // Invented tints, hundredths (53-row tables for every k used).
+            let set = glasnost_map::LightingSet {
+                tint: [60 + 4 * k, 90, 140 - 2 * k],
+                ..normal
+            };
+            painter.relight(inputs, scene, held, normal.ambient, set);
+            painter.free_unused_rows(held.iter());
+        };
+        relight(painter, scene, &mut held, 0);
+        let first = resolved_tables(scene, &held);
+        let mut sizes = Vec::new();
+        for k in 1..20 {
+            relight(painter, scene, &mut held, k);
+            sizes.push(scene.rows.len());
+        }
+        assert!(
+            sizes[2..].iter().all(|&n| n == sizes[1]),
+            "the rows stay bounded: {sizes:?}"
+        );
+        relight(painter, scene, &mut held, 0);
+        assert_eq!(
+            resolved_tables(scene, &held),
+            first,
+            "the first light again"
+        );
+    });
+}
+
+/// design: render (#107): the house-colour tables of an effect tint gone
+/// give their rows to the next tint's tables; a kept drawing that still
+/// takes an old tint's table keeps it.
+#[test]
+fn retinted_house_tables_give_their_rows_back() {
+    // An invented effect tint, hundredths.
+    const TINT: [i32; 3] = [120, 80, 150];
+    use glasnost_render::compose::row565;
+    use glasnost_render::light::shade_table;
+    use glasnost_render::palette::{TINT_EXEMPT, house_palette};
+    with_rules_inputs(false, RULES, |inputs, painter, scene| {
+        let draw = |painter: &mut super::build::Painter, scene: &mut Scene| {
+            let (mut e, _) = painter.mobiles(inputs, scene, &[plain_mobile(Kind::Infantry)]);
+            e.remove(0).items
+        };
+        let hsv = super::build::owner_definition(inputs.import, inputs.options, b"Neutral").0;
+        let pal = house_palette(&inputs.palettes.unit, hsv);
+        let held = draw(painter, scene);
+        let kept = resolved_tables(scene, &held);
+        assert!(!kept.is_empty());
+        let mut sizes = Vec::new();
+        for k in 0..30 {
+            let tint = [TINT[0] + k, TINT[1], TINT[2] - k];
+            painter.set_effect_tint(Some(tint));
+            painter.free_unused_rows(held.iter());
+            let now = draw(painter, scene);
+            let expect: Vec<_> = shade_table(&pal, tint.map(|t| t * 10), 53, Some(TINT_EXEMPT))
+                .iter()
+                .map(row565)
+                .collect();
+            assert_eq!(resolved_tables(scene, &now)[0], expect, "tint {k}");
+            sizes.push(scene.rows.len());
+        }
+        assert!(
+            sizes[1..].iter().all(|&n| n == sizes[0]),
+            "the rows stay bounded: {sizes:?}"
+        );
+        assert_eq!(
+            resolved_tables(scene, &held),
+            kept,
+            "the kept drawing's table"
+        );
+    });
+}
+
 /// The items `painter` draws for MANX at height 520 with shadow height
 /// `hs`, the generic shadow sprite `file` among the assets.
 fn generic_shadow_items(

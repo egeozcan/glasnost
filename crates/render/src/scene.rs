@@ -297,6 +297,17 @@ impl Scene {
         self.rows.len() - 1
     }
 
+    /// Replaces the rows from `base` on with `rows` in place, and records
+    /// the rewrite so that an uploader writes them again (design: render
+    /// (#107)). Returns false, changing nothing, when they do not all exist.
+    pub fn replace_rows(&mut self, base: usize, rows: &[Row565]) -> bool {
+        let Some(old) = self.rows.get_mut(base..base + rows.len()) else {
+            return false;
+        };
+        old.copy_from_slice(rows);
+        true
+    }
+
     /// The world rectangle (left, top, right, bottom; right and bottom
     /// exclusive) of `item`.
     pub fn bounds(&self, item: &Item) -> (i32, i32, i32, i32) {

@@ -542,6 +542,39 @@ fn appended_rows_write_only_themselves() {
     assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
 }
 
+/// design: render (#107): palette rows rewritten in place (a freed table's
+/// rows taken by another) are written into the row texture again, those
+/// rows only, and draw as the CPU reference draws them.
+#[test]
+fn rewritten_rows_write_only_themselves() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let first = s.rows.len();
+    for k in 0..40 {
+        s.add_row(row(k));
+    }
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    r.take_stats();
+    let at = first + 5;
+    assert!(s.replace_rows(at, &[row(300), row(301), row(302)]));
+    r.sync(&device, &queue, &s).expect("the rows are written");
+    let stats = r.take_stats();
+    assert!(
+        stats.upload_bytes > 0 && stats.upload_bytes <= 3 * 256 * 4,
+        "three rewritten rows uploaded {} bytes",
+        stats.upload_bytes
+    );
+    for (n, row) in [(0, at), (1, at + 2), (2, first + 20)] {
+        let mut item = flat_item(3, 10 + 40 * n, 40);
+        item.paint = Paint::Row(row);
+        s.items.push(item);
+    }
+    assert_eq!(differing_from_cpu(&device, &queue, &mut r, &s), 0);
+}
+
 /// spec: S-0102 claim 27 (cell-pass shadows store their depth; quirks.cell_pass_shadows_write_depth)
 ///
 /// Two writer shadows at the same depth over a flat item: with the switch

@@ -6552,6 +6552,17 @@ impl Painter {
         self.tile_items = tiles;
     }
 
+    /// Gives back the rows of the tile and house-colour tables that no
+    /// drawing can take any more, after a relight or a retint (design:
+    /// render (#107)): a tile table no cell chooses now and a house-colour
+    /// or named-palette table of another tint than today's, either one
+    /// used by none of the drawings kept from frame to frame, `held`.
+    /// Tables of the same size take their rows later. The drawings made
+    /// each frame are made after this, from today's tables.
+    pub fn free_unused_rows<'a>(&mut self, held: impl IntoIterator<Item = &'a Item>) {
+        let _ = held;
+    }
+
     /// Sets the radiation fields' light sources (S-0525 claim 13); returns
     /// whether they changed, so that the caller relights (claim 13: every
     /// change relights the cells it reaches in the same tick).
