@@ -1,9 +1,9 @@
 ---
 id: Q-3062
 title: In claim 11's payment and empty-load rows, do the refinery's animations start before or after the smoke event, and does an unloading harvester change its own image?
-status: open
+status: answered
 related: [S-0402, S-0108, S-0109, S-0616]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
