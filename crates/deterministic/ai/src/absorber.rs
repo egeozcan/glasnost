@@ -13,7 +13,9 @@
 //!   original owner's unit, yet its power goes to the building's owner
 //!   (claims 7 and 10): a captured enemy foot soldier turns into power and
 //!   frees the controller for another victim. Every idle controlled enemy
-//!   infantry unit is sent;
+//!   infantry unit is sent. A permanently controlled one frees no
+//!   controller and belongs to the house for good (S-0601 claim 13), so it
+//!   counts as the house's own ([`held_by_controller`]);
 //! - **puts spare infantry in.** Idle infantry of the house's own at home
 //!   are sent while the house is short of power, or while more than
 //!   [`KEEP`] idle infantry stand at home, the cheapest first, so the
@@ -214,7 +216,7 @@ impl Special {
         let controlled: Vec<ObjectId> = free
             .iter()
             .copied()
-            .filter(|&id| mind::mind_controlled(w, id))
+            .filter(|&id| held_by_controller(w, id))
             .collect();
         let home = script.home(w);
         let at_home = |id: ObjectId| {
@@ -226,7 +228,7 @@ impl Special {
         let mut spare: Vec<ObjectId> = free
             .iter()
             .copied()
-            .filter(|&id| !mind::mind_controlled(w, id) && at_home(id))
+            .filter(|&id| !held_by_controller(w, id) && at_home(id))
             .collect();
         let cost = |id: ObjectId| {
             w.obj(id)
@@ -267,6 +269,15 @@ impl Special {
             self.count_absorb();
         }
     }
+}
+
+/// Whether `id` is held by a controller: a mind-controlled enemy whose
+/// controller it frees on the way in. A permanently controlled one has no
+/// controller to free and belongs to the house for good (S-0601 claim 13),
+/// so it counts as the house's own.
+// design: own AI (#35)
+pub(crate) fn held_by_controller(w: &World, id: ObjectId) -> bool {
+    mind::controlled_by(w, id).is_some()
 }
 
 fn distance(w: &World, b: ObjectId, at: CellXY) -> i64 {
