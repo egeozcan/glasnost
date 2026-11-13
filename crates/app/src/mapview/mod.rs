@@ -14,6 +14,8 @@ pub mod combat;
 pub mod cover;
 pub mod credits;
 pub mod find;
+#[cfg(test)]
+mod ground_order_tests;
 pub mod harvesting;
 pub mod layers;
 pub mod live;
