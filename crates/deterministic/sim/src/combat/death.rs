@@ -636,6 +636,15 @@ pub(crate) fn kill_in(w: &mut World, id: ObjectId, hit: &Hit, chain: bool) -> Fl
     Flow::Done(())
 }
 
+/// Frees the depot place of a destroyed vehicle that stays in play (a
+/// vessel that sinks, a vehicle that crashes): S-0314 claim 22 and S-0504
+/// claim 14 free it at the destruction, not at the later removal (#179).
+fn release_depot_contact(w: &mut World, id: ObjectId) {
+    if crate::depot::link(w, id).is_some() {
+        crate::depot::release(w, id);
+    }
+}
+
 /// The death effects of a killing hit after its death weapon (S-0312
 /// table, from step 3): the attached bomb, then the kind's effects.
 fn kill_rest(w: &mut World, rest: KillRest) {
@@ -671,6 +680,8 @@ fn kill_rest(w: &mut World, rest: KillRest) {
                     leave_play(w, id);
                     return;
                 }
+                // spec: S-0504 claim 14 and S-0314 claim 22 (destruction of a contacted vessel frees its place: the killing hit releases its depot contact, though the vessel stays in play while it sinks) (#179)
+                release_depot_contact(w, id);
                 // spec: S-0312 claim 10 and S-0504 claims 4 and 5 (a non-crashable vessel stays in play; the descent starts at its next own update); S-0504 claim 13 and S-0312 claim 32 row 1 (already sinking: the descent goes on from its height, not restarted)
                 crate::naval::start_sinking(w, id);
                 return;
@@ -690,6 +701,8 @@ fn kill_rest(w: &mut World, rest: KillRest) {
             }
             // spec: S-0312 claims 15 and 16 (a destroyed vehicle whose type can crash, at a positive height above the surface, starts to crash and stays in play until it hits the ground; r66: measured from the deck on a bridge deck, jump::start_crash, so none starts on a deck; a crashable vehicle using jumpjet movement uses S-0502 claim 18's motion)
             if crashable && !already_sinking && crate::jump::start_crash(w, id, Some(hit)) {
+                // spec: S-0314 claim 22 (a destroyed vehicle in contact frees its place, though it stays in play while it crashes) (#179)
+                release_depot_contact(w, id);
                 return;
             }
             // spec: S-0312 claim 15 (every other destroyed vehicle leaves play at the end of its death effects; a crashable type that was sinking cannot start a crash below the surface and is removed)

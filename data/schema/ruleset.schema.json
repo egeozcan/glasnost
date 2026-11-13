@@ -3640,7 +3640,7 @@
           "default": null
         },
         "slot_names": {
-          "description": "Buildings: the slot names of the *production*, *special-1*,\n*special-2* and *special-3* slots as S-0108's Import mapping reads\nthem (each cut to 15 bytes, an empty value keeping the earlier name,\nan empty damaged name taking the normal name), keyed by the slot's\nart base key, each `[normal, damaged]`; a slot with both names empty\nis left out. The repair depot's slot model reads them (S-0108 claim\n20); absent: none.",
+          "description": "Buildings: the slot names of the *pre-production*, *production*,\n*special-1*, *special-2* and *special-3* slots as S-0108's Import\nmapping reads them (each cut to 15 bytes, an empty value keeping the\nearlier name, an empty damaged name taking the normal name), keyed\nby the slot's art base key, each `[normal, damaged]`; a slot with\nboth names empty is left out. The simulation's slot model reads them\n(S-0108 claim 20, S-0402 claim 11); absent: none.",
           "type": [
             "object",
             "null"

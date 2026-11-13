@@ -9,7 +9,7 @@ use glasnost_num::geom::{Facing, delta, direction};
 use crate::combat::data::WeaponId;
 use crate::combat::range;
 use crate::combat::veterancy::type_combat;
-use crate::combat::weapon::{airborne_by_height, slot_weapon, versus};
+use crate::combat::weapon::{range_airborne, slot_weapon, versus};
 use crate::rules::Kind;
 use crate::world::{Layer, ObjectId, Pos, Target, World};
 
@@ -241,7 +241,8 @@ fn projectile_illegal(w: &World, weapon: WeaponId, t: Target) -> bool {
     match t {
         Target::Object(x) => {
             let Some(o) = w.obj(x) else { return true };
-            let air = airborne_by_height(w, x);
+            // spec: S-0306 claim 23 with S-0307 Terms and claim 26 (airborne: the set-A and set-B rocket types by their in-the-air answer)
+            let air = range_airborne(w, x);
             // spec: S-0306 claim 23 (an airborne target and a projectile that is not anti-air)
             if air && !p.aa {
                 return true;
@@ -273,7 +274,7 @@ fn targeting_mode_illegal(w: &World, firer: ObjectId, t: Target) -> bool {
         Target::Object(x) => {
             let Some(o) = w.obj(x) else { return false };
             // spec: S-0306 claim 23 (both rows need an infantry, vehicle, aircraft or building that is on the map and not airborne, S-0307 Terms; a terrain object meets neither)
-            if o.kind == Kind::Terrain || !o.on_map || airborne_by_height(w, x) {
+            if o.kind == Kind::Terrain || !o.on_map || range_airborne(w, x) {
                 return false;
             }
             let bridge = o.layer == Layer::Deck;

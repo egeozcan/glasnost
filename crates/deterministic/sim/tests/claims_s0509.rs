@@ -406,6 +406,32 @@ fn claim_12_effects_and_announcement_eligibility() {
     );
 }
 
+// spec: S-0509 claim 12 (table row: the primary-building mark cleared at a building ownership change) (#223)
+#[test]
+fn claim_12_primary_mark_cleared() {
+    let mut w = game();
+    let b = put(&mut w, Kind::Building, "TARGET", 1, 0, 0);
+    w.obj_mut(b).unwrap().econ.building.primary = true;
+    capture_at(&mut w, "ENGI", 0, b);
+    assert_eq!(owner(&w, b), Some(A), "captured");
+    assert!(
+        !w.obj(b).unwrap().econ.building.primary,
+        "a capture clears it"
+    );
+    w.obj_mut(b).unwrap().econ.building.primary = true;
+    ownership::change(&mut w, b, Some(B), Cause::Trigger);
+    assert!(
+        !w.obj(b).unwrap().econ.building.primary,
+        "a trigger transfer clears it"
+    );
+    w.obj_mut(b).unwrap().econ.building.primary = true;
+    ownership::change(&mut w, b, Some(B), Cause::Capture);
+    assert!(
+        w.obj(b).unwrap().econ.building.primary,
+        "no change of owner: the mark stays"
+    );
+}
+
 // spec: S-0509 claim 14 (the objects in contact with the building: a staying one near the docking point changes owner with it and keeps its contact; a moving one, or one far away, is told to leave and loses its contact)
 #[test]
 fn claim_14_contacts_follow_or_leave() {

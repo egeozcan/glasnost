@@ -847,9 +847,15 @@ pub fn docking_cell(w: &World, refinery: ObjectId) -> Option<CellXY> {
 }
 
 /// Whether a harvester is tethered to the refinery it holds contact with
-/// (S-0402 claim 10).
+/// (S-0402 claim 10). The tether link is with that refinery (glossary
+/// *tether link*): a contact with anything else, such as a depot, is not
+/// this tether (#185).
 pub(crate) fn tethered(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| o.contact.is_some()) && st(w, id).tethered
+    // spec: S-0402 claims 10 and 11 and glossary tether link (the harvester and the refinery it docks with are tethered; S-0213 table T3 (b): an order that breaks off that contact ends the tether)
+    w.obj(id)
+        .and_then(|o| o.contact)
+        .is_some_and(|c| live_holders(w, c).contains(&id))
+        && st(w, id).tethered
 }
 
 /// The harvesters docked with a refinery (S-0408 Terms): those holding a
@@ -1559,7 +1565,10 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
             x.counter.start_period(1, t, zs); // spec: S-0402 Constants (pacing period while unloading: 1 tick)
             x.unloading = true;
         }
-        // The docking animation of the building in the neighbouring cell is not modelled (building animations).
+        if let Some(b) = west_building(w, id) {
+            // spec: S-0402 claim 11 (the building in the neighbouring cell, if any, plays its docking animation)
+            crate::depot_anim::docking(w, b);
+        }
         return standard(w, id);
     }
     let Some(b) = west_building(w, id) else {
@@ -1574,8 +1583,12 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
         }
         return finish(w, id);
     };
+    let refinery = building(w, b).is_some_and(|x| x.refinery);
     if s.finishing {
-        // spec: S-0402 claim 11 (finishing: the refinery-flag building's unloading animation is not modelled, so it is never playing)
+        if refinery && crate::depot_anim::unloading_playing(w, b) {
+            // spec: S-0402 claim 11 (finishing, and the building in the neighbouring cell is a refinery-flag building still playing its unloading animation: nothing, 1 tick)
+            return 1;
+        }
         return finish(w, id);
     }
     let thr = w.rules().econ.harvest.dump_threshold;
@@ -1592,11 +1605,15 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
             // spec: S-0402 claim 11 (counter set to 0; its period is not restarted)
             x.counter.zero(t);
         }
+        // spec: S-0402 claim 11 (the building plays its payment animation unless that is already playing; before the smoke event, Q-3062's interim)
+        crate::depot_anim::payment(w, b);
         // spec: S-0402 claim 11 and S-0616 claim 1 (each payment row makes one smoke event on the building in the neighbouring cell, before the payment of its processing)
         crate::emitters::refinery_smoke(w, b);
         pay(w, b, tib, amount);
         return 1;
     }
+    // spec: S-0402 claim 11 (load empty: the payment animation, if playing, is stopped, and a refinery-flag building plays its unloading animation; before the smoke event, Q-3062's interim)
+    crate::depot_anim::load_emptied(w, b, refinery);
     // spec: S-0402 claim 11 and S-0616 claim 1 (the empty-load row that makes the harvester finishing also makes one smoke event, so k + 1 events for k tiberiums)
     crate::emitters::refinery_smoke(w, b);
     // spec: S-0402 claim 11 (load empty and the counter allows: finishing, the counter left as it is)

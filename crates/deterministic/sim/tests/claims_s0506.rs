@@ -1400,6 +1400,24 @@ fn claim_22_in_air_by_phase() {
     assert!(in_air(&w, x));
 }
 
+// spec: S-0307 Terms (airborne: a set-A or set-B rocket by the phase answer of S-0506 claim 22) and claim 7 (only a floor-bound target's height is replaced by the terrain height) (#253)
+#[test]
+fn a_rocket_in_ascent_below_208_is_not_measured_on_the_ground() {
+    use glasnost_sim::combat::range::measured_point;
+    use glasnost_sim::combat::weapon::in_air;
+    let r = rules();
+    let (w, _, _, x) = fly_until(&r, Phase::Ascent);
+    let o = w.obj(x).unwrap();
+    let h = o.pos.z - w.surface_at(o.pos.x, o.pos.y);
+    assert!(0 < h && h < 208, "ascent, {h} leptons up");
+    assert!(in_air(&w, x));
+    assert_eq!(
+        measured_point(&w, Target::Object(x)).z,
+        w.reference_point(x).z,
+        "an airborne target keeps its own height"
+    );
+}
+
 /// Fires LNA (or LNC with `set_c`) with pause `p` and tilt `t` and returns
 /// the aim-fixing tick, the tick ascent starts and the tick of the first
 /// positive-speed movement attempt, plus the raise height gained (set C).

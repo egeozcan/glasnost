@@ -1246,6 +1246,8 @@ pub fn add_upgrade(w: &mut World, b: ObjectId, u: u32) {
         crate::econ::power::make_due(w, h);
         // spec: S-0406 claim 12 and S-0410 claim 2 (a successful upgrade placement is a radar recheck event, whatever it does to power)
         crate::econ::radar::mark_due(w, h);
+        // spec: S-0407 claim 12 (d) (a building gains an upgrade: an offer recheck for its owner) (#202)
+        crate::econ::tech::recheck_due(w, h);
     }
     // spec: S-0512 claim 2 (c) (a building gaining an upgrade: the grant check at once)
     crate::superweapons::charge::upgrade_gained(w, b);

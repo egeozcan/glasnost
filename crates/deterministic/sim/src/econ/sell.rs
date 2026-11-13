@@ -246,6 +246,12 @@ fn sell_building(w: &mut World, id: ObjectId) {
     crate::depot::sale_started(w, id);
     // spec: S-0501 claim 24 (r110, Q-2437: a pad that starts selling sends every aircraft in contact with it the run-away notice of S-0314 claim 22)
     crate::air::sale_started(w, id);
+    if !w.rules().quirks.sale_start_no_recheck
+        && let Some(h) = w.obj(id).and_then(|o| o.owner)
+    {
+        // spec: S-0407 Edge cases (quirks.sale_start_no_recheck off: the start of a sale is an event of claim 12 for the building's owner) (#202)
+        crate::econ::tech::recheck_due(w, h);
+    }
 }
 
 /// A sell order on a vehicle or aircraft (S-0408 claim 11).
@@ -821,6 +827,8 @@ fn sell_upgrade(w: &mut World, id: ObjectId, u: Option<u32>) {
     // spec: S-0408 claim 5 (the house works out its power again, S-0405 claim 7)
     crate::econ::power::make_due(w, house);
     crate::econ::radar::mark_due(w, house);
+    // spec: S-0407 claim 12 (i) (a sale that ends without removing the building: an offer recheck for its owner) (#202)
+    crate::econ::tech::recheck_due(w, house);
     if let Some(u) = u {
         // spec: S-0512 claim 2 (d) (a building losing an upgrade: the availability check at once)
         crate::superweapons::charge::upgrade_lost(w, id, u);

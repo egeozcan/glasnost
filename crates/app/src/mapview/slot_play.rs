@@ -46,6 +46,9 @@ pub enum Slot {
     Active3,
     /// *active-4*.
     Active4,
+    /// *pre-production*: started only by the simulation (a docking
+    /// animation, S-0402 claim 11).
+    PreProduction,
     /// *production*.
     Production,
     /// *special-1*.
@@ -70,16 +73,17 @@ pub enum Slot {
 
 impl Slot {
     /// This module's slots in S-0108 claim 12's restart order: *active-1*
-    /// to *active-4*, *production*, *special-1* to *special-4*, *super-1*
-    /// to *super-4*, *idle*, then *super-low-power* (the upgrade,
-    /// pre-production, turret and low-power slots of that order are not
+    /// to *active-4*, *pre-production*, *production*, *special-1* to
+    /// *special-4*, *super-1* to *super-4*, *idle*, then *super-low-power*
+    /// (the upgrade, turret and low-power slots of that order are not
     /// played here).
     // spec: S-0108 claim 12 (the running slots are restarted one after another in the fixed order upgrade-1 to upgrade-3, active-1 to active-4, pre-production, production, turret, special-1 to special-4, super-1 to super-4, idle, low-power, super-low-power)
-    pub const RESTART: [Slot; 15] = [
+    pub const RESTART: [Slot; 16] = [
         Slot::Active1,
         Slot::Active2,
         Slot::Active3,
         Slot::Active4,
+        Slot::PreProduction,
         Slot::Production,
         Slot::Special1,
         Slot::Special2,
@@ -95,12 +99,13 @@ impl Slot {
 
     /// Every slot of this module, in our own order (also the drawing
     /// order of a building's slot animations: our placeholder).
-    pub const ALL: [Slot; 15] = [
+    pub const ALL: [Slot; 16] = [
         Slot::Idle,
         Slot::Active1,
         Slot::Active2,
         Slot::Active3,
         Slot::Active4,
+        Slot::PreProduction,
         Slot::Production,
         Slot::Special1,
         Slot::Special2,
@@ -122,6 +127,7 @@ impl Slot {
             Slot::Active2 => b"ActiveAnimTwo",
             Slot::Active3 => b"ActiveAnimThree",
             Slot::Active4 => b"ActiveAnimFour",
+            Slot::PreProduction => b"PreProductionAnim",
             Slot::Production => b"ProductionAnim",
             Slot::Special1 => b"SpecialAnim",
             Slot::Special2 => b"SpecialAnimTwo",
@@ -936,7 +942,8 @@ mod tests {
     /// damaged names `…D` and occupied names `…G`.
     fn defs() -> Defs {
         let names = [
-            "I", "A1", "A2", "A3", "A4", "P", "S1", "S2", "S3", "S4", "U1", "U2", "U3", "U4", "L",
+            "I", "A1", "A2", "A3", "A4", "PP", "P", "S1", "S2", "S3", "S4", "U1", "U2", "U3", "U4",
+            "L",
         ];
         Slot::ALL
             .iter()

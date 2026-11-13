@@ -1557,3 +1557,36 @@ The fifth batch of the game-logic audit (#420): #159 to #162, #188 to #191, #213
 **Formats.** The save format goes to 132 and the AI game format to 104 for `JumpState::filtered`. Wire version 12: no valid order's encoding changes.
 
 **Seams.** #189 waits for Q-3042. Q-3041, Q-3043 and Q-3044 may change the interims above. A killed designator's or a destroyed marked building's cases of claims 19 and 20 had no audit test; the claim 20 test covers the aircraft.
+
+## Simulation (sim issues S7: refinery animations, rocket range, contacts and rechecks)
+
+The seventh batch of the game-logic audit: #430, #253 with #431, #185, #179, #222, #223, #202 and #164, and requests for #422, #168 and #163. Each change of behaviour has a test on synthetic data committed before it. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S7*. Requests Q-3059 to Q-3063 hold the questions the specs leave open.
+
+**Refinery animations (#430, S-0402 claim 11, S-0108 claims 12 and 25).** The docking, payment and unloading animations of the building in the harvester's neighbouring cell are slot animations of S-0108, played by the slot model of `depot_anim` that the repair depot already uses: animation objects of the update order with their creation draws, a stage clock and the damage swap. `DepotSlot` gains *pre-production*, before *production* in claim 12's restart order.
+
+- The start row of *unload* starts *pre-production* (the docking animation). Each payment row starts *special-1* (the payment animation) unless it runs. The empty-load row stops *special-1* and, for a refinery-flag building, starts *production* (the unloading animation). These apply to whatever building stands in the neighbouring cell, as the claim says; a building whose slot names are empty plays nothing. In the payment and empty-load rows the animation comes first, in the row's text order, then the smoke event, then the payment: no text orders the animation against the smoke event (Q-3062's interim).
+- *Finishing* waits while the refinery-flag building in the neighbouring cell has *production* running. A harvester processes before the animation in the update order (it entered the order first), so it sees the animation still running in the tick the animation ends and leaves in the next one: H1 variant e allows "tick *e* or *e* + 1".
+- The repair cycle's follow-up rows (S-0108 claim 20) stay a repair depot's: the end of *special-1* or *special-3* at a building without the repair flag starts nothing. The every-tick condition swap of claim 12 also runs for a building that is not a depot when it has a running slot.
+- The importer adds `PreProductionAnim` to the slot names it reads (S-0108 Import mapping). A damaged building whose art gives a normal name and no damaged name plays the normal animation, by S-0108's slot keys (Q-3063's interim).
+- The client draws the simulation's slots of any building, so the refinery's three animations show; its slot player gains *pre-production* for that.
+- Not modelled: S-0108 claim 13's power freeze. *Pre-production* and *production* always count *freeze-unpowered*, so by the spec an unpowered refinery freezes its unloading animation and holds its harvester until power comes back. Ours plays on: a harvest-timing divergence for an unpowered refinery, not only a drawing one (a seam, as for the depot).
+
+**Rocket aircraft in the range test (#253, S-0307 Terms and claim 26).** For the set-A and set-B rocket types, *airborne* is the phase answer of S-0506 claim 22 and *floor-bound* its opposite. `weapon::range_airborne` and `weapon::range_floor_bound` give S-0307's two answers. The air bonus (claim 3), the elevation eligibility (claim 6), the measured point (claim 7), the source point (claim 8 (b)) and the firing check's two airborne tests (S-0306 claim 23, which takes *airborne* from S-0307) use them. For every other object they are the height test as before.
+
+**A turret building against aircraft (#431).** The synthetic test of a turret building whose weapon hits air and ground, owned and captured, is in `claims_s0309_outpost.rs` and passes unchanged; the finding is in the ledger row. A local probe with an installation's resolved rules found two things. The probe's never-captured buildings were not in operation (S-0515 claim 2, S-0405 claim 8), and their firing check answered *impossible*. A captured one is in operation and its check without range passes against a helicopter, but with that data S-0307 claim 9's spatial range test never passed against a cruising aircraft, which counts the flight height in the distance. The rocket types did not fly in the probe, so the missile half is not measured; #253 changes only the windows where a rocket's phase answer and the height test differ (a low ascent, a pause), so it can explain a short window at most (reasoning, not measured). Whether that geometry is right for a building against air is a spec question, which Q-3069 asks.
+
+**The refinery tether (#185, S-0402 claim 10, S-0213 table T3 (b)).** `harvest::tethered` counts the tether only while the harvester's contact is a building whose dock it holds (`live_holders`), as `release::tethered` and `depot::link` name their building. A behaviour order, a destroyed refinery or an owner change that ends the refinery contact directly no longer leaves a tether that a later depot, bunker or transport contact revives.
+
+**A sinking docked vessel (#179, S-0314 claim 22, S-0504 claim 14).** A docked vessel killed by a hit that sinks it frees its place at the killing hit: `death::kill` releases its depot link when it starts sinking or starts to crash (`death::release_depot_contact`), as it does for a vessel removed at once.
+
+**An erased depot (#222, S-0314 claim 22, S-0514 claim 12).** `temporal::complete` releases a building's depot contacts before it removes the building, as a destroyed depot does (`depot::depot_destroyed`): no run-away notice, an arrived vehicle stays asleep, and no tether is left to the removed building.
+
+**The primary mark at an owner change (#223, S-0509 claim 12).** A building that changes owner loses its primary mark (`econ::events::owner_changed`).
+
+**Recheck events (#202, S-0407 claim 12 (d) and (i), Edge cases).** Gaining an upgrade (`placement::add_upgrade`) and a sale that ends without removing the building (`sell::sell_upgrade`) set the owner's recheck. The start of a sale does too when `quirks.sale_start_no_recheck` is off.
+
+**The area-guard leash without a guard range (#164, S-0215 F5).** A type with no guard range takes *g* as the larger of its primary and secondary weapon ranges.
+
+**Formats.** The save format goes to 134 and the AI game format to 107 for the new slot and its saved animations. Wire version 12: no valid order's encoding changes.
+
+**Seams.** Q-3059 (#422), Q-3060 (#168) and Q-3061 (#163) are open; their code waits for the answers. Q-3062 may change the order of the refinery animations against the smoke event, and asks whether an unloading harvester shows an image of its own. Q-3063 may change a damaged building's animation when its art gives no damaged name. S-0108 claim 13's power freeze of the refinery's animations is not modelled, which changes harvest timing at an unpowered refinery. #431's spatial range against a cruising aircraft waits for Q-3069.

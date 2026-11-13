@@ -1384,6 +1384,52 @@ fn claim_14_docked_ship_keeps_contact_under_a_move() {
     assert!(glasnost_sim::depot::tethered(&w, skiff));
 }
 
+// spec: S-0314 claim 22 and S-0504 claim 14 (a vehicle destroyed while in contact frees its place; the yard meets no contact at its next processing); S-0312 claim 10 (a killed vessel that sinks stays in play at 1 health point) (#179)
+#[test]
+fn claim_14_killed_docked_vessel_frees_its_place_at_the_killing_hit() {
+    let (mut w, yard, skiff) = ship_docked_at_yard();
+    // Run until the yard has taken a first paid step (it is then working).
+    let c0 = w.houses[0].credits;
+    for _ in 0..600 {
+        tick::step(&mut w);
+        if w.houses[0].credits < c0 {
+            break;
+        }
+    }
+    assert!(w.houses[0].credits < c0, "a first step was paid");
+    for _ in 0..3 {
+        tick::step(&mut w);
+    }
+    kill(&mut w, skiff);
+    assert!(
+        naval::sinking(&w, skiff),
+        "the killed vessel sinks, in play"
+    );
+    assert_eq!(w.obj(skiff).unwrap().health, 1);
+    let contact_after_kill = w.obj(skiff).unwrap().contact;
+    let other = at(&mut w, "SKIFF", 0, -4, 0);
+    w.obj_mut(other).unwrap().health = 200;
+    let accepts_other = glasnost_sim::depot::accepts(&w, yard, other, true);
+    let credits = w.houses[0].credits;
+    let mut max_health = 1;
+    let mut ticks = 0;
+    while w.obj(skiff).is_some() && ticks < 200 {
+        tick::step(&mut w);
+        ticks += 1;
+        if let Some(o) = w.obj(skiff) {
+            max_health = max_health.max(o.health);
+        }
+    }
+    let paid = credits - w.houses[0].credits;
+    assert_eq!(contact_after_kill, None, "the killing hit frees the place");
+    assert!(accepts_other, "the place is free for another vessel");
+    assert_eq!(paid, 0, "no repair step is paid for the wreck");
+    assert_eq!(
+        max_health, 1,
+        "the wreck's health is not raised by the yard"
+    );
+}
+
 /// Kills a fresh SKIFF, runs 20 ticks of its descent, then hits it again
 /// lethally when `again`; returns the height and health just after, and the
 /// tick at which it leaves play.
