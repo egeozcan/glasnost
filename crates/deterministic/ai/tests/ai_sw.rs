@@ -89,12 +89,22 @@ fn ready(giver: &str) -> (Game, CellXY) {
 /// thought again (the brain fires a ready record at once, and its order is
 /// pending in the world: a fixed wait of 400 ticks can end after that).
 fn ready_until(giver: &str, until: Option<&str>) -> (Game, CellXY) {
+    ready_in(giver, until, &fixture::map(), fixture::setup(5))
+}
+
+/// [`ready_until`] on map `map` with setup `setup`.
+fn ready_in(
+    giver: &str,
+    until: Option<&str>,
+    map: &glasnost_map::Map,
+    setup: glasnost_sim::world::GameSetup,
+) -> (Game, CellXY) {
     let mut g = Game::new(
         rules(),
-        &fixture::map(),
+        map,
         "synthetic-sw-kinds",
         fixture::catalogue(),
-        fixture::setup(5),
+        setup,
     )
     .expect("the synthetic skirmish loads");
     while g.world.tick < 3000
@@ -711,5 +721,69 @@ fn no_storm_beside_any_cell_of_an_own_building() {
     assert!(
         shots.iter().all(|&c| !near(c)),
         "a storm beside the plant {cells:?}: {shots:?}"
+    );
+}
+
+/// The synthetic map with a third start (waypoint 2, north of the middle)
+/// and three houses: Alpha (0) and Gamma (2, a house with no AI) on lobby
+/// team 1, so allied (S-0412 claim 8), and Beta (1) on team 2.
+fn allied_three() -> (glasnost_map::Map, glasnost_sim::world::GameSetup) {
+    use glasnost_sim::econ::setup::{self, HouseValues, Player, Settings};
+    let mut m = fixture::map();
+    let c = fixture::at(0, -30);
+    m.waypoints.insert(2, (c.x as i16, c.y as i16));
+    let player = |name: &str, country: &str, start: u32, ai: bool, team: u8| Player {
+        name: name.into(),
+        country: country.into(),
+        start: Some(start),
+        ai,
+        values: HouseValues {
+            team: Some(team),
+            ..Default::default()
+        },
+    };
+    let s = setup::skirmish(
+        &rules(),
+        &[
+            player("Alpha", "Alphaland", 0, true, 1),
+            player("Beta", "Betaland", 1, true, 2),
+            player("Gamma", "Alphaland", 2, false, 1),
+        ],
+        Settings::default(),
+        0,
+        5,
+    );
+    (m, s)
+}
+
+// design: own AI (#32): a storm is not aimed within STRIKE_RADIUS of an allied house's object either, as of the house's own.
+#[test]
+fn no_storm_beside_an_allys_unit() {
+    let (map, setup) = allied_three();
+    let (mut g, yard) = ready_in("STRMB", Some("STRM"), &map, setup);
+    assert!(g.world.allied(Some(HouseId(0)), Some(HouseId(2))), "allied");
+    let e = spot(yard, 15, 15);
+    let p = glasnost_sim::world::Pos::centre(e, 0);
+    glasnost_sim::econ::shroud::area_reveal(&mut g.world, HouseId(0), p, 4);
+    let mut alone = g.world.clone();
+    testkit::spawn(&mut alone, Kind::Infantry, "WALKER", 1, e, 0);
+    glasnost_sim::tick::step(&mut alone);
+    assert_eq!(
+        fires(&think(&alone), "STRM", &alone),
+        vec![e],
+        "the storm on the enemy"
+    );
+    let mut w = g.world.clone();
+    testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, e, 0);
+    let a = spot(e, 1, 1);
+    let ally = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 2, a, 0);
+    glasnost_sim::tick::step(&mut w);
+    let at = w.obj(ally).unwrap().pos.cell();
+    let shots = fires(&think(&w), "STRM", &w);
+    assert!(
+        shots
+            .iter()
+            .all(|&c| (c.x - at.x).pow(2) + (c.y - at.y).pow(2) > 9),
+        "a storm beside the ally's tank at {at:?}: {shots:?}"
     );
 }
