@@ -7,11 +7,15 @@ pub mod beams;
 pub mod bolts;
 pub mod build;
 #[cfg(test)]
+mod buildup_tests;
+#[cfg(test)]
 mod capture_tests;
 pub mod combat;
 pub mod cover;
 pub mod credits;
 pub mod find;
+#[cfg(test)]
+mod ground_order_tests;
 pub mod harvesting;
 pub mod layers;
 pub mod live;
