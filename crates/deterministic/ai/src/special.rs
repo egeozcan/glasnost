@@ -725,7 +725,7 @@ impl Special {
             .filter_map(|b| {
                 let a = targeting::cursor(w, house, &[unit], ClickOn::Object(b), mods);
                 (matches!(a, Action::Capture | Action::DamagingEntry)
-                    || (a == Action::RepairBuilding && Self::worth_repair(w, b)))
+                    || (a == Action::RepairBuilding && Self::worth_repair(w, house, b)))
                 .then_some((b, a))
             })
             .collect()
@@ -737,8 +737,12 @@ impl Special {
     /// pays, S-0515 claims 3 and 5), at half its strength or below. Our own
     /// design (M8 step A4 round 8, the lead's note 51: engineers went into
     /// any damaged building, walls and barely scratched ones too).
-    fn worth_repair(w: &World, b: ObjectId) -> bool {
+    fn worth_repair(w: &World, house: HouseId, b: ObjectId) -> bool {
         let Some(o) = w.obj(b) else { return false };
+        // design: own AI (#22): the house's own building only; the cursor offers the repair on an ally's building too (S-0214 rows I4 to I7), and an engineer was spent on it
+        if o.owner != Some(house) {
+            return false;
+        }
         let role = scripted::role_of(w, tech::type_of(o));
         let matters = matches!(
             role,
