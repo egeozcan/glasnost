@@ -515,14 +515,26 @@ fn panic_does_not_change_speed() {
     let mut w = s.build();
     let id = men(&w)[0];
     open_orders(&mut w);
+    // The walk is under way before the fear is raised: a frightened
+    // fraidycat at rest flees (S-0107 claim 15), at the start and on
+    // arrival, so only the ordered walk is traced.
+    order_move(&mut w, id, cell(1, 0));
+    tick::step(&mut w);
+    assert!(w.obj(id).unwrap().dest.is_some());
     {
         let st = w.obj_mut(id).unwrap().infantry.as_mut().unwrap();
         st.fear = 250;
         st.seq = Some(Seq::Panic);
     }
     assert_eq!(walk::walking_speed(&w, id), S);
-    order_move(&mut w, id, cell(1, 0));
-    let t = trace(&mut w, id, 200);
+    let mut t = Vec::new();
+    for _ in 0..200 {
+        let k = trace(&mut w, id, 1);
+        if w.obj(id).unwrap().dest != Some(Target::Cell(cell(1, 0))) {
+            break;
+        }
+        t.extend(k);
+    }
     let st = steps(&t);
     assert!(!st.is_empty());
     assert!(st.iter().all(|&d| d == (S, 0)), "{st:?}");
