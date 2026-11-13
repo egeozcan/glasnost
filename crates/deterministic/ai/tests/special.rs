@@ -1106,13 +1106,18 @@ fn no_engineer_is_ordered_for_a_cloaked_tech_building() {
 /// A world copy with an idle spy of house 0 and a building `name` of house
 /// 1 in its sight; also returns the objects.
 fn spy_scene(g: &Game, name: &str) -> (World, ObjectId, ObjectId) {
+    spy_scene_of(g, name, 1)
+}
+
+/// [`spy_scene`] with the building owned by house `owner`.
+fn spy_scene_of(g: &Game, name: &str, owner: u8) -> (World, ObjectId, ObjectId) {
     let mut w = g.world.clone();
     let home = home_of(&w);
     let target = testkit::spawn(
         &mut w,
         Kind::Building,
         name,
-        1,
+        owner,
         glasnost_map::CellXY::new(home.x + 7, home.y + 7),
         0,
     );
@@ -1195,4 +1200,20 @@ fn a_building_is_seen_by_any_of_its_cells() {
     );
     let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
     assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+}
+
+// design: own AI (#39): a spy goes only into an enemy player's building, as the purchase test asks: not into a passive house's building, whose infiltration would spend the spy on a house that does not play.
+#[test]
+fn a_spy_does_not_go_into_a_passive_houses_building() {
+    let mut g = game_with_neutral(5);
+    ready(&mut g);
+    let neutral = g
+        .world
+        .houses
+        .iter()
+        .position(|h| h.role == glasnost_sim::world::HouseRole::Neutral)
+        .expect("a neutral house") as u8;
+    let (w, target, unit) = spy_scene_of(&g, "SPYB", neutral);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!garrison_orders(&orders, unit, target), "{orders:?}");
 }
