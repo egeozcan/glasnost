@@ -3,7 +3,7 @@ id: Q-3054
 title: Does a gas cloud made on a high bridge's deck sink through the deck?
 status: open
 related: [S-0613, S-0102, S-0610]
-answered-by: []
+answered-by: [S-0613]
 ---
 
 ## Need
