@@ -54,7 +54,10 @@ fn run(guard_cells: Option<&str>) -> (Option<Target>, Option<Target>, Target, i3
     let mut w = testkit::game_with(&r, SIZE, 11);
     let a = veh(&mut w, "CART", 0, 0, 0);
     let t = w.tick;
-    w.obj_mut(a).unwrap().beh.force(Behaviour::AreaGuard, t, true);
+    w.obj_mut(a)
+        .unwrap()
+        .beh
+        .force(Behaviour::AreaGuard, t, true);
     w.obj_mut(a).unwrap().guard_spot = Some(Target::Cell(at(-2, 0)));
     let b = veh(&mut w, "T0", 1, 2, 0);
     w.obj_mut(a).unwrap().target = Some(Target::Object(b));
@@ -82,6 +85,10 @@ fn f5_no_guard_range_uses_the_weapon_range() {
     // spec: S-0215 F5 (L = ⌊11 × min(2g, 4096) / 10⌋)
     let l = 11 * (2 * g).clamp(0, 4096) / 10;
     assert!(l > 512, "weapon ranges {w0}, {w1}: L = {l}");
-    assert_eq!(target, Some(b), "L = {l}: the leash does not hold, the target is kept");
+    assert_eq!(
+        target,
+        Some(b),
+        "L = {l}: the leash does not hold, the target is kept"
+    );
     assert_ne!(dest, Some(Target::Cell(at(-2, 0))));
 }

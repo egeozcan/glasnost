@@ -1,13 +1,11 @@
 //! Behaviour processing (S-0215): the per-tick start, readiness, falling
 //! back to rest and the processings of the general-purpose behaviours.
 //!
-//! Seams for milestone M4 (combat): the target-acquisition specs are not
-//! written, so no automatic search runs (claims 26, 27 and 33 see "may not
-//! search"), and weapon ranges and rearm times are unknown (the close-range
-//! shortening of F3 applies only through the infantry close-range flag; no
-//! actor is ever rearming). Approaching a target is the approach step of
-//! [`crate::approach`] (claim 37), whose position search (S-0307) finds
-//! nothing yet. *Capture*, *sabotage* and *eaten* share claim 28's table
+//! The automatic search of claims 26, 27 and 33 is S-0309's
+//! ([`crate::combat::acquire`]); the area-guard leash of F5 falls back to
+//! the actor's weapon ranges when its type has no guard range. Approaching
+//! a target is the approach step of [`crate::approach`] (claim 37), with
+//! S-0307's position search. *Capture*, *sabotage* and *eaten* share claim 28's table
 //! ([`process_capture`]). A behaviour whose processing is not built yet is
 //! processed as a behaviour without a processing rule; that is recorded as
 //! a note on the world.
@@ -1682,14 +1680,19 @@ pub(crate) fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
         }
         let mobile_spot =
             matches!(gs, Target::Object(x) if w.obj(x).is_some_and(|g| g.kind.is_mobile()));
+        // spec: S-0215 F5 (g: the type's guard range if it is not 0, else the larger of the actor's primary and secondary weapon ranges) (#164)
+        let g = if u.guard_range != 0 {
+            u.guard_range
+        } else {
+            crate::combat::range::firer_weapon_range(w, id, 0)
+                .max(crate::combat::range::firer_weapon_range(w, id, 1))
+        };
         let leash = if mobile_spot {
             // spec: S-0215 F5 (guarding a mobile actor: the guard stray distance)
             // spec: S-0215 claim 36 (b) and Questions for the project lead (decided: given by no layer, the area-guard leash instead)
-            r.general
-                .guard_stray
-                .unwrap_or_else(|| leash(u.guard_range))
+            r.general.guard_stray.unwrap_or_else(|| leash(g))
         } else {
-            leash(u.guard_range)
+            leash(g)
         };
         let firing = t < o.combat.rearm_until;
         // spec: S-0215 claim 26 (the leash: not firing, no destination, distance above L)
@@ -1978,8 +1981,9 @@ fn process_open(w: &mut World, id: ObjectId) -> i32 {
     }
 }
 
-/// The area-guard leash L (S-0215 F5) for a guard range g in leptons;
-/// weapon ranges (g = 0) wait for M4 and count as 0.
+/// The area-guard leash L (S-0215 F5) for g in leptons: the type's guard
+/// range, or with none the larger of the actor's two weapon ranges (the
+/// caller's choice).
 fn leash(g: i32) -> i32 {
     // spec: S-0215 F5 (G = min(max(2g, 0), 4096); L = ⌊11G / 10⌋)
     let big_g = g.saturating_mul(2).clamp(0, 4096);
