@@ -511,3 +511,85 @@ fn picks_again_when_the_group_has_left_the_source() {
     );
     assert_eq!(fires(&orders, "CHRN", &w), vec![moved], "a new pick");
 }
+
+/// Cloaks unit `id` fully (S-0516 Terms) and checks house 0 does not
+/// sense it.
+fn cloak(w: &mut World, id: glasnost_sim::world::ObjectId) {
+    w.obj_mut(id).unwrap().cloak.state = glasnost_sim::cloak::CloakState::Cloaked;
+    assert!(glasnost_sim::cloak::hidden_from(w, id, Some(HouseId(0))));
+}
+
+// design: own AI (#38) and S-0513 claim 34 (the teleport leaves a protected object in place): a group of the house's vehicles under its iron curtain is not picked as a teleport source.
+#[test]
+fn does_not_teleport_a_curtained_group() {
+    let (g, yard) = ready("CHRNB");
+    let c = spot(yard, 10, 8);
+    let mut w = g.world.clone();
+    group(&mut w, c);
+    glasnost_sim::tick::step(&mut w);
+    let tick = w.tick;
+    let ids: Vec<_> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(0)) && o.kind == Kind::Vehicle)
+        .filter(|o| (o.pos.cell().x - c.x).abs() <= 1 && (o.pos.cell().y - c.y).abs() <= 1)
+        .map(|o| o.id)
+        .collect();
+    assert_eq!(ids.len(), 3, "the group");
+    for id in ids {
+        w.obj_mut(id).unwrap().sw.protection = Some(glasnost_sim::superweapons::Protection {
+            start: tick,
+            duration: 300,
+            kind: glasnost_sim::superweapons::ProtectKind::Curtain,
+            tint: Default::default(),
+        });
+        assert!(glasnost_sim::superweapons::protected(&w, id));
+    }
+    let orders = think(&w);
+    assert!(
+        fires(&orders, "CHRN", &w).is_empty(),
+        "no first stage on a curtained group: {orders:?}"
+    );
+}
+
+// design: own AI (#38): the teleport's source block is held back only by another house's unit the house sees: a cloaked enemy tank or an enemy building beside the group does not change the pick.
+#[test]
+fn a_hidden_tank_or_a_building_beside_a_group_does_not_stop_the_teleport() {
+    let (g, yard) = ready("CHRNB");
+    let c = spot(yard, 10, 8);
+    for what in ["tank", "building"] {
+        let mut w = g.world.clone();
+        group(&mut w, c);
+        let beside = CellXY::new(c.x - 1, c.y - 1);
+        assert!(free(&w, beside), "{what}: a free cell beside the group");
+        if what == "tank" {
+            let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, beside, 0);
+            glasnost_sim::tick::step(&mut w);
+            cloak(&mut w, tank);
+        } else {
+            testkit::spawn(&mut w, Kind::Building, "PILL", 1, beside, 0);
+            glasnost_sim::tick::step(&mut w);
+        }
+        assert_eq!(
+            fires(&think(&w), "CHRN", &w),
+            vec![c],
+            "{what}: the first stage on the group"
+        );
+    }
+}
+
+// design: own AI (#38): the teleport's landing block is chosen by what the house sees: a cloaked enemy tank standing on it does not move it.
+#[test]
+fn a_hidden_tank_does_not_move_the_landing() {
+    let (w, _) = picked((10, 8));
+    let dest = fires(&think(&w), "CHWP", &w);
+    assert_eq!(dest.len(), 1, "the second stage: {dest:?}");
+    let mut w2 = w.clone();
+    let tank = testkit::spawn(&mut w2, Kind::Vehicle, "GUNR", 1, dest[0], 0);
+    cloak(&mut w2, tank);
+    assert_eq!(
+        fires(&think(&w2), "CHWP", &w2),
+        dest,
+        "the landing is where it was"
+    );
+}
