@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 104
+revision: 106
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-11
+approved-on: 2026-11-13
 measurements: []
-requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137, Q-2138, Q-2139, Q-2166, Q-2191, Q-2192, Q-2193, Q-2226, Q-2227, Q-2228, Q-2229, Q-2230, Q-2247, Q-2971, Q-2972]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753, Q-1986, Q-1988, Q-2136, Q-2137, Q-2138, Q-2139, Q-2166, Q-2191, Q-2192, Q-2193, Q-2226, Q-2227, Q-2228, Q-2229, Q-2230, Q-2247, Q-2971, Q-2972, Q-3043]
 supersedes: []
 ---
 
@@ -1996,7 +1996,12 @@ Terms).
       whose cell equals their current cell, before any movement-point search. This is a
       test of the type's jumpjet flag, not merely its locomotor. It applies while grounded
       too: an ordinary own-cell order does not promise take-off, an assignment or get-up.
-      It does not prevent the order's separate target, behaviour or guard-spot effects.
+      The ignored assignment has no effect of its own (Q-3043): the order-level destination
+      keeps its preceding value, empty or not, and none of the assignment's effects happen
+      (S-0502 claim 23). It requests no get-up (S-0107 claim 15), and it neither ends the
+      retry delay of S-0212 claim 21 nor restarts the blockage delay of S-0209 claim 10. It
+      does not prevent the order's separate
+      target, behaviour or guard-spot effects.
     - Infantry has no vehicle unchanged-destination suppression. Subject to the own-cell
       filter and ordinary legality, repeating a nonempty destination elsewhere, whether
       the same cell or the same object, repeats movement-point adjustment and its
@@ -2035,11 +2040,16 @@ Terms).
       successful reroute's flight-state consequences; failure has S-0502 claim 17's outcome.
 
     These filters and clear outcomes inherit S-0502 claims 23, 24, 27 and 28's backing
-    and confidence: `measurable` (J2 and J16 for own-cell infantry rejection; J19 and J22
-    for effective clears and ordinary vehicle suppression, J23 for infantry reassignment,
+    and confidence: `measurable` (J2, J16 and J32 parts (a) and (b) for own-cell infantry
+    rejection, and J32 part (c) for the ignored assignment's absent get-up request; J19 and
+    J22 for effective clears and ordinary vehicle suppression, J23 for infantry reassignment,
     J24 for placement refresh and ordinary-order nonactivation; J25 for ordinary
-    balloon-hover move/attack/stop retention and retry). Confidence is high for the
-    predicates and dispatch. The later qualified teleport/dock refresh on a jumpjet,
+    balloon-hover move/attack/stop retention and retry). That the ignored assignment neither
+    ends a retry delay nor restarts a blockage delay is `unmeasured`, as in S-0502 claim 23:
+    those delays act only on units that search paths, a unit using the jumpjet locomotor
+    searches none, and no scenario sets up a jumpjet-type infantry test type with a
+    path-searching locomotor. Confidence is high for the predicates and dispatch, and medium
+    for that unmeasured part, which stands on the original's rule as read. The later qualified teleport/dock refresh on a jumpjet,
     combined balloon-hover infantry and stock deployable balloon-hover fixtures remain
     `unmeasured` with those scenarios' diagnostic limitations. Exceptional aftermath
     retains medium confidence.
