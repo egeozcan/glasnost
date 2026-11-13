@@ -236,12 +236,7 @@ pub(crate) fn filter_orders(w: &World, out: &mut Vec<Order>) {
     {
         return;
     }
-    let mut claimed: std::collections::BTreeMap<ObjectId, ObjectId> = w
-        .objects
-        .values()
-        .filter(|o| o.on_map && is_drainer(w, o.id))
-        .filter_map(|o| Some((claim(w, o.id)?, o.id)))
-        .collect();
+    let mut claimed = claims(w);
     // Drainers given a drain order earlier in `out`: a later order of
     // another part would replace it.
     let mut sent: std::collections::BTreeSet<ObjectId> = std::collections::BTreeSet::new();
@@ -261,15 +256,11 @@ pub(crate) fn filter_orders(w: &World, out: &mut Vec<Order>) {
                 target: Some(Target::Object(b)),
                 ..
             } if drain_target(w, actor, *b) => {
-                let owner = w.obj(actor).and_then(|o| o.owner);
-                match claimed.get(b) {
-                    Some(&other)
-                        if other != actor && w.obj(other).and_then(|o| o.owner) == owner =>
-                    {
-                        false
-                    }
+                let key = (w.obj(actor).and_then(|o| o.owner), *b);
+                match claimed.get(&key) {
+                    Some(&other) if other != actor => false,
                     _ => {
-                        claimed.insert(*b, actor);
+                        claimed.insert(key, actor);
                         sent.insert(actor);
                         true
                     }
@@ -280,6 +271,18 @@ pub(crate) fn filter_orders(w: &World, out: &mut Vec<Order>) {
     });
 }
 
+/// The claims of every drainer on the map, keyed by its house and the
+/// building it drains or flies to: design: own AI (#43), a claim of
+/// another house does not hide one of the house's own on the same
+/// building.
+fn claims(w: &World) -> std::collections::BTreeMap<(Option<HouseId>, ObjectId), ObjectId> {
+    w.objects
+        .values()
+        .filter(|o| o.on_map && is_drainer(w, o.id))
+        .filter_map(|o| Some(((o.owner, claim(w, o.id)?), o.id)))
+        .collect()
+}
+
 #[cfg(test)]
 mod filter_tests {
     use super::*;
@@ -288,12 +291,7 @@ mod filter_tests {
     /// [`filter_orders`] as before batch 2: the claims looked for whatever
     /// the orders.
     fn filter_as_before(w: &World, out: &mut Vec<Order>) {
-        let mut claimed: std::collections::BTreeMap<ObjectId, ObjectId> = w
-            .objects
-            .values()
-            .filter(|o| o.on_map && is_drainer(w, o.id))
-            .filter_map(|o| Some((claim(w, o.id)?, o.id)))
-            .collect();
+        let mut claimed = claims(w);
         let mut sent: std::collections::BTreeSet<ObjectId> = std::collections::BTreeSet::new();
         out.retain(|order| {
             let Some(actor) = order.actor() else {
@@ -311,15 +309,11 @@ mod filter_tests {
                     target: Some(Target::Object(b)),
                     ..
                 } if drain_target(w, actor, *b) => {
-                    let owner = w.obj(actor).and_then(|o| o.owner);
-                    match claimed.get(b) {
-                        Some(&other)
-                            if other != actor && w.obj(other).and_then(|o| o.owner) == owner =>
-                        {
-                            false
-                        }
+                    let key = (w.obj(actor).and_then(|o| o.owner), *b);
+                    match claimed.get(&key) {
+                        Some(&other) if other != actor => false,
                         _ => {
-                            claimed.insert(*b, actor);
+                            claimed.insert(key, actor);
                             sent.insert(actor);
                             true
                         }
