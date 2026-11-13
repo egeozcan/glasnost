@@ -4,7 +4,8 @@
 
 use glasnost_ai::{fixture, game::Game, scripted};
 use glasnost_sim::probe::{Phase, Probe};
-use glasnost_sim::world::HouseId;
+use glasnost_sim::rules::{Behaviour, Kind};
+use glasnost_sim::world::{HouseId, Target};
 
 const FIRST: i32 = 400;
 const MORE: i32 = 200;
@@ -100,6 +101,55 @@ fn the_brains_plan_in_different_ticks() {
         (0..8).map(|h| scripted::think_phase(HouseId(h))).collect();
     assert_eq!(phases.len(), 8);
     assert!(phases.iter().all(|&p| (0..period).contains(&p)));
+}
+
+// design: own AI (#51): once the game is over (S-0414) a step changes nothing, so the state stays the one its replay ends on
+#[test]
+fn a_step_after_the_game_is_over_changes_nothing() {
+    let mut g = start();
+    let theirs: Vec<_> = g
+        .world
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(1)))
+        .map(|o| o.id)
+        .collect();
+    for id in theirs {
+        glasnost_sim::objects::remove(&mut g.world, id);
+    }
+    for _ in 0..2000 {
+        if g.outcome().is_some() {
+            break;
+        }
+        g.step();
+    }
+    assert!(g.outcome().is_some(), "the game is over");
+    // A tick run again would apply an order waiting for the winner's unit.
+    let mover = g
+        .world
+        .objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(0)) && o.on_map && o.kind != Kind::Building)
+        .map(|o| o.id)
+        .expect("a unit of the winner");
+    let at = g.world.obj(mover).unwrap().pos.cell();
+    assert!(glasnost_sim::orders::issue(
+        &mut g.world,
+        HouseId(0),
+        glasnost_sim::orders::Order::Behaviour {
+            actor: mover,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(glasnost_map::CellXY::new(at.x + 10, at.y))),
+        },
+    ));
+    let (tick, hash) = (g.world.tick, g.state_hash());
+    for _ in 0..2 * scripted::THINK_PERIOD {
+        g.step();
+    }
+    assert_eq!(g.world.tick, tick);
+    assert_eq!(g.state_hash(), hash);
 }
 
 // PLAN §4.7 (M8 step B7): a game saved between the two houses' thinks of a period (house 0 has thought, house 1 not yet) plays on alike after a load.
