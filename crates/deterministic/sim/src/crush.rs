@@ -161,6 +161,9 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
             // spec: S-0309 claim 27 and S-0210 claim 4 (its picks come before its holders' timer draws, which its removal takes)
             crate::combat::death::vehicle_animations(w, x, &ob);
         }
+        // spec: S-0210 claim 4 (the kill is credited to the crusher, as for any kill: S-0414 claims 21 and 22 for the result screen's counts, S-0311 claims 7 to 10 for score and veterancy)
+        crate::econ::stats::destruction(w, x, crate::econ::stats::Credit::Object(id));
+        crate::combat::veterancy::destruction_credited(w, x, Some(id), cr.owner);
         // spec: S-0210 claim 4 (removed on the same tick, no damage)
         crate::objects::remove(w, x);
         // spec: S-0210 claim 4 (the crushed type's crush sound plays at the crusher's position)
