@@ -198,7 +198,16 @@ impl Special {
         }
         let home = script.home(w);
         let enemies = script.seen_enemies(w);
-        let mut chosen: Vec<ObjectId> = Vec::new();
+        // design: own AI (#45): every vehicle a lifter already aims at is
+        // taken before any free lifter picks, whatever the lifters' order.
+        let mut chosen: Vec<ObjectId> = lifters
+            .iter()
+            .filter(|&&l| lift::gripped_unit(w, l).is_none())
+            .filter_map(|&l| match w.obj(l)?.target {
+                Some(Target::Object(t)) if liftable(w, l, t) => Some(t),
+                _ => None,
+            })
+            .collect();
         for &l in &lifters {
             let Some(lo) = w.obj(l) else { continue };
             let at = lo.pos.cell();
@@ -215,12 +224,9 @@ impl Special {
                 }
                 continue;
             }
-            // A lifter already aiming at a vehicle it can seize keeps it.
-            let aiming = matches!(lo.target, Some(Target::Object(t)) if liftable(w, l, t));
-            if aiming {
-                if let Some(Target::Object(t)) = lo.target {
-                    chosen.push(t);
-                }
+            // A lifter already aiming at a vehicle it can seize keeps it (its
+            // target is in `chosen` from the start).
+            if matches!(lo.target, Some(Target::Object(t)) if liftable(w, l, t)) {
                 continue;
             }
             let near_home = |c| {
