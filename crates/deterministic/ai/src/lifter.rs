@@ -26,8 +26,9 @@
 //!   not refused by the firing check. The dearest type goes first, then the
 //!   nearest;
 //! - **drops them where the fall kills.** While a lifter holds a vehicle at
-//!   [`DROP_HEIGHT`] leptons or more over water, or over a cell that holds
-//!   another vehicle or a building of a house it is not allied to, it gives
+//!   [`DROP_HEIGHT`] leptons or more over water the vehicle cannot enter
+//!   (not over a bridge deck), or over a cell that holds another vehicle or
+//!   a building it sees, of a house it is not allied to, it gives
 //!   the lifter a move order to its own cell. That ends the grip and the
 //!   vehicle falls there (claims 12 and 17). A vehicle pulled all the way
 //!   is dropped unhurt on a free cell beside the lifter (claim 8), so a
@@ -309,8 +310,9 @@ fn clear_below(w: &World, x: ObjectId) -> bool {
 }
 
 /// Whether held unit `x` is high enough over a cell where its fall kills
-/// it: water, or a cell that holds a vehicle or building of a house that
-/// `house` is not allied to (S-0607 claims 16 and 17).
+/// it: water it cannot enter, away from a bridge deck, or a cell that holds
+/// a vehicle or building, seen by `house`, of a house that `house` is not
+/// allied to (S-0607 claims 16 and 17).
 fn drop_here(w: &World, house: HouseId, x: ObjectId) -> bool {
     let Some(xo) = w.obj(x) else { return false };
     if w.height_above_surface(x) < DROP_HEIGHT {
@@ -320,10 +322,15 @@ fn drop_here(w: &World, house: HouseId, x: ObjectId) -> bool {
     if !glasnost_sim::econ::shroud::explored(w, house, c) {
         return false;
     }
-    let water = w
-        .cells
-        .cell(c)
-        .is_some_and(|k| k.land == glasnost_map::terrain::land::WATER);
+    // spec: S-0607 claim 17 (water counts when the land is water and the unit does not land on a bridge deck; it sinks only where the cell is blocked for it, by S-0209 claim 5's zero speed check (5a) for its class)
+    // design: own AI (#46): a held vehicle that may enter water (a hovercraft, say), or one over a bridge deck, is not dropped there
+    let water = !w.high_bridge(c)
+        && w.cells
+            .cell(c)
+            .is_some_and(|k| k.land == glasnost_map::terrain::land::WATER)
+        && w.rules().unit(xo.kind, xo.type_index).is_some_and(|u| {
+            !glasnost_sim::passability::enterable_by_class(w.rules(), w, c, u.class, u.zone, false)
+        });
     let occupants = w.cells.list(c, glasnost_sim::world::Layer::Ground);
     let own_there = occupants
         .iter()
@@ -334,6 +341,8 @@ fn drop_here(w: &World, house: HouseId, x: ObjectId) -> bool {
     water
         || occupants.iter().any(|&o| {
             o != x
+                // design: own AI (#46): an enemy the house does not see (a cloaked one it does not sense) is not known to be there
+                && crate::in_view(w, house, o)
                 && w.obj(o).is_some_and(|p| {
                     matches!(p.kind, Kind::Vehicle | Kind::Building)
                         && !w.allied(Some(house), p.owner)
