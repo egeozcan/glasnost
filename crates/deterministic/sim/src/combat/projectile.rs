@@ -336,22 +336,24 @@ pub fn launch(
     let mode = rules.mode;
     let q = rules.quirks;
     let half = q.ranged_draw_half_span;
-    let wr = rules.combat.weapon(weapon).clone();
+    let wr = rules.combat.weapon(weapon);
     let Some(pid) = wr.projectile else {
         // A weapon without a projectile launches nothing (the importer warns).
         return None;
     };
-    let p = rules.combat.projectiles[pid as usize].clone();
-    let o = w.obj(firer)?.clone();
-    let tc = crate::combat::veterancy::type_combat(w, firer)
-        .cloned()
-        .unwrap_or_default();
+    let p = &rules.combat.projectiles[pid as usize];
+    let o = w.obj(firer)?;
+    // The firer as it fires.
+    let (o_target, o_pos, o_owner, o_kind, o_radial_index) =
+        (o.target, o.pos, o.owner, o.kind, o.combat.radial_index);
+    let radial = crate::combat::veterancy::type_combat_in(&rules, o.kind, o.type_index)
+        .map_or(0, |tc| tc.radial_segments);
     let g = ballistics::gravity(rules.combat.general.gravity, p.floater, mode);
     let shot_tp = ref_point(w, shot_target);
     // spec: S-0306 claim 1 (the shot speed towards the shot target's target point)
     let s1 = shot_speed(w, weapon, fire_point, aim_target_point(w, shot_target));
     // spec: S-0306 claim 3 (the aim point: the firer's target's reference point, no aim shift; no target: the origin, quirks.aim_origin_without_target)
-    let firer_target = o.target;
+    let firer_target = o_target;
     let redirected = wr.area_fire || tc_spray(w, firer);
     let mut aim = match firer_target {
         Some(t) => ref_point(w, t),
@@ -395,7 +397,6 @@ pub fn launch(
     }
     // spec: S-0306 claim 2 (capped at half the spatial distance to the impact point)
     let capped = s1.min(d3(w, fire_point, impact) / 2);
-    let radial = tc.radial_segments;
     let kind = p.kind();
     // spec: S-0306 claim 2 (a steering or vertical projectile whose firer type has no radial segments starts at 1)
     let start =
@@ -415,7 +416,7 @@ pub fn launch(
         i32::from(aiming(w, firer))
     };
     if radial > 0 {
-        yaw = radial_yaw(w, firer, radial, o.combat.radial_index);
+        yaw = radial_yaw(w, firer, radial, o_radial_index);
         if let Some(ob) = w.obj_mut(firer) {
             ob.combat.radial_index = (ob.combat.radial_index + 1) % radial;
         }
@@ -426,14 +427,14 @@ pub fn launch(
         let dz = impact.z - fire_point.z;
         let dist = d2(w, fire_point, impact);
         let tgt_ref = firer_target.map(|t| ref_point(w, t)).unwrap_or(aim);
-        let horizontal = d2(w, o.pos, tgt_ref);
+        let horizontal = d2(w, o_pos, tgt_ref);
         // spec: S-0306 claim 6 a (a lob: the lobber flag, or the target higher above than it is far)
-        let lob = wr.lobber || (tgt_ref.z - o.pos.z) > horizontal;
+        let lob = wr.lobber || (tgt_ref.z - o_pos.z) > horizontal;
         arc_pitch(w, start, dist, dz, lob, g)?
     } else if p.voxel {
         let tgt_z = firer_target.map_or(aim.z, |t| ref_point(w, t).z);
         // spec: S-0306 claim 6 b (32768 when the target is lower than the firer, else 16384)
-        if tgt_z < o.pos.z { 32768 } else { 16384 }
+        if tgt_z < o_pos.z { 32768 } else { 16384 }
     } else {
         let hb = match firer_target {
             Some(Target::Object(t)) => w
@@ -448,7 +449,7 @@ pub fn launch(
     };
     let mut vel = initial_velocity(w, yaw, pitch, start);
     // spec: S-0306 claim 5 (only a dropping projectile starts from the firer's own position)
-    let start_pos = if p.dropping { o.pos } else { fire_point };
+    let start_pos = if p.dropping { o_pos } else { fire_point };
     let id = w.new_id();
     // spec: S-0306 claim 9 (the stored target point K; the arm time: 0 against an aircraft)
     let mut stored = shot_tp;
@@ -472,8 +473,8 @@ pub fn launch(
             stored = Pos::new(qx, qy, stored.z);
         }
         // spec: S-0306 claim 9 (an invisible projectile: moved to K, or the first blocking cell's centre)
-        let house = o.owner;
-        pos = match crate::combat::lof::walk(w, &p, house, fire_point, stored) {
+        let house = o_owner;
+        pos = match crate::combat::lof::walk(w, p, house, fire_point, stored) {
             Some(c) => {
                 let cc = Pos::centre(c, 0);
                 Pos::new(cc.x, cc.y, w.surface_at(cc.x, cc.y))
@@ -490,9 +491,9 @@ pub fn launch(
         id,
         weapon,
         attacker: Some(firer),
-        house: o.owner,
+        house: o_owner,
         firer: Some(firer),
-        firer_house: o.owner,
+        firer_house: o_owner,
         pos,
         vel,
         target: Some(shot_target),
@@ -512,14 +513,14 @@ pub fn launch(
         // spec: S-0306 claims 8 and 22 (revision 45: the line-of-fire walk's X₁ is the fire point as it is, not raised)
         fire_point,
         nuke_wait: None,
-        vehicle_scalable: o.kind == Kind::Vehicle && p.scalable,
+        vehicle_scalable: o_kind == Kind::Vehicle && p.scalable,
         airburst_child: false,
         multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
         chain: 0, // spec: S-0318 Terms (a projectile that is not a fragment has chain level 0)
         looped: false,
     };
     w.projectiles.insert(id, proj);
-    if o.kind == Kind::Vehicle
+    if o_kind == Kind::Vehicle
         && p.scalable
         && let Some(pid) = wr.projectile
     {
@@ -535,7 +536,7 @@ pub fn launch(
             .insert(pid, if v == 0 { p.spawn_delay } else { v });
     }
     // spec: S-0306 claim 8 (the projectile enters play; its first turn is in the same tick)
-    w.update.enter(id);
+    w.update.enter_new(id);
     let _ = mode;
     Some(id)
 }
@@ -992,12 +993,11 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let rules = w.rules_arc();
     let mode = rules.mode;
     let q = rules.quirks;
-    let wr = rules.combat.weapon(pr.weapon).clone();
-    let Some(pid) = wr.projectile else {
+    let Some(pid) = rules.combat.weapon(pr.weapon).projectile else {
         remove(w, id);
         return;
     };
-    let p = rules.combat.projectiles[pid as usize].clone();
+    let p = &rules.combat.projectiles[pid as usize];
     let g = ballistics::gravity(rules.combat.general.gravity, p.floater, mode);
     let tick = w.tick;
     if let Some(until) = pr.nuke_wait {
@@ -1006,7 +1006,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
             return;
         }
         let pos = pr.pos;
-        explode(w, &mut pr, &p, pos, pos, true);
+        explode(w, &mut pr, p, pos, pos, true);
         remove(w, id);
         crate::parasite::carrier_ended(w, id, pr.weapon, true);
         return;
@@ -1040,12 +1040,12 @@ pub fn turn(w: &mut World, id: ObjectId) {
         .get(&pid)
         .copied()
         .unwrap_or(p.spawn_delay);
-    if let Some(trailer) = p.trailer.clone()
+    if let Some(trailer) = p.trailer.as_deref()
         && delay != 0
         && tick.rem_euclid(delay) == 0
     {
         // spec: S-0109 claim 29 (a projectile trailer, created during its turn before its movement, with an initial loop delay of 1 update)
-        effects::trailer(w, &trailer, start);
+        effects::trailer(w, trailer, start);
     }
     let kind = p.kind();
     let mut lift = 0;
@@ -1069,7 +1069,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
             (add_trunc(start, pr.vel), pr.vel)
         }
         ProjectileKind::Steering => {
-            let (disp, v, l) = steer(w, &mut pr, &p);
+            let (disp, v, l) = steer(w, &mut pr, p);
             let np = add_trunc(start, disp);
             pr.vel = v;
             lift = l;
@@ -1216,7 +1216,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
         let house = pr.firer_house;
         let x1 = pr.fire_point.cell();
         let x2 = pr.stored.cell();
-        rows.lof = crate::combat::lof::sample_blocks(w, &p, house, nc, pr.prev_cell, x1, x2);
+        rows.lof = crate::combat::lof::sample_blocks(w, p, house, nc, pr.prev_cell, x1, x2);
     }
     // spec: S-0306 T1 (deep fall: h′ ≤ −416)
     rows.deep = hp <= -416;
@@ -1331,7 +1331,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
                 .is_some_and(|u| u.jumpjet);
             let arrival = rows.arrival || (rows.passed && jumpjet);
             let reached = rows.reached;
-            let (burst, pt) = detonation_point(w, &pr, &p, point, arrival, reached, speed_start);
+            let (burst, pt) = detonation_point(w, &pr, p, point, arrival, reached, speed_start);
             // spec: S-0514 claim 20 (nuke-making is the last row: a higher selected row replaces it)
             if special_of(w, pr.weapon, pr.target) == Some(Special::NukeMake) {
                 // spec: S-0513 claim 8 (a missile-maker warhead does no damage at its burst: it is replaced by the falling missile, claim 9)
@@ -1351,7 +1351,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
                 }
             }
             pr.pos = pt;
-            explode(w, &mut pr, &p, pt, burst, false);
+            explode(w, &mut pr, p, pt, burst, false);
             remove(w, id);
             // spec: S-0614 claim 1 (when the projectile detonates, the parasite tries to latch on)
             crate::parasite::carrier_ended(w, id, pr.weapon, true);
@@ -1531,7 +1531,6 @@ fn explode(
 ) {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
-    let wr = rules.combat.weapon(pr.weapon).clone();
     // spec: S-0303 claim 2, S-0306 claim 21 and S-0614 claim 1 (a parasite-flag warhead's projectile makes no area hits; its animation and debris stay)
     // spec: S-0303 claim 2 and S-0519 claim 16 (an air-strike-flag warhead's projectile makes no area hits, whether or not it calls or redirects a strike; a projectile-producer rule only)
     // spec: S-0303 claim 2 and S-0518 claim 11 (a detonation selecting the electric-charge effect bypasses area damage at any target, even when it registers no charger)
@@ -1598,7 +1597,6 @@ fn explode(
         let b = w.rng.raw();
         q = crate::combat::death::nearby_point(w, q, lambda, b, false);
     }
-    let _ = wr;
 }
 
 /// The nine children of an airburst (S-0306 claim 21).
@@ -1670,7 +1668,7 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             looped,
         };
         w.projectiles.insert(id, child);
-        w.update.enter(id);
+        w.update.enter_new(id);
     }
 }
 
@@ -1833,7 +1831,7 @@ pub(crate) fn inner_rest(
     } = rest;
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
-    let wh = rules.combat.warhead(h).clone();
+    let wh = rules.combat.warhead(h);
     let mut anim_at = point;
     if invisible {
         // spec: S-0303 claim 21 (an invisible projectile: the nearby point N(P, 32, u mod 256), one raw value after the area damage)
@@ -1843,8 +1841,8 @@ pub(crate) fn inner_rest(
     if let Some(name) = explosion_anim(w, h, damage, q, res == DetonationResult::Hit) {
         if res == DetonationResult::Nullified {
             // spec: S-0303 claim 21 (a nullified detonation shows the nullify animation instead)
-            if let Some(n) = rules.combat.general.nullify_anim.clone() {
-                effects::anim(w, &n, anim_at);
+            if let Some(n) = rules.combat.general.nullify_anim.as_deref() {
+                effects::anim(w, n, anim_at);
             }
         } else {
             effects::anim(w, &name, anim_at);
@@ -1855,13 +1853,13 @@ pub(crate) fn inner_rest(
         // spec: S-0303 F6 (N = R(Y, X − 1))
         let n = w.rng.ranged(wh.min_debris, wh.max_debris - 1, half);
         if wh.debris_types.is_empty() {
-            let list = rules.combat.general.metallic_debris.clone();
+            let list = &rules.combat.general.metallic_debris;
             let c = list.len() as i32;
             for _ in 0..n.max(0) {
                 let k = w.rng.ranged(0, c - 1, half);
-                if let Some(name) = list.get(k as usize).cloned() {
+                if let Some(name) = list.get(k as usize) {
                     // spec: S-0303 F6 (metallic debris at Q raised by 20 leptons)
-                    effects::anim(w, &name, Pos::new(q.x, q.y, q.z + 20));
+                    effects::anim(w, name, Pos::new(q.x, q.y, q.z + 20));
                 }
             }
         } else {
