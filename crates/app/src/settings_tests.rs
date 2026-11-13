@@ -31,7 +31,39 @@ fn custom() -> Settings {
         ice: "stun:stun.example:3478 turn:turn.example:3478".into(),
         tool_tips: false,
         touchpad_scroll: false,
+        maps: MapQuery {
+            search: "Ridge cove".into(),
+            players: 6,
+            size: glasnost_ui::mappick::SizeClass::Large,
+            theater: "New urban".into(),
+            preview: glasnost_ui::mappick::PreviewFilter::With,
+            sort: glasnost_ui::mappick::Sort::Players,
+        },
     }
+}
+
+/// The map picker's search, filters and sort (design: map picker (lead's
+/// request 2026-11-13)) come back from the text; a file written before them
+/// (no `maps.` lines) reads with none; a wrong value is left at its
+/// default; the default writes no line.
+#[test]
+fn the_map_query_is_kept() {
+    let s = custom();
+    let text = s.to_text();
+    assert!(text.contains("maps.search=Ridge cove\n"), "{text}");
+    assert!(text.contains("maps.theater=New urban\n"), "{text}");
+    assert_eq!(Settings::from_text(&text).maps, s.maps);
+    let old = "version=1\nsound=40\nscale=125\ntool_tips=0\nrelay=ws://a/\n";
+    let read = Settings::from_text(old);
+    assert!(read.maps.is_default());
+    assert_eq!(read.sound, 40);
+    assert!(!Settings::default().to_text().contains("maps."));
+    let wrong = Settings::from_text(
+        "maps.players=lots\nmaps.sort=sideways\nmaps.size=Small\nmaps.unknown=1\n",
+    );
+    assert_eq!(wrong.maps.players, 0);
+    assert_eq!(wrong.maps.sort, glasnost_ui::mappick::Sort::Listed);
+    assert_eq!(wrong.maps.size, glasnost_ui::mappick::SizeClass::Small);
 }
 
 /// spec: S-0101 Import mapping (a missing saved scroll setting gives 3), S-0213 claim 22

@@ -329,6 +329,9 @@ pub struct Client {
     wheel_carry: Carry,
     /// A touchpad swipe's pixels toward the next icon-strip row.
     wheel_strip: Strip,
+    /// The map picker's decoded previews (design: map picker (lead's
+    /// request 2026-11-13)).
+    previews: maps::Previews,
 }
 
 impl Client {
@@ -403,6 +406,7 @@ impl Client {
             touches: Touches::new(),
             wheel_carry: Carry::default(),
             wheel_strip: Strip::default(),
+            previews: maps::Previews::default(),
         }
     }
 
@@ -435,6 +439,7 @@ impl Client {
         if let Some(text) = store.read() {
             self.settings = Settings::from_text(&text);
         }
+        self.shell.picker.query = self.settings.maps.clone();
         self.store = Some(store);
         self.apply_settings();
         if !self.settings.relay.is_empty() {
@@ -799,7 +804,9 @@ impl Client {
     /// A mouse-wheel event with the sign of its vertical delta (S-0411
     /// claim 18).
     pub fn wheel(&mut self, delta: i32) {
-        if self.shell.screen == Screen::Game
+        if self.picker_scrolls() {
+            self.picker_wheel(delta);
+        } else if self.shell.screen == Screen::Game
             && let Some(s) = self.session.as_mut()
         {
             s.wheel(delta);
@@ -833,6 +840,11 @@ impl Client {
     /// with the setting on.
     pub fn pixel_wheel(&mut self, d: (f64, f64)) {
         let (dx, dy) = self.wheel_carry.take(d);
+        if self.picker_scrolls() {
+            let rows = self.wheel_strip.add(dy, self.picker_pitch());
+            self.picker_rows(rows);
+            return;
+        }
         if self.shell.screen != Screen::Game {
             return;
         }
@@ -884,6 +896,10 @@ impl Client {
                 },
                 s.strip_pitch(),
             ),
+            // design: map picker (lead's request 2026-11-13): a drag on the open picker scrolls its list a row per row height; a tap still clicks
+            (Screen::Setup, _) if self.shell.picker.open => {
+                (touch::Region::Bar, self.picker_pitch())
+            }
             _ => (touch::Region::Other, 1),
         };
         match self.touches.event(phase, id, p, now_ms, region, pitch) {
@@ -894,6 +910,7 @@ impl Client {
                     s.pan(d);
                 }
             }
+            Some(Gesture::Rows(n)) if self.picker_scrolls() => self.picker_rows(n),
             Some(Gesture::Rows(n)) => self.wheel_rows(n),
             Some(Gesture::Click(b, at)) => {
                 self.pointer_moved(at);
@@ -1022,23 +1039,16 @@ impl Client {
         match rules {
             Some(r) => {
                 let e = self.shell.menu(hit, &r);
+                if hit == MenuHit::Skirmish {
+                    // A kept search and filters may leave out the map chosen.
+                    self.refilter_maps();
+                }
                 self.event(e);
             }
             None if hit == MenuHit::Install => self.pick_install = true,
             None if hit == MenuHit::Quit => self.quit = true,
             None => {}
         }
-    }
-
-    /// A setup-screen control pressed (a click or the keyboard).
-    fn setup_press(&mut self, hit: SetupHit) {
-        let Some(i) = self.install.as_ref() else {
-            return;
-        };
-        let rules = i.setup.clone();
-        let maps: Vec<_> = i.maps.iter().map(|(_, m)| m.clone()).collect();
-        let e = self.shell.setup(hit, &rules, &maps);
-        self.event(e);
     }
 
     /// The end screen's control pressed.
@@ -1095,6 +1105,9 @@ impl Client {
         // Text fields and the chat take their keys first; a letter typed
         // into one is no command.
         if down && self.net_key(k) {
+            return;
+        }
+        if down && self.picker_key(k) {
             return;
         }
         if self.shell.screen == Screen::Settings {
@@ -1250,7 +1263,9 @@ impl Client {
                 }
             }
             Screen::Setup => {
-                if let Some(hit) = self.setup_focus.nav(&self.setup_targets, nav) {
+                let hit = self.setup_focus.nav(&self.setup_targets, nav);
+                self.picker_focus_moved();
+                if let Some(hit) = hit {
                     self.setup_press(hit);
                 }
             }
@@ -1340,6 +1355,8 @@ impl Client {
         self.clock = now_ms;
         self.net_pump(now_ms);
         self.screen_music(now_ms);
+        // design: map picker (lead's request 2026-11-13): the chosen map's preview is decoded here, not while a frame is drawn
+        self.decode_preview();
         if self.shell.screen != Screen::Game {
             return;
         }
@@ -1496,20 +1513,7 @@ impl Client {
                 }
                 d
             }
-            Screen::Setup => match (self.shell.setup.as_ref(), self.install.as_ref()) {
-                (Some(setup), Some(i)) => {
-                    let maps: Vec<_> = i.maps.iter().map(|(_, m)| m.clone()).collect();
-                    let rules = self.shown_setup_rules(&i.setup);
-                    let (mut d, t) = setup.view(size, &rules, &maps, hover);
-                    self.setup_focus.mark(&mut d, &t);
-                    if self.busy {
-                        busy_veil(&mut d, size, &self.status);
-                    }
-                    self.setup_targets = t;
-                    d
-                }
-                _ => DrawList::new(),
-            },
+            Screen::Setup => self.setup_frame(size, hover, &mut changed),
             Screen::Game => {
                 // The notices over the battlefield, in logical pixels.
                 let mut overlay = DrawList::new();
@@ -1570,6 +1574,7 @@ impl Client {
         self.painter.dirty = true;
         self.painter.atlas.touch();
         self.radar_tick = -1;
+        self.previews.forget_upload();
     }
 
     /// Gives the painter an atlas of `side` × `side`, the device's sprite
@@ -1703,6 +1708,10 @@ mod net;
 #[path = "client_settings.rs"]
 mod settings_screen;
 
+#[path = "client_maps.rs"]
+mod maps;
+pub use maps::PREVIEW_IMAGE;
+
 pub use net::{BUILD, PairReport, test_build};
 
 #[cfg(test)]
@@ -1716,6 +1725,10 @@ mod net_tests;
 #[cfg(test)]
 #[path = "client_access_tests.rs"]
 mod access_tests;
+
+#[cfg(test)]
+#[path = "client_maps_tests.rs"]
+mod maps_tests;
 
 #[cfg(test)]
 #[path = "client_music_tests.rs"]

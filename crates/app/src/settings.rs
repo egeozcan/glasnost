@@ -9,6 +9,8 @@
 
 use std::path::PathBuf;
 
+use glasnost_ui::mappick::MapQuery;
+
 /// The format version this build writes. Version 1 holds every field below;
 /// a later version may add fields, which older builds ignore.
 // nocite: our own client setting (storage format)
@@ -221,6 +223,10 @@ pub struct Settings {
     /// of any kind steps the strip one row, as before. A touch screen's
     /// drags and taps work either way.
     pub touchpad_scroll: bool,
+    /// The skirmish map picker's search, filters and sort (design: map
+    /// picker (lead's request 2026-11-13)), kept as `maps.<key>=` lines; a
+    /// file without them has none.
+    pub maps: MapQuery,
 }
 
 /// A network game a client can rejoin after its link or its process went
@@ -301,6 +307,8 @@ impl Default for Settings {
             ice: String::new(),
             // design: touch and touchpad scrolling (lead's request 2026-11-10): on by default
             touchpad_scroll: true,
+            // design: map picker (lead's request 2026-11-13): no search or filter, the install's order
+            maps: MapQuery::default(),
         }
     }
 }
@@ -345,6 +353,12 @@ impl Settings {
         }
         if !self.touchpad_scroll {
             s += "touchpad=0\n";
+        }
+        // design: map picker (lead's request 2026-11-13): written only when something is set
+        if !self.maps.is_default() {
+            for (k, v) in self.maps.kept() {
+                s += &format!("maps.{k}={v}\n");
+            }
         }
         s
     }
@@ -413,7 +427,9 @@ impl Settings {
                         .to_owned();
                 }
                 other => {
-                    if let Some(name) = other.strip_prefix("key.")
+                    if let Some(name) = other.strip_prefix("maps.") {
+                        s.maps.keep(name, v);
+                    } else if let Some(name) = other.strip_prefix("key.")
                         && let Some(a) = ACTIONS.iter().copied().find(|a| a.name() == name)
                         && let Some(c) = v.trim().chars().next()
                     {

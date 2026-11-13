@@ -106,7 +106,7 @@ pub const ROWS: usize = 20;
 
 /// The height of a list row.
 // design: map picker (lead's request 2026-11-13)
-const ROW_H: i32 = 16;
+pub const ROW_H: i32 = 16;
 
 /// The search, the filters and the sort.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

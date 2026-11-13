@@ -52,6 +52,7 @@ fn synthetic_install() -> Install {
             },
         )],
         map_hashes: vec!["map-synthetic-two".into()],
+        map_info: Vec::new(),
         rules_hash: "rules-synthetic".into(),
         names: Default::default(),
         sounds: None,
@@ -390,6 +391,13 @@ fn state_hash_is_the_same_under_any_settings() {
                 tool_tips: false,
                 // design: touch and touchpad scrolling (lead's request 2026-11-10): no setting reaches the hash
                 touchpad_scroll: false,
+                // design: map picker (lead's request 2026-11-13): no setting reaches the hash
+                maps: glasnost_ui::mappick::MapQuery {
+                    search: "ridge".into(),
+                    players: 4,
+                    sort: glasnost_ui::mappick::Sort::Name,
+                    ..Default::default()
+                },
             };
             c.settings_changed();
         }

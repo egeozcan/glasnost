@@ -1150,6 +1150,7 @@ pub mod synthetic {
                 },
             )],
             map_hashes: vec![MAP_HASH.into()],
+            map_info: Vec::new(),
             rules_hash: fixture::rules().hash.clone(),
             names: Default::default(),
             sounds: None,

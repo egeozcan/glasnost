@@ -9,10 +9,13 @@ use glasnost_audio::bank::{self, SoundBank};
 use glasnost_audio::music_files::InstallMusic;
 use glasnost_audio::names::SoundNames;
 use glasnost_convert::find::Listing;
+use glasnost_convert::map::PreviewSource;
 use glasnost_ini::Document;
+use glasnost_map::Theater;
 use glasnost_rules::schema::Ruleset;
 use glasnost_sim::rules::SimRules;
 use glasnost_ui::draw::Rgba;
+use glasnost_ui::mappick::{MapFacts, Marks};
 use glasnost_ui::setup::{MapEntry, SetupRules};
 use glasnost_vfs::Vfs;
 
@@ -27,6 +30,9 @@ pub struct Install {
     /// Each offered map's content hash (`session::content_hash`), in the
     /// order of `maps`: a network room names its map by it.
     pub map_hashes: Vec<String>,
+    /// What the map picker knows of each offered map, in the order of
+    /// `maps` (empty: nothing known).
+    pub map_info: Vec<MapInfo>,
     /// The base rules' hash (`sim_rules_hash`), which a network room's
     /// members must share.
     pub rules_hash: String,
@@ -151,7 +157,70 @@ pub fn setup_rules(r: &Ruleset, sim: &SimRules) -> SetupRules {
 /// The lobby's player limit of a map file: its start waypoints among 0 …
 /// 7 (S-0009 claim 23).
 pub fn start_count(bytes: &[u8]) -> u32 {
-    let doc = Document::parse(bytes, Default::default(), &mut Vec::new());
+    start_count_of(&Document::parse(bytes, Default::default(), &mut Vec::new()))
+}
+
+/// What the map picker knows of an offered map besides its entry (design:
+/// map picker (lead's request 2026-11-13)): read once when the program
+/// starts, with the preview kept packed until it is shown.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MapInfo {
+    /// The size, theater and whether a preview is embedded.
+    pub facts: MapFacts,
+    /// The embedded preview, still packed (S-0009 claim 24, S-0012).
+    pub preview: Option<PreviewSource>,
+    /// The preview's start markers (S-0009 claim 25), when they are drawn
+    /// from the header block (quirk `preview_markers_from_header`).
+    pub marks: Option<Marks>,
+}
+
+/// The theater's name as the map picker shows it.
+// design: map picker (lead's request 2026-11-13)
+pub fn theater_label(t: Theater) -> &'static str {
+    match t {
+        Theater::Temperate => "Temperate",
+        Theater::Snow => "Snow",
+        Theater::Urban => "Urban",
+        Theater::Desert => "Desert",
+        Theater::NewUrban => "New urban",
+        Theater::Lunar => "Lunar",
+    }
+}
+
+/// The map picker's facts of a parsed map file.
+pub fn map_info_of(doc: &Document) -> MapInfo {
+    let quirks = glasnost_convert::map::MapQuirks::default();
+    let f = glasnost_convert::map::list_facts(doc, quirks);
+    // spec: S-0009 claim 25 (the numbered markers come from the header block, quirks.preview_markers_from_header; with the switch off, where they go is not specified, so none are drawn)
+    let marks = quirks.preview_markers_from_header.then(|| Marks {
+        count: f.header.count,
+        origin: f.header.origin,
+        extent: f.header.extent,
+        // spec: S-0009 Import mapping ([Header] WaypointN: pairs 1 … 8 default to (0,0); an unreadable component keeps the value in force, 0)
+        pairs: f
+            .header
+            .pairs
+            .iter()
+            .take(8)
+            .map(|p| {
+                let [x, y] = p.unwrap_or([None, None]);
+                (x.unwrap_or(0), y.unwrap_or(0))
+            })
+            .collect(),
+    });
+    MapInfo {
+        facts: MapFacts {
+            size: f.size,
+            theater: theater_label(f.theater).to_owned(),
+            preview: f.preview.is_some(),
+        },
+        preview: f.preview,
+        marks,
+    }
+}
+
+/// [`start_count`] of a parsed map file.
+pub fn start_count_of(doc: &Document) -> u32 {
     let zero_counts = glasnost_convert::map::MapQuirks::default().lobby_counts_zero_waypoint;
     (0..8u8)
         .filter(|k| {
@@ -199,6 +268,7 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
     }
     let mut maps = Vec::new();
     let mut map_hashes = Vec::new();
+    let mut map_info = Vec::new();
     for l in glasnost_convert::find::find_maps(vfs).await {
         if !l.multiplayer {
             continue;
@@ -206,11 +276,13 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         let Ok(bytes) = vfs.read(&l.file).await else {
             continue;
         };
-        let starts = start_count(&bytes);
+        let doc = Document::parse(&bytes, Default::default(), &mut Vec::new());
+        let starts = start_count_of(&doc);
         if starts >= 2 {
             let label = l.name.clone();
             maps.push((l, MapEntry { label, starts }));
             map_hashes.push(super::session::content_hash(&bytes));
+            map_info.push(map_info_of(&doc));
         }
     }
     if maps.is_empty() {
@@ -252,6 +324,7 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         setup,
         maps,
         map_hashes,
+        map_info,
         rules_hash: resolved.sim_rules_hash.clone(),
         names,
         sounds,
@@ -274,6 +347,71 @@ mod tests {
         let text = b"[Waypoints]\n0=1000\n1=2000\n2=-1\n5=3000\n8=4000\n";
         assert_eq!(start_count(text), 3);
         assert_eq!(start_count(b"[Basic]\nName=x\n"), 0);
+        let doc = Document::parse(text, Default::default(), &mut Vec::new());
+        assert_eq!(start_count_of(&doc), 3);
+    }
+
+    fn parse(text: &str) -> Document {
+        Document::parse(text.as_bytes(), Default::default(), &mut Vec::new())
+    }
+
+    /// The picker's facts of an invented map with a preview and a header
+    /// block (S-0009 claims 24, 25 and 30).
+    #[test]
+    fn map_info_reads_size_theater_preview_and_markers() {
+        let text = glasnost_convert::map::synth::MapText {
+            ini: "[Map]\nSize=0,0,70,40\nTheater=SNOW\n[Preview]\nSize=0,0,2,1\n\
+                  [Header]\nNumberStartingPoints=2\nStartX=1\nStartY=2\nWidth=30\nHeight=20\n\
+                  Waypoint1=5,6\nWaypoint2=x,9\nWaypoint3=7,7\n"
+                .into(),
+            preview: Some(vec![1, 2, 3, 4, 5, 6]),
+            ..Default::default()
+        }
+        .text();
+        let info = map_info_of(&parse(&text));
+        assert_eq!(
+            info.facts,
+            MapFacts {
+                size: (70, 40),
+                theater: "Snow".into(),
+                preview: true,
+            }
+        );
+        let p = info.preview.as_ref().expect("a preview").decode();
+        assert_eq!((p.width, p.height, p.rgb), (2, 1, vec![1, 2, 3, 4, 5, 6]));
+        // spec: S-0009 claim 25 and Import mapping (pairs 1 … N_h; a pair that does not read keeps the value in force, (0,0))
+        assert_eq!(
+            info.marks,
+            Some(Marks {
+                count: 2,
+                origin: (1, 2),
+                extent: (30, 20),
+                pairs: vec![(5, 6), (0, 0)],
+            })
+        );
+    }
+
+    /// A map without a preview block, or with an invalid preview size, has
+    /// no preview; without a header block its markers read as −1 (none drawn,
+    /// S-0009 claim 25); an absent theater is temperate.
+    #[test]
+    fn map_info_without_a_preview_or_header() {
+        let info = map_info_of(&parse("[Map]\nSize=0,0,50,60\n[Preview]\nSize=0,0,4,4\n"));
+        assert!(!info.facts.preview && info.preview.is_none());
+        assert_eq!(info.facts.theater, "Temperate");
+        let m = info.marks.expect("the header is read");
+        assert_eq!((m.count, m.extent), (-1, (-1, -1)));
+        assert!(
+            glasnost_ui::mappick::marker_corners(&m, glasnost_ui::geom::Rect::new(0, 0, 9, 9))
+                .is_empty()
+        );
+        let text = glasnost_convert::map::synth::MapText {
+            ini: "[Preview]\nSize=0,0,0,4\n".into(),
+            preview: Some(vec![9; 12]),
+            ..Default::default()
+        }
+        .text();
+        assert!(!map_info_of(&parse(&text)).facts.preview);
     }
 
     /// spec: S-0103 claims 11 and 12 (the setup swatches are the fixed slot colours after the 16-bit step: flat, eight slots, independent of the colour definitions) (Q-0280)
