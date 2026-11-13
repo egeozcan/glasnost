@@ -32,7 +32,9 @@
 //!   vehicle falls there (claims 12 and 17). A vehicle pulled all the way
 //!   is dropped unhurt on a free cell beside the lifter (claim 8), so a
 //!   vehicle within [`LET_GO`] leptons of its lifter is let go the same way
-//!   before that: it lands by the lifter, inside the base's guns;
+//!   before that, when it hangs over open land with nothing else on the
+//!   cell (claims 16 and 17): it lands by the lifter, inside the base's
+//!   guns;
 //! - **leaves a holding lifter alone.** No other part of the brain gives a
 //!   lifter an order while it grips a unit, because any accepted
 //!   destination would let the vehicle go over clear ground
@@ -201,7 +203,7 @@ impl Special {
             let Some(lo) = w.obj(l) else { continue };
             let at = lo.pos.cell();
             if let Some(x) = lift::gripped_unit(w, l) {
-                if drop_here(w, house, x) || close(w, l, x) {
+                if drop_here(w, house, x) || (close(w, l, x) && clear_below(w, x)) {
                     out.push(Order::Behaviour {
                         actor: l,
                         behaviour: Behaviour::Move,
@@ -274,6 +276,30 @@ fn close(w: &World, l: ObjectId, x: ObjectId) -> bool {
         i64::from(xo.pos.y - lo.pos.y),
     );
     dx * dx + dy * dy <= LET_GO * LET_GO
+}
+
+/// Whether held unit `x` hangs over open land with nothing else on the
+/// cell, where a vehicle let go lands unhurt and harms nothing: the first
+/// other object on the cell decides the fall, an infantry unit there is
+/// removed, and a blocked or water cell wrecks or sinks the vehicle
+/// (S-0607 claims 16 and 17).
+// design: own AI (#24): the early let-go by the lifter read only the distance, and dropped the held vehicle onto the house's own infantry or into water by the lifter
+fn clear_below(w: &World, x: ObjectId) -> bool {
+    let Some(c) = w.obj(x).map(|o| o.pos.cell()) else {
+        return false;
+    };
+    let Some(i) = w.cells.idx(c) else {
+        return false;
+    };
+    // spec: S-0211 Terms (category 0 open)
+    w.cells.category[i] == glasnost_sim::passability::category::OPEN
+        && w.cells
+            .cell(c)
+            .is_some_and(|k| k.land != glasnost_map::terrain::land::WATER)
+        && w.cells
+            .list(c, glasnost_sim::world::Layer::Ground)
+            .iter()
+            .all(|&o| o == x)
 }
 
 /// Whether held unit `x` is high enough over a cell where its fall kills
