@@ -464,6 +464,19 @@ pub struct Live {
     /// The tick's layer moments of S-0102 claim 4 the simulation reported,
     /// in order, until the layers take them.
     layer_moments: Vec<super::layers::Moment>,
+    /// The game tick whose mobile objects [`Live::after_tick`] or
+    /// [`Live::resume`] placed in their layers, until the redraw that
+    /// follows takes it: that redraw evaluates them again only for a game
+    /// at another tick (design: render (#146)).
+    synced: Option<i32>,
+    /// The status extras' object order ([`Live::status_order`]) as the last
+    /// redraw found it, for the status redraws until the next tick, resume
+    /// or redraw: only those change the layers and the types it reads, and
+    /// the game's moves. The game is public, so the order also carries the
+    /// game's tick, object count and next object ID when it was found, and
+    /// an object placed or removed in between finds it again
+    /// (design: render (#139)).
+    kept_status_order: Option<((i32, usize, u32), Vec<ObjectId>)>,
     /// The drawing's quirk switches (S-0102 Edge cases).
     view_quirks: super::quirks::ViewQuirks,
     /// Images and rows the combat drawing added.
@@ -773,6 +786,15 @@ impl anims::Env for AnimEnv<'_> {
     fn switched(&mut self, _name: &[u8]) {
         self.switched = true;
     }
+}
+
+/// The view animation of serial number `serial`. Serial numbers are
+/// unique among the playing animations (they wrap only after 2³²
+/// animations) and a new one is pushed at the end, so the search runs
+/// from the back: the animation just created is the first one looked at
+/// (design: render (#142)).
+fn anim_mut(anims: &mut [LiveAnim], serial: u32) -> Option<&mut LiveAnim> {
+    anims.iter_mut().rev().find(|a| a.serial == serial)
 }
 
 /// The surface anchor of an aircraft's voxel shadow (S-0105 claim 40): the
@@ -1373,6 +1395,8 @@ impl Live {
             ground: GroundLayer::default(),
             layers: super::layers::Layers::default(),
             layer_moments: Vec::new(),
+            synced: None,
+            kept_status_order: None,
             view_quirks: super::quirks::ViewQuirks::default(),
             cache: Cache::default(),
             transients: Vec::new(),
@@ -1593,6 +1617,8 @@ impl Live {
     pub fn after_tick(&mut self) {
         // design: render (#93) (a tick makes the next redraw a new drawn frame)
         self.drawn_lines = None;
+        // design: render (#139)
+        self.kept_status_order = None;
         self.layer_moments = self
             .world
             .effects
@@ -1611,6 +1637,7 @@ impl Live {
         self.laps.slots += self.lap_end(&mut lap);
         self.sync_layers(true);
         self.sync_ground();
+        self.synced = Some(self.world.tick);
         self.laps.layers += self.lap_end(&mut lap);
     }
 
@@ -1653,6 +1680,8 @@ impl Live {
         // design: render (#98) the presentation events of the ticks the drawing did not see are not shown late
         self.world.effects.clear();
         self.drawn_lines = None;
+        // design: render (#139)
+        self.kept_status_order = None;
         self.layer_moments.clear();
         self.transients.clear();
         self.target_lines.clear();
@@ -1682,6 +1711,7 @@ impl Live {
         self.update_slots();
         self.sync_layers(true);
         self.sync_ground();
+        self.synced = Some(self.world.tick);
     }
 
     /// Draws the game's animations in play that the drawing does not show
@@ -1751,7 +1781,7 @@ impl Live {
                     // spec: S-0608 claim 5 (the drain animation is attached to the drainer and follows it)
                     self.counts.anims += 1;
                     self.create_anim(&name, pos, now, None, false);
-                    if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                    if let Some(a) = anim_mut(&mut self.anims, serial) {
                         a.drainer = Some(d);
                     }
                     continue;
@@ -1766,7 +1796,7 @@ impl Live {
                     self.counts.anims += 1;
                     self.create_anim(&name, pos, now, None, false);
                     let house = self.deploying_owner(&String::from_utf8_lossy(&name), pos);
-                    if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                    if let Some(a) = anim_mut(&mut self.anims, serial) {
                         if let (Role::Ordinary, Some(firer)) = (s.role, s.owner) {
                             // spec: S-0301 claim 22 and S-0102 claim 3 (a shot animation attached to its firer: in the ground layer)
                             a.layer = super::slots::Layer::Ground;
@@ -1781,7 +1811,7 @@ impl Live {
                     }
                 }
             }
-            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
                 a.sim = Some(id);
             }
         }
@@ -1806,7 +1836,7 @@ impl Live {
             self.counts.anims += 1;
             let serial = self.anim_serial;
             self.create_anim(&name, pos, now, None, false);
-            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
                 a.walker = Some(id);
             }
         }
@@ -1823,7 +1853,7 @@ impl Live {
             self.counts.anims += 1;
             let serial = self.anim_serial;
             self.create_anim(&name, pos, now, None, false);
-            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
                 a.maker = Some(id);
             }
         }
@@ -1855,11 +1885,17 @@ impl Live {
     /// Newcomers of one tick enter as mobile objects, then animations by
     /// creation, then particles by object number (our order within a tick).
     fn sync_layers(&mut self, tick: bool) {
-        use super::slots::Layer;
         let events_only = self.view_quirks.layer_change_on_events_only;
         let moments = std::mem::take(&mut self.layer_moments);
         self.layers
             .evaluate_mobiles(&self.world, tick, events_only, &moments);
+        self.sync_entrants();
+    }
+
+    /// [`Live::sync_layers`]' animations, particles, projectiles and debris
+    /// pieces.
+    fn sync_entrants(&mut self) {
+        use super::slots::Layer;
         let anims: BTreeMap<u32, Layer> = self.anims.iter().map(|a| (a.serial, a.layer)).collect();
         let particles: BTreeSet<ObjectId> = self
             .world
@@ -1895,26 +1931,26 @@ impl Live {
         for (serial, layer) in anims {
             if layer != Layer::Ground && listed.insert(Entrant::Anim(serial)) {
                 // spec: S-0102 claims 4 and 7 (an animation placed in a layer other than ground becomes its last)
-                self.layers.place(Entrant::Anim(serial), layer);
+                self.layers.place_new(Entrant::Anim(serial), layer);
             }
         }
         for id in particles {
             if listed.insert(Entrant::Particle(id)) {
                 // spec: S-0616 claim 30 and S-0102 claim 3 (a particle enters the air layer when it is made, at its end, and keeps its place until removed)
-                self.layers.place(Entrant::Particle(id), Layer::Air);
+                self.layers.place_new(Entrant::Particle(id), Layer::Air);
             }
         }
         for (id, flat) in projectiles {
             if listed.insert(Entrant::Projectile(id)) {
                 // spec: S-0102 claims 3, 4 and 7 (a projectile is in the air layer, or the surface layer when its image is flat; placed at the layer's end)
                 let layer = if flat { Layer::Surface } else { Layer::Air };
-                self.layers.place(Entrant::Projectile(id), layer);
+                self.layers.place_new(Entrant::Projectile(id), layer);
             }
         }
         for id in pieces {
             if listed.insert(Entrant::Piece(id)) {
                 // spec: S-0102 claims 3, 4 and 7 (a voxel animation is in the air layer; placed at the layer's end)
-                self.layers.place(Entrant::Piece(id), Layer::Air);
+                self.layers.place_new(Entrant::Piece(id), Layer::Air);
             }
         }
     }
@@ -2483,6 +2519,14 @@ impl Live {
         name: &str,
         pos: glasnost_sim::world::Pos,
     ) -> Option<(Vec<u8>, (SimKind, u32))> {
+        // design: render (#142) (no vehicle type has `name` as its deploying animation: no vehicle can be found below, so the game's objects are not walked; read from the rules now, as below)
+        if !self.rules.vehicles.iter().any(|u| {
+            u.deploying_anim
+                .as_deref()
+                .is_some_and(|d| d.eq_ignore_ascii_case(name))
+        }) {
+            return None;
+        }
         let w = &self.world;
         let o = w
             .objects
@@ -2527,7 +2571,7 @@ impl Live {
         self.counts.anims += 1;
         let serial = self.anim_serial;
         self.create_anim(name, pos, now, drawn, false);
-        if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+        if let Some(a) = anim_mut(&mut self.anims, serial) {
             a.owner = Some(trooper);
             // spec: S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
             a.layer = super::slots::Layer::Ground;
@@ -2688,7 +2732,7 @@ impl Live {
         });
         for (serial, house, cell) in colours {
             let light = self.painter.ground_light(cell);
-            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
                 // spec: S-0611 claim 8 (drawn in its owner's colour, including after claim 9's fallback; without an owner its ordinary palette)
                 a.carrier = house.map(|h| (h, light));
             }
@@ -2713,7 +2757,7 @@ impl Live {
             self.counts.anims += 1;
             let serial = self.anim_serial;
             self.create_anim(&name, pos, now, None, false);
-            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
                 a.dominating = Some(id);
             }
         }
@@ -2812,9 +2856,10 @@ impl Live {
             {
                 return true;
             }
-            let before = a.player.name.clone();
+            // design: render (#142) (the playback changes its type's name only in a switch to a follow-up type, which it reports; the entry of an unchanged name is the one it has)
+            env.switched = false;
             let alive = a.player.update(now, &mut env, &q);
-            if alive && a.player.name != before {
+            if alive && env.switched {
                 // spec: S-0109 claim 15 (the same animation continues as the follow-up type)
                 a.entry = env.lookup(&a.player.name).0;
             }
@@ -2898,7 +2943,7 @@ impl Live {
             {
                 let serial = self.anim_serial;
                 self.attach_parachute(*trooper, *pos, now, *delay);
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.sim = *anim;
                 }
             }
@@ -2915,7 +2960,7 @@ impl Live {
                 let serial = self.anim_serial;
                 // spec: S-0301 claim 22 and S-0109 claim 29 (created in the firer's turn: first update in the creation tick; no loop delay, repeat factor 1, no reverse request)
                 let sprite = self.create_anim(&name_bytes(name), *pos, now, *delay, false);
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     if attached.is_some() {
                         // spec: S-0301 claim 22 and S-0102 claim 3 (attached to a firer that is not a building: in the ground layer, even for an aircraft in flight)
                         a.layer = super::slots::Layer::Ground;
@@ -2951,7 +2996,7 @@ impl Live {
                 // in the creation tick; the lost update of claim 29 needs playback in the simulation)
                 let sprite = self.create_anim(&name_bytes(name), *pos, now, *delay, *reverse);
                 if let Some((house, ty)) = self.deploying_owner(name, *pos)
-                    && let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial)
+                    && let Some(a) = anim_mut(&mut self.anims, serial)
                 {
                     // spec: S-0103 claim 8 row 3 (a unit's deploy or undeploy animation is drawn with
                     // its object: the owner's house-colour palette, at brightness 1000); claim 16 (its
@@ -2960,12 +3005,12 @@ impl Live {
                     a.named = Some(ty);
                 }
                 if z_adjust.is_some()
-                    && let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial)
+                    && let Some(a) = anim_mut(&mut self.anims, serial)
                 {
                     // spec: S-0102 claim 13 and S-0506 claim 19 (its creator replaces the animation's depth adjustment: −15 for a rocket detonation's explosion)
                     a.z_adjust = *z_adjust;
                 }
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.sim = *id;
                 }
                 if !sprite && self.debug_markers {
@@ -2988,7 +3033,7 @@ impl Live {
                 self.counts.anims += 1;
                 let serial = self.anim_serial;
                 self.create_anim(&name_bytes(name), *pos, now, None, false);
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.walker = Some(*id);
                 }
             }
@@ -3005,7 +3050,7 @@ impl Live {
                 self.counts.anims += 1;
                 let serial = self.anim_serial;
                 self.create_anim(&name_bytes(name), *pos, now, None, false);
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.maker = Some(*id);
                 }
             }
@@ -3027,7 +3072,7 @@ impl Live {
                 let serial = self.anim_serial;
                 let pos = o.pos;
                 self.create_anim(&name_bytes(name), pos, now, *delay, false);
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.drainer = Some(*drainer);
                 }
             }
@@ -3600,8 +3645,15 @@ impl Live {
     pub fn redraw(&mut self, inputs: &Inputs, scene: &mut Scene) {
         // design: render (#145) (the benchmark's parts of the scene update)
         let mut lap = self.lap_start();
+        // design: render (#139) (the redraw finds the status order afresh)
+        self.kept_status_order = None;
         self.learn_types(inputs);
-        self.sync_layers(false);
+        // design: render (#146) (the mobile objects the tick's sync placed are not evaluated again for the game at that tick: objects enter and leave the map only in a tick, and orders wait for the next)
+        if self.synced.take() == Some(self.world.tick) {
+            self.sync_entrants();
+        } else {
+            self.sync_layers(false);
+        }
         if !self.view_quirks.unsorted_upper_layers {
             // spec: S-0102 Edge cases (quirks.unsorted_upper_layers off: the other layers are sorted like the ground layer, by the keys of claim 5)
             let keys = self.upper_keys();
@@ -4923,16 +4975,28 @@ impl Live {
             red: r.general.condition_red,
             mode: r.mode,
         };
-        let shows: Vec<(ObjectId, bool)> = self
+        // design: render (#139) (a map for the per-object lookup; the first entry of an object wins, as the scan found it)
+        let mut shows: BTreeMap<ObjectId, bool> = BTreeMap::new();
+        for (id, selected) in self
             .marked
             .iter()
             .map(|&id| (id, true))
             .chain(self.hovered.map(|h| (h, false)))
-            .collect();
+        {
+            shows.entry(id).or_insert(selected);
+        }
         let mut items = Vec::new();
         // spec: S-0111 claim 17 and State and ordering (each object's status extras, the number included, are complete before the next object's begin, in the object order of S-0102 claims 1, 6 and 7)
-        let order = self.status_order(inputs);
-        for id in order {
+        let stamp = (
+            self.world.tick,
+            self.world.objects.len(),
+            self.world.next_id,
+        );
+        let order = match self.kept_status_order.take() {
+            Some((kept, order)) if kept == stamp => order,
+            _ => self.status_order(inputs),
+        };
+        for &id in &order {
             let Some(o) = self.world.obj(id) else {
                 continue;
             };
@@ -5018,7 +5082,7 @@ impl Live {
                     }
                 }
             }
-            let bar = shows.iter().find(|(id, _)| *id == o.id).map(|(_, s)| *s);
+            let bar = shows.get(&o.id).copied();
             // spec: S-0111 claim 18 (no insignia while the unit appears disguised to the local player's house, S-0516 claims 35–36, even when drawn as its real type)
             let disguised = self.viewer.is_some()
                 && glasnost_sim::cloak::disguise::appears_disguised(&self.world, o.id, self.viewer);
@@ -5128,6 +5192,7 @@ impl Live {
                 ));
             }
         }
+        self.kept_status_order = Some((stamp, order));
         scene.items.extend(items);
     }
 

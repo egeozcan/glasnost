@@ -8632,3 +8632,498 @@ fn a_live_building_drawn_again_follows_its_cells_level() {
         assert_ne!(now, flat, "the change shows");
     });
 }
+
+// ---------------------------------------------------------------------------
+// Each voxel type's fixed drawing fields are read once (#133)
+
+/// Runs `f` with the inputs of a map with three voxel types: CARX, a
+/// vehicle with a turret drawn from the synthetic two-limb model; VANX, a
+/// vehicle without one drawn from its first limb alone; and JETX, an
+/// aircraft drawn from the one-limb model, whose registration index is
+/// CARX's. Every name and number is made up.
+fn with_voxel_types(f: impl FnOnce(&Inputs)) {
+    use glasnost_convert::art::TypeArt;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let rules = format!(
+        "{}[CARX]\nTurret=yes\n",
+        RULES.replace(
+            "[VehicleTypes]\n1=CARX\n",
+            "[VehicleTypes]\n1=CARX\n2=VANX\n[AircraftTypes]\n1=JETX\n",
+        )
+    );
+    let (mut import, catalogue, mut assets) = context_with(&rules);
+    let voxels = |parts: &[(&str, &[u8])]| TypeArt {
+        voxels: parts
+            .iter()
+            .map(|(role, file)| (role.to_string(), file.to_vec()))
+            .collect(),
+        ..Default::default()
+    };
+    import.arts.insert(
+        (Kind::Vehicles, 0),
+        voxels(&[("body", b"hull.vxl"), ("turret", b"hull.vxl")]),
+    );
+    import
+        .arts
+        .insert((Kind::Vehicles, 1), voxels(&[("body", b"lean.vxl")]));
+    import
+        .arts
+        .insert((Kind::Aircraft, 0), voxels(&[("body", b"lean.vxl")]));
+    let full = synthetic_model();
+    let mut lean = synthetic_model();
+    lean.limbs.truncate(1);
+    assets.insert(b"hull.vxl", VxlWriter { model: &full }.write());
+    assets.insert(b"lean.vxl", VxlWriter { model: &lean }.write());
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    f(&Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    });
+}
+
+/// Type `idx` of `kind` as object `n`, standing on the map.
+fn voxel_mobile(kind: Kind, idx: usize, n: u32) -> Mobile {
+    Mobile {
+        kind,
+        idx,
+        owner: b"Neutral".to_vec(),
+        pos: (3 * 256 + 128, (3 + n as i32) * 256 + 128, 0),
+        body: 8192,
+        turret: 24576,
+        elevation: 16384,
+        anim: 0,
+        infantry: None,
+        object: sim_code(ObjectId(5 + n)),
+        harvesting: None,
+        shadow: None,
+        alternative: false,
+        attitude: Attitude::None,
+        disabled: false,
+        above: 0,
+        protection: None,
+        generic_shadow: None,
+        berserk: None,
+        turret_index: None,
+        walk: Default::default(),
+        deck: false,
+    }
+}
+
+/// design: render (#133): voxel types that share a registration index (a
+/// vehicle and an aircraft) or a painter draw, in every drawing of the
+/// painter, as each type drawn alone by a fresh painter; and a drawing that
+/// takes every image from the painter's caches keeps its per-drawing note.
+#[test]
+fn voxel_types_drawn_together_draw_as_each_alone() {
+    with_voxel_types(|inputs| {
+        let all = [
+            voxel_mobile(Kind::Vehicles, 0, 0),
+            voxel_mobile(Kind::Vehicles, 1, 1),
+            voxel_mobile(Kind::Aircraft, 0, 2),
+        ];
+        let (built, mut painter) = build_parts(inputs, true);
+        let mut scene = built.scene;
+        for round in 0..2 {
+            let (entries, notes) = painter.mobiles(inputs, &mut scene, &all);
+            for (m, entry) in all.iter().zip(&entries) {
+                let (built, mut fresh) = build_parts(inputs, true);
+                let mut fresh_scene = built.scene;
+                let (expect, _) = fresh.mobiles(inputs, &mut fresh_scene, std::slice::from_ref(m));
+                let now = drawn_look(&scene, &entry.items);
+                assert!(!now.is_empty(), "round {round}: {:?} draws", m.kind);
+                assert_eq!(
+                    now,
+                    drawn_look(&fresh_scene, &expect[0].items),
+                    "round {round}: {:?} {} as drawn alone",
+                    m.kind,
+                    m.idx
+                );
+            }
+            assert!(
+                notes.iter().any(|n| n.contains("voxel shadow raised")),
+                "round {round}: {notes:?}"
+            );
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// An owner's colour follows the person's options (#135)
+
+/// design: render (#135): a vehicle drawn again after the person switched
+/// the colour-blind house colours on (M8 step C3) takes its owner's new
+/// colour definition, as a painter that only saw the new options draws it;
+/// so does one drawn after its house's lobby slot changed (S-0103 claim
+/// 10).
+#[test]
+fn a_mobile_drawn_again_follows_the_owner_colour_options() {
+    with_voxel_types(|inputs| {
+        let mut car = voxel_mobile(Kind::Vehicles, 0, 0);
+        car.owner = b"Americans".to_vec();
+        let car = std::slice::from_ref(&car);
+        let slot = |s: u8, colour_blind: bool| Options {
+            slots: vec![(b"Americans".to_vec(), s)],
+            colour_blind,
+            ..inputs.options.clone()
+        };
+        let plain = slot(1, false);
+        let changes = [slot(1, true), slot(5, true)];
+        let (built, mut painter) = build_parts(inputs, true);
+        let mut scene = built.scene;
+        let at = |o| Inputs {
+            options: o,
+            ..*inputs
+        };
+        let (drawn, _) = painter.mobiles(&at(&plain), &mut scene, car);
+        let mut before = drawn_look(&scene, &drawn[0].items);
+        for changed in &changes {
+            let (now, _) = painter.mobiles(&at(changed), &mut scene, car);
+            let now = drawn_look(&scene, &now[0].items);
+            let (built, mut fresh) = build_parts(inputs, true);
+            let mut fresh_scene = built.scene;
+            let (expect, _) = fresh.mobiles(&at(changed), &mut fresh_scene, car);
+            assert_eq!(
+                now,
+                drawn_look(&fresh_scene, &expect[0].items),
+                "as drawn afresh"
+            );
+            assert_ne!(now, before, "the change shows");
+            before = now;
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// The layers synced after a tick are not synced again at its redraw (#146)
+
+/// design: render (#146): a move marker made after the tick's layers were
+/// synced, before the redraw (S-0214 claim 30), enters the air layer at
+/// the redraw (S-0102 claims 3, 4 and 7).
+#[test]
+fn a_move_marker_after_the_tick_enters_its_layer_at_the_redraw() {
+    use super::slots::Layer;
+    use glasnost_sim::world::Pos;
+    let (import, catalogue, assets) = anim_context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (
+            testkit::new_game(5),
+            testkit::rules(),
+            testkit::setup(5),
+            Vec::new(),
+        ),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    let anims = |live: &Live| {
+        live.layer_list(Layer::Air)
+            .iter()
+            .filter(|e| matches!(e, Entrant::Anim(_)))
+            .count()
+    };
+    live.step();
+    assert_eq!(anims(&live), 0);
+    live.move_marker(Pos {
+        x: 5 * 256 + 128,
+        y: 5 * 256 + 128,
+        z: 0,
+    });
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(anims(&live), 1, "the marker's animation is in the air list");
+    assert_eq!(live.counts.anims_drawn, 1);
+}
+
+/// design: render (#146): a game that moved on by a tick after the layers
+/// were synced (the redraw reads the game it is handed) has its new
+/// objects placed at the redraw (S-0102 claims 3 and 4).
+#[test]
+fn a_game_moved_on_after_the_sync_is_placed_at_the_redraw() {
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, _, _) = two_carts(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.step();
+    let mut moved = live.world.clone();
+    let id = testkit::spawn(
+        &mut moved,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 3, 3),
+        0,
+    );
+    testkit::run(&mut moved, 1);
+    live.world = moved;
+    assert_eq!(live.layer_of(id), None);
+    live.redraw(&inputs, &mut scene);
+    assert!(live.layer_of(id).is_some(), "the new cart is placed");
+}
+
+// ---------------------------------------------------------------------------
+// The status extras redrawn between ticks follow the game (#139)
+
+/// design: render (#139): the status extras are drawn between ticks (a
+/// selection change), a cart joins the game, `change` brings the drawing
+/// up to it, and the selected new cart's status extras are drawn at the
+/// next status redraw (S-0111 claims 3 and 17).
+fn new_cart_status_follows(change: impl Fn(&mut Live, &Inputs, &mut Scene)) {
+    use glasnost_render::scene::Group;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, earlier, _) = two_carts(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let status_of = |scene: &Scene, id: ObjectId| {
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
+            .count()
+    };
+    live.redraw(&inputs, &mut scene);
+    live.set_marks(&[earlier], None);
+    live.redraw_status(&inputs, &mut scene);
+    assert!(status_of(&scene, earlier) > 0, "the selected cart's bar");
+    let id = testkit::spawn(
+        &mut live.world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 3, 3),
+        0,
+    );
+    change(&mut live, &inputs, &mut scene);
+    live.set_marks(&[earlier, id], None);
+    live.redraw_status(&inputs, &mut scene);
+    assert!(status_of(&scene, id) > 0, "the new cart's bar");
+    assert!(status_of(&scene, earlier) > 0);
+}
+
+/// design: render (#139): brought up to the game by the tick's update.
+#[test]
+fn status_extras_follow_a_tick() {
+    new_cart_status_follows(|live, _, _| live.after_tick());
+}
+
+/// design: render (#139): brought up to the game by a redraw.
+#[test]
+fn status_extras_follow_a_redraw() {
+    new_cart_status_follows(|live, inputs, scene| live.redraw(inputs, scene));
+}
+
+/// design: render (#139): brought up to a game put in place (#98).
+#[test]
+fn status_extras_follow_a_resume() {
+    new_cart_status_follows(|live, _, _| live.resume());
+}
+
+/// design: render (#139): the status extras are drawn between ticks (a
+/// selection change) while a tower is off the map (an object of no list:
+/// last in the status order), the tower comes onto it at the same tick
+/// (the game's object count and next object ID stay the same, so only
+/// `change` brings the status order up to it), and the selected tower's
+/// status extras are drawn at the next status redraw before those of the
+/// cart behind it (S-0111 claims 8 and 17, S-0102 claim 6).
+fn entering_tower_status_follows(change: impl Fn(&mut Live, &Inputs, &mut Scene)) {
+    use glasnost_render::scene::Group;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, earlier, _) = two_carts(&assets);
+    let tower = testkit::spawn(
+        &mut live.world,
+        SimKind::Building,
+        "TOWER",
+        0,
+        testkit::mid(24, -4, -4),
+        0,
+    );
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let first_status = |scene: &Scene, id: ObjectId| {
+        scene
+            .items
+            .iter()
+            .position(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
+    };
+    live.world.obj_mut(tower).unwrap().on_map = false;
+    live.redraw(&inputs, &mut scene);
+    live.set_marks(&[earlier], None);
+    live.redraw_status(&inputs, &mut scene);
+    assert!(
+        first_status(&scene, earlier).is_some(),
+        "the selected cart's bar"
+    );
+    live.world.obj_mut(tower).unwrap().on_map = true;
+    change(&mut live, &inputs, &mut scene);
+    live.set_marks(&[earlier, tower], None);
+    live.redraw_status(&inputs, &mut scene);
+    let (Some(t), Some(c)) = (first_status(&scene, tower), first_status(&scene, earlier)) else {
+        panic!("both selected objects' status extras");
+    };
+    assert!(t < c, "the tower in front of the cart first");
+}
+
+/// design: render (#139): an entering tower, brought up to by the tick's update.
+#[test]
+fn status_extras_follow_a_tower_entering_at_a_tick() {
+    entering_tower_status_follows(|live, _, _| live.after_tick());
+}
+
+/// design: render (#139): an entering tower, brought up to by a redraw.
+#[test]
+fn status_extras_follow_a_tower_entering_at_a_redraw() {
+    entering_tower_status_follows(|live, inputs, scene| live.redraw(inputs, scene));
+}
+
+/// design: render (#139): an entering tower, in a game put in place (#98).
+#[test]
+fn status_extras_follow_a_tower_entering_at_a_resume() {
+    entering_tower_status_follows(|live, _, _| live.resume());
+}
+
+// ---------------------------------------------------------------------------
+// A view animation's follow-up type (#142)
+
+/// spec: S-0109 claim 15 (at the end of its passes an animation continues
+/// as its follow-up type, with that type's art); design: render (#142)
+/// (the drawing takes the follow-up's art when the playback switches).
+/// BOOMX (frames 2 × 2 pixels) is followed by TAILX (frames 5 × 5).
+#[test]
+fn a_view_animation_draws_its_follow_up_types_art() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let rules = format!("{RULES}[Animations]\n0=BOOMX\n1=TAILX\n");
+    let art = format!(
+        "{}[BOOMX]\nRate=900\nNext=TAILX\n[TAILX]\nRate=900\n",
+        super::tests::ART
+    );
+    let (mut import, catalogue, mut assets) = super::tests::context_full(&rules, &art);
+    import.arts.insert(
+        (Kind::Animations, 0),
+        super::tests::art_of("BOOMX", "boomx.shp"),
+    );
+    import.arts.insert(
+        (Kind::Animations, 1),
+        super::tests::art_of("TAILX", "tailx.shp"),
+    );
+    assets.insert(b"boomx.shp", shp((10, 10), 3, (2, 2), (4, 4)));
+    assets.insert(b"tailx.shp", shp((10, 10), 3, (5, 5), (2, 2)));
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let world = testkit::new_game(5);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, testkit::rules(), testkit::setup(5), Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    live.step();
+    live.world.effects.push(Effect::Anim {
+        name: "boomx".into(),
+        pos: Pos {
+            x: 5 * 256 + 128,
+            y: 5 * 256 + 128,
+            z: 0,
+        },
+        delay: None,
+        reverse: false,
+        z_adjust: None,
+        id: None,
+    });
+    live.after_tick();
+    let widths = |scene: &Scene| -> Vec<u32> {
+        use glasnost_render::scene::Group;
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Effects)
+            .map(|i| scene.images[i.image as usize].width())
+            .collect()
+    };
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(widths(&scene), [2], "BOOMX's art first");
+    let mut seen = Vec::new();
+    for _ in 0..8 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        seen.extend(widths(&scene));
+    }
+    assert!(seen.contains(&5), "TAILX's art after the switch: {seen:?}");
+}

@@ -253,6 +253,10 @@ pub struct Client {
     /// The end screen's targets of the last frame.
     pub end_targets: Targets<()>,
     radar_tick: i32,
+    /// The radar picture last sent to the device; a tick's picture equal
+    /// to it is not sent again, unless `radar_tick` is −1 (a new game or a
+    /// new device: the device's copy is not known) (design: render (#137)).
+    radar_sent: Vec<u8>,
     cpu_images: BTreeMap<u32, CpuImage>,
     /// The multiplayer screen's fields.
     pub netform: NetForm,
@@ -366,6 +370,7 @@ impl Client {
             setup_targets: Targets::new(),
             end_targets: Targets::new(),
             radar_tick: -1,
+            radar_sent: Vec::new(),
             cpu_images: BTreeMap::new(),
             netform: NetForm {
                 build: net::BUILD.into(),
@@ -1542,8 +1547,13 @@ impl Client {
                         if tick != self.radar_tick
                             && let Some(rgba) = s.radar_rgba()
                         {
-                            let (w, h) = glasnost_ui::hud::RADAR;
-                            changed.push((RADAR_IMAGE, w as u32, h as u32, rgba));
+                            // design: render (#137) (an unchanged picture is not sent again)
+                            if self.radar_tick == -1 || rgba != self.radar_sent {
+                                self.radar_sent.clear();
+                                self.radar_sent.extend_from_slice(&rgba);
+                                let (w, h) = glasnost_ui::hud::RADAR;
+                                changed.push((RADAR_IMAGE, w as u32, h as u32, rgba));
+                            }
                             self.radar_tick = tick;
                         }
                         let v = s.view();

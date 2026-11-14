@@ -132,6 +132,46 @@ fn the_watch_view_draws_no_shroud_and_the_whole_radar() {
     assert!(session(&c).play.game.replay().orders.is_empty());
 }
 
+/// #137. design: render (#137): after every tick's frame the device holds
+/// the radar's current picture: an object taken off the map changes the
+/// whole-map radar, and the next frame sends it.
+#[test]
+fn the_device_holds_the_radars_current_picture() {
+    let mut c = client((1024, 768), 100);
+    start_watch(&mut c);
+    let sent = |c: &mut Client| -> Option<Vec<u8>> {
+        let (_, images) = c.frame();
+        images
+            .changed
+            .into_iter()
+            .find(|(id, ..)| *id == RADAR_IMAGE)
+            .map(|(.., rgba)| rgba)
+    };
+    let current = |c: &Client| session(c).radar_rgba().expect("a radar map");
+    // A new device: the next frame sends the radar, whatever was sent before.
+    c.new_device();
+    let mut held = sent(&mut c).expect("the frame sends the radar");
+    assert!(held == current(&c));
+    let step = |c: &mut Client, held: &mut Vec<u8>| {
+        session_mut(c).step();
+        if let Some(rgba) = sent(c) {
+            *held = rgba;
+        }
+        assert!(*held == current(c), "the device holds the current picture");
+    };
+    for _ in 0..3 {
+        step(&mut c, &mut held);
+    }
+    let before = held.clone();
+    let s = session_mut(&mut c);
+    let h = players(s)[0];
+    let o = object_of(s, h);
+    s.play.game.world.obj_mut(o).unwrap().on_map = false;
+    step(&mut c, &mut held);
+    assert!(held != before, "the picture changed");
+    step(&mut c, &mut held);
+}
+
 // design: watch mode (lead request 2026-11-02, an extra not in the original): clicks, keys, the sidebar, groups and route mode give no order; a left click selects any house's object for looking
 #[test]
 fn the_watch_game_takes_no_orders() {
