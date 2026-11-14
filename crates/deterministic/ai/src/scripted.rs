@@ -4322,6 +4322,45 @@ mod start_tests {
     use crate::{fixture, game::Game};
     use glasnost_sim::testkit;
 
+    // design: own AI (#27): the goal of the ferry, the rally points and the teleport's landing is a start the house has not seen empty (explored, no enemy building by it: S-0409 claims 9 and 19); once it has seen every start empty it knows of no enemy base, and they aim at none. They aimed at the starts in turn, each one empty, while the waves searched the unseen cells.
+    #[test]
+    fn a_start_seen_empty_is_no_goal() {
+        let map = fixture::map();
+        let g = Game::new(
+            fixture::rules(),
+            &map,
+            "synthetic-skirmish",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the skirmish loads");
+        let mut w = g.world.clone();
+        let gone: Vec<ObjectId> = w
+            .objects
+            .values()
+            .filter(|o| o.owner.is_some_and(|h| h != HouseId(0)))
+            .map(|o| o.id)
+            .collect();
+        for id in gone {
+            glasnost_sim::objects::remove(&mut w, id);
+        }
+        let mut s = Script::new(HouseId(0), Plan::default());
+        s.set_starts(&w, &crate::skirmish::start_cells(&map));
+        let targets = s.enemy_starts(&w);
+        assert!(!targets.is_empty());
+        assert_eq!(s.attack_goal(&w), Some(targets[0]), "a start not explored");
+        for &c in &targets {
+            shroud::area_reveal(
+                &mut w,
+                HouseId(0),
+                glasnost_sim::world::Pos::centre(c, 0),
+                6,
+            );
+        }
+        assert_eq!(s.attack_goal(&w), None, "every start seen empty");
+        assert_eq!(s.base_goal(&w), None, "every start seen empty");
+    }
+
     // design: own AI (#27): the house's own start is no wave target when its base unit stands more than five cells off it (bases off, or the unit placed off its waypoint): it was the first target
     #[test]
     fn the_own_start_is_no_target_when_the_base_unit_stands_off_it() {
