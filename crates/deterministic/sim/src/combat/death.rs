@@ -1158,8 +1158,8 @@ fn crew(w: &mut World, id: ObjectId, hit: &Hit) {
     // spec: S-0312 claim 13 (a crew that is due takes the creation draw whether or not it can then be placed)
     let cid = crate::objects::create(w, Kind::Infantry, crew_type, o.owner);
     let Some((pos, layer)) = crew_position(w, id, cid) else {
-        // spec: S-0312 claim 13 (a crew that gets no position, or whose placement is refused, never enters play and takes no health draw)
-        w.objects.remove(&cid);
+        // spec: S-0312 claim 13 (a crew that gets no position, or whose placement is refused, never enters play and takes no health draw); S-0611 claim 14 (nor does its creation set)
+        crate::objects::discard_unplaced(w, cid);
         return;
     };
     crate::combat::survivors::put_infantry(w, cid, pos, layer, top);
