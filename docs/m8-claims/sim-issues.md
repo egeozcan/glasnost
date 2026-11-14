@@ -226,9 +226,12 @@ Traced with the lane's state hashes and object dumps (`GLASNOST_AI_HASH`, `GLASN
 - 8/2/3, base against the batch: the first difference is at tick 1764 and touches only house 0's harvester #643's applied sight. Base moved it to cell (67, 29) as the vehicle crossed into that cell; the batch keeps it on (68, 28) until the arrival (#205). The two states come back together and finally part at tick 4009, where again only an applied sight differs (house 1's walking slave miner #637).
 - 8/2/3, base against 356acf8: the first difference is at tick 22588. House 0's rocket #5321 (from launcher #5320), in lazy cruise toward house 1's infantry #3380, has already detonated at 356acf8 while base still flies it. That is Q-3066's nose-point test.
 - 8/8/3 (same winner; 356acf8 ends it exactly as the batch, 0@53198): the first difference from base is at tick 15898. House 0's lazy-cruise rocket #3583 detonates a tick earlier at its nose point and hits house 1's infantry #4503 (health 200 → 48). In the same tick house 1's slave miner #178 has one turn fewer (S-0203 claim 10).
-- 7/2/3 and 8/0/3 are not traced further.
+- 7/2/3, base against the batch: the first difference is at tick 1760 and touches only house 1's walking slave miner #636's applied sight, cell (70, 34) on base and (71, 34) in the batch (#205).
+- 8/0/3, base against the batch: the first difference is at tick 1760, on house 1's walking slave miner #1156's applied sight, cell (42, 97) on base and (43, 97) in the batch (#205).
+- 8/8/2, base against the batch: the first difference is at tick 1833, on house 1's vehicle #185's applied sight, cell (26, 89) on base and (25, 88) in the batch, which the vehicle reaches at its arrival (#205).
+- 9/0/3, base against the batch: the first difference is at tick 1760, on house 1's walking slave miner #1153's applied sight, cell (110, 62) on base and (111, 62) in the batch (#205).
 
-All of these come from rules S-0409 r9 and S-0506 r43 require, so they stand.
+So in all five games the first difference from base is #205's sight timing. The bisect shows 7/2/3, 8/0/3 and 8/2/3 flip without #205 too. For 8/2/3, the trace against 356acf8 puts that on Q-3066's nose-point test. For 7/2/3 and 8/0/3, the earlier commit that flips them is not traced. The changes traced come from rules S-0409 r9 and S-0506 r43 require. None of the traces points to a fault.
 
 The goldens moved, hashes only, and were regenerated in 3d0e5b9; all nine moved. The AI suite with its ignored tests passes 328, as on base. On the final tree, the sim gate with its ignored tests passes 16. `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --check`, the wasm32 build of `glasnost-app`, `xtask check` and `xtask gate` pass, and the wasm32 gate matches every golden. The workspace tests pass but for main's `quirks::tests::every_spec_quirk_has_a_switch` (`named_palette_true_owner`, `gas_through_bridge_deck`).
 
