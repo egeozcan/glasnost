@@ -98,6 +98,11 @@ pub struct Anim {
     /// #174; [`crate::loops`]).
     #[serde(default)]
     pub looped: bool,
+    /// Its infantry-making state (S-0611 claims 8 to 11, #291): set at its
+    /// creation when its type is infantry-making and it is neither attached
+    /// to an owner nor of a bouncing type (Q-3121).
+    #[serde(default)]
+    pub making: Option<crate::mutation::Making>,
 }
 
 /// What a creator gives a new ordinary animation besides its type and
@@ -193,6 +198,18 @@ pub fn spawn_index(w: &mut World, index: Option<u32>, at: Option<Pos>, s: Spawn)
             delay: drawn,
         };
     }
+    // spec: S-0611 claim 9 (the rules for every infantry-making animation, whatever its creator, S-0611 Terms: infantry-making at some type of its follow-up chain)
+    // design: interim (Q-3121): an animation attached to an owner or of a bouncing type at its creation is played without claims 8 to 11
+    let making = match at {
+        Some(p)
+            if s.owner.is_none()
+                && flight.is_none()
+                && crate::mutation::makes_infantry(w, index) =>
+        {
+            Some(crate::mutation::Making::at(w, p))
+        }
+        _ => None,
+    };
     w.anims.anims.insert(
         id,
         Anim {
@@ -204,6 +221,7 @@ pub fn spawn_index(w: &mut World, index: Option<u32>, at: Option<Pos>, s: Spawn)
             role: s.role,
             flight,
             looped: s.looped,
+            making,
         },
     );
     // spec: S-0109 claim 29 and S-0203 claims 3 and 4 (appended; eligible for its first update later in the same pass)
@@ -237,7 +255,12 @@ fn anim_index(w: &World, name: &[u8]) -> Option<u32> {
 /// source pick or a warp launch, the end of loading for a first-pass tile
 /// animation.
 pub fn remove(w: &mut World, id: ObjectId) {
-    let present = w.anims.anims.remove(&id).is_some();
+    let removed = w.anims.anims.remove(&id);
+    let present = removed.is_some();
+    if let Some(m) = removed.and_then(|a| a.making) {
+        // design: interim (Q-3121): a removal by another rule frees the standing position, as the end does, and makes nothing
+        crate::mutation::free(w, id, &m);
+    }
     let current = match &mut w.anims.current {
         Some((c, _, gone)) if *c == id => {
             *gone = true;
@@ -501,6 +524,12 @@ pub fn turn(w: &mut World, id: ObjectId) {
         // spec: S-0319 claim 12 (every animation whose type names a trailer, after its motion step and before its stage update, at its position in play, with S-0109 claim 29's trailer settings)
         crate::combat::effects::trailer_marked(w, &name, p, looped);
     }
+    if let Some(m) = &a.making
+        && current.make_infantry != -1
+    {
+        // spec: S-0611 claim 8 (in each of its updates, while its current type makes infantry, its position is marked taken)
+        crate::mutation::mark(w, id, m);
+    }
     w.anims.current = Some((id, a.role, false));
     let aq = AnimQuirks::from(&w.rules().quirks);
     let t = w.tick;
@@ -518,12 +547,29 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if gone {
         // Removed by another rule during its own turn (a drain link ended by its damage, say): its
         // playback stopped there (S-0109 State and ordering).
+        if let Some(m) = &a.making {
+            // design: interim (Q-3121): a removal by another rule frees the standing position and makes nothing
+            crate::mutation::free(w, id, m);
+        }
         ended(w, id, &a);
         return;
     }
     if playing {
         w.anims.anims.insert(id, a);
         return;
+    }
+    if let Some(mut m) = a.making {
+        // spec: S-0611 claim 8 (at its end the position is shown free again)
+        crate::mutation::free(w, id, &m);
+        let pos = a.pos.unwrap_or_default();
+        let made = crate::mutation::try_make(w, a.anim, pos, &mut m.owner, &mut |_, _| {});
+        a.making = Some(m);
+        if matches!(made, crate::mutation::Attempt::Refused) {
+            // spec: S-0611 claim 11 (the placement refused: the animation stays, steps back one frame and tries again when that frame is next due)
+            a.player.step_back();
+            w.anims.anims.insert(id, a);
+            return;
+        }
     }
     ended(w, id, &a);
     // spec: S-0109 claim 16 (the last pass ends with no follow-up type: removed in that update); S-0203 claim 10 (a removal from the update order)

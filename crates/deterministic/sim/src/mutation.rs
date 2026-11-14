@@ -165,6 +165,47 @@ pub struct Maker {
     pub conversion: bool,
 }
 
+/// What an ordinary animation of an infantry-making type holds for claims
+/// 8 to 11 (#291; [`crate::anims::Anim::making`]): one that is neither
+/// attached to an owner nor of a bouncing type at its creation (Q-3121).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Making {
+    /// Its surface (claim 8: the occupancy record of its surface).
+    pub layer: Layer,
+    /// Its owner: none from its creator; claim 9's fallback gives it one.
+    pub owner: Option<HouseId>,
+    /// The standing position it holds: its cell and position.
+    pub spot: (CellXY, u8),
+}
+
+impl Making {
+    /// The making state of an animation created at `p`, with no owner.
+    pub(crate) fn at(w: &World, p: Pos) -> Making {
+        Making {
+            // spec: S-0611 claims 8 and 10 (the occupancy record of its surface: the deck on a high-bridge cell above the terrain height)
+            layer: surface_of(w, p),
+            // spec: S-0611 claim 9 (an animation with no owner)
+            owner: None,
+            // spec: S-0611 claim 8 (the standing position its world point is in)
+            spot: spot_of(w, p),
+        }
+    }
+}
+
+/// Marks an infantry-making animation's standing position taken in one of
+/// its updates (claim 8).
+pub(crate) fn mark(w: &mut World, id: ObjectId, m: &Making) {
+    let seize = w.rules().quirks.infantry_animation_occupancy;
+    let (c, p) = m.spot;
+    // spec: S-0611 claim 8 (in each of its updates its position is marked taken and the cell's infantry house becomes its owner)
+    w.cells.mark_anim(c, m.layer, p, id, m.owner, seize);
+}
+
+/// Frees an ordinary infantry-making animation's position (claim 8).
+pub(crate) fn free(w: &mut World, id: ObjectId, m: &Making) {
+    free_at(w, id, m.layer, m.spot);
+}
+
 /// A refused victim's freed standing position (claim 7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Freed {
@@ -586,19 +627,25 @@ pub fn removing(w: &mut World, id: ObjectId) {
 
 /// Frees an infantry-making animation's position at its end (claim 8).
 fn free_spot(w: &mut World, id: ObjectId, m: &Maker) {
+    free_at(w, id, m.layer, m.spot);
+}
+
+/// Frees the standing position `spot` of surface `layer` an
+/// infantry-making animation `id` holds (claim 8).
+fn free_at(w: &mut World, id: ObjectId, layer: Layer, spot: (CellXY, u8)) {
     let oq = crate::objects::occ_quirks(w);
-    let (c, p) = m.spot;
+    let (c, p) = spot;
     if w.rules().quirks.infantry_animation_occupancy {
         // spec: S-0611 claim 8 and Edge cases (at its end the position is shown free again, whatever else has marked it)
-        w.cells.clear_position(c, m.layer, p, oq);
+        w.cells.clear_position(c, layer, p, oq);
     } else {
         // spec: S-0611 Edge cases (quirks.infantry_animation_occupancy off: it frees only its own mark)
-        w.cells.clear_infantry(c, m.layer, id, oq);
+        w.cells.clear_infantry(c, layer, id, oq);
     }
 }
 
 /// The outcome of one creation attempt (claims 9 to 11).
-enum Attempt {
+pub(crate) enum Attempt {
     /// A unit was created and placed.
     Made(ObjectId),
     /// Nothing is created; the animation is removed.
@@ -654,9 +701,32 @@ fn discard(w: &mut World, unit: ObjectId) {
 /// One creation attempt at the end of an infantry-making animation
 /// (claims 9 to 11).
 fn attempt(w: &mut World, id: ObjectId, m: &mut Maker) -> Attempt {
+    let (name, pos, frame) = (m.player.name_text(), m.pos, m.player.frame());
+    let mut changed = |w: &mut World, owner: Option<HouseId>| {
+        w.effects.push(Effect::Maker {
+            id,
+            name: name.clone(),
+            pos,
+            owner,
+            frame,
+            event: MakerEvent::Owner,
+        });
+    };
+    try_make(w, m.anim, m.pos, &mut m.owner, &mut changed)
+}
+
+/// One creation attempt at the end of an infantry-making animation of
+/// current type `anim` at `pos` with owner `owner` (claims 9 to 11);
+/// `changed` is told of claim 9's change of the animation's owner.
+pub(crate) fn try_make(
+    w: &mut World,
+    anim: Option<u32>,
+    pos: Pos,
+    owner: &mut Option<HouseId>,
+    changed: &mut dyn FnMut(&mut World, Option<HouseId>),
+) -> Attempt {
     let rules = w.rules_arc();
-    let i = m
-        .anim
+    let i = anim
         .and_then(|a| rules.animations.get(a as usize))
         .map_or(-1, |a| a.make_infantry);
     let list = &rules.superweapons.mutation.made;
@@ -668,27 +738,20 @@ fn attempt(w: &mut World, id: ObjectId, m: &mut Maker) -> Attempt {
     else {
         return Attempt::Nothing;
     };
-    let live = m.owner.filter(|&h| !crate::econ::victory::defeated(w, h));
+    let live = owner.filter(|&h| !crate::econ::victory::defeated(w, h));
     let house = match live {
         Some(h) => Some(h),
         None => match crate::structures::garrison::civilian_house(w) {
             Some(civ) => {
                 // spec: S-0611 claim 9 (no owner, or a defeated owner: the animation itself changes owner to the civilian house and the unit goes to it)
-                if m.owner != Some(civ) {
-                    m.owner = Some(civ);
-                    w.effects.push(Effect::Maker {
-                        id,
-                        name: m.player.name_text(),
-                        pos: m.pos,
-                        owner: m.owner,
-                        frame: m.player.frame(),
-                        event: MakerEvent::Owner,
-                    });
+                if *owner != Some(civ) {
+                    *owner = Some(civ);
+                    changed(w, *owner);
                 }
                 Some(civ)
             }
             // spec: S-0611 claim 9 (no civilian house: an ownerless animation creates nothing and a defeated owner keeps the unit)
-            None => m.owner,
+            None => *owner,
         },
     };
     let Some(house) = house else {
@@ -697,7 +760,7 @@ fn attempt(w: &mut World, id: ObjectId, m: &mut Maker) -> Attempt {
     // spec: S-0611 claim 10 (a fresh object of the made type: full health, starting experience under S-0311 claim 11, no passengers, no inherited order)
     // spec: S-0611 claim 14 and F5 (the attempt creates the whole creation set, refused or not, every member owned by the attempt's house; the position-choice draw comes after the whole set)
     let unit = crate::objects::create(w, Kind::Infantry, ty, Some(house));
-    if !place(w, unit, m.pos) {
+    if !place(w, unit, pos) {
         // spec: S-0611 claims 11 and 14 (no unit appears; our engine builds none of the creation set, a documented departure; the set's creation draws, then the position-choice draw where claim 10's choice applies, are not undone)
         discard(w, unit);
         return Attempt::Refused;
