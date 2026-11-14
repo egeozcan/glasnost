@@ -4176,3 +4176,251 @@ fn claim6a_void_launch_in_the_firing_step_keeps_the_countdown() {
     assert!(shots > 0, "the control fires");
     assert_ne!(after, before, "and starts its countdown");
 }
+
+// ================================================================= quirks.table_direction off
+
+/// The base rules with S-0204's `quirks.table_direction` off.
+fn exact(mut r: Ruleset) -> Ruleset {
+    r.globals.quirks.table_direction = false;
+    r
+}
+
+/// θ(f) of a map-plane facing with `quirks.table_direction` off:
+/// (f̂ − 16384) × (the double nearest −2π/65536), f̂ the facing as a signed
+/// 16-bit value and f̂ − 16384 exact.
+// spec: S-0306 Formulas (revision 90: with quirks.table_direction off, θ(f) of a facing in the map plane is (f − 16384) × (−2π / 65536), the constant the double nearest −2π/65536)
+fn theta_plane(f: i32) -> F64 {
+    let signed = i64::from(f as i16);
+    F64::from_i64(signed - 16384, RZ).mul(nd("-0.00009587379924285257"), RZ)
+}
+
+/// F1 with `quirks.table_direction` off: θ(y) on the exact scale, θ(p) of
+/// the pitch facing on the table scale (zero speed launch on).
+// spec: S-0306 Formulas (revision 90: θ(y) in F1 takes the exact scale; θ(p) of a pitch facing keeps the scale of Terms)
+fn f1_exact(yaw: i32, pitch: i32, s: i32) -> [F64; 3] {
+    let s0 = if s > 0 { s } else { 100 };
+    let l = table_root((i64::from(s0) * i64::from(s0)) as u64, RZ).to_f64();
+    let ty = theta_plane(yaw);
+    let cx = cos_t(ty, RZ).mul(l, RZ);
+    let cy = sin_t(ty, RZ).mul(l, RZ).negated();
+    let m = table_root_real(cx.mul(cx, RZ).add(cy.mul(cy, RZ), RZ), true, RZ);
+    let tp = theta(pitch, RZ);
+    [
+        cos_t(tp, RZ).mul(cx, RZ),
+        cos_t(tp, RZ).mul(cy, RZ),
+        sin_t(tp, RZ).mul(m, RZ),
+    ]
+}
+
+/// The exact direction from `from` to `to` (S-0204 Edge cases).
+fn yaw_exact(from: Pos, to: Pos) -> i32 {
+    i32::from(direction(
+        i64::from(to.x - from.x),
+        i64::from(to.y - from.y),
+        false,
+    ))
+}
+
+// spec: S-0306 claim 5 and F1, Formulas (revision 90: with quirks.table_direction off the launch direction is S-0204's exact angle and θ(y) takes the exact scale), S-0204 Edge cases (axes 16384, …)
+#[test]
+fn exact_direction_launch_velocity() {
+    // The two scales often meet in the same sine-table step; count the
+    // targets where they do not, so that the test tells them apart.
+    let mut apart = 0;
+    for dx in -6..=6 {
+        for dy in [-6, -5, -1, 0, 2, 3, 6] {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            let mut s = setup(&exact(base()), dx, dy);
+            let f = fp(&s, 0);
+            let t = Target::Object(s.t);
+            let id = fire(&mut s, t, f).unwrap();
+            let tp = pos(&s, s.t);
+            let start = arc(d2(&s.w, f, tp)).min(d3(&s.w, f, tp) / 2);
+            let y = yaw_exact(f, tp);
+            let want = f1_exact(y, 16383, start);
+            assert_eq!(
+                pr(&s, id).vel,
+                want,
+                "target at ({dx}, {dy}) cells, yaw {y}"
+            );
+            if want != f1(y, 16383, start) {
+                apart += 1;
+            }
+        }
+    }
+    assert!(apart > 0, "some launch tells the two scales apart");
+    // Map east on the exact scale is an angle of exactly 0: no north part.
+    let mut s = setup(&exact(base()), 5, 0);
+    let f = fp(&s, 0);
+    let t = Target::Object(s.t);
+    let id = fire(&mut s, t, f).unwrap();
+    assert!(pr(&s, id).vel[1].eq_num(F64::ZERO));
+}
+
+// spec: S-0306 Formulas (revision 90: the direction of a zero displacement, claim 5 at a planar distance of 0, is 16383 with quirks.table_direction on and 16384 with it off), claim 6 c (|Δz| ≤ 200: level)
+#[test]
+fn exact_direction_launch_at_zero_planar_distance() {
+    let mut s = setup(&exact(base()), 3, 0);
+    let tp = pos(&s, s.t);
+    let f = Pos::new(tp.x, tp.y, tp.z + 100);
+    let t = Target::Object(s.t);
+    let id = fire(&mut s, t, f).expect("a launch");
+    let start = arc(d2(&s.w, f, tp)).min(d3(&s.w, f, tp) / 2);
+    assert_eq!(pr(&s, id).vel, f1_exact(16384, 16383, start));
+    // The same shot with the switch on: 16383 and the table scale.
+    let mut s = setup(&base(), 3, 0);
+    let t = Target::Object(s.t);
+    let id = fire(&mut s, t, f).expect("a launch");
+    assert_eq!(pr(&s, id).vel, f1(16383, 16383, start));
+}
+
+/// F1's radial yaw with `quirks.table_direction` off: θ(b) on the exact
+/// scale, the angle-to-facing conversion with c₂ unchanged.
+// spec: S-0306 F1 and Formulas (revision 90: θ(b) in F1 takes the exact scale; F1's radial angle-to-facing conversion with c₂ keeps its scale)
+fn radial_yaw_exact(b: i32, nseg: i32, k: i32) -> i32 {
+    let (c1, c2) = direction_constants();
+    let pi = c1.mul(n(2), RZ);
+    let phi = pi.div(n(nseg.into()), RZ).mul(n(k.into()), RZ).sub(c1, RZ);
+    let v = theta_plane(b)
+        .add(phi, RZ)
+        .sub(c1, RZ)
+        .mul(c2, RZ)
+        .trunc_i128()
+        .unwrap();
+    i32::from(v as i64 as u16)
+}
+
+// spec: S-0306 claim 7 and F1, Formulas (revision 90: θ(b) and θ(y) on the exact scale with quirks.table_direction off)
+#[test]
+fn exact_direction_radial_fire_segments() {
+    let mut r = exact(base());
+    r.sim
+        .vehicles
+        .get_mut("CART")
+        .unwrap()
+        .combat
+        .radial_fire_segments = Some(4);
+    let mut apart = 0;
+    for b in (0..65536).step_by(4099) {
+        let mut s = setup(&r, 5, 0);
+        set_turret(&mut s.w, s.a, b as u16);
+        let f = fp(&s, 0);
+        let tp = pos(&s, s.t);
+        let start = arc(d2(&s.w, f, tp)).min(d3(&s.w, f, tp) / 2);
+        for (shot, k) in [0, 1, 2, 3].into_iter().enumerate() {
+            let t = Target::Object(s.t);
+            let id = fire(&mut s, t, f).unwrap();
+            let y = radial_yaw_exact(b, 4, k);
+            let expected = (b + 16384 - 8192 * k).rem_euclid(65536);
+            assert!(
+                delta(y as u16, expected as u16).abs() <= 2,
+                "b {b}, shot {shot}: yaw {y}, expected about {expected}"
+            );
+            let want = f1_exact(y, 16383, start);
+            assert_eq!(pr(&s, id).vel, want, "b {b}, shot {shot}");
+            if want != f1(radial_yaw(b, 4, k), 16383, start) {
+                apart += 1;
+            }
+        }
+    }
+    assert!(apart > 0, "some shot tells the two scales apart");
+}
+
+/// F5 with `quirks.table_direction` off: θ(f_ξ) on the exact scale.
+// spec: S-0306 F5 and Formulas (revision 90: θ(f_ξ) in F5 takes the exact scale; F5's angle-to-facing conversion with c₂ keeps its scale)
+fn f5_exact(p: (i32, i32), sigma: i32, xi: i32) -> (i32, i32) {
+    let k = nd("4.656612877414201e-10");
+    let (c1, c2) = direction_constants();
+    let two_pi = c1.mul(n(4), RZ);
+    let fx = n(xi.into())
+        .mul(k, RZ)
+        .mul(two_pi, RZ)
+        .sub(c1, RZ)
+        .mul(c2, RZ)
+        .trunc_i128()
+        .unwrap() as i64 as i16;
+    let th = theta_plane(i32::from(fx));
+    let s = n(sigma.into());
+    (
+        n(p.0.into())
+            .add(cos_t(th, RZ).mul(s, RZ), RZ)
+            .to_i32_common(),
+        n(p.1.into())
+            .sub(sin_t(th, RZ).mul(s, RZ), RZ)
+            .to_i32_common(),
+    )
+}
+
+// spec: S-0306 claim 4 and F5, Formulas (revision 90: θ(f_ξ) and θ(y) on the exact scale with quirks.table_direction off)
+#[test]
+fn exact_direction_scatter() {
+    let mut apart = 0;
+    for shift in 0..40 {
+        let mut r = exact(base());
+        let (mut s, f, aim) = scatter_setup(&mut r, shift);
+        let mut c = s.w.rng.clone();
+        let h = half(&s.w);
+        let sigma = c.ranged(256, 512, h);
+        let xi = c.ranged(0, 2147483646, h);
+        let id = fire(&mut s, Target::Cell(aim.cell()), f).unwrap();
+        let disp = (aim.x - f.x, aim.y - f.y);
+        let (qx, qy) = f5_exact(disp, sigma, xi);
+        let q = Pos::new(f.x + qx, f.y + qy, aim.z);
+        let start = arc(d2(&s.w, f, aim)).min(d3(&s.w, f, q) / 2);
+        let want = f1_exact(yaw_exact(f, q), 8191, start);
+        assert_eq!(pr(&s, id).vel, want, "shift {shift}");
+        // The same draws with θ on the scale of Terms in F5 and F1.
+        let (ox, oy) = f5(disp, sigma, xi);
+        let o = Pos::new(f.x + ox, f.y + oy, aim.z);
+        let o_start = arc(d2(&s.w, f, aim)).min(d3(&s.w, f, o) / 2);
+        if want != f1(yaw_exact(f, o), 8191, o_start) {
+            apart += 1;
+        }
+    }
+    assert!(apart > 0, "some scatter tells the two scales apart");
+}
+
+/// F11's velocity of facing `y` at horizontal speed 64 with
+/// `quirks.table_direction` off.
+// spec: S-0306 F11 and Formulas (revision 90: θ(y′) in F11 takes the exact scale)
+fn turned_exact(y: i32) -> [F64; 3] {
+    let th = theta_plane(y);
+    let h = table_root_real(n(4096), true, RZ);
+    [
+        cos_t(th, RZ).mul(h, RZ),
+        sin_t(th, RZ).mul(h, RZ).negated(),
+        F64::ZERO,
+    ]
+}
+
+// spec: S-0306 claim 13, F7 and F11, Formulas (revision 90: with quirks.table_direction off F11's directions are exact, map east 16384, and θ(y′) takes the exact scale)
+#[test]
+fn exact_direction_steering_turn() {
+    let mut apart = 0;
+    for j in -12..=12 {
+        let mut r = steering(10, 1, 3);
+        ball(&mut r).level = Some(true);
+        r.sim.general.missile_rot_var = Some(d("0"));
+        let mut s = setup(&exact(r), 15, 0);
+        water_role(&mut s.w, 0);
+        let p = c(-12, 0, 300);
+        // Targets far to the east, within the turn step of it.
+        let tp = Pos::new(p.x + 3000, p.y + 53 * j, 300);
+        put(&mut s.w, s.t, tp);
+        let id = steer_place(&mut s, p, [64, 0, 0]);
+        // m = 0: t = 256 ρ = 2560 (F7); the current direction is map east, 16384.
+        let pp = Pos::new(p.x + 64, p.y, p.z);
+        let goal = yaw_exact(pp, tp);
+        let y = towards(16384, goal, 2560);
+        assert_eq!(y, goal, "target {j}: within one step");
+        assert!(matches!(step(&mut s, id), Out::Flying(_)));
+        let want = turned_exact(y);
+        assert_eq!(pr(&s, id).vel, want, "target {j}");
+        if want != turned(y) {
+            apart += 1;
+        }
+    }
+    assert!(apart > 0, "some turn tells the two scales apart");
+}
