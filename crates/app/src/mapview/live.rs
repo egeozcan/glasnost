@@ -329,14 +329,27 @@ impl GroundLayer {
     /// takes its current key, newcomers go after the existing members, and
     /// the whole list is sorted by key, stably.
     pub fn update(&mut self, members: &[(Entrant, i64)]) {
-        self.list
-            .retain(|(e, _)| members.iter().any(|(m, _)| m == e));
+        // design: render (#146) (one ordered map of the members instead of a scan per entry;
+        // a member listed twice takes its last key, and only an entrant's first entry is
+        // re-keyed, as the scans did)
+        let mut keys: BTreeMap<Entrant, i64> = BTreeMap::new();
         for &(e, key) in members {
-            if self.contains(e) {
-                self.set_key(e, key);
-            } else {
+            keys.insert(e, key);
+        }
+        let mut kept: BTreeSet<Entrant> = BTreeSet::new();
+        self.list.retain_mut(|(e, k)| {
+            let Some(&key) = keys.get(e) else {
+                return false;
+            };
+            if kept.insert(*e) {
+                *k = key;
+            }
+            true
+        });
+        for &(e, _) in members {
+            if kept.insert(e) {
                 // spec: S-0102 claim 6 (a newcomer follows existing equal-key objects)
-                self.list.push((e, key));
+                self.list.push((e, keys[&e]));
             }
         }
         self.sort();
@@ -1876,27 +1889,30 @@ impl Live {
             Entrant::Piece(id) => world.pieces.contains_key(&id),
             _ => true,
         });
+        // design: render (#146) (the listed entrants gathered once; an entrant placed below
+        // joins them, so each test reads as the scan of the lists did)
+        let mut listed = self.layers.entrants();
         for (serial, layer) in anims {
-            if layer != Layer::Ground && !self.layers.contains(Entrant::Anim(serial)) {
+            if layer != Layer::Ground && listed.insert(Entrant::Anim(serial)) {
                 // spec: S-0102 claims 4 and 7 (an animation placed in a layer other than ground becomes its last)
                 self.layers.place(Entrant::Anim(serial), layer);
             }
         }
         for id in particles {
-            if !self.layers.contains(Entrant::Particle(id)) {
+            if listed.insert(Entrant::Particle(id)) {
                 // spec: S-0616 claim 30 and S-0102 claim 3 (a particle enters the air layer when it is made, at its end, and keeps its place until removed)
                 self.layers.place(Entrant::Particle(id), Layer::Air);
             }
         }
         for (id, flat) in projectiles {
-            if !self.layers.contains(Entrant::Projectile(id)) {
+            if listed.insert(Entrant::Projectile(id)) {
                 // spec: S-0102 claims 3, 4 and 7 (a projectile is in the air layer, or the surface layer when its image is flat; placed at the layer's end)
                 let layer = if flat { Layer::Surface } else { Layer::Air };
                 self.layers.place(Entrant::Projectile(id), layer);
             }
         }
         for id in pieces {
-            if !self.layers.contains(Entrant::Piece(id)) {
+            if listed.insert(Entrant::Piece(id)) {
                 // spec: S-0102 claims 3, 4 and 7 (a voxel animation is in the air layer; placed at the layer's end)
                 self.layers.place(Entrant::Piece(id), Layer::Air);
             }

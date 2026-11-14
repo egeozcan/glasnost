@@ -179,6 +179,12 @@ impl Layers {
         self.lists.values().any(|v| v.contains(&e))
     }
 
+    /// Every entrant of every list, for many membership tests at once.
+    // design: render (#146)
+    pub fn entrants(&self) -> std::collections::BTreeSet<super::live::Entrant> {
+        self.lists.values().flatten().copied().collect()
+    }
+
     /// Sorts every list other than ground stably by `key` (the alternative
     /// of `quirks.unsorted_upper_layers`, S-0102 Edge cases).
     pub fn sort_by_key(&mut self, key: impl Fn(super::live::Entrant) -> i64) {
@@ -265,10 +271,12 @@ impl Layers {
             .copied()
             .filter(|&id| kept(id))
             .collect();
+        // design: render (#146) (a set for the membership test, not a scan of `ids`)
+        let in_order: std::collections::BTreeSet<ObjectId> = ids.iter().copied().collect();
         let mut rest: Vec<ObjectId> = w
             .objects
             .values()
-            .filter(|o| kept(o.id) && !ids.contains(&o.id))
+            .filter(|o| kept(o.id) && !in_order.contains(&o.id))
             .map(|o| o.id)
             .collect();
         ids.append(&mut rest);

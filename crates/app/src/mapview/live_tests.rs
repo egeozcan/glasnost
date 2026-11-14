@@ -177,6 +177,24 @@ fn ground_layer_newcomer_follows_equal_keys() {
     assert!(!g.contains(b));
 }
 
+/// spec: S-0102 claim 6 (newcomers in the order they entered, after the
+/// existing equal-key objects). A member listed twice takes its last key
+/// (#146: the update reads its members through one map).
+#[test]
+fn ground_layer_update_takes_a_twice_listed_members_last_key() {
+    let o = |n| Entrant::Object(ObjectId(n));
+    let (a, b, n, m) = (o(1), o(2), o(3), o(4));
+    let mut g = GroundLayer::default();
+    g.enter(a, 5);
+    g.enter(b, 10);
+    // N is listed twice, first at key 30 and last at key 5; M enters at 5.
+    g.update(&[(n, 30), (m, 5), (a, 5), (b, 10), (n, 5)]);
+    assert_eq!(g.order().collect::<Vec<_>>(), [a, n, m, b]);
+    // A twice: its last key moves it behind B.
+    g.update(&[(a, 5), (b, 10), (n, 5), (m, 5), (a, 20)]);
+    assert_eq!(g.order().collect::<Vec<_>>(), [n, m, b, a]);
+}
+
 /// spec: S-0107 F1, F2 (frame from stage, count and facing group)
 #[test]
 fn infantry_frames() {
