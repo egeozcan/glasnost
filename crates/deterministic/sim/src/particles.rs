@@ -615,8 +615,9 @@ fn smoke_emission(w: &mut World, sys: ObjectId) {
                     .sub(d(i64::from(t.spawn_frames), m), m)
                     .mul(crate::consts::SMOKE_SPEED_LOSS, m);
                 let mut v = p.speed.to_f64().sub(loss, m).to_f32(m);
+                // spec: S-0616 F4 and Constants (raised to 2.0 below 2.0)
                 if v.to_f64().lt(d(2, m)) {
-                    v = d(2, m).to_f32(m);
+                    v = d(2, m).to_f32(m); // spec: S-0616 F4 and Constants (raised to 2.0)
                 }
                 p.speed = v;
                 // spec: S-0616 claim 9, F4 and claim 26 (its translucency rises by 25 when T > τ, compared in single precision)
