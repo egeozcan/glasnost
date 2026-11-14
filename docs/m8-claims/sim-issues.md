@@ -299,7 +299,7 @@ Lanes compare base 59674de with the batch at 9046a28 (25c3de2 and b748b9b change
 
 **Sweeps.** M7a and M7b over seeds 1–16 are identical to base. M6c passes, but seeds 1, 6, 7, 8, 13 and 14 change length and counters; seed 7's smallest counter is 0 (charger orders and support beams; on base seed 13's was 0).
 
-**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games). 26 games end on another tick and 3 change winner (seed/map/game, base → batch):
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games). 25 games end on another tick and 3 change winner (seed/map/game, base → batch):
 - 7/0/2 0@21635 → 1@44736
 - 8/8/2 0@23078 → 1@38549
 - 10/2/2 1@52306 → 0@54175
@@ -307,7 +307,7 @@ Lanes compare base 59674de with the batch at 9046a28 (25c3de2 and b748b9b change
 Each was traced with the state hash every tick, then an object dump at the first differing tick:
 - **7/0/2**, tick 10937, object 2242 (house 0 infantry with an attack-move memory and a destination). Base resumes *move* at once at 10936; the batch keeps *attack* current and *move* queued, as the unit is not ready. #229's resumption (S-0309 claim 23 (b), S-0215 claim 7).
 - **8/8/2**, tick 13273, object 1749 (house 0 infantry, engaged, with an attack-move memory and a destination). It falls back at 13272 from a targetless *attack*; the resumed *move* goes through the readiness start, so its processing delay and timers take other values (delay 16 → 14, timer 13273 → 13301). #229's resumption.
-- **10/2/2**, tick 21215, objects 4552 and 4555 (house 0 deployed infantry, *guard* current with *attack* queued and no target). The queued *attack* now runs the deployed row (#230: deployed firing and the standard delay) where base took the general rows, so their next search moves from 21217 and 21218 to 21241.
+- **10/2/2**, tick 21215, objects 4552 and 4555 (house 0 deployed infantry, *guard* current with *attack* queued, no target and no attack-move memory, so not #229). In both runs the queued *attack* is gone at 21215, so it started and was processed in that tick, in `process_attack`, whose deployed branch 1cee2c2 changed. It now runs the deployed row (#230: deployed firing and the standard delay) where base took the general rows, so their next search moves from 21217 and 21218 to 21241.
 
 They stand. The other changed games keep their winners; not traced.
 
