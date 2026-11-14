@@ -135,7 +135,7 @@ pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
     all_types(w)
         .into_iter()
         .filter(|&t| grinder_type(w, t))
-        .filter(|&t| crate::startable(w, house, t))
+        .filter(|&t| script.startable(w, t))
         .filter(|&t| !on_line(t))
         // design: own AI (#8): only while its line is free, as for the other special buildings (S-0411 claim 6: a line with an item takes no new build order)
         .filter(|&t| !script.busy(w, t))

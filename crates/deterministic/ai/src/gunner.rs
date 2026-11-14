@@ -92,14 +92,25 @@ fn entering(o: &glasnost_sim::world::Object) -> bool {
     o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter)
 }
 
-/// Whether a unit is on its way into vehicle `v`.
-fn awaited(w: &World, v: ObjectId) -> bool {
-    w.objects.values().any(|o| {
-        o.on_map
-            && o.id != v
-            && entering(o)
-            && (o.contact == Some(v) || o.dest == Some(Target::Object(v)))
-    })
+/// The objects a unit is on its way into: of every unit on the map that
+/// enters, the object it is in contact with and its destination object,
+/// itself left out. One pass over the objects instead of one per vehicle
+/// asked (design: own AI, #61).
+fn awaited(w: &World) -> std::collections::BTreeSet<ObjectId> {
+    w.objects
+        .values()
+        .filter(|o| o.on_map && entering(o))
+        .flat_map(|o| {
+            let dest = match o.dest {
+                Some(Target::Object(v)) => Some(v),
+                _ => None,
+            };
+            o.contact
+                .into_iter()
+                .chain(dest)
+                .filter(move |&v| v != o.id)
+        })
+        .collect()
 }
 
 /// Whether an order of this think already moves `id`.
@@ -176,8 +187,20 @@ impl Special {
             .iter()
             .filter(|&&id| weapon::armed(w, id) && !healer(w, id))
             .count();
+        // design: own AI (#61): no healer is wanted with too few armed
+        // vehicles, and none can be loaded without a switching gunner
+        // vehicle (`empty` below takes only those), so the healers are not
+        // counted then.
+        if armed / PER_HEALER == 0
+            || !vehicles
+                .iter()
+                .any(|&id| unit(id).is_some_and(switching_gunner))
+        {
+            return plan;
+        }
+        let awaited = awaited(w);
         let healers = vehicles.iter().filter(|&&id| healer(w, id)).count()
-            + vehicles.iter().filter(|&&id| awaited(w, id)).count();
+            + vehicles.iter().filter(|&id| awaited.contains(id)).count();
         // A person stops at one healer for every PER_HEALER armed vehicles.
         let mut wanted = (armed / PER_HEALER).saturating_sub(healers);
         if wanted == 0 {
@@ -192,7 +215,7 @@ impl Special {
                     && at_home(id)
                     && scripted::idle(w, id)
                     && !ordered(out, id)
-                    && !awaited(w, id)
+                    && !awaited.contains(&id)
                     && !mind::mind_controlled(w, id)
             })
             .collect();
@@ -234,7 +257,7 @@ impl Special {
                             && unit(id).is_some_and(|p| heals_in(w, vr, p))
                     });
                     if !has {
-                        plan.build = Self::buildable_infantry(w, house, |p| heals_in(w, vr, p));
+                        plan.build = Self::buildable_infantry(script, w, |p| heals_in(w, vr, p));
                     }
                     break;
                 }
@@ -368,5 +391,181 @@ pub fn probe(w: &World, house: HouseId) -> GunnerProbe {
         empty_home,
         healers: healers.len(),
         free,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// Whether a unit is on its way into vehicle `v`, as before #61: one
+    /// pass over the objects for each vehicle asked.
+    fn awaited_as_before(w: &World, v: ObjectId) -> bool {
+        w.objects.values().any(|o| {
+            o.on_map
+                && o.id != v
+                && entering(o)
+                && (o.contact == Some(v) || o.dest == Some(Target::Object(v)))
+        })
+    }
+
+    /// [`Special::gunner_plan`] as before #61: the healers counted, each
+    /// awaited vehicle by its own pass, before the wanted count is known.
+    fn gunner_plan_as_before(
+        s: &Special,
+        script: &Script,
+        own: &[ObjectId],
+        w: &World,
+        out: &[Order],
+    ) -> GunnerPlan {
+        let mut plan = GunnerPlan {
+            loads: Vec::new(),
+            build: None,
+        };
+        let house: HouseId = script.house;
+        let Some(home) = script.home(w) else {
+            return plan;
+        };
+        let at_home = |id: ObjectId| {
+            w.obj(id)
+                .is_some_and(|o| dist2(o.pos.cell(), home) <= HOME_REACH * HOME_REACH)
+        };
+        let unit = |id: ObjectId| w.obj(id).and_then(|o| w.rules().unit(o.kind, o.type_index));
+        let vehicles: Vec<ObjectId> = own
+            .iter()
+            .copied()
+            .filter(|&id| {
+                w.obj(id)
+                    .is_some_and(|o| o.kind == Kind::Vehicle && o.on_map && o.health > 0)
+            })
+            .collect();
+        let armed = vehicles
+            .iter()
+            .filter(|&&id| weapon::armed(w, id) && !healer(w, id))
+            .count();
+        let healers = vehicles.iter().filter(|&&id| healer(w, id)).count()
+            + vehicles
+                .iter()
+                .filter(|&&id| awaited_as_before(w, id))
+                .count();
+        let mut wanted = (armed / PER_HEALER).saturating_sub(healers);
+        if wanted == 0 {
+            return plan;
+        }
+        let empty: Vec<ObjectId> = vehicles
+            .iter()
+            .copied()
+            .filter(|&id| {
+                transport::count(w, id) == 0
+                    && unit(id).is_some_and(switching_gunner)
+                    && at_home(id)
+                    && scripted::idle(w, id)
+                    && !ordered(out, id)
+                    && !awaited_as_before(w, id)
+                    && !mind::mind_controlled(w, id)
+            })
+            .collect();
+        for v in empty {
+            if wanted == 0 {
+                break;
+            }
+            let Some(vr) = unit(v) else { continue };
+            let Some(at) = w.obj(v).map(|o| o.pos.cell()) else {
+                continue;
+            };
+            let mut candidates: Vec<(i64, ObjectId)> = own
+                .iter()
+                .copied()
+                .filter(|&id| {
+                    !plan.loads.iter().any(|&(p, _)| p == id)
+                        && free_infantry(w, id)
+                        && (scripted::idle(w, id) || (at_home(id) && rallied(w, id)))
+                        && !mind::mind_controlled(w, id)
+                        && unit(id).is_some_and(|p| heals_in(w, vr, p))
+                        && s.memory.ok(w, id, Target::Object(v))
+                })
+                .map(|id| (w.obj(id).map_or(i64::MAX, |o| dist2(o.pos.cell(), at)), id))
+                .collect();
+            candidates.sort_unstable();
+            let pick = candidates.into_iter().map(|(_, id)| id).find(|&id| {
+                targeting::cursor(w, house, &[id], ClickOn::Object(v), Modifiers::default())
+                    == Action::Enter
+            });
+            match pick {
+                Some(id) => {
+                    plan.loads.push((id, v));
+                    wanted -= 1;
+                }
+                None => {
+                    let has = own.iter().any(|&id| {
+                        w.obj(id).is_some_and(|o| o.kind == Kind::Infantry)
+                            && unit(id).is_some_and(|p| heals_in(w, vr, p))
+                    });
+                    if !has {
+                        plan.build = Special::buildable_infantry(script, w, |p| heals_in(w, vr, p));
+                    }
+                    break;
+                }
+            }
+        }
+        plan
+    }
+
+    /// Our tooling for speed (design: own AI, #61): the set of awaited
+    /// objects from one pass holds exactly the objects a unit is on its way
+    /// into, and the gunner plan with its early exits is the plan as before,
+    /// for every object and every house at many points of the M6c, M7a and
+    /// M7b duels.
+    #[test]
+    fn the_awaited_set_and_the_early_plan_are_as_before() {
+        let games = [
+            (
+                crate::fixture_m6c::rules(),
+                crate::fixture_m6c::map(),
+                crate::fixture_m6c::MAP_NAME,
+                crate::fixture_m6c::setup(2),
+            ),
+            (
+                crate::fixture_m7a::rules(),
+                crate::fixture_m7a::map(),
+                crate::fixture_m7a::MAP_NAME,
+                crate::fixture_m7a::setup(17),
+            ),
+            (
+                crate::fixture_m7b::rules(),
+                crate::fixture_m7b::map(),
+                crate::fixture_m7b::MAP_NAME,
+                crate::fixture_m7b::setup(11),
+            ),
+        ];
+        let (mut entered, mut plans) = (0, 0);
+        for (rules, map, map_name, setup) in games {
+            let mut g = Game::new(rules, &map, map_name, fixture::catalogue(), setup)
+                .expect("the duel loads");
+            for _ in 0..120 {
+                for _ in 0..75 {
+                    g.step();
+                }
+                let w = &g.world;
+                let set = awaited(w);
+                for &v in w.objects.keys() {
+                    let want = awaited_as_before(w, v);
+                    assert_eq!(set.contains(&v), want, "{map_name}, tick {}, {v:?}", w.tick);
+                    entered += usize::from(want);
+                }
+                for h in 0..w.houses.len() {
+                    let script = Script::new(HouseId(h as u8), crate::brain::default_plan());
+                    let own = script.own(w);
+                    let s = Special::default();
+                    let now = s.gunner_plan(&script, &own, w, &[]);
+                    let before = gunner_plan_as_before(&s, &script, &own, w, &[]);
+                    assert_eq!(now.loads, before.loads, "{map_name}, tick {}", w.tick);
+                    assert_eq!(now.build, before.build, "{map_name}, tick {}", w.tick);
+                    plans += 1;
+                }
+            }
+        }
+        assert!(entered > 0 && plans > 0, "{entered} entered, {plans} plans");
     }
 }

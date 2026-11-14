@@ -168,3 +168,50 @@ smallest counter (0, the bunker counters of seed 13, before and after).
 | #48 doc and code disagree | yes, by reading; the radiation case by a test: a walker hovering 400 leptons above a field got a move order | radiation: the code follows the doc and S-0525 claim 8 (aircraft hurt too; nothing airborne moved). Chrono, drain and lifter: the doc follows the code | `tests/radiation.rs`: `a_unit_in_the_air_above_a_field_stays` |
 | #51 step after game over; clones in save and diagnose | yes: a step after the outcome applied a pending order and changed the hash | `Game::step` does nothing once the game has an outcome; `save` writes from borrows (same bytes); `diagnose` reads the world unless its regions are out of date | `tests/game.rs`: `a_step_after_the_game_is_over_changes_nothing`; `save_load_and_replay_keep_the_state` |
 | #19 (rest) counters count offered orders | left untouched in this batch | — | — |
+
+## Batch AP1 (AI perf)
+
+Issues #52, #58, #60, #56, #55, #61, #62, #54 and #64 (time the AI spends thinking), with #57 and
+#63 looked at and left without new code. The batch changes no behaviour, so no format changes (AI game
+112, save 137, wire 12) and the goldens stay as they are. Each change gives the same answers as the
+code it replaces. A test checks this against a copy of the old code, or the old map scan, on the M6c,
+M7a and M7b duels.
+
+**Results against base c0d6f52.** The install bench (map 9, 8 houses, seed 7, 9 000 ticks) writes
+the same state hash every 500 ticks; the end hash is `02388e7c…0fb71824`. Each other check prints the
+same lines as base, timing lines apart:
+
+- the quick lane: seeds 7 to 14, maps 0, 2 and 8, sides 0,2 and 1,2, 48 games;
+- the M6c, M7a and M7b sweeps: seeds 1 to 16.
+
+**No state carried across ticks.** Nothing is cached from one tick to the next. Every kept answer
+lasts one think, or one call, and none is saved.
+
+**Final bench, run base, after, base, after back to back:**
+
+- AI time a tick, every house: 2256.5 / 1277.8 / 2090.6 / 1243.2 µs.
+- Think-tick AI per house: 3615.7 / 2082.4 / 3392.2 / 2026.5 µs.
+- A whole period of thinks summed: 27 137.5 → 16 211.8 µs (the second pair).
+- `tick::step` (the simulation, not changed): 2284.9 / 2102.7 / 2128.2 / 2053.7 µs.
+
+The rows below give that second pair, in ms over the run.
+
+**Where the time moved.** army_types (1401 → 2587) and build_superweapon (944 → 1300) grew. The
+think keeps its answers on whether each type can be built. The climb, which runs earlier in the
+think, used to work those answers out first. Now that the climb is skipped while its line is busy,
+these later steps work them out instead. The bench at the #52 commit shows the shift: climb
+3253 → 375 ms, army_types 1414 → 2924 and build_superweapon 950 → 1769.
+
+| issue | confirmed | change | test |
+|---|---|---|---|
+| #52 base walk and tech climb on a busy line | yes: both searches ran while every line their building could go on was busy, and their answers were thrown away | neither search runs while those lines are busy (`order_build` orders only on a free line). Bench: climb 3204.7 → 338.7 ms, walk 942.0 → 28.8. The net saving is smaller, because the climb's kept answers are now worked out by later steps: think-tick AI per house 3443.8 → 3221.5 µs at the #52 commit | `scripted.rs`: `every_climb_answer_is_a_climbable_building` |
+| #58 field questions scan the map | yes: field_cell, field_refinery, ore_goal, harvesters_wanted and fields() each scanned the map, and the ferry's land cell scanned the whole map | the think keeps one list of explored resource cells, and the field questions read it. fields() floods a dense box. The expansion tests ask the cheap questions first. The ferry scans only the square around its centre. Bench: expand:tests 1375.6 → 28.9 ms (with #64), plant_first 859.9 → 320.4 | `scripted.rs`: `the_field_answers_match_the_map_scans`; `brain.rs`: `the_land_cell_of_the_square_is_the_land_cell_of_the_map` |
+| #60 special builders ask buildable and startable afresh | yes: each startable answer scanned the objects, for every builder that asked | the special builders, the yard vehicle and the special infantry ask `Script::buildable` and a new kept `Script::startable`, which are worked out once a think. sell_when_broke tests the price first. Bench: special:jumpjets 258.8 → 59.5 ms | `scripted.rs`: `the_kept_startable_answer_is_the_plain_one` |
+| #56 defence views every enemy between thinks | yes: on a tick between thinks, building the list of seen enemies viewed every enemy object on the map | `Script::seen_enemies_where` reads the kept list during a think. Outside one, it views only the enemies near the base (a bounding box, then the distance to each building) or raiding it, in the same order. Enemies are tried nearest first, and the threats are a set. Bench, between thinks: defend 1944.5 → 927.0 ms | `brain.rs`: `the_nearest_first_defence_is_the_defence_of_every_enemy`, `the_threats_of_the_one_pass_are_the_threats_of_every_seen_enemy` |
+| #55 dominator aim scans the objects for each cell | yes: three scans of the objects for each cell weighed, and the spread radius found again for each object | the radius is found once a search, and the objects the blast can hurt are listed once. M7b bench: fire_superweapons between thinks 30.4 → 25.1 ms, then 19.5 with #54 | `dominator.rs`: `the_aim_read_once_is_the_aim_of_every_object` |
+| #61 gunner plan counts healers it may not want | yes: for every own vehicle, a pass over all objects ran before it knew whether a healer was wanted | the plan stops early when no healer is wanted or the house has no switching gunner vehicle. One pass finds the awaited vehicles as a set. Bench: special:gunners 140.0 → 21.4 ms | `gunner.rs`: `the_awaited_set_and_the_early_plan_are_as_before` |
+| #62 garrison, engineers and spies count en route per building | yes: a pass over every object for each building, and garrison summed it again for every own object | one pass counts the infantry bound for each building. The engineers' rank drops a component that is always false. Each step reads its seen and ranked buildings once, for the first idle unit. Bench: special:engineers 637.4 → 378.8 ms, special:spies 63.1 → 21.7 | `special.rs`: `the_counts_of_one_pass_are_the_counts_of_a_pass_for_each_building` |
+| #54 curtain reads every vehicle block | partly: a block with no seen enemy near was listed and filtered before the test that rules it out | the enemy test now runs first. Caching "no target" across ticks is not done, because the answer would not be exact | `brain.rs`: `the_curtain_cell_asking_for_enemies_first_is_the_cell_as_before` |
+| #64 smaller scans (field known, absorbers, sensor, berserk) | partly: the scan of the whole map for a known field ran once each in many steps of a think; the absorber room ran a pass over the objects for each absorber; the sensor searched a cell before asking its line; berserk counted each target's group again for every unit | the think keeps whether the house knows a field. One pass counts the units bound for every absorber. The sensor asks its line first. Berserk counts each group once a call. Bench: build_specials 1127.9 → 219.7 ms, build_lifter 342.4 → 30.3, build_drainer 381.3 → 52.0, ferry 498.8 → 213.2. Left: anti-air slots, bunker exit reasons, jumpjets, grinder contains, crates and memory lookups, all small rows | `scripted.rs`: `the_kept_field_answer_is_the_scan_of_the_map`; `absorber.rs`: `the_counts_of_one_pass_are_the_counts_of_a_pass_for_each_object`; `psychic.rs`: `the_sensor_and_the_berserk_targets_are_as_before` |
+| #57 deploy spot spiral | partly, in batch 2; find_deploy_spot is about 39 to 41 ms between thinks, before and after this batch (2.7 % of that AI time) | no new code. Keeping a failed spiral across ticks would not be exact | — |
+| #63 refused or redundant orders | yes, as counted | won't fix. Skipping the think while orders are blocked moves the M7b game by tick 500, because the first think also sets the brain's state. Thinking but returning no orders keeps the hashes on the M7b bench, but the think still runs, so it saves nothing. The harvest re-issue goes only to resting, idle or stalled harvesters, which the sim accepts and acts on. Batching waves changes when orders are sent; the wave bookkeeping belongs to #19. The grinder Build refusals are #8 | — |

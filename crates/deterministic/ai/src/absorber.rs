@@ -37,6 +37,8 @@
 //! and draws no random value. The numbers are tuning of our own opponent,
 //! not game behaviour.
 
+use std::collections::BTreeMap;
+
 use glasnost_map::CellXY;
 use glasnost_sim::econ::slaves;
 use glasnost_sim::econ::{production, tech};
@@ -108,21 +110,64 @@ pub fn stalled(w: &World, id: ObjectId) -> Option<ObjectId> {
     absorb::infantry_absorber(w, b).then_some(b)
 }
 
+/// [`en_route`] for each of `buildings`, from one pass over the objects
+/// (design: own AI, #64: a pass for each building, and again for the
+/// grinder's question). A unit counts once for each building it is bound
+/// for, as there.
+fn en_route_each(w: &World, buildings: &[ObjectId]) -> BTreeMap<ObjectId, usize> {
+    let mut m: BTreeMap<ObjectId, usize> = buildings.iter().map(|&b| (b, 0)).collect();
+    for o in w.objects.values().filter(|o| o.on_map) {
+        let waits = absorb::waiting_for(w, o.id);
+        let (contact, goal) = if entering(o) {
+            let goal = match o.dest {
+                Some(Target::Object(b)) => Some(b),
+                _ => None,
+            };
+            (o.contact, goal)
+        } else {
+            (None, None)
+        };
+        // Each building the unit is bound for once, not the unit itself.
+        let bound = [
+            waits,
+            contact.filter(|&c| Some(c) != waits),
+            goal.filter(|&g| Some(g) != waits && Some(g) != contact),
+        ];
+        for b in bound.into_iter().flatten().filter(|&b| b != o.id) {
+            if let Some(n) = m.get_mut(&b) {
+                *n += 1;
+            }
+        }
+    }
+    m
+}
+
 /// The room left in `b` for this think: its capacity less its passengers
-/// and the ones on their way.
-fn room(w: &World, b: ObjectId) -> usize {
+/// and the `en_route` ones on their way.
+fn room(w: &World, b: ObjectId, en_route: usize) -> usize {
     let cap = w
         .obj(b)
         .and_then(|o| w.rules().buildings.get(o.type_index as usize))
         .map_or(0, |r| r.absorb.capacity);
-    let taken = absorb::count(w, b) as usize + en_route(w, b);
+    let taken = absorb::count(w, b) as usize + en_route;
     usize::try_from(cap).unwrap_or(0).saturating_sub(taken)
+}
+
+/// The room left in each of `buildings` for this think ([`room`]).
+fn rooms(w: &World, buildings: &[ObjectId]) -> Vec<(ObjectId, usize)> {
+    let bound = en_route_each(w, buildings);
+    buildings
+        .iter()
+        .map(|&b| (b, room(w, b, bound.get(&b).copied().unwrap_or(0))))
+        .collect()
 }
 
 /// Whether one of the house's infantry absorbers has room left (the
 /// grinder step sends controlled infantry there first, `grinder`).
 pub(crate) fn room_left(w: &World, house: HouseId) -> bool {
-    absorbers(w, house).iter().any(|&b| room(w, b) > 0)
+    let buildings = absorbers(w, house);
+    // No absorber, no pass over the objects.
+    !buildings.is_empty() && rooms(w, &buildings).iter().any(|&(_, r)| r > 0)
 }
 
 /// Whether the house is short of power, read as a person reads the power
@@ -175,8 +220,7 @@ impl Special {
             return;
         }
         let mut sent = 0;
-        let mut rooms: Vec<(ObjectId, usize)> =
-            buildings.iter().map(|&b| (b, room(w, b))).collect();
+        let mut rooms: Vec<(ObjectId, usize)> = rooms(w, &buildings);
         // Stalled entrants first: the enter click on their building again.
         for &id in own {
             if sent >= PER_THINK {
@@ -282,4 +326,85 @@ pub(crate) fn held_by_controller(w: &World, id: ObjectId) -> bool {
 
 fn distance(w: &World, b: ObjectId, at: CellXY) -> i64 {
     w.obj(b).map_or(i64::MAX, |o| dist2(o.pos.cell(), at))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// [`room`] as before #64: the units on their way read by a pass of
+    /// their own.
+    fn room_as_before(w: &World, b: ObjectId) -> usize {
+        let cap = w
+            .obj(b)
+            .and_then(|o| w.rules().buildings.get(o.type_index as usize))
+            .map_or(0, |r| r.absorb.capacity);
+        let taken = absorb::count(w, b) as usize + en_route(w, b);
+        usize::try_from(cap).unwrap_or(0).saturating_sub(taken)
+    }
+
+    /// Our tooling for speed (design: own AI, #64): the units on their way
+    /// counted for every object at once are the units counted object by
+    /// object, and the rooms and the grinder's question read from them are
+    /// as before, at many points of the M6c, M7a and M7b duels.
+    #[test]
+    fn the_counts_of_one_pass_are_the_counts_of_a_pass_for_each_object() {
+        let games = [
+            (
+                crate::fixture_m6c::rules(),
+                crate::fixture_m6c::map(),
+                crate::fixture_m6c::MAP_NAME,
+                crate::fixture_m6c::setup(2),
+            ),
+            (
+                crate::fixture_m7a::rules(),
+                crate::fixture_m7a::map(),
+                crate::fixture_m7a::MAP_NAME,
+                crate::fixture_m7a::setup(17),
+            ),
+            (
+                crate::fixture_m7b::rules(),
+                crate::fixture_m7b::map(),
+                crate::fixture_m7b::MAP_NAME,
+                crate::fixture_m7b::setup(11),
+            ),
+        ];
+        let (mut bound, mut roomy) = (0, 0);
+        for (rules, map, map_name, setup) in games {
+            let mut g = Game::new(rules, &map, map_name, fixture::catalogue(), setup)
+                .expect("the duel loads");
+            for _ in 0..120 {
+                for _ in 0..75 {
+                    g.step();
+                }
+                let w = &g.world;
+                let every: Vec<ObjectId> = w.objects.keys().copied().collect();
+                let counts = en_route_each(w, &every);
+                for &b in &every {
+                    let want = en_route(w, b);
+                    assert_eq!(
+                        counts.get(&b),
+                        Some(&want),
+                        "{map_name}, tick {}, {b:?}",
+                        w.tick
+                    );
+                    bound += want;
+                }
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    let buildings = absorbers(w, house);
+                    let want: Vec<(ObjectId, usize)> = buildings
+                        .iter()
+                        .map(|&b| (b, room_as_before(w, b)))
+                        .collect();
+                    assert_eq!(rooms(w, &buildings), want, "{map_name}, tick {}", w.tick);
+                    let left = want.iter().any(|&(_, r)| r > 0);
+                    assert_eq!(room_left(w, house), left, "{map_name}, tick {}", w.tick);
+                    roomy += usize::from(left);
+                }
+            }
+        }
+        assert!(bound > 0 && roomy > 0, "{bound} bound, {roomy} with room");
+    }
 }

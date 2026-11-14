@@ -764,6 +764,19 @@ struct Kept {
     roles: BTreeMap<Role, Arc<[ObjectId]>>,
     /// [`Script::candidates`] by role (design: own AI, #59 and #60).
     candidates: BTreeMap<Role, Arc<[TypeRef]>>,
+    /// [`Script::explored_ore`] (design: own AI, #58: one scan of the map
+    /// a think instead of one per question).
+    ore: Option<Arc<[(CellXY, bool)]>>,
+    /// [`Script::ore_goal`] (design: own AI, #58).
+    ore_goal: Option<Option<CellXY>>,
+    /// [`Script::harvesters_wanted`] (design: own AI, #58).
+    wanted: Option<usize>,
+    /// [`Script::startable`] by type (design: own AI, #60).
+    startable: BTreeMap<TypeRef, bool>,
+    /// [`Script::knows_field`] (design: own AI, #64: one scan of the map a
+    /// think for the lifter, drainer and economy questions instead of one
+    /// each).
+    knows_field: Option<bool>,
 }
 
 impl PlaceMemo {
@@ -1115,16 +1128,32 @@ impl Script {
     /// The nearest explored cell to `from` that holds a resource, the first
     /// in cell order on equal distance: where a person sends a slave miner.
     fn field_cell(&self, w: &World, from: CellXY) -> Option<CellXY> {
-        w.cells
-            .grid
+        self.explored_ore(w)
             .iter()
-            .map(|(c, _)| c)
-            .filter(|&c| {
-                w.cells.usable(c)
-                    && shroud::explored(w, self.house, c)
-                    && resource::resource_at(w, c).is_some()
-            })
+            .filter(|&&(_, usable)| usable)
+            .map(|&(c, _)| c)
             .min_by_key(|&c| (dist2(c, from), c.y, c.x))
+    }
+
+    /// The explored cells of the map that hold a resource, in cell order,
+    /// each with whether it is usable ([`World`]'s `cells.usable`); one scan
+    /// a think, the list kept for the rest of it (design: own AI, #58: the
+    /// field questions of a think each scanned the whole map).
+    fn explored_ore(&self, w: &World) -> Arc<[(CellXY, bool)]> {
+        self.placed.keep(
+            |m| &mut m.ore,
+            || {
+                w.cells
+                    .grid
+                    .iter()
+                    .map(|(c, _)| c)
+                    .filter(|&c| {
+                        resource::resource_at(w, c).is_some() && shroud::explored(w, self.house, c)
+                    })
+                    .map(|c| (c, w.cells.usable(c)))
+                    .collect()
+            },
+        )
     }
 
     /// The house's objects on the map that play `role`. A slave with a
@@ -1404,6 +1433,18 @@ impl Script {
         yes
     }
 
+    /// [`crate::startable`] for the house, asking the kept
+    /// [`Script::buildable`] first; the answer is kept for the rest of a
+    /// think (design: own AI, #60: the special builders ask it of many
+    /// types, each answer a scan of the objects).
+    pub(crate) fn startable(&self, w: &World, t: TypeRef) -> bool {
+        self.placed.keep_by(
+            |m| &mut m.startable,
+            t,
+            || self.buildable(w, t) && crate::could_start(w, self.house, t),
+        )
+    }
+
     /// Whether a build order for `t` would be refused at issue now by its
     /// build limit or by claim 16's test, a full pad total for a dock-bound
     /// aircraft among them ([`tech::refused_at_issue`]), the answer kept for
@@ -1487,6 +1528,44 @@ impl Script {
             .map(|(_, _, b)| b)
             // design: own AI (#40): the cheapest with a cell now, so that a building no cell takes is not ordered again after its cancel
             .find(|&b| self.placeable(w, b))
+    }
+
+    /// Every building the tech climb could ever give
+    /// ([`Script::unblocker`]): a building that meets a prerequisite entry
+    /// of some type, or a factory. The rules alone decide the list, so it
+    /// holds every answer of the climb whatever the house has.
+    fn climbable(w: &World) -> BTreeSet<TypeRef> {
+        let tech = &w.rules().econ.tech;
+        let factories = w
+            .rules()
+            .buildings
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.factory.is_some())
+            .map(|(i, _)| i as u32);
+        all_types(w)
+            .into_iter()
+            .filter_map(|x| tech.of(x))
+            .flat_map(|f| f.prereq.iter().flat_map(|&p| Self::meeting(w, p)))
+            .chain(factories)
+            .map(|index| TypeRef {
+                kind: Kind::Building,
+                index,
+            })
+            .collect()
+    }
+
+    /// Whether the line of every building the base walk or the tech climb
+    /// could give ([`Script::candidates`] for power, [`Script::climbable`])
+    /// is busy: then [`Script::order_build`] orders none of them, whichever
+    /// the searches would find (our own tooling for speed, #52: the searches
+    /// ran every think while a building was in production and their answer
+    /// was thrown away).
+    fn climb_lines_busy(&self, w: &World) -> bool {
+        self.candidates(w, Role::Power)
+            .into_iter()
+            .chain(Self::climbable(w))
+            .all(|t| self.busy(w, t))
     }
 
     /// The credits the house earned over the last whole window of
@@ -1626,11 +1705,13 @@ impl Script {
         // Broke: too few credits for anything the house can build now.
         // design: own AI (#60): asked last, as the patience and the refund
         // decide alone most thinks (the test reads every type's tech).
+        // design: own AI (#60): the price before the tech tree, as most
+        // types cost more than a broke house holds.
         let affordable = || {
             all_types(w)
                 .into_iter()
-                .filter(|&a| self.buildable(w, a))
-                .any(|a| credits >= production::cost_field(w, a))
+                .filter(|&a| credits >= production::cost_field(w, a))
+                .any(|a| self.buildable(w, a))
         };
         if t - since < BROKE_PATIENCE || refund || affordable() {
             return;
@@ -1700,7 +1781,14 @@ impl Script {
     /// (M7b AI audit: two slave miners earned about a third of what two
     /// harvesters of the other sides earned on the same stock maps, and the
     /// house starved).
+    /// The answer is kept for the rest of a think (design: own AI, #58).
     pub(crate) fn harvesters_wanted(&self, w: &World) -> usize {
+        self.placed
+            .keep(|m| &mut m.wanted, || self.find_harvesters_wanted(w))
+    }
+
+    /// [`Script::harvesters_wanted`]'s count.
+    fn find_harvesters_wanted(&self, w: &World) -> usize {
         let mut centres = self.field_centres(w);
         centres.extend(self.home(w));
         let mut cells = std::collections::BTreeSet::new();
@@ -1772,47 +1860,65 @@ impl Script {
         };
         let centres = self.field_centres(w);
         let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
-        let ore: std::collections::BTreeSet<(i32, i32)> = w
-            .cells
-            .grid
+        // The usable explored resource cells, in cell order.
+        let ore: Vec<CellXY> = self
+            .explored_ore(w)
             .iter()
-            .map(|(c, _)| c)
-            .filter(|&c| {
-                w.cells.usable(c)
-                    && resource::resource_at(w, c).is_some()
-                    && shroud::explored(w, self.house, c)
-            })
-            .map(|c| (c.y, c.x))
+            .filter(|&&(_, usable)| usable)
+            .map(|&(c, _)| c)
             .collect();
-        let mut worked: std::collections::BTreeSet<(i32, i32)> = ore
-            .iter()
-            .copied()
-            .filter(|&(y, x)| {
-                centres
-                    .iter()
-                    .any(|&m| dist2(m, CellXY::new(x, y)) <= reach)
-            })
-            .collect();
-        let mut todo: Vec<(i32, i32)> = worked.iter().copied().collect();
-        while let Some((y, x)) = todo.pop() {
+        // design: own AI (#58): the fields are joined on a dense map of the
+        // resource cells' bounding box (0 none, 1 a resource cell, 2 one of
+        // a worked field) instead of ordered sets; the same cells join
+        let x0 = ore.iter().map(|c| c.x).min().unwrap_or(0);
+        let x1 = ore.iter().map(|c| c.x).max().unwrap_or(-1);
+        let y0 = ore.iter().map(|c| c.y).min().unwrap_or(0);
+        let y1 = ore.iter().map(|c| c.y).max().unwrap_or(-1);
+        let wide = usize::try_from(x1 - x0 + 1).unwrap_or(0);
+        let high = usize::try_from(y1 - y0 + 1).unwrap_or(0);
+        let index = |c: CellXY| {
+            ((x0..=x1).contains(&c.x) && (y0..=y1).contains(&c.y))
+                .then(|| (c.y - y0) as usize * wide + (c.x - x0) as usize)
+        };
+        // The marks of the dense map.
+        const NONE: u8 = 0; // nocite: a mark of our own search, not game behaviour
+        const ORE: u8 = 1; // nocite: a mark of our own search, not game behaviour
+        const WORKED: u8 = 2; // nocite: a mark of our own search, not game behaviour
+        let mut state = vec![NONE; wide * high];
+        let mut todo: Vec<CellXY> = Vec::new();
+        for &c in &ore {
+            let Some(i) = index(c) else { continue };
+            if centres.iter().any(|&m| dist2(m, c) <= reach) {
+                state[i] = WORKED;
+                todo.push(c);
+            } else {
+                state[i] = ORE;
+            }
+        }
+        while let Some(c) = todo.pop() {
             for dy in -FIELD_GAP - 1..=FIELD_GAP + 1 {
                 for dx in -FIELD_GAP - 1..=FIELD_GAP + 1 {
-                    let n = (y + dy, x + dx);
-                    if ore.contains(&n) && worked.insert(n) {
+                    let n = CellXY::new(c.x + dx, c.y + dy);
+                    if let Some(i) = index(n)
+                        && state[i] == ORE
+                    {
+                        state[i] = WORKED;
                         todo.push(n);
                     }
                 }
             }
         }
+        let worked = state.iter().filter(|&&s| s == WORKED).count();
         let enemy_starts = self.enemy_starts(w);
         let own_half: Vec<CellXY> = ore
-            .difference(&worked)
-            .map(|&(y, x)| CellXY::new(x, y))
+            .iter()
+            .copied()
+            .filter(|&c| index(c).is_some_and(|i| state[i] == ORE))
             .filter(|&c| enemy_starts.iter().all(|&t| dist2(c, home) < dist2(c, t)))
             .collect();
         Fields {
             explored: ore.len(),
-            worked: worked.len(),
+            worked,
             own_half: own_half.len(),
             far: own_half
                 .into_iter()
@@ -1822,9 +1928,14 @@ impl Script {
 
     /// Whether an explored cell of the map holds a resource for the house.
     fn knows_field(&self, w: &World) -> bool {
-        w.cells.grid.iter().any(|(c, _)| {
-            resource::resource_at(w, c).is_some() && shroud::explored(w, self.house, c)
-        })
+        self.placed.keep(
+            |m| &mut m.knows_field,
+            || {
+                w.cells.grid.iter().any(|(c, _)| {
+                    resource::resource_at(w, c).is_some() && shroud::explored(w, self.house, c)
+                })
+            },
+        )
     }
 
     /// Whether the fields the house has known are all mined out: it has
@@ -2005,17 +2116,10 @@ impl Script {
             return false;
         }
         let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
-        let near = w
-            .cells
-            .grid
+        let near = self
+            .explored_ore(w)
             .iter()
-            .map(|(c, _)| c)
-            .filter(|&c| {
-                refineries.iter().any(|&r| dist2(r, c) <= reach)
-                    && w.cells.usable(c)
-                    && resource::resource_at(w, c).is_some()
-                    && shroud::explored(w, self.house, c)
-            })
+            .filter(|&&(c, usable)| usable && refineries.iter().any(|&r| dist2(r, c) <= reach))
             .count();
         if near >= CELLS_PER_HARVESTER {
             return false;
@@ -2171,7 +2275,10 @@ impl Script {
             };
             if let Some(role) = wanted {
                 self.build(w, role, &mut out);
-            } else if !selling && self.harvesters_kept(w) {
+            } else if !selling && self.harvesters_kept(w) && !self.climb_lines_busy(w) {
+                // design: own AI (#52): with every line a walk or climb
+                // building could go on busy, the search's building would
+                // not be ordered (`order_build`), so it is not searched for
                 mark("ai:script:buildings:walk");
                 let walked = walk();
                 mark("ai:script:buildings:climb");
@@ -2870,10 +2977,43 @@ impl Script {
             .to_vec()
     }
 
-    /// [`Script::seen_enemies`]'s scan. The cloak is asked only of an
-    /// enemy (it only reads the world, so the answer is the same as asking
-    /// it of every object first; design: own AI, #53).
+    /// The [`Script::seen_enemies`] whose object passes `pick`, in object
+    /// order: read off the kept list when the think has one, else found by
+    /// one scan that asks `pick` before the view and the disguise (design:
+    /// own AI, #56: on a tick between thinks the defence wants only the
+    /// enemies near the base or raiding it, and the view of every enemy on
+    /// the map was most of that tick's AI time). `pick` must only read the
+    /// world.
+    pub(crate) fn seen_enemies_where(
+        &self,
+        w: &World,
+        pick: impl Fn(&Object) -> bool,
+    ) -> Vec<(ObjectId, CellXY)> {
+        let kept = self.placed.0.borrow().as_ref().and_then(|m| m.seen.clone());
+        match kept {
+            Some(seen) => seen
+                .iter()
+                .copied()
+                .filter(|&(id, _)| w.obj(id).is_some_and(&pick))
+                .collect(),
+            None => self.scan_seen_where(w, pick),
+        }
+    }
+
+    /// [`Script::seen_enemies`]'s scan.
     fn scan_seen_enemies(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
+        self.scan_seen_where(w, |_| true)
+    }
+
+    /// The seen enemies whose object passes `pick`, in object order. The
+    /// cloak is asked only of an enemy that `pick` takes (it and `pick`
+    /// only read the world, so the answer is the same as asking it of
+    /// every object first; design: own AI, #53 and #56).
+    fn scan_seen_where(
+        &self,
+        w: &World,
+        pick: impl Fn(&Object) -> bool,
+    ) -> Vec<(ObjectId, CellXY)> {
         let me = &w.houses[usize::from(self.house.0)];
         w.objects
             .values()
@@ -2890,7 +3030,7 @@ impl Script {
                 let seen = || crate::in_view(w, self.house, o.id);
                 // design: own AI (#37): an enemy unit the house is shown as its disguise is taken for what it shows (S-0516 claims 35 and 37)
                 let disguised = || crate::shown_as_disguise(w, self.house, o.id);
-                (enemy && seen() && !disguised()).then_some((o.id, c))
+                (enemy && pick(o) && seen() && !disguised()).then_some((o.id, c))
             })
             .collect()
     }
@@ -3074,22 +3214,26 @@ impl Script {
     /// [`CELLS_PER_HARVESTER`] explored resource cells within
     /// [`FIELD_REACH`] cells, a field that keeps a harvester at work; with
     /// none, the explored resource cell nearest home.
+    /// The answer is kept for the rest of a think (design: own AI, #58).
     fn ore_goal(&self, w: &World) -> Option<CellXY> {
+        self.placed
+            .keep(|m| &mut m.ore_goal, || self.find_ore_goal(w))
+    }
+
+    /// [`Script::ore_goal`]'s search.
+    fn find_ore_goal(&self, w: &World) -> Option<CellXY> {
         let home = self.home(w)?;
         let reach = self.harvester_reach(w, home);
-        let mut ore: Vec<CellXY> = w
-            .cells
-            .grid
+        let mut ore: Vec<CellXY> = self
+            .explored_ore(w)
             .iter()
-            .map(|(c, _)| c)
+            .filter(|&&(_, usable)| usable)
+            .map(|&(c, _)| c)
             .filter(|&c| {
-                w.cells.usable(c)
-                    && resource::resource_at(w, c).is_some()
-                    && shroud::explored(w, self.house, c)
-                    && (reach.is_empty()
-                        || reach
-                            .iter()
-                            .any(|&(z, r)| regions::reach_in(w, c, z) == Reach::Region(r)))
+                reach.is_empty()
+                    || reach
+                        .iter()
+                        .any(|&(z, r)| regions::reach_in(w, c, z) == Reach::Region(r))
             })
             .collect();
         ore.sort_by_key(|&c| (dist2(c, home), c.y, c.x));
@@ -3804,6 +3948,283 @@ mod place_cell_tests {
         assert!(seen > 0, "no enemy seen");
         assert!(free > 0 && free < tested, "{free} of {tested}");
         assert!(roles_found > 0 && candidates_found > 0);
+    }
+
+    /// [`Script::fields`] as before #58: the explored resource cells and the
+    /// worked ones in ordered sets.
+    fn fields_as_before(s: &Script, w: &World) -> Fields {
+        let Some(home) = s.home(w) else {
+            return Fields::default();
+        };
+        let centres = s.field_centres(w);
+        let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
+        let ore: BTreeSet<(i32, i32)> = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                w.cells.usable(c)
+                    && resource::resource_at(w, c).is_some()
+                    && shroud::explored(w, s.house, c)
+            })
+            .map(|c| (c.y, c.x))
+            .collect();
+        let mut worked: BTreeSet<(i32, i32)> = ore
+            .iter()
+            .copied()
+            .filter(|&(y, x)| {
+                centres
+                    .iter()
+                    .any(|&m| dist2(m, CellXY::new(x, y)) <= reach)
+            })
+            .collect();
+        let mut todo: Vec<(i32, i32)> = worked.iter().copied().collect();
+        while let Some((y, x)) = todo.pop() {
+            for dy in -FIELD_GAP - 1..=FIELD_GAP + 1 {
+                for dx in -FIELD_GAP - 1..=FIELD_GAP + 1 {
+                    let n = (y + dy, x + dx);
+                    if ore.contains(&n) && worked.insert(n) {
+                        todo.push(n);
+                    }
+                }
+            }
+        }
+        let enemy_starts = s.enemy_starts(w);
+        let own_half: Vec<CellXY> = ore
+            .difference(&worked)
+            .map(|&(y, x)| CellXY::new(x, y))
+            .filter(|&c| enemy_starts.iter().all(|&t| dist2(c, home) < dist2(c, t)))
+            .collect();
+        Fields {
+            explored: ore.len(),
+            worked: worked.len(),
+            own_half: own_half.len(),
+            far: own_half
+                .into_iter()
+                .min_by_key(|&c| (dist2(c, home), c.y, c.x)),
+        }
+    }
+
+    /// [`Script::field_cell`] as before #58: every cell of the map read.
+    fn field_cell_as_before(s: &Script, w: &World, from: CellXY) -> Option<CellXY> {
+        w.cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                w.cells.usable(c)
+                    && shroud::explored(w, s.house, c)
+                    && resource::resource_at(w, c).is_some()
+            })
+            .min_by_key(|&c| (dist2(c, from), c.y, c.x))
+    }
+
+    /// [`Script::ore_goal`] as before #58: every cell of the map read, the
+    /// goal searched at each call.
+    fn ore_goal_as_before(s: &Script, w: &World) -> Option<CellXY> {
+        let home = s.home(w)?;
+        let reach = s.harvester_reach(w, home);
+        let mut ore: Vec<CellXY> = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                w.cells.usable(c)
+                    && resource::resource_at(w, c).is_some()
+                    && shroud::explored(w, s.house, c)
+                    && (reach.is_empty()
+                        || reach
+                            .iter()
+                            .any(|&(z, r)| regions::reach_in(w, c, z) == Reach::Region(r)))
+            })
+            .collect();
+        ore.sort_by_key(|&c| (dist2(c, home), c.y, c.x));
+        let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
+        let rich = |c: CellXY| {
+            ore.iter().filter(|&&o| dist2(o, c) <= reach).count() >= CELLS_PER_HARVESTER
+        };
+        ore.iter()
+            .copied()
+            .find(|&c| rich(c))
+            .or_else(|| ore.first().copied())
+    }
+
+    /// Our tooling for speed (design: own AI, #58): the field answers read
+    /// off the explored resource cells listed once a think (the far field
+    /// joined on a dense map, the nearest field cell, the refinery's goal,
+    /// the harvesters wanted and the field refinery's want) answer as the
+    /// scans of the whole map did, at several points of each fixture game,
+    /// for every house, during a think and outside one.
+    #[test]
+    fn the_field_answers_match_the_map_scans() {
+        let mut explored = 0;
+        let mut far = 0;
+        let mut goals = 0;
+        for mut g in kept_games() {
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                let froms: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).step_by(211).collect();
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    let s = Script::new(house, Plan::default());
+                    for thinking in [true, false] {
+                        if thinking {
+                            s.begin_think();
+                        }
+                        let plain = Script::new(house, Plan::default());
+                        for _ in 0..2 {
+                            let want = fields_as_before(&s, w);
+                            assert_eq!(s.fields(w), want, "house {h}");
+                            explored += want.explored;
+                            far += usize::from(want.far.is_some());
+                            for &from in &froms {
+                                assert_eq!(
+                                    s.field_cell(w, from),
+                                    field_cell_as_before(&s, w, from),
+                                    "house {h}, {from:?}"
+                                );
+                            }
+                            let goal = ore_goal_as_before(&s, w);
+                            assert_eq!(s.ore_goal(w), goal, "house {h}");
+                            goals += usize::from(goal.is_some());
+                            assert_eq!(
+                                s.harvesters_wanted(w),
+                                plain.harvesters_wanted(w),
+                                "house {h}"
+                            );
+                            assert_eq!(s.field_refinery(w), plain.field_refinery(w), "house {h}");
+                        }
+                        if thinking {
+                            s.end_think();
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            explored > 0 && far > 0 && goals > 0,
+            "{explored}, {far}, {goals}"
+        );
+    }
+
+    /// Our tooling for speed (design: own AI, #52): every building the
+    /// tech climb's search gives, for every type at every depth, is one of
+    /// [`Script::climbable`], so that while the lines of all of them and of
+    /// the power plants are busy ([`Script::climb_lines_busy`]) neither the
+    /// climb's nor the base walk's building could be ordered; at several
+    /// points of each fixture game, for every house.
+    #[test]
+    fn every_climb_answer_is_a_climbable_building() {
+        let mut answers = 0;
+        let mut busy = 0;
+        for mut g in kept_games() {
+            let climbable = Script::climbable(&g.world);
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                for h in 0..w.houses.len() {
+                    let s = Script::new(HouseId(h as u8), Plan::default());
+                    s.begin_think();
+                    for t in all_types(w) {
+                        for depth in 0..=CLIMB_DEPTH {
+                            if let Some(b) = s.unblocker(w, t, depth) {
+                                assert!(
+                                    climbable.contains(&b),
+                                    "house {h}, {t:?}, depth {depth}: {b:?}"
+                                );
+                                answers += 1;
+                            }
+                        }
+                    }
+                    if s.climb_lines_busy(w) {
+                        busy += 1;
+                        assert!(s.climb(w).is_none_or(|t| s.busy(w, t)), "house {h}");
+                        assert!(
+                            s.candidates(w, Role::Power)
+                                .into_iter()
+                                .all(|t| s.busy(w, t)),
+                            "house {h}"
+                        );
+                    }
+                    s.end_think();
+                }
+            }
+        }
+        assert!(answers > 0 && busy > 0, "{answers} answers, {busy} busy");
+    }
+
+    /// Design: own AI (#60). The kept [`Script::startable`] gives
+    /// [`crate::startable`]'s answer for every type, asked twice in a think
+    /// (the second answer kept) and outside one, at several points of each
+    /// fixture game, for every house.
+    #[test]
+    fn the_kept_startable_answer_is_the_plain_one() {
+        let mut yes = 0;
+        let mut no = 0;
+        for mut g in kept_games() {
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    let s = Script::new(house, Plan::default());
+                    let plain = Script::new(house, Plan::default());
+                    s.begin_think();
+                    for t in all_types(w) {
+                        let want = crate::startable(w, house, t);
+                        assert_eq!(s.startable(w, t), want, "house {h}, {t:?}");
+                        assert_eq!(s.startable(w, t), want, "kept: house {h}, {t:?}");
+                        assert_eq!(plain.startable(w, t), want, "plain: house {h}, {t:?}");
+                        if want {
+                            yes += 1;
+                        } else {
+                            no += 1;
+                        }
+                    }
+                    s.end_think();
+                }
+            }
+        }
+        assert!(yes > 0 && no > 0, "{yes} startable, {no} not");
+    }
+
+    /// Our tooling for speed (design: own AI, #64): whether the house knows
+    /// a field, kept for a think, is the answer of a scan of the map, and
+    /// the answer of a script outside a think.
+    #[test]
+    fn the_kept_field_answer_is_the_scan_of_the_map() {
+        let mut known = 0;
+        for mut g in kept_games() {
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    let want = w.cells.grid.iter().any(|(c, _)| {
+                        resource::resource_at(w, c).is_some() && shroud::explored(w, house, c)
+                    });
+                    let s = Script::new(house, Plan::default());
+                    assert_eq!(s.knows_field(w), want, "plain: house {h}");
+                    s.begin_think();
+                    assert_eq!(s.knows_field(w), want, "house {h}");
+                    assert_eq!(s.knows_field(w), want, "kept: house {h}");
+                    s.end_think();
+                    known += usize::from(want);
+                }
+            }
+        }
+        assert!(known > 0, "{known} known");
     }
 }
 

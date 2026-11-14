@@ -13,7 +13,7 @@
 
 use std::collections::BTreeMap;
 
-use glasnost_sim::econ::{TypeRef, production, tech};
+use glasnost_sim::econ::{TypeRef, production};
 use glasnost_sim::linked;
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind};
@@ -41,19 +41,20 @@ const OVERPOWERABLE_WANTED: usize = 1; // nocite: tuning of our own opponent
 /// `quirks.path_no_reopen` flipped).
 const CHARGE_REACH: i64 = 24; // nocite: tuning of our own opponent
 
-/// The prism type as a buildable type of the house.
-fn prism_type(w: &World, house: HouseId) -> Option<TypeRef> {
+/// The prism type as a buildable type of the house (the script's kept
+/// buildability; design: own AI, #60).
+fn prism_type(w: &World, script: &Script) -> Option<TypeRef> {
     let b = w.rules().combat.general.prism.building?;
     let t = TypeRef {
         kind: Kind::Building,
         index: b,
     };
-    tech::buildable(w, house, t).then_some(t)
+    script.buildable(w, t).then_some(t)
 }
 
 /// The cheapest overpowerable building type other than the prism type
 /// that the house can build (the first in the rules on equal price).
-fn overpowerable_type(w: &World, house: HouseId) -> Option<TypeRef> {
+fn overpowerable_type(w: &World, script: &Script) -> Option<TypeRef> {
     let r = w.rules();
     let prism = r.combat.general.prism.building;
     (0..r.buildings.len())
@@ -63,7 +64,7 @@ fn overpowerable_type(w: &World, house: HouseId) -> Option<TypeRef> {
             kind: Kind::Building,
             index,
         })
-        .filter(|&t| tech::buildable(w, house, t))
+        .filter(|&t| script.buildable(w, t))
         .min_by_key(|&t| (production::cost_field(w, t), t.index))
 }
 
@@ -124,7 +125,7 @@ impl Special {
                     >= production::cost_field(w, t).saturating_mul(RESERVE)
         };
         let mut ordered = false;
-        if let Some(t) = prism_type(w, house)
+        if let Some(t) = prism_type(w, script)
             && count(w, house, t) < PRISMS_WANTED
             && affords(t)
         {
@@ -139,7 +140,7 @@ impl Special {
             && own.iter().any(|&id| {
                 linked::charger_type(w, id) && w.obj(id).is_some_and(|o| o.kind == Kind::Infantry)
             })
-            && let Some(t) = overpowerable_type(w, house)
+            && let Some(t) = overpowerable_type(w, script)
         {
             let have: usize = (0..w.rules().buildings.len())
                 .filter_map(|i| u32::try_from(i).ok())
