@@ -103,8 +103,15 @@ fn issue_270_no_search_on_arrival_after_a_switch_off_stop_request() {
     assert!(switched, "a moment to switch it off was found");
     glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
     let o = w.obj(id).unwrap();
-    assert_eq!(o.dest, Some(Target::Cell(c)), "order-level destination stays");
-    assert!(o.path.steps.is_empty(), "the stop request cleared the stored path");
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(c)),
+        "order-level destination stays"
+    );
+    assert!(
+        o.path.steps.is_empty(),
+        "the stop request cleared the stored path"
+    );
     assert_eq!(hover::destination_point(&w, id), None, "D is cleared");
     assert!(o.hover.as_ref().unwrap().point.is_some(), "P is kept");
     let retry_before = o.path.retry_at;

@@ -11,8 +11,7 @@ use glasnost_sim::rules::Kind;
 
 // spec: S-0107 State and ordering ("Not moving" in the follow-up table: no movement in progress, or a speed fraction of at most 0.1; a completed kind while not moving and not prone is followed by stand, forced) and Constants (moving test at completion 0.1); claim 7 (walk becomes panic above fear 199)
 #[test]
-fn issue_275_completed_panic_with_movement_in_progress_and_speed_fraction_0_is_followed_by_stand()
-{
+fn issue_275_completed_panic_with_movement_in_progress_and_speed_fraction_0_is_followed_by_stand() {
     let mut s = Scene::new();
     let mut t = unit_type(common::FOOT, 4, 5);
     for k in ["stand", "walk", "panic"] {

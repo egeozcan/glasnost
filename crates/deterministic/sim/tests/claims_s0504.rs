@@ -2004,7 +2004,10 @@ fn issue_269_killing_hit_sinking_cancels_destination_and_own_target() {
     let o = w.obj(skiff).unwrap();
     assert_eq!(o.target, None, "claim 10: its own target is cancelled");
     assert_eq!(o.dest, None, "claim 10: the destination is cancelled");
-    assert!(o.path.steps.is_empty(), "claim 10: the locomotor stop clears the stored steps");
+    assert!(
+        o.path.steps.is_empty(),
+        "claim 10: the locomotor stop clears the stored steps"
+    );
     assert_eq!(
         o.drive.as_ref().unwrap().track,
         track,

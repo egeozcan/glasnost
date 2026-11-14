@@ -68,5 +68,9 @@ fn issue_273_own_cell_under_a_deck_is_searched_for() {
 fn issue_273_control_own_cell_without_a_deck_is_complete() {
     let (mut w, id) = standing(false);
     assert_eq!(searches_in_one_tick(&mut w, id), 0, "no search");
-    assert_eq!(w.obj(id).expect("s").dest, None, "the destination is complete");
+    assert_eq!(
+        w.obj(id).expect("s").dest,
+        None,
+        "the destination is complete"
+    );
 }

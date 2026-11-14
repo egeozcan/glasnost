@@ -93,7 +93,10 @@ fn issue_263_off_the_new_first_step_replaces_the_old_one() {
             r.track_end, r.stored, r.leads_to
         );
     }
-    assert!(!cells.contains(&(16, 16)), "the vehicle drove past its destination: {cells:?}");
+    assert!(
+        !cells.contains(&(16, 16)),
+        "the vehicle drove past its destination: {cells:?}"
+    );
     assert_eq!(cells.last(), Some(&to));
 }
 
