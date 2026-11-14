@@ -2,14 +2,14 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 41
+revision: 43
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-13
+approved-on: 2026-11-14
 measurements: []
 requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561, Q-2159, Q-2711, Q-2748,
-Q-2749, Q-2811, Q-3044]
+Q-2749, Q-2811, Q-3044, Q-3066]
 supersedes: []
 ---
 
@@ -421,7 +421,8 @@ above the terrain*.
     aim point is the destination's *heading point*:
     - for a unit: the point its locomotor is moving it to at that moment (the end of the step it is
       on), or its position when it is not moving; for a hovering vehicle, as the paragraph *A
-      hovering destination* below gives; for a unit inside a tunnel, the tunnel's exit,
+      hovering destination* below gives; for a unit inside a tunnel, the tunnel's exit (the centre
+      of its exit cell, at world height 0),
     - for a building: its centre, the point 128 × (*W* − 1) leptons further on the map *x* axis and
       128 × (*H* − 1) further on the map *y* axis than its position, *W* × *H* being its foundation,
       except that a building whose type is a helipad, a unit repair or reload building, or a bunker
@@ -439,17 +440,26 @@ above the terrain*.
     holds one at that moment, and its position when it holds none. Holding *P* is the whole test:
     whether the vehicle is powered, its throttle *T* and S-0503's *moving* play no part. So:
     - a switched-off vehicle that holds *P*, whether still above a hover height of 0 or already down
-      at 0, gives *P*, although it may never travel there (S-0503 claim 10: the switch-off keeps *P*),
+      at 0, gives *P*, although it may never travel there (S-0503 claim 10: the switch-off leaves *P*),
     - a powered vehicle that holds *P* in a tick in which its throttle is 0 because its movement
       heading is more than 45° from the direction to *P* (S-0503 claim 2) gives *P*,
     - a vehicle that keeps a destination but holds no *P*, as after a step check whose outcome is
       not *clear*, for example while it waits at a closed gate of its own house (S-0503 claim 12),
       gives its position, although S-0503 counts it as moving.
 
+    A vehicle disabled by the cell-arrival update of its own clear choice of *P* (S-0405 claim 13),
+    as when a still-powered vehicle whose type has the powered-unit flag, on a cell without a
+    building and with no active control centre in its house, is given a destination and chooses at
+    once (S-0503 claim 5), still holds that *P* after the disabling: *P* is already chosen at that
+    update (S-0503 claim 15), and the disabling's stop request leaves *P*, clearing the destination
+    and stored path only when the destination differs from *P* (S-0503 claim 10).
+
     A rocket missile launched at a switched-off vehicle that holds *P* therefore detonates where
     claim 19 gives for the aim point *P*, wherever the vehicle has come to rest. The vehicle takes
     S-0303's area damage at its own distance from that detonation point, like any other object
-    there, and none when that distance exceeds the warhead's spread radius. With
+    there, and none when that distance exceeds the warhead's spread radius. For a *P* at its cell's
+    surface height, the detonation point can lie below the surface (claim 19, *Placement height*),
+    and the distance then includes that depth (S-0303 claim 7). With
     `quirks.rocket_aim_at_heading_point` off the aim point is the vehicle's position in each of
     these cases.
 
@@ -544,7 +554,13 @@ above the terrain*.
       `measurable` (scenario R27) for a hovering destination. The result of the M-0003 row
       restated by M-0016 that Q-3044 names (the launchers win all 12 games against switched-off
       hovering vehicles) is consistent with it; those records give outcomes only and do not by
-      themselves tell it from an aim at the position.
+      themselves tell it from an aim at the position. `unmeasured` for a vehicle disabled by the
+      update of its own choice of *P* holding that *P*: it rests on S-0503 claims 5, 10 and 15 and
+      S-0405 claim 13, which gives the moment of that disabling as `unmeasured`, and no scenario
+      here records a vehicle in the tick of that choice (R27 part f records *P* in the launch tick,
+      not the tick in which a vehicle was switched off). `unmeasured` for the world height 0 of a
+      tunnel exit: R9's tunnel target tells it from the exit cell's surface height only where that
+      surface lies above height 0, which R9 does not arrange.
     - Confidence: high for the fixing at the launch. High, for a destination that leaves play other
       than by crashing and a missile that loses no update after the leaving, for the aim point, the
       path and the detonation and for no missile being left on the map without a flight, which
@@ -562,7 +578,7 @@ above the terrain*.
       down. Medium for no reset when the leaving object is
       not then the controller target, as claim 11 rates its list of events. Medium for a preparing
       rocket missile without the flag being unaffected by the reset, and for the building docking
-      cases and the tunnel case. For a controller target in the air at the launch: high for no
+      cases and the tunnel case, the exit's world height of 0 included. For a controller target in the air at the launch: high for no
       destination, no flight and no phase while the missile has none, for the missile not
       following the target, and for the fixing by the first later destination not in the air
       from its heading point at that moment; medium for claim 24's ticks counting from the tick
@@ -570,7 +586,8 @@ above the terrain*.
       destination in the air not fixing an aim point. For a hovering destination: high for *P*
       while the vehicle is switched off, above a hover height of 0 or down at 0, for *P* while its
       throttle is 0, for the position when it keeps a destination without *P*, and for the absence
-      of any power, throttle or settling test
+      of any power, throttle or settling test; medium for a vehicle disabled by the update of its own
+      choice of *P* holding that *P*, as S-0405 claim 13 rates the moment of that disabling
 
 15. **Flight phases.** A rocket missile goes through these phases, by the Rocket table under State
     and ordering:
@@ -646,13 +663,13 @@ above the terrain*.
     - Confidence: high for the step; medium for the edge case
 
 19. **Detonation.** A rocket missile detonates in the first tick in which, before its move:
-    - (cruise, any mode) its height above the terrain is below 1 lepton; or
-    - (lazy cruise and descent) the world height its move would reach is at or below the aim point's
-      world height; or the missile is over a cell with a high bridge, the aim point's world
-      height equals that cell's terrain height, and the height its move would reach is at or below
-      the aim point's world height plus the 416-lepton height of a bridge deck (glossary *bridge
-      deck*); or
-    - (lazy cruise and descent) its height above the terrain is below 1 lepton (the same test as
+    - (cruise, any mode) its own height above the terrain, at its position, is below 1 lepton; or
+    - (lazy cruise and descent) the world height of its nose point (Formulas F9, from its position
+      and pitch before the move) is at or below the aim point's world height; or the missile is
+      over a cell with a high bridge, the aim point's world height equals that cell's terrain
+      height, and that nose-point height is at or below the aim point's world height plus the
+      416-lepton height of a bridge deck (glossary *bridge deck*); or
+    - (lazy cruise and descent) its own height above the terrain is below 1 lepton (the same test as
       the first bullet above, which covers cruise in both modes).
 
     It also detonates after a positive-speed movement attempt with health below 1 (claim 20),
@@ -672,10 +689,16 @@ above the terrain*.
     so any animation-creation random draws precede draws caused by those hits.
     **Placement height.** The area damage, the explosion animation and the drawing-only light flash
     all take the nose point exactly, its height included. Nothing raises it to the terrain under
-    it, to the top of the building hit or to the aim point's height. A steep dive can therefore
-    detonate with the nose point below the surface, for example under a building on raised ground
-    (claim 19's tests compare the next height with the aim point, and F9 adds a negative vertical
-    component when the pitch is negative). The animation then stays at that point for its whole
+    it, to the top of the building hit or to the aim point's height. The nose point can therefore
+    lie below the surface. When the second bullet's test against the aim point's world height (not
+    its bridge part) ends the flight, the detonation point is the nose point of that tick, at or
+    below that height, so a dive at a point on the ground, such as a building on raised ground or a
+    hovering vehicle's *P* at its cell's surface height (claim 14), can end with the nose point
+    below that ground. Where that point lies relative to the target, horizontally and in depth,
+    follows from the flight that leads there (claims 15 to 18, Formulas F1 and F9); no separate rule
+    places it. Where it lies for a settled hovering vehicle's *P* is among the Open questions. F9 adds a negative vertical component
+    when the pitch is negative, so a detonation by the own-height tests or by claim 20 can put the
+    nose point lower than the missile's position. The animation then stays at that point for its whole
     life. Its creator replaces the animation's depth adjustment by the fixed value −15 depth units,
     instead of its type's (S-0102 claim 13 takes the animation depth adjustment from the creator
     when the creator replaces it). How much of an animation placed below a building shows is
@@ -692,9 +715,13 @@ above the terrain*.
       `unmeasured`: R11 does not isolate a house-sensitive effect from the missile's owner.
     - Backing for the placement height, the land type and the −15 depth adjustment: `measurable`
       (scenario R22).
-    - Confidence: high for the amount, warhead and elite choice, and for the placement at the nose
-      point with no height correction and the −15 depth adjustment; medium for the bridge condition
-      and for the visible result over a building (it depends on S-0102's depth rules)
+    - Backing for the nose-point test of the second bullet: `measurable` (scenario R27 part f).
+      For the own-height tests of the first and third bullets: `unmeasured`, because no scenario
+      here sets up a flight that ends by them.
+    - Confidence: high for the amount, warhead and elite choice, for the nose-point test of the
+      second bullet, and for the placement at the nose point with no height correction and the −15
+      depth adjustment; medium for the own-height tests, for the bridge condition and for the
+      visible result over a building (it depends on S-0102's depth rules)
 
 20. **Interception.** A rocket missile is an aircraft-kind object with health; whether something
     can target it is S-0309's and S-0214's. When a hit destroys it:
@@ -1622,8 +1649,9 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   the plateau's surface; the building's health loss matches area damage taken at that point
   (S-0303). Its visible rows
   match S-0102's depth rule evaluated at the nose point with a depth adjustment of −15, and do not
-  change between the two type-adjustment runs. Falsifiers: an explosion drawn at the plateau's
-  surface or at the aim point's height (a height correction); visible rows that match the type's
+  change between the two type-adjustment runs. Falsifiers: an explosion drawn at another point
+  than that nose point, for example raised to the plateau's surface (a height correction; this
+  falsifier counts only in runs whose nose point lies below the plateau's surface); visible rows that match the type's
   adjustment, or that change between the two runs (no replacement). Repeat with a dive into open
   water and a conventional test warhead: expected the splash list (F5's splash case, decided at the
   nose point and its cell).
@@ -1771,7 +1799,7 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   destination not in the air, or by a path that changes as the aircraft
   moves or lands; in any variant by an aim point that moves after it is fixed; in (d) by no fixing
   at the launch.
-- **R27. A rocket launched at a hovering vehicle (claim 14; Q-3044).** A small flat map with the
+- **R27. A rocket launched at a hovering vehicle (claims 14 and 19; Q-3044, Q-3066).** A small flat map with the
   recorder; a stock rocket launcher and vehicles of a stock hovering type that is the powered unit
   of a control centre, all of the human-controlled house, with one control centre of that house in
   operation and a closed gate of that house on the map. The vehicles get their orders by normal
@@ -1793,7 +1821,12 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   - (e) a powered vehicle ordered to a cell beyond the closed gate, the launch timed while it waits
     at the gate (S-0503 claim 12, the closed-friendly-gate row),
   - (f) the set-up of the M-0003 row that Q-3044 names, replayed in stock with this recorder: for
-    each launch at a switched-off vehicle, its *P* or none in the launch tick and the detonation point.
+    each launch at a switched-off vehicle, its *P* or none in the launch tick and the detonation point,
+    and the missile's position, pitch, body facing (F1's *F*) and phase as drawn in each tick from the
+    end of its ascent to its detonation (claim 19; Q-3066). The frame drawn in a tick's cycle shows
+    the state at the end of the previous tick (S-0201 claim 6), which that tick's update finds; the
+    last record before a detonation is the frame drawn in the detonation tick's cycle. A run in which
+    a missile is hit before its detonation is void for that missile.
 
   In (c) a run counts only when the record shows no *P* and no destination in the launch tick, and
   in (e) only when it shows a destination and no *P* then. Expected: in (a), (b), (d) and (f) for a
@@ -1803,6 +1836,14 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   Falsified by a detonation for the vehicle's position when it held *P* in the launch tick, by one
   for any other point when it held none, or by a health loss that differs from S-0303's for the
   recorded distance.
+  Also expected in (f): each missile detonates at the first update after a record that shows it in
+  lazy cruise (claim 17's lazy curve, not plain cruise) or descent with the height of its nose point (F9, from that record's position and
+  pitch) at or below the aim point's world height, unless another condition of claim 19 ends its
+  flight earlier, and its detonation point is the nose point (F9) of the last record before the
+  detonation, from that record's position, pitch and body facing. Falsified in (f) by a missile
+  that, after such a record, is recorded still on the map at another position; by a detonation whose last record before it gives a nose height above the
+  aim point's world height while none of claim 19's other conditions holds; or by a detonation point
+  other than the nose point of that last record.
 
 ## Open questions
 
@@ -1810,6 +1851,15 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   especially other disabling effects than the electromagnetic pulse, and whether a controller
   target taken over by hijacking is lost as claim 11 gives.
 - Whether all building docking classifications in claim 14 are reachable as stock rocket targets.
+- How claim 19's nose test ends a flight whose aim point is a tunnel exit (claim 14: world height
+  0) on raised ground, where the nose may not come down to that height before the missile meets
+  the ground, has not been traced.
+- (Q-3066 question 2.) For a rocket missile aimed at the heading point *P* of a switched-off
+  hovering vehicle at rest (claim 14), how far from the vehicle the nose point lies at the
+  detonation, horizontally and in depth below the surface, and so whether the vehicle lies within
+  the warhead's spread radius of it, is not given. It follows from the flight of claims 15 to 19
+  from the launcher's position, which is not worked out here for that set-up. Scenario R27 part f
+  records it.
 - (Q-2748 questions 2 and 3.) Which destination whose in-the-air answer is false a rocket missile
   launched at a controller target in the air is first given, and in which tick (claim 14), has not
   been traced. The candidates are the fall-back behaviour its move behaviour takes when it finds no
@@ -1830,7 +1880,8 @@ applies throughout that area. These are data-only tests, not stock-data measurem
 ## Questions for the project lead
 
 - Q-1561: in the original, the explosion of a missile that dives steeply onto a building on
-  raised ground is placed below the building's surface and is drawn with the depth of that point
+  raised ground is placed at its nose point, which can lie below the building's top and below the
+  ground under it, and is drawn with the depth of that point
   (claim 19), so the building can hide part of it. The placement also feeds game state (area
   damage and the animation's own effects), so it is not a drawing-only defect and this spec keeps
   it. Should a drawing-only remedy (for example a depth lift for detonation animations only) be
