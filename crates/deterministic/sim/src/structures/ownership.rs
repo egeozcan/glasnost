@@ -68,6 +68,9 @@ pub fn change_by(
     if old == new {
         return;
     }
+    // spec: S-0601 claim 11 (the switch-off release comes first, before every other consumer of the change, from the house the controller still has)
+    crate::mind::owner_changing(w, b);
+    let Some(o) = w.obj(b) else { return };
     let of = TypeRef {
         kind: o.kind,
         index: o.type_index,
@@ -309,6 +312,8 @@ fn contacts(w: &mut World, b: ObjectId, new: Option<HouseId>) {
         if staying && (factory || near()) {
             let old = o.owner;
             if old != new {
+                // spec: S-0601 claim 11 (the switch-off release comes first, from the house the controller still has)
+                crate::mind::owner_changing(w, v);
                 if let Some(ob) = w.obj_mut(v) {
                     ob.owner = new;
                 }

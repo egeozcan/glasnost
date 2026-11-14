@@ -408,6 +408,8 @@ fn end_group(w: &mut World, g: SlaveGroup, how: End<'_>) {
                 // spec: S-0312 claims 30 and 31 and S-0408 claim 10a (a transferred slave: target and destination cleared, guard queued)
                 free_to_guard(w, s);
                 if so.owner != Some(h) {
+                    // spec: S-0601 claim 11 (the switch-off release comes first, from the house the controller still has)
+                    crate::mind::owner_changing(w, s);
                     if let Some(ob) = w.obj_mut(s) {
                         ob.owner = Some(h);
                     }
