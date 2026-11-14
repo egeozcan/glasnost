@@ -1222,11 +1222,19 @@ fn process_move(w: &mut World, id: ObjectId) -> i32 {
             .and_then(|s| s.seq)
             .is_some_and(Seq::is_deploy);
     if deployed {
-        // spec: S-0215 claim 22 (deployed infantry: clears its destination, 1 tick)
-        if let Some(ob) = w.obj_mut(id) {
-            ob.dest = None;
+        if crate::combat::acquire::player_owned(w, id) {
+            // spec: S-0215 claim 22 (Infantry: a deployed unit of a human-controlled owner clears its destination, 1 tick; in our engine every player house, Terms, houses in our engine)
+            if let Some(ob) = w.obj_mut(id) {
+                ob.dest = None;
+            }
+            return 1;
         }
-        return 1;
+        if undeploy_delay(w, id) < 0 {
+            // spec: S-0215 claim 22 (Infantry: one of a computer-controlled owner whose undeploy delay is negative starts its undeploy sequence, the delay that sequence's frame count; the neutral, special and test-only computer-controlled player houses keep the original's rules, Terms) (#235)
+            infantry::request(w, id, Seq::Undeploy, false);
+            return frame_count(w, id, Seq::Undeploy);
+        }
+        // spec: S-0215 claim 22 (Infantry: one of a computer-controlled owner whose undeploy delay is 0 or more follows the general rule) (#235)
     }
     // spec: S-0215 claim 22 (no destination, not moving, nothing queued: falls back to rest, 1 tick)
     if o.dest.is_none() && !moving(w, id) && o.beh.queued.is_none() {
