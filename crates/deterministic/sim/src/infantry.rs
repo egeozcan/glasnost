@@ -316,6 +316,8 @@ pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>)
     crate::jump::take_destination(w, id);
     // spec: S-0207 claim 25 (a driving or ship locomotor installs the supplied point at the assignment, before any path search)
     crate::drive::take_destination(w, id);
+    // spec: S-0208 claim 18 and F9 (a walker's cell-destination deck addition is fixed when the destination is assigned)
+    crate::walk::take_destination(w, id);
     // spec: S-0207 claim 27 (the refresh this assignment consumed is gone, unless the dock fallback newly enabled it here)
     crate::refresh::finish(w, id, token);
     let Some(o) = w.obj(id) else { return };
