@@ -38,7 +38,7 @@ fn every_m6c_ability_is_exercised_and_the_replay_reproduces_the_game() {
 #[test]
 #[ignore = "long; run in release (`cargo test --release -p glasnost-sim-gate -- --include-ignored`)"]
 fn a_spy_infiltrates_in_the_seeds_main_found_none() {
-    let seeds = [7u32, 9, 10, 11, 13, 14, 15];
+    let seeds = [5u32, 7, 9, 10, 11, 13, 14, 15];
     let hs: Vec<_> = seeds
         .iter()
         .map(|&s| std::thread::spawn(move || (s, m6c::play(s, M6C_TICKS).2.infiltrations)))
