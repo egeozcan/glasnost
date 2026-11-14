@@ -706,6 +706,8 @@ pub fn late_start(w: &mut World, id: ObjectId) {
 fn refresh_attack_move(w: &mut World, id: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
+    // spec: S-0215 claim 7 (an immediate start is the readiness-dependent one: the queued behaviour starts only when the object is ready, claim 11) (#229)
+    let rd = ready(w, id);
     let Some(ob) = w.obj_mut(id) else { return };
     let Some(mem) = ob.attack_move else { return };
     // spec: S-0309 claim 23 (b) (resumed when engaged or in guard; otherwise the memory is removed, with its engaged mark)
@@ -720,14 +722,14 @@ fn refresh_attack_move(w: &mut World, id: ObjectId) {
         AttackMoveMemory::Dest(d) => {
             // spec: S-0309 claim 23 (b) (a destination: move queued with an immediate start, the memory's destination the object's)
             let before = ob.dest;
-            ob.beh.queue_and_start_at_once(Behaviour::Move, t, stale);
+            ob.beh.queue_and_start(Some(Behaviour::Move), rd, t, stale);
             ob.dest = Some(d);
             // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
             crate::infantry::destination_assigned(w, id, before);
         }
         AttackMoveMemory::Target(x) => {
             // spec: S-0309 claim 23 (b) (only a target: attack queued with an immediate start, the memory's target the object's)
-            ob.beh.queue_and_start_at_once(Behaviour::Attack, t, stale);
+            ob.beh.queue_and_start(Some(Behaviour::Attack), rd, t, stale);
             let before = ob.target;
             ob.target = Some(x);
             // spec: S-0309 claim 24 (every setting of a target, even to the same one, leaves a target that is not an opportunity target)
