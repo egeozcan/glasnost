@@ -3822,7 +3822,7 @@
           "default": null
         },
         "water_bound": {
-          "description": "Buildings: `WaterBound` (S-0406 claim 3 d); absent: no, unless the\nlocomotion-class key names *float*.",
+          "description": "Buildings: the water-bound flag (S-0406 claim 3 d), decided per rules\nlayer from `WaterBound` or, in a layer that omits it, from\n`SpeedType` (S-0406 claim 21); absent: no.",
           "type": [
             "boolean",
             "null"

@@ -161,7 +161,6 @@ const BUILDING_ECON: &[Row] = &[
         "S-0406",
     ),
     ("place_anywhere", "PlaceAnywhere", Bool, "S-0406"),
-    ("water_bound", "WaterBound", Bool, "S-0406"),
     ("wall", "Wall", Bool, "S-0403, S-0406"),
     ("to_overlay", "ToOverlay", Ref(Kind::Overlays), "S-0406"),
     ("nuke_silo", "NukeSilo", Bool, "S-0513"),
@@ -1223,6 +1222,8 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     }
     out.push(("buildings", "Owner".to_owned(), "S-0407"));
     out.push(("buildings", "ExitCoord".to_owned(), "S-0404"));
+    out.push(("buildings", "WaterBound".to_owned(), "S-0406"));
+    out.push(("buildings", "SpeedType".to_owned(), "S-0406"));
     for k in NO_EFFECT_FACTORS {
         out.push(("countries", k.to_owned(), "S-0413"));
     }
@@ -1317,6 +1318,9 @@ impl Builder<'_> {
             }
             Kind::Buildings => {
                 self.efields(&mut econ, t, kind, BUILDING_ECON);
+                if let Some(v) = Self::water_bound(t) {
+                    econ.put("water_bound", jsonc::boolean(v));
+                }
                 if let Some(v) = self.rules_triple(t, "ExitCoord") {
                     econ.put(
                         "exit_coord",
@@ -1342,6 +1346,38 @@ impl Builder<'_> {
         if !econ.0.is_empty() {
             rec.put("econ", econ.node());
         }
+    }
+
+    /// A building type's water-bound flag, decided again in every layer that
+    /// gives `WaterBound` or `SpeedType` (S-0406 claim 21); `None` when no
+    /// layer decides it.
+    fn water_bound(t: &TypeRec) -> Option<bool> {
+        // The last stored value of a key in one layer (S-0006 claim 3: an
+        // entry with no value is not given and is no stored value).
+        let in_layer = |k: &[u8], r: usize| {
+            t.keys.get(k).and_then(|s| {
+                s.history.iter().rev().find_map(|e| match &e.what {
+                    What::Set(v) if e.layer == r => Some(v.clone()),
+                    _ => None,
+                })
+            })
+        };
+        let names: Vec<&str> = LOCOMOTION_CLASSES.iter().map(|c| c.1).collect();
+        let mut flag = None;
+        for &r in &t.reads {
+            // spec: S-0406 claim 21 (a) (the layer's recognised water-bound value is the flag, whatever class the layer gives; an unrecognised value counts as not given)
+            if let Some(b) = in_layer(b"WaterBound", r).and_then(|v| value::boolean(&v)) {
+                flag = Some(b);
+            } else if let Some(v) = in_layer(b"SpeedType", r) {
+                // spec: S-0406 claim 21 (b) (otherwise on when the class names float, case ignored; off for any other class name and for text that names no class)
+                flag = Some(
+                    value::named(&v, NAME_LIMIT, &names)
+                        .is_some_and(|c| LOCOMOTION_CLASSES[c].0 == "float"),
+                );
+            }
+            // spec: S-0406 claim 21 (a layer that gives neither keeps the flag)
+        }
+        flag
     }
 
     /// An integer triple of a type's rules keys (S-0003 claim 9): unread

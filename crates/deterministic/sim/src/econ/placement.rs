@@ -145,7 +145,7 @@ pub fn place_type(w: &World, t: u32) -> PlaceType {
         anywhere: e.place_anywhere.unwrap_or(false),
         // spec: S-0406 Import mapping (ToTile absent: none)
         to_tile: e.to_tile.is_some(),
-        // spec: S-0406 Import mapping (WaterBound absent: no)
+        // spec: S-0406 claim 21 and Import mapping (the flag the converter decides per layer from WaterBound or SpeedType; no layer giving either: no)
         water_bound: e.water_bound.unwrap_or(false),
         naval: b.naval,
         wall_overlay,

@@ -238,8 +238,9 @@ pub struct EconFields {
     /// Buildings: `PlaceAnywhere` (S-0406 claim 3); absent: no.
     #[serde(default)]
     pub place_anywhere: Option<bool>,
-    /// Buildings: `WaterBound` (S-0406 claim 3 d); absent: no, unless the
-    /// locomotion-class key names *float*.
+    /// Buildings: the water-bound flag (S-0406 claim 3 d), decided per rules
+    /// layer from `WaterBound` or, in a layer that omits it, from
+    /// `SpeedType` (S-0406 claim 21); absent: no.
     #[serde(default)]
     pub water_bound: Option<bool>,
     /// Buildings: `Wall`, wall type (S-0406 claim 10, S-0403 claim 7);
