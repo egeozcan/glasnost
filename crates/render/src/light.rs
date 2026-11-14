@@ -12,10 +12,10 @@
 //! - A drawn object's brightness comes from its cell's levels
 //!   ([`object_brightness`], claim 13) and picks a shade row
 //!   ([`brightness_row`], claim 15).
-//! - The ambient fade moves one step at a time ([`ambient_step`], claim 4).
 //!
 //! Not here: which lighting set and which effects are in force (claims 2,
-//! 5, 14, 16 and 17), the fade's timing (claim 4), the import of map and
+//! 5, 14, 16 and 17), the ambient fade and its timing (claim 4, in the
+//! simulation's `lighting::ambient_step`), the import of map and
 //! rules values (claims 1 and 12) and the shadowed-cell marks. Those need
 //! simulation state and the caller passes their results in.
 //!
@@ -774,23 +774,6 @@ pub fn incremental_update(
         scaled_raised: clamp_level(raised * k / ONE_16_16),
         ..*previous
     }
-}
-
-/// One ambient fade step (S-0104 claim 4, Formulas "Ambient fade"), all in
-/// hundredths: returns the new current and the new target ambient. A
-/// negative target is raised to 0 when the step falls due (the caller
-/// stores the returned target), and a step never overshoots. When a step
-/// falls due is the caller's (the fade interval).
-pub fn ambient_step(current: i32, target: i32, step: i32) -> (i32, i32) {
-    // spec: S-0104 claim 4 (a negative target is raised to 0 when a step falls due), Formulas "Ambient fade" (A_t = max(target, 0))
-    let target = target.max(0);
-    // spec: S-0104 Formulas, "Ambient fade" (A′ = A_t if |A_t − A| ≤ step, else A + step·sgn(A_t − A))
-    let current = if (i64::from(target) - i64::from(current)).abs() <= i64::from(step) {
-        target
-    } else {
-        current + step * (target - current).signum()
-    };
-    (current, target)
 }
 
 /// The tint-exempt brightness rows *L* for a shade count *N* (S-0104
@@ -1881,18 +1864,6 @@ mod tests {
         let add = |t: i32| i64::from(t) * falloff / 1000;
         assert!(1000 + add(building_light_tint_default(&on)) >= i64::from(LEVEL_MAX));
         assert_eq!(1000 + add(building_light_tint_default(&off)), 1500);
-    }
-
-    /// spec: S-0104 claim 4, Formulas "Ambient fade"
-    #[test]
-    fn fade_steps() {
-        assert_eq!(ambient_step(100, 50, 10), (90, 50));
-        assert_eq!(ambient_step(55, 50, 10), (50, 50));
-        assert_eq!(ambient_step(50, 200, 10), (60, 200));
-        assert_eq!(ambient_step(195, 200, 10), (200, 200));
-        assert_eq!(ambient_step(5, -30, 10), (0, 0));
-        assert_eq!(ambient_step(50, -30, 10), (40, 0));
-        assert_eq!(ambient_step(50, 50, 10), (50, 50));
     }
 
     /// spec: S-0104 Formulas, "Shade table" (L = 6 for 53 rows, 3 for 27)
