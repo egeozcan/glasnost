@@ -657,6 +657,8 @@ pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0309 claim 31 (without a second grand opening: a building has one at most, so no free unit follows, S-0402 claim 18)
         return CONSTRUCTION_DELAY;
     }
+    // spec: S-0516 claim 23 (r20, Q-3060: an array that entered play under construction has its grand opening at its handover, with construction still current, so it is not in operation and never adds its disc)
+    crate::cloak::sensor::grand_opening(w, id);
     // spec: S-0402 claim 18 (the grand opening, at the end of the build-up in the building's own turn: its free unit)
     crate::econ::harvest::grand_opening(w, id);
     CONSTRUCTION_DELAY
