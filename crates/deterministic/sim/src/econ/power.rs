@@ -322,12 +322,13 @@ pub fn building_output(w: &World, id: ObjectId) -> i32 {
         return 0;
     }
     // spec: S-0405 F1 (P = base output + [absorbing and extra output > 0] × extra output × n_a + Σ base output of the held upgrades)
+    // spec: S-0205 claim 1 (an integer result outside the range wraps)
     let mut p = t.output;
     if t.absorbing && t.extra_output > 0 {
-        p += t.extra_output * absorbed(w, id);
+        p = p.wrapping_add(t.extra_output.wrapping_mul(absorbed(w, id)));
     }
     for u in held_upgrades(w, id) {
-        p += bp(w, u).map_or(0, |b| b.output);
+        p = p.wrapping_add(bp(w, u).map_or(0, |b| b.output));
     }
     if p == 0 {
         return 0;
@@ -355,12 +356,13 @@ pub fn building_drain(w: &World, id: ObjectId) -> i32 {
         return 0;
     }
     // spec: S-0405 F2 (base drain + Σ base drain of the held upgrades + [super-gap active] × extra drain)
+    // spec: S-0205 claim 1 (an integer result outside the range wraps)
     let mut d = t.drain;
     for u in held_upgrades(w, id) {
-        d += bp(w, u).map_or(0, |b| b.drain);
+        d = d.wrapping_add(bp(w, u).map_or(0, |b| b.drain));
     }
     if o.econ.building.super_gap {
-        d += t.extra_drain;
+        d = d.wrapping_add(t.extra_drain);
     }
     d
 }
@@ -416,12 +418,12 @@ pub fn start_blackout(w: &mut World, h: HouseId, d: i32) {
     }
     let after = p.updated == t0;
     p.blackout_end = Some(if one_short {
-        // spec: S-0405 claim 6 (it ends at the beginning of the house update of tick t₀ + d − 1, quirks.blackout_one_short)
-        t0 + d - 1
+        // spec: S-0405 claim 6 (it ends at the beginning of the house update of tick t₀ + d − 1, quirks.blackout_one_short); S-0205 claim 1 (wrapping)
+        t0.wrapping_add(d).wrapping_sub(1)
     } else {
-        // spec: S-0405 Edge cases (switch off: exactly d house updates from the first one after the start)
-        let first = if after { t0 + 1 } else { t0 };
-        first + d
+        // spec: S-0405 Edge cases (switch off: exactly d house updates from the first one after the start); S-0205 claim 1 (wrapping)
+        let first = if after { t0.wrapping_add(1) } else { t0 };
+        first.wrapping_add(d)
     });
 }
 
@@ -533,8 +535,9 @@ pub fn house_update(w: &mut World, h: HouseId) -> bool {
     for &id in &ids {
         // spec: S-0405 claim 7 and F1 (each building's output uses its health at this moment)
         let out = building_output(w, id);
-        o = o.saturating_add(out);
-        d = d.saturating_add(building_drain(w, id));
+        // spec: S-0405 claim 7 (O and D: the sums over the counted buildings); S-0205 claim 1 (an integer result outside the range wraps)
+        o = o.wrapping_add(out);
+        d = d.wrapping_add(building_drain(w, id));
         // spec: S-0405 claim 5 (a counted building whose output is above 0 and that is being drained)
         if out > 0 && being_drained(w, id) {
             drained = true;

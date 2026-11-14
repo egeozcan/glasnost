@@ -844,7 +844,8 @@ pub fn adjusted_cost(w: &World, b: u32) -> i32 {
     let cost = |t: Option<crate::econ::TypeRef>| t.map_or(0, |t| p::cost_field(w, t));
     // spec: S-0408 F2 (d = trunc((C₀ + C₁) / 2) when the pad deduction applies; a missing entry counts 0)
     let d = if p::pad_term_applies(w, b) {
-        (cost(p::pad(w, 0)) + cost(p::pad(w, 1))) / 2
+        // spec: S-0205 claim 1 (an integer result outside the range wraps)
+        cost(p::pad(w, 0)).wrapping_add(cost(p::pad(w, 1))) / 2
     } else {
         0
     };
@@ -853,8 +854,8 @@ pub fn adjusted_cost(w: &World, b: u32) -> i32 {
         index: b,
     }));
     match p::free_unit(w, b) {
-        // spec: S-0408 F2 (C = max(0, K − d − F) with a free unit, K − d without one)
-        Some(f) => (k - d - cost(Some(f))).max(0),
-        None => k - d,
+        // spec: S-0408 F2 (C = max(0, K − d − F) with a free unit, K − d without one); S-0205 claim 1 (wrapping)
+        Some(f) => k.wrapping_sub(d).wrapping_sub(cost(Some(f))).max(0),
+        None => k.wrapping_sub(d),
     }
 }
