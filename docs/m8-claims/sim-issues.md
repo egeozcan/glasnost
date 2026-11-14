@@ -237,6 +237,23 @@ The goldens moved, hashes only, and were regenerated in 3d0e5b9; all nine moved.
 
 Seams left (also in the design section): Q-3085 (#169) and Q-3087 (#200) are open with no code change. Q-3086's interim for #193 stands until it is answered, and rubble (S-0312 claim 20) is still not modelled. Hover and ship units have no arrival hook, so their sight moves only on the 15-tick refresh. A tunnel exit as a rocket's aim point stays a seam. ROBO against V3 (M-0003) still fails its side outcome, 0/10/2 against 0/12/0. The M6c and M7a minima of 0 are not traced.
 
+Merge with main 0c8d9f9 (sim batch S9, foundations F1, AI perf AP1 and AI batch 6) in a2ff008. The goldens took main's versions and were regenerated (62bbb78), and the AI game format goes to 114 (024709f).
+
+On the merged tree the gate's M6c duel, seed 3, ends at tick 9139 with one jumpjet order. Traced against main with per-tick state hashes, the first difference is at tick 18. There the only difference is the applied sight of nine of house 1's walking infantry (objects 56–58, 61–64, 67 and 68): one row behind main's, until their arrival (#205, S-0409 r9 claim 8). On batch S10 alone seed 3 played all its ticks, so the early end comes from #205 together with main's newer changes. Nothing in the trace points to a fault.
+
+The M6c sweep over seeds 1–16 on the merged tree:
+- seeds 1, 2, 5–9, 11–13, 15 and 16 play all 12000 ticks with smallest counter 4;
+- seed 10 plays all ticks with smallest counter 3;
+- seeds 3 (9139), 4 (9175) and 14 (9457) end early.
+
+`M6C_SEED` goes from 3 to 2 (59c9361), and every ability is exercised.
+
+On the merged tree:
+- the sim gate with its ignored tests passes 17;
+- the AI suite with its ignored tests passes 356;
+- `cargo fmt --check` and `cargo xtask check` pass;
+- the workspace tests pass but for main's `every_spec_quirk_has_a_switch` (`gas_through_bridge_deck`, `named_palette_true_owner`).
+
 ## Batch S9: the answers to S6's and S8's requests
 
 Base main a3f48b8, not rebased. Save format 138 and AI game format 113 (15212d6): no saved field changes, but what a saved game replays to does; wire version unchanged (12). The sim-gate goldens were regenerated with the ignored tests, and none of the nine golden files moved. Tests come first (c6a143e, 8f54226, a3de060, c094541, 131e100, 5a741c4). Each failing test fails on the commit before its fix; #431's pass, because the code already followed the answer. No new requests. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S9: the answers to S6's and S8's requests)* (f5389e5).
