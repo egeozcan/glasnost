@@ -305,3 +305,65 @@ fn settling_on_water_with_no_shore_takes_the_placeholder() {
     assert_eq!(o.beh.progress, transport::phase::SETTLING, "still settling");
     assert_eq!(transport::riding(&w, p), Some(t));
 }
+
+/// A hovering transport for four on the lake's centre with a passenger
+/// aboard, settling with *unload* on water (`path_delay` an invented
+/// general path delay, or the fixture's). Returns the stored steps right
+/// after the assignment, the ticks with a destination but neither heading
+/// point nor stored step, and whether the passenger got out.
+fn hover_shore_approach(path_delay: Option<&str>) -> (usize, i32, bool) {
+    let mut s = Scene::new();
+    s.ruleset = rules();
+    if let Some(d) = path_delay {
+        s.ruleset.sim.general.path_delay = dec(d);
+    }
+    for dx in -8..=8 {
+        for dy in -8..=8 {
+            if lake(dx, dy) {
+                s.set_cell(cell(dx, dy), code_tile(WATER_CODE), 0);
+            }
+        }
+    }
+    let mut w = s.build();
+    let t = at(&mut w, Kind::Vehicle, "HOVERT", 0, 0);
+    let p = at(&mut w, Kind::Infantry, "WALKER", -6, 0);
+    transport::board(&mut w, p, t);
+    testkit::run(&mut w, 40);
+    assert_eq!(land_of(&w, t), land::WATER);
+    assert!(w.obj(t).unwrap().dest.is_none());
+    force_unload(&mut w, t);
+    // spec: S-0507 claim 8 (on water with no destination: the shore cell becomes the destination, 10 ticks)
+    assert_eq!(transport::process_unload(&mut w, t), 10);
+    let steps_after = w.obj(t).unwrap().path.steps.len();
+    let mut stalled = 0;
+    for _ in 0..3000 {
+        tick::step(&mut w);
+        let o = w.obj(t).unwrap();
+        let h = o.hover.as_ref().unwrap();
+        if o.dest.is_some() && h.point.is_none() && o.path.steps.is_empty() {
+            stalled += 1;
+        }
+        if transport::riding(&w, p).is_none() {
+            break;
+        }
+    }
+    (steps_after, stalled, transport::riding(&w, p).is_none())
+}
+
+// spec: S-0507 claim 8 (the shore cell becomes the destination); S-0503 claim 5 (a powered hovering vehicle not moving now searches and chooses its heading point at once when given a destination); S-0212 claim 20 (a new search replaces the stored path) (#271)
+#[test]
+fn issue_271_hover_shore_approach_keeps_its_path() {
+    let (steps, stalled, out) = hover_shore_approach(None);
+    assert!(steps > 0, "the path found at the assignment is kept");
+    assert_eq!(stalled, 0, "no tick waiting for the retry delay");
+    assert!(out, "the passenger is let out on the shore");
+}
+
+// spec: S-0507 claim 8; S-0503 claim 5; S-0212 claim 20 (as above, with a longer invented retry delay) (#271)
+#[test]
+fn issue_271_hover_shore_approach_keeps_its_path_long_delay() {
+    let (steps, stalled, out) = hover_shore_approach(Some("0.1"));
+    assert!(steps > 0, "the path found at the assignment is kept");
+    assert_eq!(stalled, 0, "no tick waiting for the retry delay");
+    assert!(out, "the passenger is let out on the shore");
+}

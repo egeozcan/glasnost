@@ -590,8 +590,15 @@ fn counted_search(
         let passive = u.passive && o.kind == Kind::Vehicle;
         let from = req.from;
         let to = req.to;
-        // spec: S-0212 claim 12 (a found path must contain at least one step)
-        if from == to {
+        let (from_layer, start_level) = start_pair(w, req.unit, from);
+        // spec: S-0212 claim 7 (the destination pair: a bridge cell's deck for every unit that is not an aircraft, else the ground)
+        let to_layer = if is_bridge(w, to) && o.kind != Kind::Aircraft {
+            Layer::Deck
+        } else {
+            Layer::Ground
+        };
+        // spec: S-0212 claim 12 (a found path must contain at least one step: no path when the destination cell is the unit's own cell on the same search layer)
+        if from == to && from_layer == to_layer {
             return None;
         }
         let est = |c: CellXY| -> F32 {
@@ -608,13 +615,6 @@ fn counted_search(
             w.cells
                 .idx(c)
                 .map(|i| 2 * i + usize::from(l == Layer::Deck))
-        };
-        let (from_layer, start_level) = start_pair(w, req.unit, from);
-        // spec: S-0212 claim 7 (the destination pair: a bridge cell's deck for every unit that is not an aircraft, else the ground)
-        let to_layer = if is_bridge(w, to) && o.kind != Kind::Aircraft {
-            Layer::Deck
-        } else {
-            Layer::Ground
         };
         let to_level = pair_level(w, to, to_layer);
         let fi = ix(from, from_layer)?;

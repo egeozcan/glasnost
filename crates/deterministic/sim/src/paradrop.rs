@@ -185,14 +185,14 @@ fn landing(w: &mut World, p: ObjectId, x: i32, y: i32) -> Option<(CellXY, (i32, 
     w.cells.cell(c)?;
     let (kind, ti) = w.obj(p).map(|o| (o.kind, o.type_index))?;
     let u = w.rules().unit(kind, ti)?.clone();
-    let top = w.rules().quirks.top_position_counts_as_centre;
     let high = w.cells.is_bridge(c);
     // spec: S-0522 claim 9 (S-0209's entry outcome clear under S-0208 claim 19's landing-entry rules: deck objects and record on a high-bridge cell, the level −6 bypass; a refusal here suppresses the standing-position selection, so it takes no draw)
     if !crate::teleport::entry_clear(w, p, c, high) {
         return None;
     }
     // spec: S-0522 claim 9 (S-0208 claim 3 with the drop point as the desired point and the cell's ground occupancy record, also on a bridge cell; no standing-position result also refuses the drop, without reaching the later conditions)
-    let class = walk::position_class(x.rem_euclid(256), y.rem_euclid(256), top); // spec: S-0204 claim 2 (the position within its cell, 0 … 255 per axis)
+    // spec: S-0208 claim 2 and Edge cases (the drop point's class is claim 2's geometric class whatever quirks.top_position_counts_as_centre says: the switch decides only how a unit standing at the top is recorded in the occupancy record, and a drop point is no standing unit)
+    let class = walk::position_class(x.rem_euclid(256), y.rem_euclid(256), true); // spec: S-0204 claim 2 (the position within its cell, 0 … 255 per axis)
     let pos = walk::choose_position(w, c, Layer::Ground, class, false)?;
     let (su, sv) = walk::standing_point(pos);
     let at = (256 * c.x + su, 256 * c.y + sv); // spec: S-0208 table P (a standing position within the cell)

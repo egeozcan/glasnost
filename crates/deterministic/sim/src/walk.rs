@@ -35,6 +35,11 @@ pub struct WalkState {
     /// 17).
     #[serde(default)]
     pub fraction: bool,
+    /// The cell destination at its last assignment and whether that cell
+    /// carried a high bridge then (S-0208 claim 18, F9: the deck addition
+    /// is fixed when the destination is assigned).
+    #[serde(default)]
+    pub dest_deck: Option<(CellXY, bool)>,
 }
 
 /// The point of a standing position within a cell (S-0208 table P).
@@ -339,7 +344,7 @@ fn own_locomotion(w: &mut World, id: ObjectId) -> bool {
 /// cell and chooses its walking target without moving (claim 3, S-0209).
 fn standing(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
-    let (dest, no_path, here) = (o.dest, o.path.steps.is_empty(), o.pos.cell());
+    let (dest, no_path, here, z) = (o.dest, o.path.steps.is_empty(), o.pos.cell(), o.pos.z);
     if dest.is_none() {
         // spec: S-0208 claim 6 (r52, A stored path kept under enter: a walker follows a stored path only towards a destination, so a destination that becomes nothing leaves it no path to follow, whatever it keeps)
         if !no_path && let Some(ob) = w.obj_mut(id) {
@@ -354,7 +359,12 @@ fn standing(w: &mut World, id: ObjectId) {
     }
     if no_path {
         let goal = path::goal_cell(w, id);
-        if goal == Some(here) || goal.is_none() {
+        // spec: S-0208 claims 16 and 18 (a cell destination is complete only within two height levels of its height: on the ground under a high-bridge deck it is not, and an exhausted path needs another path computation under S-0212)
+        let height_met = match dest {
+            Some(Target::Cell(c)) => (cell_destination_height(w, id, c) - z).abs() < 208,
+            _ => true,
+        };
+        if (goal == Some(here) && height_met) || goal.is_none() {
             // A standing walker given a destination in its own cell (no
             // arrival tick ends that walk under claim 16): the move is
             // finished.
@@ -610,17 +620,41 @@ fn end_of_walk(w: &mut World, id: ObjectId) {
     }
 }
 
+/// The walker records, at a destination assignment, its cell destination
+/// and whether that cell carries a high bridge then (S-0208 claim 18, F9).
+/// Called from `infantry::destination_assigned` with the other locomotors.
+pub fn take_destination(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if o.walk.is_none() {
+        return;
+    }
+    // spec: S-0208 claim 18 and F9 (a is 414 leptons when the cell carries a high bridge at destination assignment; fixed when the destination is assigned, not recomputed on arrival)
+    let rec = match o.dest {
+        Some(Target::Cell(c)) => Some((c, w.high_bridge(c))),
+        _ => None,
+    };
+    if let Some(s) = w.obj_mut(id).and_then(|o| o.walk.as_mut()) {
+        s.dest_deck = rec;
+    }
+}
+
 /// The height of a walker's cell locomotor destination (S-0208 claim 18,
 /// F9): the terrain height at the cell's centre, plus 414 leptons when the
-/// cell carries a high bridge, whatever the walker's layer. The decks are
-/// fixed at load, so reading the bridge on arrival gives its state at
-/// assignment.
+/// cell carried a high bridge at the destination's assignment, whatever the
+/// walker's layer. Bridges are lost and repaired in play, so the deck is
+/// read from the record `take_destination` made; a destination cell with no
+/// record (set without an assignment) is read as it is now.
 pub fn cell_destination_height(w: &World, id: ObjectId, c: CellXY) -> i32 {
     // spec: S-0208 F9 (the cell centre (256cx + 128, 256cy + 128) and its terrain height H)
     let h = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
     if w.rules().quirks.walker_bridge_destination_deck {
+        // spec: S-0208 claim 18 and F9 (fixed when the destination is assigned)
+        let deck = match w.obj(id).and_then(|o| o.walk.as_ref()?.dest_deck) {
+            Some((rc, d)) if rc == c => d,
+            _ => w.high_bridge(c),
+        };
         // spec: S-0208 claim 18 and F9 (a = 414 leptons on a high-bridge cell, independent of the layer)
-        h + if w.high_bridge(c) { 414 } else { 0 }
+        h + if deck { 414 } else { 0 }
     } else {
         let deck = w.obj(id).is_some_and(|o| o.layer == Layer::Deck);
         // spec: S-0208 Edge cases (switch off: the centre's height on the arrival layer, 416 leptons up on the deck)

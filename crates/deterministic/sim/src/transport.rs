@@ -959,12 +959,16 @@ fn settle(w: &mut World, t: ObjectId) -> i32 {
         // spec: S-0507 claim 8 and table U (on water with no destination: the nearby-cell search's cell as destination; wait 10 ticks)
         // spec: S-0507 claim 8 and S-0212 claim 25 (with no result, the placeholder at map cell (0, 0) is still assigned, and the processing does not go on to claim 9)
         let c = shore(w, t).unwrap_or(CellXY::new(0, 0));
-        crate::econ::assign_destination(w, t, Some(Target::Cell(c)));
-        // A new destination starts a new path search (S-0212 claim 20).
+        // A new destination starts a new path search (S-0212 claim 20). The
+        // old stored path is dropped before the assignment: a hovering
+        // transport searches at the assignment itself (S-0503 claim 5) and
+        // keeps the path it finds there.
         if let Some(ob) = w.obj_mut(t) {
             ob.path.steps.clear();
             // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
         }
+        // spec: S-0507 claim 8 (the shore cell as destination) and S-0503 claim 5 (a powered hovering vehicle not moving now searches and chooses its heading point at once when given a destination)
+        crate::econ::assign_destination(w, t, Some(Target::Cell(c)));
         return SETTLE_WAIT;
     }
     let d = choose_direction(w, t);

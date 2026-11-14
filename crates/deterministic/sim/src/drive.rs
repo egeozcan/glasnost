@@ -2,8 +2,8 @@
 //! place of S-0206 claim 12, a driving unit's blocked steps (S-0212 claims
 //! 20 and 22) and crushing at cell centres (S-0210 claims 3, 7 to 9).
 
-use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
+use glasnost_map::{CellXY, NO_OVERLAY};
 use glasnost_num::F64;
 use glasnost_num::geom::root_floor;
 use glasnost_rules::sim::{LocomotionClass, MovementZone};
@@ -638,7 +638,7 @@ fn cell_of(x: i32, y: i32) -> CellXY {
 /// off a bridge deck (S-0207 claim 5). `at_point`: the position is a track
 /// point or the track target, where the world height is set (claim 5);
 /// between points (claim 4) the height is kept.
-fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool) {
+fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool, crush: bool) {
     let Some(o) = w.obj(id) else { return };
     let (pos, old_layer) = (o.pos, o.layer);
     let old = pos.cell();
@@ -660,7 +660,8 @@ fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool) {
         // spec: S-0212 claims 13 and 16a (recorded in a cell of another threat block: its threat amount moves there)
         crate::threat::relisted(w, id, new);
         crate::load::recalc_cells(w, &[old, new]);
-        crate::crush::entered_cell(w, id, new);
+        // spec: S-0210 claim 9 (each time it drives into a new cell on a crush-mode track: the track being driven, also when the move to its target, made after the track is cleared, is the entry)
+        crate::crush::entered_cell_on(w, id, new, crush);
     }
 }
 
@@ -783,6 +784,20 @@ fn turn_in_place(w: &mut World, id: ObjectId, u: &UnitRules, d: u8) {
 /// check cannot begin a two-cell curve (the step check after the search of
 /// T5's obstacle row).
 fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_curve: bool) -> bool {
+    step_check_with(w, id, u, repeated, no_curve, true)
+}
+
+/// [`step_check`]. `refresh`: whether the recomputation of S-0212 claim 20
+/// may still be made in this check; false for the check made on the new
+/// path after a recomputation with `quirks.path_refresh_keeps_old_step` off.
+fn step_check_with(
+    w: &mut World,
+    id: ObjectId,
+    u: &UnitRules,
+    repeated: bool,
+    no_curve: bool,
+    refresh: bool,
+) -> bool {
     let t = w.tick;
     let r = w.rules_arc();
     let Some(o) = w.obj(id) else {
@@ -915,6 +930,10 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
                     if w.obj(id).is_none_or(|x| x.dest.is_none()) {
                         return false;
                     }
+                    // spec: S-0207 claim 15 (a vehicle whose next cell holds an allied closed gate waits without a track and without turning until the gate is open, whether or not it faces the step; the look at the first cell has told the gate to open)
+                    if process::closed_friendly_gate(w, id, neighbour(here, nd)).is_some() {
+                        return false;
+                    }
                     if w.obj(id).is_some_and(|x| x.body.value(t) != facing_of(nd)) {
                         turn_in_place(w, id, u, nd);
                         return false;
@@ -974,6 +993,25 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
     // spec: S-0212 claim 20 (the drive locomotor recomputes as it begins the last stored step, heading point beyond 512)
     let used = if two { 2 } else { 1 };
     let last_step = steps_len <= used;
+    if refresh
+        && last_step
+        && !r.quirks.path_refresh_keeps_old_step
+        && refresh_due(w, id, target_cell)
+    {
+        // spec: S-0212 claim 20 and Edge cases (quirks.path_refresh_keeps_old_step off: the unit takes the new path's first step instead of the old one, so the recomputation comes before the old track begins; the new first step is checked once, without a recomputation of its own)
+        let Some((old, keep_pos)) = w.obj(id).map(|o| (o.path.steps.clone(), o.pos)) else {
+            return false;
+        };
+        let found = path::compute(w, id, Mode::Fresh) == Search::Found;
+        if let Some(ob) = w.obj_mut(id) {
+            ob.pos = keep_pos;
+            if !found {
+                // design: S-0212 claim 20 and Edge cases (switch off: a search that finds nothing gives no new first step, so the old step is taken, as with the switch on)
+                ob.path.steps = old;
+            }
+        }
+        return step_check_with(w, id, u, repeated, no_curve, false);
+    }
     let rho_t = target_fraction(w, id, u, first);
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.drain(..used.min(ob.path.steps.len()));
@@ -1003,25 +1041,36 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
     if occupancy::is_crusher(w, id) {
         crate::crush::warn_ahead(w, id, first);
     }
-    if last_step
-        && let Some(hp) = path::heading_point(w, id)
-        && let Some(pos) = w.obj(id).map(|o2| o2.pos)
+    // spec: S-0212 claim 20 (switch on: the old track is begun, then the path is recomputed)
+    if refresh
+        && last_step
+        && r.quirks.path_refresh_keeps_old_step
+        && refresh_due(w, id, target_cell)
     {
-        let dx = i64::from(hp.x - pos.x);
-        let dy = i64::from(hp.y - pos.y);
-        let dz = i64::from(hp.z - pos.z);
-        // spec: S-0212 F6c (the heading point more than 512 leptons away)
-        let dist = root_floor(
-            (dx * dx + dy * dy + dz * dz) as u64,
-            r.quirks.table_root_distance,
-            r.mode,
-        );
-        // spec: S-0212 claim 20 (the heading point more than 512 leptons away)
-        if dist > 512 && hp.cell() != target_cell {
-            refresh_from_target(w, id, target_cell);
-        }
+        refresh_from_target(w, id);
     }
     true
+}
+
+/// Whether the recomputation of S-0212 claim 20 is due as the track that
+/// ends in `target_cell` begins: the heading point is more than 512 leptons
+/// away and not in that cell.
+fn refresh_due(w: &World, id: ObjectId, target_cell: CellXY) -> bool {
+    let (Some(hp), Some(pos)) = (path::heading_point(w, id), w.obj(id).map(|o| o.pos)) else {
+        return false;
+    };
+    let r = w.rules();
+    let dx = i64::from(hp.x - pos.x);
+    let dy = i64::from(hp.y - pos.y);
+    let dz = i64::from(hp.z - pos.z);
+    // spec: S-0212 F6c (the heading point more than 512 leptons away)
+    let dist = root_floor(
+        (dx * dx + dy * dy + dz * dz) as u64,
+        r.quirks.table_root_distance,
+        r.mode,
+    );
+    // spec: S-0212 claim 20 (the heading point more than 512 leptons away)
+    dist > 512 && hp.cell() != target_cell
 }
 
 /// A vehicle that waits gets no track on this tick and its budget is
@@ -1294,14 +1343,11 @@ pub(crate) fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
             (!allied).then_some(Target::Object(f))
         }
         // spec: S-0207 table T4 (no object listed: the cell's wall, whatever its owner)
+        // spec: S-0009 claim 12 (the value 255 means no overlay: walls::is_wall tests it first)
         None => w
             .cells
             .cell(c)
-            .filter(|cell| {
-                r.overlays
-                    .get(usize::from(cell.overlay))
-                    .is_some_and(|ov| ov.wall)
-            })
+            .filter(|cell| crate::walls::is_wall(w, cell.overlay))
             .map(|_| Target::Cell(c)),
     };
     let Some(target) = target else { return };
@@ -1327,26 +1373,27 @@ pub(crate) fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
     crate::emitters::retarget_let_go(w, id);
 }
 
-/// The immediate recomputation of S-0212 claim 20, taken from where the
-/// step in progress leads; with `quirks.path_refresh_keeps_old_step` the new
-/// path's first step is dropped.
-fn refresh_from_target(w: &mut World, id: ObjectId, from: CellXY) {
-    let Some(o) = w.obj(id).cloned() else { return };
-    // Search from the unit's cell (the original's rule), then align.
-    let keep_pos = o.pos;
+/// The immediate recomputation of S-0212 claim 20 with
+/// `quirks.path_refresh_keeps_old_step` on, made just after the old track
+/// has begun: the search starts from the unit's own cell, and the new
+/// path's first step is dropped. (Off, the step check recomputes before the
+/// track begins.)
+fn refresh_from_target(w: &mut World, id: ObjectId) {
+    let Some(keep_pos) = w.obj(id).map(|o| o.pos) else {
+        return;
+    };
     let res = path::compute(w, id, Mode::Fresh);
     if res != Search::Found {
         return;
     }
-    let q = w.rules().quirks;
     if let Some(ob) = w.obj_mut(id) {
         ob.pos = keep_pos;
-        if q.path_refresh_keeps_old_step && !ob.path.steps.is_empty() {
+        if !ob.path.steps.is_empty() {
             // spec: S-0212 claim 20 (the old step is still taken; the new path's first step is dropped)
+            // design: Q-3115 interim (one step is dropped also when the old track is a two-cell curve)
             ob.path.steps.remove(0);
         }
     }
-    let _ = from;
 }
 
 /// Crush mode (S-0207 claim 7).
@@ -1355,9 +1402,11 @@ fn crush_mode(w: &World, id: ObjectId, u: &UnitRules, first: CellXY, second: Cel
     let all = u.zone == MovementZone::CrusherAll;
     let overlay_crush = |c: CellXY, walls: bool| -> bool {
         w.cells.cell(c).is_some_and(|cell| {
-            r.overlays
-                .get(usize::from(cell.overlay))
-                .is_some_and(|o| o.crushable || (walls && all && o.wall))
+            // spec: S-0009 claim 12 (the value 255 means no overlay, not an index into the overlay type list)
+            cell.overlay != NO_OVERLAY
+                && r.overlays
+                    .get(usize::from(cell.overlay))
+                    .is_some_and(|o| o.crushable || (walls && all && o.wall))
         })
     };
     // spec: S-0607 claims 22 and 23 (a seized unit's stand-in, not its own type's locomotor, is the one that moves it)
@@ -1613,7 +1662,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
                 d2.track = None;
                 d2.between_steps = true;
             }
-            set_pos(w, id, tr.target.0, tr.target.1, true);
+            set_pos(w, id, tr.target.0, tr.target.1, true, tr.crush);
             if let Some(&(_, _, f)) = pts.last() {
                 set_facing(w, id, f);
             }
@@ -1633,7 +1682,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
         let p: Point = pts[next - 1];
         let (x, y) = (tr.target.0 + p.0, tr.target.1 + p.1);
         // spec: S-0207 claim 5 (at a point: ground position target + displacement, height H, facing 256f)
-        set_pos(w, id, x, y, true);
+        set_pos(w, id, x, y, true, tr.crush);
         set_facing(w, id, p.2);
         last = (x, y);
     }
@@ -1675,7 +1724,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             q0
         };
         if dest != cur {
-            set_pos(w, id, dest.0, dest.1, false);
+            set_pos(w, id, dest.0, dest.1, false, tr.crush);
         }
     }
     if let Some(d2) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {

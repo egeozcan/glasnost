@@ -666,6 +666,26 @@ fn release_depot_contact(w: &mut World, id: ObjectId) {
 
 /// The death effects of a killing hit after its death weapon (S-0312
 /// table, from step 3): the attached bomb, then the kind's effects.
+/// The start of a vessel's killing-hit sinking state (S-0504 claim 10): its
+/// destination and its own target are cancelled and its locomotor is asked
+/// to stop. The stop clears the stored steps; a track already begun stays,
+/// as claim 5 stops all locomotor progress while the vessel sinks.
+fn killing_hit_sinking_begins(w: &mut World, id: ObjectId) {
+    // spec: S-0504 claim 10 (beginning the killing-hit sinking state cancels the vessel's destination)
+    crate::econ::assign_destination(w, id, None);
+    // spec: S-0504 claim 10 (and its own target; other objects' targets are not cleared) and S-0301 claim 4 (a cleared target resets the burst counter)
+    if let Some(ob) = w.obj_mut(id) {
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0;
+    }
+    // spec: S-0504 claim 10 (and asks its locomotor to stop): S-0503 claim 10's stop request for the hovering locomotor, S-0207 claim 11's stop otherwise
+    if crate::hover::is_hover(w, id) {
+        crate::hover::stop_request(w, id);
+    } else {
+        crate::drive::stop(w, id);
+    }
+}
+
 fn kill_rest(w: &mut World, rest: KillRest) {
     let KillRest {
         id,
@@ -703,6 +723,9 @@ fn kill_rest(w: &mut World, rest: KillRest) {
                 release_depot_contact(w, id);
                 // spec: S-0312 claim 10 and S-0504 claims 4 and 5 (a non-crashable vessel stays in play; the descent starts at its next own update); S-0504 claim 13 and S-0312 claim 32 row 1 (already sinking: the descent goes on from its height, not restarted)
                 crate::naval::start_sinking(w, id);
+                if !already_sinking {
+                    killing_hit_sinking_begins(w, id);
+                }
                 return;
             }
             if marked_water {
