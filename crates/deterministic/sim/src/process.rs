@@ -741,7 +741,8 @@ fn refresh_attack_move(w: &mut World, id: ObjectId) {
         }
         AttackMoveMemory::Target(x) => {
             // spec: S-0309 claim 23 (b) (only a target: attack queued with an immediate start, the memory's target the object's)
-            ob.beh.queue_and_start(Some(Behaviour::Attack), rd, t, stale);
+            ob.beh
+                .queue_and_start(Some(Behaviour::Attack), rd, t, stale);
             let before = ob.target;
             ob.target = Some(x);
             // spec: S-0309 claim 24 (every setting of a target, even to the same one, leaves a target that is not an opportunity target)
