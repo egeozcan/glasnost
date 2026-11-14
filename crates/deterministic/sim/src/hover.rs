@@ -208,16 +208,20 @@ pub fn powered(w: &World, id: ObjectId) -> bool {
 pub fn moving(w: &World, id: ObjectId) -> bool {
     // spec: S-0503 Terms and claim 16 (moving: D or P; moving-state tests use D, also a D kept after the order-level destination was cleared)
     w.obj(id).is_some_and(|o| {
-        // spec: S-0503 claim 10 (a D cleared by the stop request, its order-level destination left in place, is no D)
-        let d_cleared = o
-            .hover
-            .as_ref()
-            .is_some_and(|h| h.stopped.is_some() && h.stopped == o.dest);
-        (o.dest.is_some() && !d_cleared)
+        (o.dest.is_some() && !d_cleared(o))
             || o.hover
                 .as_ref()
                 .is_some_and(|h| h.point.is_some() || h.retained.is_some())
     })
+}
+
+/// Whether the stop request of claim 10 has cleared *D* while leaving the
+/// order-level destination in place.
+fn d_cleared(o: &crate::world::Object) -> bool {
+    // spec: S-0503 claim 10 (a D cleared by the stop request, its order-level destination left in place, is no D)
+    o.hover
+        .as_ref()
+        .is_some_and(|h| h.stopped.is_some() && h.stopped == o.dest)
 }
 
 /// Whether the vehicle is moving now (Terms): moving and *T* ≠ 0.
@@ -649,19 +653,21 @@ fn refuse(w: &mut World, id: ObjectId) {
 /// search clears *D* and *P* and with them `old`, the former heading
 /// point's reservation; returns the reservation still standing.
 fn path_update(w: &mut World, id: ObjectId, old: Option<Pos>) -> Option<Pos> {
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return old;
     };
-    if !o.path.steps.is_empty() || o.dest.is_none() {
+    // spec: S-0503 claim 15 (no fresh search is made without D) and S-0212 claim 20 (a hover's searches use its movement destination): a D cleared by the stop request of claim 10, the order-level destination left in place, is no D
+    if !o.path.steps.is_empty() || o.dest.is_none() || d_cleared(o) {
         return old;
     }
+    let retry_at = o.path.retry_at;
     if at_destination(w, id) {
         // spec: S-0503 claim 7 (in the destination's cell at a height difference below 208: the destination is cleared and the move ends)
         drop_dest(w, id);
         return old;
     }
     // spec: S-0212 claim 21 and S-0207 claim 19 (d) (a fresh search with no stored steps waits for R)
-    if w.tick >= o.path.retry_at
+    if w.tick >= retry_at
         && fresh_search(w, id) != Search::Found
         && w.obj(id).is_none_or(|o| o.dest.is_none())
     {
