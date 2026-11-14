@@ -1943,6 +1943,12 @@ pub struct UnitType {
     /// `UndeployDelay`, ticks.
     #[serde(default)]
     pub undeploy_delay: Option<i32>,
+    /// Our format's named area-fire deployer flag, absent no: the infantry
+    /// type singled out by name in S-0215 claim 30. Not a key of the
+    /// original's data; the importer sets it from the type's identifier
+    /// (S-0215 Terms and Import mapping).
+    #[serde(default)]
+    pub named_area_fire_deployer: Option<bool>,
     /// `DefaultToGuardArea`.
     #[serde(default)]
     pub default_to_guard_area: Option<bool>,

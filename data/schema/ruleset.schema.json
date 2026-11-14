@@ -13230,6 +13230,14 @@
             }
           ]
         },
+        "named_area_fire_deployer": {
+          "description": "Our format's named area-fire deployer flag, absent no: the infantry\ntype singled out by name in S-0215 claim 30. Not a key of the\noriginal's data; the importer sets it from the type's identifier\n(S-0215 Terms and Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "non_vehicle": {
           "description": "`NonVehicle`.",
           "type": [
