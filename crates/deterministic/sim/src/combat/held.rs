@@ -146,9 +146,11 @@ pub(crate) fn aside_lost(
     gone: ObjectId,
     keep_target: impl Fn(&World, Option<HouseId>) -> bool,
 ) {
+    /// The put-aside target and destination (`Behaviours::aside`).
+    type Slots = (Option<Target>, Option<Target>);
     let it = Some(Target::Object(gone));
     // spec: S-0309 claim 27a (r140, Q-3061: every holder, in key order; a slot that names another object or a cell is kept)
-    let changes: Vec<(ObjectId, (Option<Target>, Option<Target>))> = w
+    let changes: Vec<(ObjectId, Slots)> = w
         .objects
         .values()
         .filter_map(|o| {
