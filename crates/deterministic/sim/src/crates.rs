@@ -1004,17 +1004,18 @@ fn explosion(w: &mut World, collector: ObjectId, p: Pos, d: i32, half: bool) {
 
 /// Claim 17: napalm.
 fn napalm(w: &mut World, collector: ObjectId, p: Pos, d: i32) {
-    let Some(flame) = w.rules().crates.flame else {
-        w.note("S-0520 Edge cases: no flame warhead: napalm skips its hit and its area damage");
-        return;
-    };
     let c = w.reference_point(collector);
     // spec: S-0520 F6 (the midpoint, each coordinate truncated toward zero)
     let m = Pos::new((p.x + c.x) / 2, (p.y + c.y) / 2, (p.z + c.z) / 2);
-    // spec: S-0520 claim 17 (the animation at position 0 of the animation list appears at the midpoint, before the hits)
+    // spec: S-0520 claim 17 (the animation at position 0 of the animation list appears at the midpoint, before the hits; it does not depend on the warhead) (#283)
     if let Some(name) = w.rules().animations.first().map(|a| a.name.clone()) {
         crate::combat::effects::anim(w, &name, m);
     }
+    let Some(flame) = w.rules().crates.flame else {
+        // spec: S-0520 Edge cases (a missing flame warhead for napalm: our engine skips the hit and the area damage)
+        w.note("S-0520 Edge cases: no flame warhead: napalm skips its hit and its area damage");
+        return;
+    };
     damage::apply(
         w,
         collector,
