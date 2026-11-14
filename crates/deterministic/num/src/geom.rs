@@ -365,16 +365,20 @@ pub fn direction_real(x: F64, y: F64, mode: Rounding) -> Facing {
 
 /// [`direction_real`] with `quirks.table_direction` at `table`: off, the
 /// exact direction of S-0204 Edge cases for X and Y narrowed to single
-/// precision by `mode` (S-0306 Formulas). A zero displacement, or an
-/// argument that is not finite in single precision, keeps the table path:
-/// the specs give no off value for them (Q-3082).
+/// precision by `mode` (S-0306 Formulas). A zero displacement, both
+/// arguments zero of either sign after the narrowing, is 16384 off (S-0306
+/// Formulas, revision 90). An argument that is not finite in single
+/// precision keeps the table path: no spec gives an off value for it.
 // spec: S-0204 Edge cases (quirks.table_direction off: the exact angle), S-0306 Formulas (both arguments narrowed to single precision)
 pub fn direction_real_b(x: F64, y: F64, table: bool, mode: Rounding) -> Facing {
     if !table
         && let (Some((nx, mx, kx)), Some((ny, my, ky))) =
             (single_parts(x.to_f32(mode)), single_parts(y.to_f32(mode)))
-        && (mx != 0 || my != 0)
     {
+        if mx == 0 && my == 0 {
+            // spec: S-0306 Formulas (revision 90: a zero displacement, both arguments zero of either sign after the narrowing, is 16384 with quirks.table_direction off)
+            return 16384;
+        }
         // Both magnitudes on the smaller of the two binary exponents.
         let k = kx.min(ky);
         let ax = BigUint::from(mx) << (kx - k) as u32;
