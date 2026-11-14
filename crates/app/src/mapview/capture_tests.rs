@@ -1512,3 +1512,108 @@ fn an_ungranted_superweapon_record_is_read_by_its_clock() {
         );
     }
 }
+
+/// The follow-up type's image frames are 5 × 5, so its items can be told
+/// from [`SLOT_FRAME`]'s.
+const FOLLOW_UP_FRAME: u32 = 5;
+
+/// spec: S-0109 claim 15 (at its end, a slot animation whose type names a follow-up type continues as
+/// the follow-up type) and S-0108 claim 11 (a building placed during the set-up starts its active
+/// slot); design: render (#136): the drawing takes the follow-up type's images from the switch on
+#[test]
+fn a_slot_animation_is_drawn_as_its_follow_up_type_after_the_switch() {
+    let rules_text = format!("{RULES}[Animations]\n0=SLOTL\n1=SLOTN\n");
+    let hut = format!("[HUTX]\n{SLOT}");
+    let art = format!(
+        "{}[SLOTL]\nLayer=ground\nLoopCount=1\nNext=SLOTN\n[SLOTN]\nLayer=ground\nLoopCount=-1\n",
+        ART.replacen("[HUTX]\n", &hut, 1)
+    );
+    let (mut import, catalogue, mut assets) = context_full(&rules_text, &art);
+    import
+        .arts
+        .insert((Kind::Animations, 0), art_of("SLOTL", "slotl.shp"));
+    import
+        .arts
+        .insert((Kind::Animations, 1), art_of("SLOTN", "slotn.shp"));
+    assets.insert(
+        b"slotl.shp",
+        shp((20, 20), 8, (SLOT_FRAME, SLOT_FRAME), (8, 8)),
+    );
+    assets.insert(
+        b"slotn.shp",
+        shp((20, 20), 8, (FOLLOW_UP_FRAME, FOLLOW_UP_FRAME), (8, 8)),
+    );
+    let mut map = testkit::empty_map(SIZE);
+    let at = testkit::mid(SIZE, 2, 0);
+    map.objects.structures.push(Structure {
+        placed: Placed {
+            key: b"0".to_vec(),
+            owner: b"Neutral".to_vec(),
+            type_name: b"HUTX".to_vec(),
+            health: 256,
+            cell: at,
+            facing: 0,
+            raw: Vec::new(),
+        },
+    });
+    let rules = rules(false);
+    let setup = setup();
+    let world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let b = world
+        .objects
+        .values()
+        .find(|o| o.kind == SimKind::Building && o.pos.cell() == at)
+        .map(|o| o.id)
+        .expect("the map's building");
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
+    let mut scene = built.scene;
+    // The slot images' widths, redraw by redraw.
+    let mut widths = Vec::new();
+    for _ in 0..40 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        let w: BTreeSet<u32> = items_of(&scene, sim_code(b))
+            .iter()
+            .filter(|i| matches!(i.paint, Paint::Lit(_)))
+            .map(|i| scene.images[i.image as usize].width())
+            .filter(|&w| w != BODY_FRAME)
+            .collect();
+        widths.push(w);
+    }
+    let first = widths
+        .iter()
+        .position(|w| w.contains(&FOLLOW_UP_FRAME))
+        .unwrap_or_else(|| panic!("the follow-up type is drawn: {widths:?}"));
+    assert!(
+        widths[..first]
+            .iter()
+            .all(|w| *w == BTreeSet::from([SLOT_FRAME])),
+        "SLOTL until the switch: {widths:?}"
+    );
+    assert!(
+        widths[first..]
+            .iter()
+            .all(|w| *w == BTreeSet::from([FOLLOW_UP_FRAME])),
+        "SLOTN from the switch on: {widths:?}"
+    );
+}

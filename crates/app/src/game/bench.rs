@@ -143,6 +143,12 @@ pub struct BenchOptions {
     /// The offscreen host writes a picture of each view's last warmup
     /// frame.
     pub shots: bool,
+    /// The offscreen host reads back every this many frames of the run
+    /// (warmup and timed) into a digest of the drawn pictures; 0: none.
+    /// design: render (#145): a check that a performance change leaves
+    /// every drawn frame as it was; off by default, as the readbacks
+    /// disturb the timing.
+    pub digest: u32,
 }
 
 impl Default for BenchOptions {
@@ -167,6 +173,7 @@ impl Default for BenchOptions {
             every_frame: false,
             vsync: false,
             shots: true,
+            digest: 0,
         }
     }
 }
@@ -222,6 +229,7 @@ impl BenchOptions {
                 }
                 "vsync" => o.vsync = flag(v)?,
                 "shots" => o.shots = flag(v)?,
+                "digest" => o.digest = num(v)? as u32,
                 _ => return Err(format!("unknown bench option {k:?}")),
             }
         }
@@ -271,6 +279,8 @@ struct Row {
     play: f64,
     scene: f64,
     radar: f64,
+    /// The parts of `scene` (#145).
+    parts: crate::mapview::live::SceneLaps,
     draw: DrawLaps,
     acquire: f64,
     encode: f64,
@@ -334,6 +344,9 @@ pub struct Bench {
     end_hash: Option<String>,
     size: (u32, u32),
     last_log: f64,
+    /// The digest of the pictures read back (`digest=N`), and their count.
+    frame_digest: sha2::Sha256,
+    digested: u64,
 }
 
 impl Bench {
@@ -371,6 +384,8 @@ impl Bench {
             end_hash: None,
             size,
             last_log: 0.0,
+            frame_digest: sha2::Digest::new(),
+            digested: 0,
         }
     }
 
@@ -429,6 +444,20 @@ impl Bench {
         let last_warmup = self.in_view + 1 == self.opts.warmup;
         (self.opts.shots && self.stage == Stage::Run && last_warmup)
             .then(|| format!("{}-{}.png", self.label(), self.opts.views[self.view].name()))
+    }
+
+    /// Whether the frame just drawn goes into the frame digest
+    /// (`digest=N`: every Nth frame of each view's run, warmup included).
+    pub fn digest_due(&self) -> bool {
+        self.opts.digest > 0
+            && self.stage == Stage::Run
+            && self.in_view.is_multiple_of(self.opts.digest)
+    }
+
+    /// Adds a frame's pictures (RGBA) to the frame digest.
+    pub fn digest(&mut self, rgba: &[u8]) {
+        sha2::Digest::update(&mut self.frame_digest, rgba);
+        self.digested += 1;
     }
 
     /// Host time spent outside the frame (a picture's readback), left out
@@ -686,6 +715,7 @@ impl Bench {
             play: laps.play,
             scene: laps.scene,
             radar: laps.radar,
+            parts: laps.parts,
             ..Row::default()
         });
         if c.shell.screen != Screen::Game {
@@ -980,6 +1010,17 @@ impl Bench {
         if let Some(h) = &self.end_hash {
             let _ = writeln!(out, "state hash at the end: {h}");
         }
+        if self.digested > 0 {
+            let hex: String = sha2::Digest::finalize(self.frame_digest.clone())
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect();
+            let _ = writeln!(
+                out,
+                "frame digest: {hex} over {} frames (every {})",
+                self.digested, self.opts.digest
+            );
+        }
         let _ = writeln!(
             out,
             "load average: before {}; after {}",
@@ -1106,6 +1147,35 @@ impl Bench {
         ];
         for (name, f) in parts {
             let _ = writeln!(out, "  {name:<24} {:>8.3}", mean(f));
+        }
+        let _ = writeln!(out);
+        // design: render (#145): the scene update's parts, per timed frame that ticked
+        let ticked: Vec<&Row> = timed.iter().copied().filter(|r| r.ticked).collect();
+        let _ = writeln!(
+            out,
+            "mean per timed frame that ticked (ms, {} frames), by part:",
+            ticked.len()
+        );
+        let n_ticked = ticked.len().max(1) as f64;
+        let tick_mean =
+            |f: fn(&Row) -> f64| ticked.iter().map(|r| f(r)).sum::<f64>() / n_ticked + 0.0;
+        let scene_parts: [(&str, Part); 13] = [
+            ("play", |r| r.play),
+            ("scene", |r| r.scene),
+            ("  effects", |r| r.parts.effects),
+            ("  slots", |r| r.parts.slots),
+            ("  layers", |r| r.parts.layers),
+            ("  mobiles", |r| r.parts.mobiles),
+            ("  buildings", |r| r.parts.buildings),
+            ("  overlays", |r| r.parts.overlays),
+            ("  anims", |r| r.parts.anims),
+            ("  order", |r| r.parts.order),
+            ("  status", |r| r.parts.status),
+            ("radar", |r| r.radar),
+            ("work (whole frame)", |r| r.work),
+        ];
+        for (name, f) in scene_parts {
+            let _ = writeln!(out, "  {name:<24} {:>8.3}", tick_mean(f));
         }
         let _ = writeln!(out);
         let _ = writeln!(out, "counts per timed frame (mean, max):");
@@ -1404,6 +1474,7 @@ pub fn run_offscreen(
             .map(|t| t.collect(&device))
             .unwrap_or_default();
         let shot = bench.shot();
+        let digest = bench.digest_due();
         bench.after_frame(
             &client,
             FrameEnd {
@@ -1425,6 +1496,12 @@ pub fn run_offscreen(
             if let Err(e) = std::fs::write(out.join(&name), png) {
                 log::warn!("benchmark: cannot write {name}: {e}");
             }
+            bench.exclude(now() - t);
+        }
+        if digest {
+            let t = now();
+            let rgba = read_texture(&device, &queue, &target, w, h);
+            bench.digest(&rgba);
             bench.exclude(now() - t);
         }
     }
