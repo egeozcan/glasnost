@@ -4732,6 +4732,146 @@ fn particles_draw_their_sprites_in_the_air_layer() {
     assert_eq!(effect_items(&scene, true), 1, "the debug view marks it");
 }
 
+/// #424: spec: S-0613 claim 19 (a gas particle is drawn at its own world height with the particle
+/// depth of S-0616 claim 27 and no rule of its own for bridges, in either position of
+/// `quirks.gas_through_bridge_deck`: only the simulation's height differs) and S-0616 claim 30
+/// (the air layer): the same particle at the deck's height and 5 above it draws the same items
+/// whether or not its cell carries a high bridge
+#[test]
+fn a_gas_particle_draws_alike_over_a_high_bridge() {
+    use glasnost_num::F32;
+    use glasnost_render::scene::Group;
+    use glasnost_rules::sim::{ParticleSystemType, ParticleType};
+    use glasnost_sim::gas::{Particle, ParticleSystem};
+    use glasnost_sim::world::Pos;
+    let rules = format!("{RULES}[Particles]\n0=PUFF\n[PUFF]\nX=1\n");
+    let (mut import, catalogue, mut assets) = super::tests::context_full(&rules, super::tests::ART);
+    let i = import.outcome.registries[&Kind::Particles]
+        .iter()
+        .position(|t| t.name == b"PUFF")
+        .unwrap();
+    import.arts.insert(
+        (Kind::Particles, i),
+        super::tests::art_of("PUFF", "puff.shp"),
+    );
+    assets.insert(b"puff.shp", shp((20, 20), 4, (3, 3), (2, 2)));
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let mut r = testkit::ruleset();
+    r.registries
+        .entry("particles".into())
+        .or_default()
+        .push("PUFF".into());
+    r.sim.particles.insert(
+        "PUFF".into(),
+        ParticleType {
+            behaves_like: Some("gas".into()),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("particle_systems".into())
+        .or_default()
+        .push("CLOUD".into());
+    r.sim.particle_systems.insert(
+        "CLOUD".into(),
+        ParticleSystemType {
+            holds_what: Some("PUFF".into()),
+            ..Default::default()
+        },
+    );
+    // The deck height of a level-0 cell (S-0616 claim 14).
+    let deck = 416;
+    let drawn = |high_bridge: bool, z: i32| {
+        let sim_rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic"));
+        let world = glasnost_sim::load::new_game(
+            sim_rules.clone(),
+            &map,
+            testkit::catalogue(),
+            &testkit::setup(5),
+        )
+        .unwrap();
+        let (mut built, painter) = build_parts(&inputs, true);
+        let mut live = Live::new(
+            &inputs,
+            &mut built,
+            painter,
+            (world, sim_rules.clone(), testkit::setup(5), Vec::new()),
+        );
+        let mut scene = built.scene;
+        live.set_debug_markers(false);
+        live.step();
+        // A level-0 cell of the synthetic map, clear of its plateau.
+        let pos = Pos::centre(testkit::cell(0, 6), z);
+        if high_bridge {
+            let c = live.world.cells.idx(pos.cell()).unwrap();
+            live.world.cells.deck[c] = true;
+        }
+        let cloud = sim_rules.gas.system("CLOUD").unwrap();
+        let mut system = ParticleSystem::new(
+            cloud,
+            &sim_rules.gas.systems[cloud as usize],
+            pos,
+            None,
+            sim_rules.mode,
+        );
+        system.particles = vec![Particle {
+            id: ObjectId(9001),
+            type_index: 0,
+            pos,
+            vel: [0; 3],
+            defl: [F32(0); 2],
+            life: 100,
+            countdown: 0,
+            stage: 1,
+            dead: false,
+            speed: F32(0),
+            dir: [F32(0); 3],
+            fvel: [F32(0); 3],
+            step: [0; 3],
+            advance: 0,
+            translucency: 0,
+            colour: Default::default(),
+            origin: pos,
+            aim: pos,
+        }];
+        live.world.gas.systems.insert(ObjectId(9000), system);
+        live.redraw(&inputs, &mut scene);
+        assert_eq!(live.counts.particles_drawn, 1);
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Effects && !i.provisional)
+            .map(|i| {
+                let img = &scene.images[i.image as usize];
+                (
+                    i.x,
+                    i.y,
+                    img.width(),
+                    img.pixels().to_vec(),
+                    format!("{:?} {:?} {:?}", i.paint, i.depth, i.test),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    for z in [deck, deck + 5] {
+        let open = drawn(false, z);
+        assert_eq!(open.len(), 1, "one sprite item at height {z}");
+        assert_eq!(drawn(true, z), open, "height {z}");
+    }
+}
+
 /// The rules of the protection tests: the curtain selector names table
 /// position 1 and the force-shield selector position 2 (invented triples).
 fn protection_rules() -> String {
