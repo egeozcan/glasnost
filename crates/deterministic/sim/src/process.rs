@@ -1168,8 +1168,22 @@ fn process_unload_infantry(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0215 claim 30 (deployed: 450 ticks)
         NO_RULE_DELAY
     } else {
-        // spec: S-0215 claim 30 (an undeployed unit starts its deploy sequence; area-fire weapons wait for M4)
+        // spec: S-0215 claim 30 (an undeployed unit starts its deploy sequence)
         infantry::request(w, id, Seq::Deploy, false);
+        // spec: S-0215 claim 30 and Terms (the deploy weapon: the secondary, or the primary for a type with the spray-attack flag)
+        let spray = w
+            .rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.spray_attack.unwrap_or(false));
+        let slot = if spray { 0 } else { 1 };
+        let area = crate::combat::weapon::slot_weapon(w, id, slot)
+            .is_some_and(|x| w.rules().combat.weapon(x).area_fire);
+        if area && let Some(ob) = w.obj_mut(id) {
+            // spec: S-0215 claim 30 (a deploy weapon with the area-fire flag: a unit of any type but the one singled out by name takes its own cell as its target); Q-3100 (interim: no type is singled out, in both positions of quirks.named_deploy_area_fire, so the named type's rows are not built) (#232)
+            crate::spawn::set_own_target(ob, Some(Target::Cell(o.pos.cell())));
+            // spec: S-0301 claim 5, Moment of a retarget's let-go (at the change of the firer's target)
+            crate::emitters::retarget_let_go(w, id);
+        }
         // spec: S-0215 claim 30 (undeployed: the undeploy delay when 0 or more, else 450 ticks)
         if delay >= 0 { delay } else { NO_RULE_DELAY }
     };
