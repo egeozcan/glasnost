@@ -238,6 +238,8 @@ fn own_locomotion(w: &mut World, id: ObjectId) -> bool {
             arrive(w, id, target);
             // spec: S-0516 claims 13 and 22 (a walker's cell-arrival update is its arrival and snap to the walking target's standing position, same-cell and intermediate arrivals included: the sensor disc moves and a cloaked walker takes the adjacency check)
             crate::cloak::machine::cell_movement_completed(w, id);
+            // spec: S-0409 claim 8 and Terms (a walking unit removes and adds its sight at the position reached on each arrival in a cell, a same-cell arrival included)
+            crate::econ::shroud::refresh_sight(w, id);
             // spec: S-0507 claim 6 (arriving at the cell of the transport it is entering: it boards, or is turned away)
             if crate::transport::arrival(w, id) {
                 return true;

@@ -69,12 +69,13 @@ impl UpdateOrder {
             return;
         }
         if let Some(cur) = self.cur {
-            // spec: S-0203 claim 10 (a removal counts when the object is the current one or stands before it)
-            if p <= cur {
+            // spec: S-0203 claim 10 (a removal counts when the object is the current one or stands before it; once the current one has left, index `cur` holds the object that stood after it, whose removal costs nobody a turn)
+            let current = p == cur && !self.cur_gone;
+            if p < cur || current {
                 if removal_skip {
                     self.skips += 1;
                 }
-                if p == cur {
+                if current {
                     self.cur_gone = true;
                 } else {
                     self.cur = Some(cur - 1);
@@ -254,6 +255,69 @@ mod tests {
         }
         // F1's projectile in tick 0; F2's in tick 1; F3's in tick 2.
         assert_eq!(hits, vec![(201, 0), (202, 1), (203, 2)]);
+    }
+
+    // spec: S-0203 claim 10 (a removal of an object that stands after the current one costs nobody a turn: after the current object has left play in its own turn, the object that stood directly after it still stands after it)
+    #[test]
+    fn current_leaves_then_its_follower_leaves() {
+        let mut o = UpdateOrder::default();
+        for id in 1..=5 {
+            o.enter(ObjectId(id));
+        }
+        o.begin_pass();
+        let mut seen = Vec::new();
+        while let Some(id) = o.next_turn() {
+            seen.push(id.0);
+            if id.0 == 1 {
+                // The current object leaves play, then the object directly after it.
+                o.leave(ObjectId(1), true);
+                o.leave(ObjectId(2), true);
+            }
+        }
+        o.end_pass();
+        // One counting removal (object 1): object 3 misses its turn, 4 and 5 act.
+        assert_eq!(seen, vec![1, 4, 5]);
+    }
+
+    // spec: S-0203 claim 10 (the same two removals in the other order: one counting removal)
+    #[test]
+    fn follower_leaves_then_the_current_object_leaves() {
+        let mut o = UpdateOrder::default();
+        for id in 1..=5 {
+            o.enter(ObjectId(id));
+        }
+        o.begin_pass();
+        let mut seen = Vec::new();
+        while let Some(id) = o.next_turn() {
+            seen.push(id.0);
+            if id.0 == 1 {
+                o.leave(ObjectId(2), true);
+                o.leave(ObjectId(1), true);
+            }
+        }
+        o.end_pass();
+        assert_eq!(seen, vec![1, 4, 5]);
+    }
+
+    // spec: S-0203 claim 10 (after the current object has left play, a removal of an object that stood before it still counts)
+    #[test]
+    fn current_leaves_then_an_earlier_object_leaves() {
+        let mut o = UpdateOrder::default();
+        for id in 1..=6 {
+            o.enter(ObjectId(id));
+        }
+        o.begin_pass();
+        let mut seen = Vec::new();
+        while let Some(id) = o.next_turn() {
+            seen.push(id.0);
+            if id.0 == 3 {
+                o.leave(ObjectId(3), true);
+                o.leave(ObjectId(1), true);
+            }
+        }
+        o.end_pass();
+        // Two counting removals: objects 4 and 5 miss their turns.
+        assert_eq!(seen, vec![1, 2, 3, 6]);
     }
 
     // spec: S-0203 Edge cases (`quirks.update_order_removal_skip` off: no removal costs a turn)

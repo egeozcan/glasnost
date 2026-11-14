@@ -1621,6 +1621,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             completion_clears_goal(w, id);
             // spec: S-0516 claims 13 and 22 (arrival at the track target's cell centre is the completed-cell movement event: the sensor disc moves and a cloaked mover takes the adjacency check)
             crate::cloak::machine::cell_movement_completed(w, id);
+            // spec: S-0409 claim 8 and Terms (a driving unit removes and adds its sight at the position reached on each arrival in a cell, the movement arrival update; not at a boundary crossing) and S-0207 claim 12 (reaching the track target is the cell-arrival update)
+            crate::econ::shroud::refresh_sight(w, id);
             // spec: S-0402 claim 10 (second route: the arrival report at the track target, after the position and the cleared track, before cell-centre crushing and any next track)
             crate::econ::harvest::track_arrival(w, id);
             crate::crush::at_cell_centre(w, id);

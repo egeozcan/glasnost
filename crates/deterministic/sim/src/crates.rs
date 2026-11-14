@@ -321,7 +321,16 @@ fn finish(w: &mut World, found: Option<CellXY>, contents: u8, trigger: bool) -> 
     if !w.cells.usable(c) || cell.overlay != NO_OVERLAY {
         return false;
     }
+    put(w, c, contents, trigger)
+}
+
+/// Puts a crate on `c` with `contents` in the lowest free place, with no test
+/// of the cell; the lifetime draw follows any overlay draws.
+fn put(w: &mut World, c: CellXY, contents: u8, trigger: bool) -> bool {
     let Some(place) = free_place(w) else {
+        return false;
+    };
+    let Some(cell) = w.cells.cell(c) else {
         return false;
     };
     let r = w.rules_arc();
@@ -422,6 +431,25 @@ pub fn place_death(w: &mut World, at: CellXY, money: bool) -> bool {
     finish(w, found, if money { 0 } else { RANDOM }, false) // spec: S-0520 claim 5 (a building's crate beneath holds the money power-up (0) when the type says so; every other death crate is random)
 }
 
+/// A destroyed building's crate beneath (S-0312 claim 20, S-0520 claim 5),
+/// placed on its top-left foundation cell `at` once the building has left
+/// its cells: a money crate when `money`, otherwise random contents.
+/// Claim 20 states no condition on the cell, so only claim 1's place limit
+/// and the named crate overlays are tested; the crate replaces whatever
+/// overlay the cell holds (`design: Q-3086 interim`).
+pub fn place_beneath(w: &mut World, at: CellXY, money: bool) -> bool {
+    if free_place(w).is_none() || !overlays_named(w) {
+        // spec: S-0520 claim 1 (every place occupied: nothing and no draw) and S-0524 Edge cases (no crate overlay named: no effect, no draw)
+        return false;
+    }
+    if is_crate(w, at) {
+        // design: Q-3086 interim (a crate already on the cell is replaced, its place freed first)
+        remove_crate(w, at);
+    }
+    // spec: S-0312 claim 20 (the crate appears on the top-left foundation cell); S-0520 claim 5 (the money power-up (0) when the type says so, random contents otherwise); claim 3 (the water crate on water, the wooden crate otherwise)
+    put(w, at, if money { 0 } else { RANDOM }, false)
+}
+
 /// The game-start placements (claim 2): `n` random placements in order.
 pub fn place_at_start(w: &mut World, n: i32) {
     for _ in 0..n {
@@ -508,8 +536,12 @@ pub fn pickup(w: &mut World, collector: ObjectId, cell: CellXY) -> bool {
         place_random(w);
     }
     let (shown, blocked) = effect(w, p, forced, collector, house, cell);
-    if let Some(name) = r.crates.anim[shown].clone() {
-        // spec: S-0520 claim 11 (the animation appears 200 leptons above the crate point's floor height; a successful unit has none, and its creation draws follow every effect draw)
+    // spec: S-0520 claims 11 and 13 (a successfully placed unit has no animation, even when the unit power-up names one; `effect` gives the unit power-up only for a placed unit)
+    let anim = (shown != UNIT)
+        .then(|| r.crates.anim[shown].clone())
+        .flatten();
+    if let Some(name) = anim {
+        // spec: S-0520 claim 11 (the animation appears 200 leptons above the crate point's floor height; its creation draws follow every effect draw)
         let mut at = point(w, cell);
         at.z += 200; // spec: S-0520 Constants (animation height 200 leptons)
         crate::combat::effects::anim(w, &name, at);
@@ -671,8 +703,9 @@ fn convert(w: &World, p: usize, collector: ObjectId, house: HouseId, cell: CellX
 // ---------------------------------------------------------------------------
 // Effects (claims 12 to 25)
 
-/// Plays a power-up: returns the power-up whose animation shows and whether
-/// a ground collector's step is blocked.
+/// Plays a power-up: returns the power-up whose animation shows (the unit
+/// power-up only for a placed unit, which shows none) and whether a ground
+/// collector's step is blocked.
 fn effect(
     w: &mut World,
     p: usize,
@@ -1135,9 +1168,10 @@ fn resource(w: &mut World, p: Pos, half: bool) {
     }
 }
 
-/// A destroyed crate-carrying vehicle or building with a crate beneath
-/// leaves a crate (S-0312 claims 14 and 20, S-0520 claim 5) when the game's
-/// crate setting allows crates.
+/// A destroyed crate-carrying vehicle leaves a crate near its position
+/// (S-0312 claim 14, S-0520 claim 5) when the game's crate setting allows
+/// crates. A building's crate beneath goes through [`place_beneath`] once
+/// the building has left its cells (`combat::death::leave_play`).
 pub fn death_crate(w: &mut World, id: ObjectId) {
     if let Some((at, money)) = death_crate_plan(w, id) {
         place_death(w, at, money);

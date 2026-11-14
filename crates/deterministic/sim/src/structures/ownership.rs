@@ -316,6 +316,10 @@ fn contacts(w: &mut World, b: ObjectId, new: Option<HouseId>) {
                 crate::econ::events::owner_changed(w, v, old);
                 // spec: S-0309 claim 31 (each object that changes owner together with a building it is in contact with has its orders reset)
                 reset_orders(w, v);
+                if o.spawn.is_some() {
+                    // spec: S-0506 claim 13 (a spawner that changes house clears its slots)
+                    crate::spawn::owner_changed(w, v);
+                }
             }
         } else {
             leave(w, b, v);

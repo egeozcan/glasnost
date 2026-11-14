@@ -281,6 +281,50 @@ fn deaths_leave_crates() {
     }
 }
 
+/// A world with crates on and the building type BASE given a money crate
+/// beneath (and the explodes flag when `explodes`); destroys a BASE of
+/// house 1 at (6, 0), runs 3 ticks and returns its top-left cell and the
+/// crate cells.
+fn crate_beneath(explodes: bool) -> (CellXY, Vec<CellXY>) {
+    let mut w = world_with(true, |r| {
+        let b = r.sim.buildings.get_mut("BASE").unwrap();
+        b.crate_beneath = Some(true);
+        b.crate_beneath_is_money = Some(true);
+        if explodes {
+            b.combat.explodes = Some(true);
+        }
+    });
+    let b = spawn(&mut w, Kind::Building, "BASE", 1, at(6, 0));
+    let top_left = w.obj(b).unwrap().pos.cell();
+    let hit = glasnost_sim::combat::damage::Hit {
+        amount: 100_000,
+        warhead: w.rules().combat.general.c4_warhead,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: true,
+        no_escape: false,
+    };
+    glasnost_sim::combat::damage::apply(&mut w, b, hit);
+    testkit::run(&mut w, 3);
+    assert!(w.obj(b).is_none(), "the building has left play");
+    (top_left, crate_cells(&w))
+}
+
+// spec: S-0312 claim 20 (a crate beneath appears on the building's top-left foundation cell) and claim 21 (placed in the moment it leaves play); S-0520 claim 5; S-0312 scenario D14 variant b (a different crate cell falsifies b)
+#[test]
+fn a_crate_beneath_lands_on_the_top_left_foundation_cell() {
+    let (top_left, cells) = crate_beneath(false);
+    assert_eq!(cells, vec![top_left]);
+}
+
+// spec: S-0312 claim 21 (a building with the explodes flag awaits removal; its crate is placed in its removal turn, after the second round) and claim 20 (the top-left foundation cell)
+#[test]
+fn an_exploding_buildings_crate_beneath_lands_on_its_top_left_cell() {
+    let (top_left, cells) = crate_beneath(true);
+    assert_eq!(cells, vec![top_left]);
+}
+
 // spec: S-0520 Determinism: crate places, lifetimes and the mark survive a save and load
 #[test]
 fn crate_state_survives_a_save_and_load() {
