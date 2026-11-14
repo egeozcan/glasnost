@@ -1027,6 +1027,12 @@ fn immune_deployed(w: &mut World, id: ObjectId) -> i32 {
     // spec: S-0215 claim 31 and S-0525 claim 7 (only a field centred on the unit's cell counts, by its current integer field level)
     let suppressed = crate::radiation::centre_field_level(w, cell).is_some_and(|l| l >= threshold);
     let target = Target::Cell(cell);
+    if !suppressed && let Some(ob) = w.obj_mut(id) {
+        // spec: S-0215 claim 31 (Q-0983: the own cell is the target for the firing check and this immediate shot only, assigned in the deciding processing and cleared there after the shot or the refusal); S-0306 claim 3 (the launch direction, elevation and scatter are computed towards the aim point, the reference point of the firer's target) (#233)
+        crate::spawn::set_own_target(ob, Some(target));
+        // spec: S-0301 claim 5, Moment of a retarget's let-go (at the change of the firer's target)
+        crate::emitters::retarget_let_go(w, id);
+    }
     if !suppressed && check(w, id, Some(target), 1, true) == Answer::CanFire {
         // spec: S-0215 claim 31 (fires at its own cell, drops the target, starts its deployed-fire sequence; Q-0983: the shot is made at once)
         crate::combat::fire::shot(w, id, 1, target);
