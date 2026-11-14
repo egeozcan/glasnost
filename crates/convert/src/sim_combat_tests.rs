@@ -541,6 +541,32 @@ fn verses_items_follow_decimal_conversion_rounding() {
     assert_eq!(q.get("decimal_conversion_rounding"), Some(&false));
 }
 
+/// The weapons' attached particle systems after a base layer that gives
+/// each `Plume` and a mode layer that writes `later` for Torch, an empty
+/// value for Wick and `none` for Fuse.
+fn attached_after(later: &str, options: &ImportOptions) -> [Option<String>; 3] {
+    let base = "[ParticleSystems]\n0=Plume\n[Plume]\nBehavesLike=Smoke\n\
+                [VehicleTypes]\n1=Tank\n[Tank]\nPrimary=Torch\nSecondary=Wick\nElitePrimary=Fuse\n\
+                [Torch]\nAttachedParticleSystem=Plume\n[Wick]\nAttachedParticleSystem=Plume\n\
+                [Fuse]\nAttachedParticleSystem=Plume\n";
+    let mode = format!(
+        "[Torch]\nAttachedParticleSystem={later}\n[Wick]\nAttachedParticleSystem=\n\
+         [Fuse]\nAttachedParticleSystem=none\n"
+    );
+    let (s, _, _) = import(base, &mode, "", "", options);
+    ["Torch", "Wick", "Fuse"].map(|w| s.weapons[w].attached_particle_system.clone())
+}
+
+/// spec: S-0004 claim 2 (a weapon's attached particle system: `<none>` and an empty value keep the field's value; `none` names a particle system called none) and Edge cases (quirks.attached_system_none_keeps and quirks.particle_none_is_a_name, both on by default)
+#[test]
+fn attached_particle_system_keeps_on_none_and_empty() {
+    let plume = Some("Plume".to_owned());
+    let [torch, wick, fuse] = attached_after("<NONE>", &ImportOptions::default());
+    assert_eq!(torch, plume, "<none> keeps the value in force");
+    assert_eq!(wick, plume, "an empty value keeps the value in force");
+    assert_eq!(fuse.as_deref(), Some("none"), "none names a type");
+}
+
 /// spec: S-0006 claim 3 (a "not given" value is compared on the converted number), S-0003 Edge cases (quirks.decimal_conversion_rounding decides that number)
 #[test]
 fn not_given_values_follow_decimal_conversion_rounding() {
