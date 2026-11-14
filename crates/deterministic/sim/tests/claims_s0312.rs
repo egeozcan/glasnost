@@ -2121,6 +2121,64 @@ mod destruction_triggers {
             "the later lethal hit fires normally"
         );
     }
+
+    /// The firings of a repeating destroyed-by-anything tag on HUT at a first
+    /// delayed-kill hit, a second one during the countdown and a final lethal
+    /// hit by another warhead (#249).
+    fn delayed_firings(credited_again: bool) -> (u64, u64, u64) {
+        let mut r = delay_rules();
+        r.globals.quirks.delay_kill_credited_again = credited_again;
+        let mut w = game_with_triggers(&r, triggers(2, vec![]));
+        let id = tagged(&mut w, Kind::Building, "HUT", 0);
+        let f0 = w.triggers.fired;
+        assert_eq!(
+            damage::apply(&mut w, id, delay_hit(&r, 0)),
+            HitResult::PostMortem
+        );
+        let f1 = w.triggers.fired;
+        assert_eq!(
+            damage::apply(&mut w, id, delay_hit(&r, 0)),
+            HitResult::PostMortem
+        );
+        let f2 = w.triggers.fired;
+        assert_eq!(
+            damage::apply(&mut w, id, hit_with(warhead(&r, "W1"), 50)),
+            HitResult::NowDead
+        );
+        let f3 = w.triggers.fired;
+        (f1 - f0, f2 - f1, f3 - f2)
+    }
+
+    // spec: S-0302 claim 16 and Edge cases (quirks.delay_kill_credited_again: on, every later lethal hit registers the destruction again, the destroyed-object events included; off, the destruction is registered once, at the first delayed-kill hit, and the later hits register nothing); S-0312 claim 3 (S-0302 owns the switch)
+    #[test]
+    fn quirk_delay_kill_credited_again_governs_the_destruction_raises() {
+        assert_eq!(delayed_firings(true), (2, 2, 2));
+        assert_eq!(delayed_firings(false), (2, 0, 0));
+    }
+
+    /// The firings of the tag at a delayed-kill hit and then at the
+    /// countdown's expiry hit (#249).
+    fn expiry_firings(credited_again: bool) -> (u64, u64) {
+        let mut r = delay_rules();
+        r.globals.quirks.delay_kill_credited_again = credited_again;
+        r.sim.general.c4_warhead = Some("W1".into());
+        let mut w = game_with_triggers(&r, triggers(2, vec![]));
+        let id = tagged(&mut w, Kind::Building, "HUT", 0);
+        let f0 = w.triggers.fired;
+        damage::apply(&mut w, id, delay_hit(&r, 0));
+        let f1 = w.triggers.fired;
+        testkit::run(&mut w, 6);
+        // spec: S-0312 claim 21 (a building other than an exploding or selling one leaves play at once)
+        assert!(w.obj(id).is_none(), "expired: the building has left play");
+        (f1 - f0, w.triggers.fired - f1)
+    }
+
+    // spec: S-0302 claim 16 (Countdown expiry: the expiry hit raises the destroyed-object events again; with quirks.delay_kill_credited_again off, repeated destruction registration at an expiry hit is suppressed too); S-0312 claim 29 (Deferred deaths) and claim 3
+    #[test]
+    fn quirk_delay_kill_credited_again_governs_the_expiry_raises() {
+        assert_eq!(expiry_firings(true), (2, 2));
+        assert_eq!(expiry_firings(false), (2, 0));
+    }
 }
 
 // spec: S-0312 claim 2 and scenario D2 (strength 203: the first hit leaves 50 health, not 51, the quarter truncated toward zero)
