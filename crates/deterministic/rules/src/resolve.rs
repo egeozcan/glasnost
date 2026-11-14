@@ -606,11 +606,28 @@ fn resolve_instance(
     };
     let mut base = empty_object();
     for parent in &parents {
-        if node.get(parent).is_none() {
-            errors.push(error(format!(
-                "{collection}.{id}: unknown parent {parent:?}"
-            )));
-            continue;
+        match node.get(parent).map(|p| &p.value) {
+            None => {
+                errors.push(error(format!(
+                    "{collection}.{id}: unknown parent {parent:?}"
+                )));
+                continue;
+            }
+            // nocite: our own rules format (PLAN.md 4.6): a parent removed by a layer's `null` is not there to inherit from (#330)
+            Some(Value::Null) => {
+                errors.push(error(format!(
+                    "{collection}.{id}: parent {parent:?} was removed by a layer"
+                )));
+                continue;
+            }
+            Some(Value::Object(_)) => {}
+            // nocite: our own rules format (PLAN.md 4.6): an instance is an object (#330)
+            Some(_) => {
+                errors.push(error(format!(
+                    "{collection}.{id}: parent {parent:?} is not an object"
+                )));
+                continue;
+            }
         }
         if let Some(p) =
             resolve_instance(collection, parent, node, done, visiting, provenance, errors)
