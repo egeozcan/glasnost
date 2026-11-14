@@ -60,6 +60,8 @@ pub fn plant(w: &mut World, firer: Option<ObjectId>, target: Option<Target>) {
             planted: tick,
         });
     }
+    // A bomb now exists (#402, `crate::census`).
+    crate::census::forget(w);
     // spec: S-0519 claim 2 (the bomb-attach sound for the local player's planter is presentation: not built)
 }
 
@@ -143,12 +145,15 @@ pub fn carrier_killed(w: &mut World, id: ObjectId) {
 /// An object leaves play (claims 7 and 8): a carrier removed other than by
 /// death loses its bomb silently; a bomb whose planter leaves forgets it.
 pub fn removed(w: &mut World, id: ObjectId) {
-    for ob in w.objects.values_mut() {
-        if let Some(b) = ob.combat.bomb.as_mut()
-            && b.planter == Some(id)
-        {
-            // spec: S-0519 claim 8 (the bomb forgets its planter but keeps the planter's house)
-            b.planter = None;
+    // No bomb anywhere: the walk below would find none (#402).
+    if !crate::census::none(w, crate::census::Held::Bomb) {
+        for ob in w.objects.values_mut() {
+            if let Some(b) = ob.combat.bomb.as_mut()
+                && b.planter == Some(id)
+            {
+                // spec: S-0519 claim 8 (the bomb forgets its planter but keeps the planter's house)
+                b.planter = None;
+            }
         }
     }
     if let Some(ob) = w.obj_mut(id) {
