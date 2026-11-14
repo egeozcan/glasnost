@@ -94,8 +94,15 @@ pub const DUEL_DIAGONAL_SEED: u32 = 8;
 /// keep house 1's new construction yard as their target): seed 2 then
 /// ends at tick 9857 with smallest counter 1; seed 3 plays all its ticks
 /// with smallest counter 4, the most any seed reached (`m6c_seed_sweep`,
-/// seeds 1 to 16).
-pub const M6C_SEED: u32 = 3;
+/// seeds 1 to 16). Moved from 3 at the merge of sim issues batch S10 with
+/// batch S9 (S-0409 r9 claim 8, #205: a walking or driving unit's sight
+/// moves at its movement arrival; from tick 18 of seed 3 on, the only
+/// difference from main is the applied sight of house 1's walking
+/// infantry): seed 3 then ends at tick 9139 with smallest counter 1
+/// (jumpjet orders); seed 2 plays all its ticks with smallest counter 4,
+/// the most any seed reached, as do eleven other seeds of 1 to 16
+/// (`m6c_seed_sweep`).
+pub const M6C_SEED: u32 = 2;
 
 /// Ticks of the full run of the M6c duel (shorter than the other duels'
 /// games: every ability is exercised well before it).
