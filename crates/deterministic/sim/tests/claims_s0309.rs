@@ -2218,9 +2218,8 @@ fn turning(w: &mut World, a: ObjectId) {
     );
 }
 
-// spec: S-0309 claim 23 (a), row "a destination, not engaged" (a target found: attack queued with an immediate start) and S-0215 claim 7 ("with an immediate start" is the readiness-dependent start: not ready, attack stays queued)
+// spec: S-0309 claim 23 (a), row "a destination, not engaged" (a target found: attack queued with an immediate start) and S-0215 claim 7 ("with an immediate start" is the readiness-dependent start: not ready, attack stays queued); S-0309 r142 claim 23 (a) (Q-3102: the queued attack becomes current only at a start that finds the object ready)
 #[test]
-#[ignore = "Q-3102: the start of a moving vehicle's attack-move search is open; the interim starts attack at once"]
 fn issue_229_attack_move_destination_search_not_ready_queues_attack() {
     let mut r = base();
     cart_mut(&mut r).combat.can_passive_aquire = Some(false);
@@ -2242,9 +2241,8 @@ fn issue_229_attack_move_destination_search_not_ready_queues_attack() {
     );
 }
 
-// spec: S-0309 claim 23 (a), row "only a target", any other state (a target found: attack queued with an immediate start) and S-0215 claim 7 (the readiness-dependent start)
+// spec: S-0309 claim 23 (a), row "only a target", any other state (a target found: attack queued with an immediate start) and S-0215 claim 7 (the readiness-dependent start); S-0309 r142 claim 23 (a) (Q-3102)
 #[test]
-#[ignore = "Q-3102: the start of a moving vehicle's attack-move search is open; the interim starts attack at once"]
 fn issue_229_attack_move_target_search_not_ready_queues_attack() {
     let mut w = game(&base());
     let a = veh(&mut w, "CART", 0, 0, 0);
@@ -2263,6 +2261,30 @@ fn issue_229_attack_move_target_search_not_ready_queues_attack() {
         (Some(Behaviour::Move), Some(Behaviour::Attack)),
         "move stays current and attack stays queued"
     );
+}
+
+// spec: S-0309 r142 claim 23 (a) (Q-3102: a search of the table changes neither the object's destination nor its movement; it leaves the locomotor's destination and route as they were)
+#[test]
+fn issue_229_attack_move_search_keeps_destination_and_route() {
+    let mut r = base();
+    cart_mut(&mut r).combat.can_passive_aquire = Some(false);
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let b = veh(&mut w, "T0", 1, 2, 0);
+    set_beh(&mut w, a, Behaviour::Move);
+    attack_move(&mut w, a, Target::Cell(at(-8, 0)), false);
+    w.obj_mut(a).unwrap().path.steps = vec![6, 6];
+    let (dest, steps) = {
+        let o = w.obj(a).unwrap();
+        (o.dest, o.path.steps.clone())
+    };
+    expire(&mut w, a);
+    turning(&mut w, a);
+    acquire::per_tick(&mut w, a);
+    assert_eq!(target(&w, a), obj(b));
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.dest, dest, "the destination is kept");
+    assert_eq!(o.path.steps, steps, "the route is kept");
 }
 
 // ---------------------------------------------------------------------------
