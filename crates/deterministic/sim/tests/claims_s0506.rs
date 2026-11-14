@@ -2436,6 +2436,56 @@ fn claim_19_flight_detonation_carries_the_depth_adjustment() {
     );
 }
 
+// spec: S-0506 claim 19 (r43, Q-3066: in lazy cruise and descent the test is the world height of the nose point, Formulas F9 from the position and pitch before the move, at or below the aim point's world height; the detonation point is that tick's nose point) and F9
+#[test]
+fn claim_19_lazy_flight_ends_when_the_nose_reaches_the_aim_height() {
+    let mut r = rules();
+    // An invented body length well above the set's speed, so that in a dive
+    // the nose point lies far lower than the end of the next move.
+    let length = 300;
+    r.sim.general.v3_rocket_body_length = Some(length);
+    let (mut w, _, _, x) = fly_until(&r, Phase::Cruise);
+    let mode = w.rules().mode;
+    let bias = glasnost_sim::table_trig::bias(&w);
+    let mut last = None;
+    for _ in 0..600 {
+        let o = w.obj(x).expect("the missile flies");
+        let rs = o.rocket.clone().unwrap();
+        let aim = rs.aim.expect("the aim point is fixed");
+        let nose = glasnost_sim::rocket::nose_b(
+            o.pos,
+            length,
+            rs.pitch,
+            o.body.value(w.tick),
+            mode,
+            bias,
+        );
+        w.effects.clear();
+        testkit::run(&mut w, 1);
+        if w.obj(x).is_none() {
+            last = Some((nose, aim, detonation_point(&w)));
+            break;
+        }
+        assert!(
+            nose.z > aim.z,
+            "tick {}: the missile flew on with its nose point at height {} at or below the aim height {}",
+            w.tick,
+            nose.z,
+            aim.z
+        );
+    }
+    let (nose, aim, at) = last.expect("the missile detonates");
+    assert!(
+        nose.z <= aim.z,
+        "the nose reached the aim height: {nose:?} {aim:?}"
+    );
+    assert_eq!(
+        at.map(|p| p.z),
+        Some(nose.z),
+        "the detonation point is that tick's nose point"
+    );
+}
+
 /// The rules with a ground anti-air vehicle FLAK: a driving vehicle whose
 /// weapon Flak (range 12 cells, damage 1) fires a projectile that can hit
 /// flying objects. RKA is made too strong for that weapon to destroy.
