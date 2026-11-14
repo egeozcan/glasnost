@@ -363,6 +363,13 @@ pub fn direction_real(x: F64, y: F64, mode: Rounding) -> Facing {
     facing_of_angle(t, i, x.gt(F64::ZERO), mode).rem_euclid(65536) as Facing
 }
 
+/// [`direction_real`] with `quirks.table_direction` at `table` (#294: the
+/// exact path is not written yet).
+pub fn direction_real_b(x: F64, y: F64, table: bool, mode: Rounding) -> Facing {
+    let _ = table;
+    direction_real(x, y, mode)
+}
+
 /// The constants c₁ (π/2) and c₂ (−32767/π) of S-0204 F3, as doubles.
 pub fn direction_constants() -> (F64, F64) {
     let k = dir_const();
