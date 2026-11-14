@@ -1093,12 +1093,12 @@ fn deployed_firing(w: &mut World, id: ObjectId) {
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
-    // spec: S-0517 claim 16 (an S-0309 range search centred on its own position, without waiting for its targeting timer)
+    // spec: S-0517 claim 16 (an S-0309 range search centred on its own position, without waiting for its targeting timer); S-0309 claims 1 (its own context, the fifth row) and 24 (no opportunity mark)
     let _ = crate::combat::acquire::search(
         w,
         id,
         crate::combat::acquire::SearchKind::Range,
-        crate::combat::acquire::SearchContext::PerTick,
+        crate::combat::acquire::SearchContext::DeployedFiring,
     );
     let Some(o) = w.obj(id) else { return };
     if o.target.is_some() {

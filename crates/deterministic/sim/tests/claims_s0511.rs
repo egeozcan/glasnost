@@ -16,6 +16,7 @@ use glasnost_map::{CellXY, Map, NO_OVERLAY};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
     BuildingType, Decimal, LandRow, LandType, Locomotor, OverlayType, UnitType, WarheadType,
+    WeaponType,
 };
 use glasnost_sim::bridges::blow::Ctx;
 use glasnost_sim::bridges::pieces::{self, Family, Line, Role};
@@ -1493,6 +1494,33 @@ fn claim_17_engineer_enters_the_hut() {
     }
 }
 
+// spec: S-0511 claim 17 (every infantry unit forgets the hut as a target), S-0301 claim 4 (a cleared target resets the burst counter), S-0107 claim 11, Changes of target (the loss of the target is tested at the change: the attack state ends at once)
+#[test]
+fn claim_17_forgetting_the_hut_target_resets_the_burst_and_the_attack_state() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let h = hut(&mut w, at(3, 3));
+    let e = engineer(&mut w, at(3, 2));
+    let a = spawn(&mut w, Kind::Infantry, "WALKER", at(8, 8));
+    {
+        let o = w.obj_mut(a).unwrap();
+        o.target = Some(Target::Object(h));
+        o.combat.burst = 1;
+        let s = o.infantry.as_mut().expect("infantry state");
+        s.attack = true;
+        s.watch = Some(Target::Object(h));
+    }
+    assert!(hut::engineer_entered_hut(&mut w, e, h));
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, None, "the hut is forgotten as a target");
+    assert_eq!(o.combat.burst, 0, "the burst counter is reset");
+    assert!(
+        !o.infantry.as_ref().unwrap().attack,
+        "the attack state ends"
+    );
+}
+
 // spec: S-0511 claim 18 (the start piece: the nearest start ramp or pier on the start-side ray; a pier is restored with the bridge two steps toward its start side; quirks.repair_walk_unbounded)
 #[test]
 fn claim_18_which_bridge_is_repaired() {
@@ -2003,6 +2031,57 @@ fn claim_6_r13_a_notice_collapse_centres_on_the_arriving_cell() {
         data(&w, at(5, 0)),
         start,
         "the onward notice goes from at(5, 1), not from the reference cell"
+    );
+}
+
+/// A pier in state 3 at x = 4 collapses from the loss notice of the section
+/// on its start side, with a CART in the ground layer of its reference cell
+/// (no deck there). With `exploding`, the CART's death weapon has a wall
+/// warhead, so its death in the column blow-up attempts the pier again.
+/// Returns the reference cell's level afterwards.
+fn notice_collapse_level(exploding: bool) -> i8 {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 9, &[4]);
+    let mut r = ruleset();
+    r.sim.weapons.insert(
+        "Boom".into(),
+        WeaponType {
+            damage: Some(100),
+            rof: Some(30),
+            range: Some(dec("2")),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("BLAST".into()),
+            ..Default::default()
+        },
+    );
+    if exploding {
+        let v = r.sim.vehicles.get_mut("CART").unwrap();
+        v.combat.explodes = Some(true);
+        v.combat.death_weapon = Some("Boom".into());
+    }
+    let mut w = game(&r, &m);
+    w.econ.settings.bridge_destruction = Some(true);
+    let p = at(4, 0);
+    assert!(!w.cells.is_bridge(p), "the reference cell has no deck");
+    spawn(&mut w, Kind::Vehicle, "CART", p);
+    assert!(!bridges::attempt(&mut w, p));
+    assert_eq!(pier_k(&w, p), Some(3));
+    // The start-side section is damaged, then lost: its loss notice reaches the pier.
+    assert!(bridges::attempts(&mut w, at(3, 0), 2));
+    assert_eq!(pier_k(&w, p), Some(4));
+    assert_eq!(w.cells.pier_levels.get(&p).copied(), Some(4));
+    w.cells.cell(p).unwrap().level
+}
+
+// spec: S-0511 claim 6 (a collapse leaves every cell of the pier's tile at the pre-collapse level minus 4, from a notice as from a direct attempt, even when a death weapon in the column attempts the pier during the blow-ups)
+#[test]
+fn claim_6_a_notice_collapse_lowers_the_pier_once() {
+    assert_eq!(notice_collapse_level(false), 0, "control: no death weapon");
+    assert_eq!(
+        notice_collapse_level(true),
+        0,
+        "with a death weapon in the column"
     );
 }
 

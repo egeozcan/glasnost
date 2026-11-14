@@ -286,10 +286,12 @@ fn lifetime(w: &mut World) -> i32 {
     l.add(h.sub(l, mode).mul(u, mode), mode).to_i32_common()
 }
 
-/// The search of a candidate or trigger cell (claims 3 and S-0524 claim 4):
-/// *float* class for water, *track* otherwise, *normal* zone, no reach, no
-/// deck, no height condition, bridges allowed, no reference cell.
-fn search(w: &mut World, centre: CellXY) -> Option<CellXY> {
+/// The search of a candidate, trigger or crate-beneath cell (claim 3,
+/// S-0524 claim 4, S-0312 claim 20): *float* class for water, *track*
+/// otherwise, *normal* zone, no reach, no deck, no height condition, bridges
+/// allowed, no reference cell; the no-overlay condition only when
+/// `no_overlay`.
+fn search(w: &mut World, centre: CellXY, no_overlay: bool) -> Option<CellXY> {
     crate::regions::ensure(w);
     // spec: S-0520 claim 3 (a candidate outside the cell array is treated as ordinary land)
     let wet = w.cells.cell(centre).is_some_and(|c| c.land == land::WATER);
@@ -305,7 +307,7 @@ fn search(w: &mut World, centre: CellXY) -> Option<CellXY> {
         height: false,
         reference: None,
         no_bridges: false,
-        no_overlay: false,
+        no_overlay,
     };
     crate::path::nearby(w, centre, crate::path::NearbyUse::Settings(settings))
 }
@@ -392,7 +394,7 @@ pub fn place_random(w: &mut World) -> bool {
     for _ in 0..ATTEMPTS {
         let x = 1 + w.rng.ranged(0, span, half);
         let y = 1 + w.rng.ranged(0, span, half);
-        let found = search(w, CellXY::new(x, y));
+        let found = search(w, CellXY::new(x, y), false); // spec: S-0520 claim 3 (no no-overlay condition)
         // spec: S-0520 claim 3 (the first attempt that meets every condition ends the placement)
         if finish(w, found, RANDOM, false) {
             return true;
@@ -418,7 +420,7 @@ pub fn place_trigger(w: &mut World, at: CellXY, kind: i32) -> bool {
     } else {
         u8::try_from(kind.rem_euclid(256)).unwrap_or(RANDOM)
     };
-    let found = search(w, at);
+    let found = search(w, at, false); // spec: S-0524 claim 4 (claim 3's search, no no-overlay condition)
     finish(w, found, contents, true)
 }
 
@@ -427,27 +429,25 @@ pub fn place_death(w: &mut World, at: CellXY, money: bool) -> bool {
     if free_place(w).is_none() || !overlays_named(w) {
         return false;
     }
-    let found = search(w, at);
+    let found = search(w, at, false); // spec: S-0520 claim 5 (claim 3's search, no no-overlay condition)
     finish(w, found, if money { 0 } else { RANDOM }, false) // spec: S-0520 claim 5 (a building's crate beneath holds the money power-up (0) when the type says so; every other death crate is random)
 }
 
 /// A destroyed building's crate beneath (S-0312 claim 20, S-0520 claim 5),
-/// placed on its top-left foundation cell `at` once the building has left
-/// its cells: a money crate when `money`, otherwise random contents.
-/// Claim 20 states no condition on the cell, so only claim 1's place limit
-/// and the named crate overlays are tested; the crate replaces whatever
-/// overlay the cell holds (`design: Q-3086 interim`).
+/// placed once the building has left its cells, on the cell a single-cell
+/// nearby search centred on its top-left foundation cell `at` selects: a
+/// money crate when `money`, otherwise random contents. Rubble is not
+/// modelled, so the land read is the cell's own.
 pub fn place_beneath(w: &mut World, at: CellXY, money: bool) -> bool {
     if free_place(w).is_none() || !overlays_named(w) {
-        // spec: S-0520 claim 1 (every place occupied: nothing and no draw) and S-0524 Edge cases (no crate overlay named: no effect, no draw)
+        // spec: S-0312 claim 20 and S-0520 claim 1 (every place occupied: no crate and no draw) and S-0524 Edge cases (no crate overlay named: no effect, no draw)
         return false;
     }
-    if is_crate(w, at) {
-        // design: Q-3086 interim (a crate already on the cell is replaced, its place freed first)
-        remove_crate(w, at);
-    }
-    // spec: S-0312 claim 20 (the crate appears on the top-left foundation cell); S-0520 claim 5 (the money power-up (0) when the type says so, random contents otherwise); claim 3 (the water crate on water, the wooden crate otherwise)
-    put(w, at, if money { 0 } else { RANDOM }, false)
+    // spec: S-0312 claim 20 (r78, Q-3086: S-0212 claim 25's single-cell nearby search centred on the top-left foundation cell, float on water and track otherwise, normal zone, no reach, deck off, no height, bridges allowed, no reference cell; quirks.crate_beneath_overlay_refusal on: no no-overlay condition; off: the search asks for it)
+    let no_overlay = !w.rules().quirks.crate_beneath_overlay_refusal;
+    let found = search(w, at, no_overlay);
+    // spec: S-0312 claim 20 (no crate and no draw when the search finds no cell or the selected cell is outside the height-aware usable area or holds any overlay; otherwise the water crate on water, the wooden crate otherwise, with S-0520 claim 3's overlay draws and lifetime request); S-0520 claim 5 (the money power-up (0) when the type says so, random contents otherwise)
+    finish(w, found, if money { 0 } else { RANDOM }, false)
 }
 
 /// The game-start placements (claim 2): `n` random placements in order.

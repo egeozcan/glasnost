@@ -18,7 +18,8 @@ pub enum Coverage {
 }
 
 /// Adds `delta` to house `h`'s counts over the disc of radius `r` around
-/// `centre`; `floor` keeps a count from going below 0 (claim 22). Every
+/// `centre`; `floor` keeps a removal from taking a count below 0, and
+/// leaves a count already at or below 0 unchanged (claim 22). Every
 /// sensor change re-evaluates the mobile objects of the cell's ground layer
 /// (claim 21).
 pub fn change(
@@ -37,11 +38,15 @@ pub fn change(
             Coverage::Detectors => &mut w.cloak.detectors,
         };
         let now = map.get(&(h.0, c)).copied().unwrap_or(0);
-        let mut v = now.saturating_add(delta);
-        if floor {
+        let v = if floor && delta < 0 && now <= 0 {
+            // spec: S-0516 claim 22 and scenario CS18 part B (a mobile sensor's removal never takes a count below 0: counts lose one only where positive, so a count at or below 0 is left as it is, never raised)
+            now
+        } else if floor {
             // spec: S-0516 claim 22 (a mobile sensor's removal never takes a count below 0)
-            v = v.max(0);
-        }
+            now.saturating_add(delta).max(0)
+        } else {
+            now.saturating_add(delta)
+        };
         if v == 0 {
             map.remove(&(h.0, c));
         } else {

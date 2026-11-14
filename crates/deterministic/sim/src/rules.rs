@@ -316,6 +316,8 @@ pub struct BuildingRules {
     pub naval: bool,
     /// The absorbing-building fields (S-0605 Terms and Import mapping).
     pub absorb: AbsorbRules,
+    /// Guard range *g*, leptons (S-0309 Import mapping; 0: none given).
+    pub guard_range: i32,
 }
 
 /// An absorbing building type's fields (S-0605 Terms, F1 and Import
@@ -1663,6 +1665,19 @@ impl SimRules {
         v.get(index as usize)
     }
 
+    /// A type's guard range *g* in leptons (S-0309 claim 8, F1, F3 and F4):
+    /// a mobile type's or a building type's; 0 for other kinds.
+    pub fn guard_range(&self, kind: Kind, index: u32) -> i32 {
+        // spec: S-0309 claim 8 and Import mapping (g: the type's guard range, buildings included; absent: 0)
+        match kind {
+            Kind::Building => self
+                .buildings
+                .get(index as usize)
+                .map_or(0, |b| b.guard_range),
+            _ => self.unit(kind, index).map_or(0, |u| u.guard_range),
+        }
+    }
+
     /// The animation type a name names (S-0003 claim 14: ASCII case
     /// folding), if the rules list it.
     pub fn animation(&self, name: &str) -> Option<&AnimRules> {
@@ -2022,11 +2037,18 @@ fn building_rules(
         // spec: S-0605 Import mapping (SizeLimit of a building type absent: 0.0)
         size_limit: dec(&bt.size_limit, mode).unwrap_or(F64::ZERO),
     };
+    // spec: S-0309 Import mapping (GuardRange: g in the lepton form of S-0307 claim 1, the single-precision decimal × 256, truncated; absent: 0)
+    let guard_range = bt
+        .econ
+        .guard_range
+        .as_ref()
+        .map_or(0, |d| crate::combat::data::leptons(d, mode));
     BuildingRules {
         factory,
         factory_category,
         naval,
         absorb,
+        guard_range,
         name: name.to_owned(),
         strength: bt.strength.unwrap_or(0),
         // spec: S-0108 Import mapping (Foundation absent: 1x1; the zero-size word is 0 × 0), S-0406 claim 2 and S-0009 claim 38 (a zero-size building has no foundation cells)

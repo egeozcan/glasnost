@@ -247,6 +247,77 @@ fn claim_34_losing_a_disguise() {
     assert_eq!(disguise_of(&w, c), None);
 }
 
+/// A surviving SA hit of `amount` on `id`.
+fn sa_hit(w: &mut World, r: &Ruleset, id: ObjectId, amount: i32) {
+    let sa = r.sim.warheads.keys().position(|k| k == "SA").unwrap() as u32;
+    glasnost_sim::combat::damage::apply(
+        w,
+        id,
+        glasnost_sim::combat::damage::Hit {
+            amount,
+            warhead: Some(sa),
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: false,
+            no_escape: false,
+        },
+    );
+}
+
+// spec: S-0516 claim 34 (a) (revision 25, Q-3085: a unit whose type disguises permanently keeps its disguise through a hit, a copied one or its side default, infantry and vehicles alike; no lockout), scenario CS13 (c)
+#[test]
+fn claim_34_a_permanent_disguise_survives_a_hit() {
+    let mut r = rules();
+    let mut pv = r.sim.vehicles.get("PLAIN").unwrap().clone();
+    pv.combat.can_disguise = Some(true);
+    pv.perma_disguise = Some(true);
+    r.sim.vehicles.insert("PERMAV".into(), pv);
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("PERMAV".into());
+    let mut w = game(&r);
+    let walker = idx(&w, Kind::Infantry, "WALKER");
+    let shade = idx(&w, Kind::Infantry, "SHADE");
+    // Permanent infantry holding a copied disguise of the other house.
+    let copied = spawn(&mut w, "SPY", ALPHA, 0, 0);
+    set_disguise(&mut w, copied, DisguiseAs::Infantry(shade), Some(BETA));
+    // Permanent infantry holding its side default.
+    let default = spawn(&mut w, "SPY", ALPHA, 4, 0);
+    // A permanent vehicle holding its disguise.
+    let v = spawn(&mut w, "PERMAV", ALPHA, -4, 0);
+    run(&mut w, 1);
+    for id in [copied, default, v] {
+        let before = disguise_of(&w, id);
+        assert!(before.is_some());
+        let lockout = w.obj(id).unwrap().cloak.lockout_until;
+        let health = w.obj(id).unwrap().health;
+        sa_hit(&mut w, &r, id, 5);
+        assert!(w.obj(id).unwrap().health < health, "a surviving hit");
+        assert_eq!(disguise_of(&w, id), before, "the disguise is kept");
+        assert_eq!(
+            w.obj(id).unwrap().cloak.lockout_until,
+            lockout,
+            "no lockout"
+        );
+    }
+    let d = disguise_of(&w, copied).unwrap();
+    assert_eq!(
+        (d.what, d.house),
+        (Some(DisguiseAs::Infantry(shade)), Some(BETA))
+    );
+    assert!(
+        appears_disguised(&w, copied, Some(BETA)),
+        "still fools Beta"
+    );
+    let d = disguise_of(&w, default).unwrap();
+    assert_eq!(
+        (d.what, d.house),
+        (Some(DisguiseAs::Infantry(walker)), Some(ALPHA))
+    );
+}
+
 // spec: S-0516 claim 35 (appears disguised to H: disguised, its owner not allying H, no detector coverage of H on its cell, the disguise house H, none or an ally of H; a building or aircraft to every house)
 #[test]
 fn claim_35_appears_disguised() {

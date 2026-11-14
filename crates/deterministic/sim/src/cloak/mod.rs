@@ -9,26 +9,37 @@
 //!
 //! The per-object state is [`ObjCloak`] (`Object::cloak`); the per-house,
 //! per-cell coverage is [`CloakWorld`] (`World::cloak`). The machine runs in
-//! the object's own turn ([`turn`], called from `econ::events::turn`), and
-//! the event hooks of `econ::events` call [`entered_map`], [`leaving_map`]
-//! and [`owner_changed`].
+//! the object's own turn ([`turn`]): a vehicle, infantry unit or aircraft
+//! takes it from `tick::object_turn`, before its locomotion; a building
+//! from `econ::events::turn`. The event hooks of `econ::events` call
+//! [`entered_map`], [`leaving_map`] and [`owner_changed`].
 //!
-//! Seams to specs that are not built (each named where it is used):
-//! - S-0214 (paralysed), the special-weapons specs (EMP
-//!   through `econ::power::under_pulse`, warping through
-//!   `econ::power::being_erased`; chrono warp is S-0514's);
-//! - S-0519 (C4 planting: [`machine::uncloak`] is the call it makes);
-//! - S-0520 claim 15 (cloaking crates: [`machine::grant_own_flag`]);
-//! - S-0517 claim 6 (undeploy disguise loss: [`disguise::clear`]);
-//! - S-0510 claim 2 (infiltration uses the spy up);
-//! - S-0210 claim 11 (the crush response to a hit, `crush::respond_to_hit`: [`appears_disguised`]);
-//! - S-0414 (a house leaving the game: [`disguise::house_left`]);
+//! Hooks other modules call (each named where it is used):
+//! - S-0519 (C4 planting): `bomb::charge_arrival` calls [`machine::uncloak`];
+//! - S-0520 claim 15 (cloaking crates): `crates::effect` calls
+//!   [`machine::grant_own_flag`];
+//! - S-0517 claim 6 (undeploy disguise loss): `econ::inplace::undeploy_step`
+//!   calls [`disguise::clear`];
+//! - S-0510 claim 2 (infiltration uses the spy up): `structures::spy::infiltrate`
+//!   removes the spy;
+//! - S-0210 claim 11 (the crush response to a hit): `crush::respond_to_hit`
+//!   reads [`appears_disguised`];
+//! - S-0502 (jumpjets): `jump::fly::touchdown` calls
+//!   [`machine::cell_movement_completed`], as the other locomotors' cell
+//!   steps do;
+//! - S-0515 (mind control): `mind::set_owner_by` reaches [`owner_changed`]
+//!   through `econ::events::owner_changed`.
+//!
+//! Seams still open:
+//! - S-0214 (paralysed) and EMP: the disable test reads
+//!   `econ::power::under_pulse`, which answers no until a pulse exists;
+//!   warping reads `econ::power::being_erased` (S-0513, S-0514);
+//! - S-0414 (a house leaving the game): [`disguise::house_left`] has no
+//!   caller outside the tests;
 //! - S-0518, S-0525 and S-06xx (psychic detection and the special-weapon
-//!   effects that would call [`machine::uncloak`]);
-//! - S-0502 (jumpjets: the height test of claim 4 already covers them);
+//!   effects that would call [`machine::uncloak`]), not checked again here;
 //! - S-0508 and S-0509 (occupied buildings and tank bunkers: a hit stopped
-//!   by a bunker does not uncloak, claim 12);
-//! - S-0515 (mind control: an owner change, [`owner_changed`]).
+//!   by a bunker does not uncloak, claim 12), not checked again here.
 
 pub mod disguise;
 pub mod field;
@@ -236,22 +247,22 @@ pub fn fade_fraction(k: i32, n: i32) -> i32 {
 }
 
 /// *c* = ⌈*N* / 2⌉, the stage at which cloaking completes (S-0516 claim 7,
-/// F1).
+/// F1). Computed in `i64`, so the largest *N* does not overflow (#241).
 pub fn cloaked_stage(n: i32) -> i32 {
     // spec: S-0516 claim 7 and F1 (c = ⌈N / 2⌉)
-    (n + 1) / 2
+    ((i64::from(n) + 1) / 2) as i32
 }
 
-/// F1: the cloaking time *c* · *S*.
-pub fn cloak_time(n: i32, s: i32) -> i32 {
+/// F1: the cloaking time *c* · *S*, in `i64` (no overflow for any *N*, *S*).
+pub fn cloak_time(n: i32, s: i32) -> i64 {
     // spec: S-0516 F1 (T_cloak = c × S)
-    cloaked_stage(n) * s
+    i64::from(cloaked_stage(n)) * i64::from(s)
 }
 
-/// F2: the uncloaking time (*N* − 1) · *S*.
-pub fn uncloak_time(n: i32, s: i32) -> i32 {
+/// F2: the uncloaking time (*N* − 1) · *S*, in `i64`.
+pub fn uncloak_time(n: i32, s: i32) -> i64 {
     // spec: S-0516 F2 (T_uncloak = (N − 1) × S)
-    (n - 1) * s
+    (i64::from(n) - 1) * i64::from(s)
 }
 
 /// The displacements of the sensor disc of radius `r` (S-0516 Terms):

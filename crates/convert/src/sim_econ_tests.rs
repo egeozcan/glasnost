@@ -145,6 +145,53 @@ fn factory_kind_words() {
     }
 }
 
+// spec: S-0406 claim 21 and Import mapping (WaterBound and SpeedType rows: the water-bound flag is decided again in each layer giving either key; a recognised WaterBound wins in its layer; otherwise SpeedType Float, any case, turns it on and any other text off; a layer giving neither keeps it; an empty entry is absent; an unrecognised WaterBound counts as not given; no layer: no)
+#[test]
+fn water_bound_is_decided_per_layer() {
+    let names = [
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N",
+    ];
+    let mut base = String::from("[BuildingTypes]\n");
+    for (i, n) in names.iter().enumerate() {
+        base.push_str(&format!("{i}={n}\n"));
+    }
+    base.push_str(
+        "[A]\nWaterBound=yes\n[B]\nSpeedType=Float\n[C]\nSpeedType=fLOAT\n[D]\nSpeedType=Wheel\n\
+         [E]\nWaterBound=yes\n[F]\nWaterBound=no\n[G]\nSpeedType=Bogus\n\
+         [H]\nWaterBound=no\nSpeedType=Float\n[I]\nSpeedType=Float\n[J]\nSpeedType=Float\n\
+         [K]\nWaterBound=yes\n[L]\nWaterBound=yes\n[M]\nPower=1\n\
+         [N]\nWaterBound=maybe\nSpeedType=Float\n",
+    );
+    let map = "[E]\nSpeedType=Wheel\n[F]\nSpeedType=Float\n[I]\nWaterBound=maybe\n\
+               [J]\nWaterBound=\n[K]\nPower=2\n[L]\nSpeedType=FloatBeach\n";
+    let (s, _) = import_with_map(&base, map);
+    let wb = |n: &str| {
+        s.buildings
+            .get(n)
+            .and_then(|b| b.econ.water_bound)
+            .unwrap_or(false)
+    };
+    let want = [
+        ("A", true),  // (a)
+        ("B", true),  // (b) Float
+        ("C", true),  // (b) case ignored
+        ("D", false), // (b) another class
+        ("E", false), // a later class-only layer overrides an earlier yes
+        ("F", true),  // a later Float overrides an earlier no
+        ("G", false), // (b) text naming no class
+        ("H", false), // (a) wins over the same layer's class
+        ("I", true),  // an unrecognised WaterBound is not given: kept
+        ("J", true),  // an empty entry is absent: kept
+        ("K", true),  // a layer giving neither keeps the flag
+        ("L", false), // FloatBeach is not Float
+        ("M", false), // no layer gives either key
+        ("N", true),  // an unrecognised WaterBound: (b) applies in that layer
+    ];
+    for (n, v) in want {
+        assert_eq!(wb(n), v, "{n}");
+    }
+}
+
 // spec: S-0003 claim 21 (empty keeps the value in force; an unmatched word does not)
 #[test]
 fn factory_kind_layers() {

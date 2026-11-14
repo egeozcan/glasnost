@@ -200,11 +200,13 @@ pub(super) fn set_pier(
     cells
 }
 
-/// A collapse lowers the pier's changed tile cells `cells` to cell `r`'s
-/// pre-collapse level − 4 (claim 6), remembering their levels: the
-/// reference cell for a direct attempt, the centre cell for a notice.
-fn lower_pier(w: &mut World, r: CellXY, cells: &[CellXY]) {
-    let Some(ref_level) = w.cells.cell(r).map(|x| x.level) else {
+/// A collapse lowers the pier's changed tile cells `cells` to `ref_level`
+/// − 4 (claim 6), remembering their levels. `ref_level` is the pre-collapse
+/// level of the reference cell for a direct attempt, of the centre cell for
+/// a notice, read before anything the collapse sets off can change it
+/// (none for a cell off the map: nothing is lowered).
+fn lower_pier(w: &mut World, ref_level: Option<i8>, cells: &[CellXY]) {
+    let Some(ref_level) = ref_level else {
         return;
     };
     for &c in cells {
@@ -257,9 +259,11 @@ pub fn attempt_pier(
     }
     // spec: S-0511 claim 6 (state 3: collapse; succeeds)
     let pre = column_levels(w, r, line);
+    let level = w.cells.cell(r).map(|x| x.level);
     // spec: S-0511 claim 6 (a collapsed pier is in state 4)
     let cells = set_pier(w, r, family, line, 4);
-    lower_pier(w, r, &cells);
+    // spec: S-0511 claim 6 (every cell of its tile takes the reference cell's pre-collapse level minus 4)
+    lower_pier(w, level, &cells);
     // spec: S-0511 claim 6 (the column's blow-ups at pre-collapse heights, decreasing cross coordinate, reference, increasing)
     for (c, level) in pre {
         blow::blow_up(w, c, level, ctx);
@@ -338,6 +342,8 @@ fn pier_notice(
         at(c, line.step(), -1)
     };
     let pre = column_levels(w, centre, line);
+    // spec: S-0511 claim 6 (the centre cell's pre-collapse level, read before the onward notice and the blow-ups, whose death weapons can collapse this pier directly and lower it first)
+    let level = w.cells.cell(centre).map(|x| x.level);
     // spec: S-0511 claim 6 (collapse from a notice: the loss passes onward first, on the side away from the sender; r13: from the arriving cell)
     from_pier(w, c, line, onward(c, line, side), Notice::Loss, side, ctx);
     // spec: S-0511 claim 6 (then its blow-ups: centre, decreasing y, increasing y along x; decreasing x, centre, increasing x along y)
@@ -350,7 +356,7 @@ fn pier_notice(
     }
     // spec: S-0511 claim 6 (its tile and height change as for a direct collapse, with no span check or connectivity of its own; r13: the arriving cell's component takes the centre cell's level minus 4)
     let cells = set_pier(w, c, family, line, 4);
-    lower_pier(w, centre, &cells);
+    lower_pier(w, level, &cells);
 }
 
 // ---------------------------------------------------------------------

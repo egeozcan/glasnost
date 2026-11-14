@@ -264,6 +264,27 @@ fn claim_7_durations() {
     assert_eq!(t[1], (14 + DELAY, CloakState::Cloaking));
 }
 
+// spec: S-0516 claim 7 and F1, F2 (c = ⌈N / 2⌉ for the largest stage count of claim 43's signed integer, with no overflow: cloaking does not complete at once)
+#[test]
+fn claim_7_the_largest_stage_count() {
+    fn wide<T: Into<i64>>(x: T) -> i64 {
+        x.into()
+    }
+    assert_eq!(cloak::cloaked_stage(i32::MAX), 1 << 30);
+    assert_eq!(wide(cloak::cloak_time(i32::MAX, 2)), (1_i64 << 30) * 2);
+    assert_eq!(
+        wide(cloak::uncloak_time(i32::MAX, 2)),
+        (i64::from(i32::MAX) - 1) * 2
+    );
+    let mut r = ruleset();
+    r.sim.general.cloaking_stages = Some(i32::MAX);
+    let mut w = game(&r);
+    assert_eq!(w.rules().cloak.stages, i32::MAX);
+    let id = spawn(&mut w, "SHADE", ALPHA, 0, 0);
+    run(&mut w, 60);
+    assert_eq!(state(&w, id), CloakState::Cloaking, "2^30 stage steps away");
+}
+
 // spec: S-0516 claim 8 (in the 50 % band at or below red, one R(0, 99) per tick; below 10 starts uncloaking from N − 1, silently)
 #[test]
 fn claim_8_abort_at_low_health() {

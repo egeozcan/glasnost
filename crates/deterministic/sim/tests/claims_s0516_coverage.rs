@@ -240,6 +240,28 @@ fn claim_23_sensor_arrays() {
     assert_eq!(count_at(&w, BETA, 0, 0), -1);
 }
 
+// spec: S-0516 claims 22 and 23 and scenario CS18 part B (a mobile sensor's removal never takes a count below 0: counts lose one where positive, so a count left negative by array removals is not raised)
+#[test]
+fn claim_22_a_mobile_removal_does_not_raise_a_negative_count() {
+    let mut r = ruleset();
+    r.sim
+        .buildings
+        .get_mut("ARRAY")
+        .unwrap()
+        .cloak_radius_in_cells = Some(6);
+    let mut w = game(&r);
+    // Two arrays placed and removed in turn: the excess annulus is at −2.
+    for _ in 0..2 {
+        let a = spawn(&mut w, "ARRAY", ALPHA, 0, 0);
+        objects::remove(&mut w, a);
+    }
+    assert_eq!(count_at(&w, ALPHA, -5, 0), -2);
+    let s = spawn(&mut w, "SEEKER", ALPHA, -5, 0);
+    assert_eq!(count_at(&w, ALPHA, -5, 0), -1);
+    objects::remove(&mut w, s);
+    assert_eq!(count_at(&w, ALPHA, -5, 0), -1, "not raised to 0");
+}
+
 // spec: S-0516 claim 40 (a detector building adds the disc of its detection range to its owner's detector coverage; removal uses the detection range; detector coverage does not sense)
 #[test]
 fn claim_40_disguise_detection() {

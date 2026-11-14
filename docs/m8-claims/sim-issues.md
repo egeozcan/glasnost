@@ -404,3 +404,62 @@ Base main 8e4d8ad, not rebased. Design section first (cff1e46, with a correction
 Lanes, base 8e4d8ad against the batch at d2ea36a (arena and quick lane from a release `glasnost-headless` built at d2ea36a). Oracle arena: every output file is byte-identical to base. The M6c, M7a and M7b sweeps over seeds 1–16 are identical to base apart from build lines and run times. The sim gate with its ignored tests passes 17 and the AI suite with its ignored tests passes 356, as base. In the AI quick lane (seeds 7–10, maps 0, 2 and 8, 36 games) every game ends on the same tick with the same winner; only run times differ. No stock game changes, so there is nothing to trace: #294's changes and #324's decimal rounding act only with a switch off, and #393 and #397 give the same results by test. #324's S-0004 reader changes the default position: an empty value or `<none>` in a weapon's attached particle system now keeps the value, as S-0004 claim 2 says. It moves no lane row. Whether the stock data has such a value was not checked. No format moves: save format, AI game format and wire version stay as on base. The import gains two switch names in its record (`decimal_conversion_rounding` and `attached_system_none_keeps`). That record lies under `import`, which `sim_rules_hash` leaves out (`hash::is_render_path`), so it moves only the informational render hash. On the final tree `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all -- --check`, `cargo xtask check`, `cargo xtask gate` (native and wasm32, every golden matching) and the wasm32 build of `glasnost-app` pass. The workspace tests pass 8638 but for base's `quirks::tests::every_spec_quirk_has_a_switch` (six `gas_through_bridge_deck`, S-0613), whose list this batch does not lengthen although the check now reads S-0003.
 
 Seams left: Q-3103 (#294's non-finite arguments and a fragment's zero planar displacement with `quirks.table_direction` off); rulesets built in code (testkit, `Layers::apply_quirks`) and callers of `de::from_node` (convert's tests, the sim gate's margins) get claim 6's rule whatever the switch says; the typed attached particle system reads the common text limit, not S-0004's 19-byte cut; S-0003's importer warning where the original's result differs from the correctly rounded one is not given; #397's remaining load time still grows faster than the layer's size (about 77 times for ten times the size), so a cost other than line lookup is left (not traced).
+## Batch S12: S10's answered requests, bridges, cloak and target acquisition
+
+Base main f99453e, not rebased. The lead's answers to S10's three requests come first: Q-3085 (S-0516 r25), Q-3086 (S-0312 r78) and Q-3087 (S-0406 r13). Ten issues, #238 to #247, follow. Save format 144 and AI game format 120 (0f80024): no saved field changes, but what a saved game replays to does. The wire version is unchanged (12). Failing tests are committed first: d8c9b10, 95286cf, 37fea04, 9170982, eaa35ef, dbe6619, e27167f, 92262e6, 1e9c0b6 and 6a1ef47. Each fails on the commit before its fix, and no fix commit changes a test. #169's test is a guard test that passes on base (6f90891). #242 and #243 are documentation only. The quirk switch `crate_beneath_overlay_refusal`, which S-0312 r78 names, was added at the coordinator's request in a1d0b1b: field, schema default on and `named()` entry, with the simulation's off path in #193's fix. Request Q-3109 (12275fc) is filed. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S12: S10's answered requests, bridges, cloak and target acquisition)* (d535d41). The S-0309 claim ledger names the new tests (34865e0).
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #169 | Q-3085: S-0516 r25 claim 34 (a) keeps a permanently disguising type's copied disguise, lockout and default disguise through a surviving hit | already matches (6f90891) | None: `disguise::hit_taken` returns before any loss for such a type | `claims_s0516_disguise.rs::claim_34_a_permanent_disguise_survives_a_hit` (guard; passes on base) |
+| #193 | Q-3086: S10's interim put the crate beneath on the top-left cell with no usable-area or overlay test, and replaced a crate already there | fixed (f5ce45d); switch a1d0b1b | S-0312 r78 claim 20 and Edge cases: `crates::place_beneath` runs S-0520 claim 3's single-cell nearby search centred on the top-left foundation cell, then `crates::finish`'s usable-area and overlay tests; a refusal places no crate and draws nothing. `quirks.crate_beneath_overlay_refusal` off: the search asks for a cell without an overlay (`crates::search`'s `no_overlay`; the random, trigger and death placements pass false) | `claims_s0520.rs` (`claim_20_a_crate_beneath_never_replaces_an_overlay`, `claim_20_a_crate_beneath_moves_off_an_occupied_top_left_cell`) |
+| #200 | Q-3087: a building with no `WaterBound` key was never water-bound | fixed (5614b5d) | S-0406 r13 claim 21: for each layer that sets either key, in order, a recognised `WaterBound` decides the flag; otherwise a `SpeedType` naming the float class sets it on and any other class off; a layer setting neither keeps it (`convert::sim_econ::water_bound`). The rules doc and schema follow | `crates/convert/src/sim_econ_tests.rs::water_bound_is_decided_per_layer` |
+| #238 | A death weapon's re-attempt of the pier during the blow-ups lowered its component a second time | fixed (691b611) | S-0511 claim 6: `high::attempt_pier` and `high::pier_notice` read the reference level before the blow-ups and pass it to `lower_pier` | `claims_s0511.rs::claim_6_a_notice_collapse_lowers_the_pier_once` |
+| #239 | Forgetting the hut target kept the burst counter and the attack state | fixed (c02ca58) | S-0511 claim 17, S-0301 claim 4, S-0107 claim 11: `hut::forget_and_scatter` clears through `spawn::clear_own_target`, sets the burst to 0 and runs `infantry::watch_test` for each unit that lost it | `claims_s0511.rs::claim_17_forgetting_the_hut_target_resets_the_burst_and_the_attack_state` |
+| #240 | A floored sensor decrement raised a negative count to 0 | fixed (a358200) | S-0516 claim 22 and CS18 part B: `cloak::sensor::change` skips a decrement on a count at or below 0; an increment still floors at 0 | `claims_s0516_coverage.rs::claim_22_a_mobile_removal_does_not_raise_a_negative_count` |
+| #241 | `CloakingStages = 2147483647` overflowed the cloaked stage | fixed (e1d1a2e) | S-0516 claim 7, F1 and F2: `cloaked_stage` computes (N + 1) / 2 in 64 bits; `cloak_time` and `uncloak_time` return i64 | `claims_s0516_machine.rs::claim_7_the_largest_stage_count` |
+| #242 | `cloak/field.rs`'s header did not state claim 20's phase model | fixed (95833a4), documentation | Header text only | none (documentation) |
+| #243 | `cloak/mod.rs`'s header named one turn caller and mixed hooks with seams | fixed (79af8c1), documentation; the design section in d535d41 | Header text only: both callers (`tick::object_turn`, `econ::events::turn`); hooks with callers apart from open seams | none (documentation) |
+| #244 | A harvesting slave searched passively | fixed (5c94625) | S-0309 claim 2 (S-0215): `may_search_passively` refuses an object `seams::is_harvesting_slave` names | `claims_s0309_slave_gate.rs::claim_2_a_harvesting_slave_does_not_search_passively` |
+| #245 | An area search did not skip a visited bridge cell by its deck read | partly (607e329); Q-3109 (12275fc) | S-0309 claim 11: an area search by a mobile non-aircraft searcher reads its own cell's deck when it is a bridge cell, and skips a visited cell whose deck read lies outside that region (claim 7's comparison, now `reach_match`); a no-link deck read drops the restriction; a range search has no skip. Which read table C's zone row uses in an area search is Q-3109; the row keeps claim 7's read | `claims_s0212.rs::an_area_search_skips_a_bridge_cell_by_its_deck_read` |
+| #246 | The deployed-firing search marked its target as an opportunity target | fixed (4cae340) | S-0309 claims 1 and 24, S-0517 claim 16: `SearchContext::DeployedFiring` (claim 1's fifth row) marks nothing; `process::deployed_firing` uses it | `claims_s0517_deployed_mark.rs::claim_16_deployed_firing_search_target_is_not_an_opportunity_target` |
+| #247 | A building's guard range read as 0 in its searches | fixed (c18a406) | S-0309 claim 8, F1, F3, F4 and Import mapping: `BuildingRules.guard_range` (leptons, through `combat::data::leptons`); `SimRules::guard_range` answers for every kind; `radius`, `candidate`'s unarmed test and `threat_sum` read it | `claims_s0309_building_guard.rs` (`claim_8_building_guard_range_smaller_than_weapon_range`, `claim_8_building_guard_range_larger_than_weapon_range`; the vehicle control `claim_8_control_vehicle_guard_range_larger_than_weapon_range` passed before) |
+
+Lanes, base f99453e against the batch at 5614b5d. Oracle arena (`--record all`): every output file identical to base (M-0001 9 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25, M-0021 10 of 50 failing). The M6c, M7a and M7b sweeps over seeds 1–16 print exactly what base prints.
+
+AI quick lane (seeds 7–10, maps 0, 2 and 8, 36 games): 25 games change. Those are every game with side 2 (sides 0,2 and 1,2) and 9/8 of sides 0,1; every other sides-0,1 game is identical to base. Ten change winner (seed/map/sides, base → batch):
+- 7/0 (0,2) 0@18837 → 1@44312
+- 7/2 (0,2) 1@41926 → 0@30957
+- 7/2 (1,2) 1@32017 → 0@77312
+- 7/8 (0,2) 1@36239 → 0@59156
+- 8/8 (0,2) 1@24986 → 0@23391
+- 8/8 (1,2) 0@61358 → 1@56992
+- 9/0 (1,2) 0@52245 → 1@45785
+- 9/2 (1,2) 1@60402 → 0@70306
+- 9/8 (0,2) 0@21576 → 1@52813
+- 10/8 (0,2) 1@30738 → 0@29211
+
+The other fifteen keep their winner and end on another tick, 9/8 (0,1) among them (0@32939 → 0@27098).
+
+Every changed winner, and 9/8 (0,1), was traced with the state hash every tick (`GLASNOST_AI_HASH`), then an object dump at the first differing tick (`GLASNOST_AI_OBJS`). In each, the only differences are three slave miner slaves (type 61, slave phase Seeking) and the RNG. On base each slave's per-tick passive search restarted its targeting timer with a draw. In the batch the timer stays 0 and no draw is taken (#244, S-0309 claim 2). First difference (game: tick, house, slaves, master):
+- 7/0 (0,2): 1738, house 1, slaves 1149–1151, master 1146
+- 7/2 (0,2) and 7/2 (1,2): 1738, house 1, slaves 634–636, master 631
+- 7/8 (0,2): 2064, house 1, slaves 176–178, master 190
+- 8/8 (0,2): 2249, house 1, slaves 178–180, master 193
+- 8/8 (1,2): 2248, house 1, slaves 178–180, master 193
+- 9/0 (1,2): 1738, house 1, slaves 1152–1154, master 1149
+- 9/2 (1,2): 1738, house 1, slaves 635–637, master 632
+- 9/8 (0,2): 2079, house 1, slaves 181–183, master 195
+- 9/8 (0,1): 8280, house 0, slaves 638–640, master 702
+- 10/8 (0,2): 2079, house 1, slaves 180–182, master 194
+
+So every change traced comes from the rule S-0309 claim 2 requires, and none points to a fault. At the first differing tick those slaves hold their own master as target, with the attack flag set, on base and in the batch alike. This was seen but not traced.
+
+The checks all ran on the final tree.
+- The sim gate with its ignored tests passes 17. After the format bump the goldens were regenerated with the ignored tests, and none of the nine moved.
+- The AI suite with its ignored tests passes 356, as on main.
+- `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check` are clean.
+- The wasm32 build of `glasnost-app` succeeds.
+- `xtask check` passes. `xtask gate` passes, and on wasm32 it matches all nine goldens.
+- The workspace tests pass except main's `quirks::tests::every_spec_quirk_has_a_switch`, which fails on `gas_through_bridge_deck` only. The new switch `crate_beneath_overlay_refusal` is read.
+
+Seams left (also in the design section): Q-3109 (#245's zone row in an area search). A building's guard range is read as S-0309's Import mapping gives it (single-precision decimal × 256, truncated), while a mobile type's still reads S-0215's (the double × 256, truncated). The two can differ for a value that a single cannot hold exactly; whether they are one read is not settled here. Rubble beneath a building (S-0312 claim 20) is still not modelled. A seeking slave miner slave holds its own master as target with the attack flag set, on base and in the batch. Whether a spec gives that has not been checked.

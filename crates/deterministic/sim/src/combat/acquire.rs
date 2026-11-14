@@ -417,6 +417,10 @@ pub enum SearchContext {
     Teleport,
     /// The break-off search of a charging unit (S-0518 claim 15): no targeting-timer gate or reset draw, and the held target is neither tested nor protected.
     BreakOff,
+    /// The deployed-firing search (claim 1's fifth row, S-0517 claim 16):
+    /// the targeting timer restarts as claim 4 gives, and a target it finds
+    /// is not an opportunity target (claim 24).
+    DeployedFiring,
 }
 
 /// The search classes (S-0309 claim 5): infantry, vehicles, aircraft,
@@ -543,7 +547,8 @@ fn radius(w: &World, a: ObjectId, kind: SearchKind) -> (i32, i32) {
     let Some(o) = w.obj(a) else { return (0, 0) };
     let r = w.rules();
     let u = r.unit(o.kind, o.type_index);
-    let g = u.map_or(0, |u| u.guard_range);
+    // spec: S-0309 claim 8 and Import mapping (g: the type's guard range, a building's included)
+    let g = r.guard_range(o.kind, o.type_index);
     let engineer = u.is_some_and(|u| u.engineer);
     let w0 = crate::combat::range::firer_weapon_range(w, a, 0);
     let w1 = crate::combat::range::firer_weapon_range(w, a, 1);
@@ -814,7 +819,8 @@ fn candidate(
         } else if weapon.is_some() {
             crate::combat::range::in_range(w, a, weapon, Some(tt), None)
         } else {
-            delta <= i64::from(r.unit(ao.kind, ao.type_index).map_or(0, |u| u.guard_range))
+            // spec: S-0309 F3 (unarmed: δ ≤ g, a building's guard range included)
+            delta <= i64::from(r.guard_range(ao.kind, ao.type_index))
         };
         if !pass {
             return Verdict::Reject;
@@ -957,11 +963,14 @@ fn rho2(w: &World, a: ObjectId, b: ObjectId) -> i64 {
 }
 
 /// Whether T's cell lies in the connected region of A's movement zone that
-/// holds A's cell (S-0309 claims 7 and 11; S-0212 claim 4). A's own cell
-/// is read for its deck whenever it is a bridge cell, whatever layer A is
-/// in; T's cell is read in the layer T occupies, always for A's movement
-/// zone. Two cells of no reach region count as the same region. When A's
-/// deck read finds no bridge link, the restriction is omitted.
+/// holds A's cell: table C's row *zone*, read as claim 7 gives (S-0309
+/// claim 7; S-0212 claim 4). A's own cell is read for its deck whenever it
+/// is a bridge cell, whatever layer A is in; T's cell is read in the layer T
+/// occupies, always for A's movement zone. Two cells of no reach region
+/// count as the same region. When A's deck read finds no bridge link, the
+/// restriction is omitted. Claim 11's skip of a visited cell, read for its
+/// deck, is the area search's own (`search`); which read the row uses in an
+/// area search is asked in Q-3109.
 pub fn same_zone(w: &World, a: ObjectId, t: ObjectId) -> bool {
     use crate::regions::{Reach, reach_read};
     let (Some(ao), Some(to)) = (w.obj(a), w.obj(t)) else {
@@ -983,6 +992,13 @@ pub fn same_zone(w: &World, a: ObjectId, t: ObjectId) -> bool {
         u.zone,
         to.layer == crate::world::Layer::Deck,
     );
+    reach_match(own, other)
+}
+
+/// Two reads compared as S-0309 claims 7 and 11 compare them (S-0212
+/// claim 4).
+fn reach_match(own: crate::regions::Reach, other: crate::regions::Reach) -> bool {
+    use crate::regions::Reach;
     // spec: S-0309 claims 7 and 11 and S-0212 claim 4 (regions compared as S-0212 claim 4 does: two cells of no reach region count as the same region, and so do two off-map cells; a no-link deck read differs from every other region)
     match (own, other) {
         (Reach::Region(x), Reach::Region(y)) => x == y,
@@ -1033,7 +1049,7 @@ fn threat_sum(w: &World, a: ObjectId, t: ObjectId, ground_pass: bool) -> Option<
     let s = crate::combat::damage::strength(w, t);
     let ht = F64::from_i64(i64::from(to.health), mode).div(F64::from_i64(i64::from(s), mode), mode);
     let (_, wp) = would_use(w, a, Some(Target::Object(t)));
-    let g = r.unit(ao.kind, ao.type_index).map_or(0, |u| u.guard_range);
+    let g = r.guard_range(ao.kind, ao.type_index); // spec: S-0309 Import mapping (g of F4, a building's included)
     // spec: S-0309 F4 (k = trunc(range / 256), or trunc(g / 256) without a weapon)
     let k = wp.map_or(g / 256, |x| r.combat.weapon(x).range / 256);
     let rh = rho3(w, a, t);
@@ -1326,12 +1342,32 @@ pub fn search(
             // ending before them leaves the candidates as an early stop or
             // the last ring would (#401). The stops keep the uncapped n.
             let last = nrings.min(w.cells.ring_limit(centre).saturating_add(1));
+            // spec: S-0309 claim 11 (an area search by a mobile searcher other than an aircraft: its own cell read for its deck when a bridge cell; claim 7's no-link deck case omits the restriction for every visited cell; a range search has none)
+            let own_reach =
+                if kind == SearchKind::Area && ao.kind.is_mobile() && ao.kind != Kind::Aircraft {
+                    rules
+                        .unit(ao.kind, ao.type_index)
+                        .map(|u| {
+                            (
+                                u.zone,
+                                crate::regions::reach_read(w, ao.pos.cell(), u.zone, true),
+                            )
+                        })
+                        .filter(|&(_, own)| own != crate::regions::Reach::LoneDeck)
+                } else {
+                    None
+                };
             for ring in 0..last {
                 for cell in search_ring(centre, ring) {
                     if w.cells.cell(cell).is_none() {
                         continue;
                     }
-                    // spec: S-0309 claim 11 (an area search skips cells outside the searcher's zone region)
+                    // spec: S-0309 claim 11 (an area search skips a visited cell outside the searcher's zone region, the visited cell read for its deck when a bridge cell, compared as claim 7 gives)
+                    if let Some((zone, own)) = own_reach
+                        && !reach_match(own, crate::regions::reach_read(w, cell, zone, true))
+                    {
+                        continue;
+                    }
                     let cands_here: Vec<ObjectId> = if rules.quirks.search_one_object_per_cell {
                         offered(w, a, s, cell).into_iter().collect()
                     } else {
@@ -1539,6 +1575,10 @@ pub fn may_search_passively(w: &World, a: ObjectId) -> bool {
     };
     // spec: S-0309 claim 2 (the passive-acquire flag; armed; not an empty occupiable building; not a player's engineer)
     if !tc.passive_acquire || !armed(w, a) {
+        return false;
+    }
+    // spec: S-0309 claim 2 (it is not a harvesting slave, S-0215)
+    if crate::seams::is_harvesting_slave(w, a) {
         return false;
     }
     // spec: S-0309 claim 2 (no temporal weapon of its own is erasing a target) and S-0301 r73 claim 9 (a building that drops the target its beam holds keeps the beam attached, so while that target is being erased it takes none by a search; a departed warp member is no longer being erased, S-0513 claim 39a)
