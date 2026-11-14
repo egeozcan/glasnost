@@ -5188,7 +5188,11 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
                     set_stage(w, id, next);
                     Some(standard(w, id))
                 }
-                Answer::Cloaked | Answer::Rearming => Some(standard(w, id)),
+                // spec: S-0501 T1 (refiring, rearming: standard delay; cloaked: uncloak, standard delay); S-0516 claim 11 (a) (a firer that tries to fire and gets cloaked starts uncloaking) (#228)
+                Answer::Cloaked | Answer::Rearming => {
+                    crate::cloak::machine::firing_answer(w, id, 0, tgv, ans);
+                    Some(standard(w, id))
+                }
                 other => {
                     let next = if !ammo_left(w, id) {
                         Stage::Done
