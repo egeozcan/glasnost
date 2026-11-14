@@ -485,7 +485,10 @@ pub fn update(w: &mut World) {
     for (k, p) in due {
         // spec: S-0520 claim 4 (each expiry frees its place and its crate; the replacement sees it free)
         w.crates.places.remove(&k);
-        crate::crush::remove_overlay(w, p.cell);
+        // spec: S-0520 Terms (a crate is a cell holding a crate overlay) and claim 4 (an expiry removes one crate: an overlay that is not a crate is left alone); Q-3118 (interim: a place whose crate another rule removed stays occupied until its lifetime ends and still makes its replacement placement) (#284)
+        if is_crate(w, p.cell) {
+            crate::crush::remove_overlay(w, p.cell);
+        }
         if on {
             // spec: S-0520 claim 4 (one random placement per expiry, which can fail)
             place_random(w);
