@@ -931,6 +931,18 @@ fn fire_actions(w: &mut World, tag: u32, inst: &Instance) {
     }
 }
 
+/// Whether an object is a present object (S-0011 Terms): on the map, and its
+/// destruction not begun. A killed object with no health left (one inside
+/// its own killing hit, infantry showing its death, a crashing object or a
+/// building awaiting removal) and a sinking vessel are not; a building in a
+/// delayed-kill countdown is, as it does not die yet (S-0302 claim 16).
+fn present_object(w: &World, id: ObjectId) -> bool {
+    // spec: S-0011 Terms (present object: not inside a transport, building or factory, and not an object whose destruction has begun but which has not been removed), claim 19 and S-0312 claim 29 (infantry showing its death keep their tag and are no present object); S-0312 claim 10 (a sinking vessel was destroyed by its killing hit); S-0302 claim 16 (a delayed-kill building does not die yet)
+    w.obj(id)
+        .is_some_and(|o| o.on_map && !crate::combat::damage::dead(o))
+        && !crate::naval::sinking(w, id)
+}
+
 fn action(
     w: &mut World,
     a: &glasnost_map::triggers::Action,
@@ -1142,14 +1154,14 @@ fn action(
                 crate::computer::hunt_order(w, h);
             }
         }
-        // spec: S-0011 claim 24 (14 change owner: every present object that carries the tag holding the firing trigger changes its owner to the resolved house, without announcement; a carrier inside a transport or building keeps its owner)
+        // spec: S-0011 claim 24 (14 change owner: every present object that carries the tag holding the firing trigger changes its owner to the resolved house, without announcement; a carrier inside a transport or building, or one whose destruction has begun, keeps its owner)
         14 => {
             if let Some(h) = crate::mp_triggers::resolve_house(w, a.number, triggering) {
                 let carriers: Vec<ObjectId> = w
                     .triggers
                     .objects
                     .iter()
-                    .filter(|&(&id, &t)| t == tag && w.obj(id).is_some_and(|o| o.on_map))
+                    .filter(|&(&id, &t)| t == tag && present_object(w, id))
                     .map(|(&id, _)| id)
                     .collect();
                 for id in carriers {
