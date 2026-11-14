@@ -38,4 +38,7 @@ fn an_own_weapons_collection_keeps_the_imported_weapons_registry() {
     );
     assert_eq!(modded.ids.get("weapons", "B"), Some(1));
     assert_eq!(modded.ids.get("weapons", "mymod:laser"), None);
+    assert_eq!(modded.ids.own["weapons"], ["mymod:laser"]);
+    assert_eq!(modded.ids.get_own("weapons", "mymod:laser"), Some(0));
+    assert_eq!(modded.ids.get_own("weapons", "B"), None);
 }

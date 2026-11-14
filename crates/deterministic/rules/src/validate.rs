@@ -152,24 +152,46 @@ pub fn validate(r: &Ruleset) -> Vec<Problem> {
 }
 
 /// Interned IDs: every kind's names in a defined order.
+///
+/// The imported registries and our own collections are two name spaces:
+/// the importer writes a registry per kind (`weapons`, `warheads`, …) and
+/// the own format has top-level collections that can share those names, so
+/// each keeps its own map.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Ids {
-    /// Names per kind; the position is the ID.
+    /// Imported names per kind, in registration order (S-0004); the
+    /// position is the ID.
     pub kinds: BTreeMap<String, Vec<String>>,
+    /// Our own collections' names (`objects`, `weapons`, `warheads`,
+    /// `owners`), in the order their instances first appear across the
+    /// layers; the position is the ID.
+    ///
+    /// That order is not covered by `sim_rules_hash`, which encodes object
+    /// members sorted by key: two rulesets whose layers first name the same
+    /// instances in a different order hash the same and number them
+    /// differently. These IDs must not enter simulation state, saves or the
+    /// wire until they are derived from an order the hash covers.
+    pub own: BTreeMap<String, Vec<String>>,
 }
 
 impl Ids {
-    /// The ID of `name` in `kind`.
+    /// The ID of `name` in the imported registry of `kind`.
     pub fn get(&self, kind: &str, name: &str) -> Option<usize> {
         self.kinds.get(kind)?.iter().position(|n| n == name)
+    }
+
+    /// The ID of `name` in our own collection `collection` (see
+    /// [`Ids::own`] for what it may be used for).
+    pub fn get_own(&self, collection: &str, name: &str) -> Option<usize> {
+        self.own.get(collection)?.iter().position(|n| n == name)
     }
 }
 
 /// Interns IDs (PLAN.md 4.6, step 6): imported kinds in registration order
-/// (S-0004); our own collections in the order their instances first
-/// appear across the layers (import order, then mods).
+/// (S-0004); our own collections, separately, in the order their instances
+/// first appear across the layers (import order, then mods).
 pub fn intern(r: &Ruleset, tree: &Node) -> Ids {
-    let mut kinds = r.registries.clone();
+    let mut own = BTreeMap::new();
     for collection in crate::resolve::COLLECTIONS {
         let names: Vec<String> = tree
             .get(collection)
@@ -177,8 +199,11 @@ pub fn intern(r: &Ruleset, tree: &Node) -> Ids {
             .map(|m| m.iter().map(|x| x.key.clone()).collect())
             .unwrap_or_default();
         if !names.is_empty() {
-            kinds.insert(collection.to_owned(), names);
+            own.insert(collection.to_owned(), names);
         }
     }
-    Ids { kinds }
+    Ids {
+        kinds: r.registries.clone(),
+        own,
+    }
 }
