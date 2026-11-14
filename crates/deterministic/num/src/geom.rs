@@ -36,37 +36,39 @@ pub fn table_root_parts(n: u64, mode: Rounding) -> Option<(u32, u32)> {
     if n == 0 {
         return None;
     }
-    // spec: S-0204 F1 (n is converted to single precision: 24 significant bits)
+    // spec: S-0204 F1 (n is converted to single precision: 24 significant bits; to nearest, n may round up to 2^64)
     let n = single_of_integer(n, mode);
-    let len = 64 - n.leading_zeros();
+    let len = 128 - n.leading_zeros();
     let z = (len - 1) / 2;
     // spec: S-0204 F1 (n / 4^z truncated toward zero to 14 significant binary digits)
     let r = if len > 14 {
-        let top = u128::from(n >> (len - 14));
+        let top = n >> (len - 14);
         isqrt(top << (len - 14 + 46 - 2 * z))
     } else {
         // spec: S-0204 F1 (root truncated to 24 significant digits: 2^46 scale for 2^23 ≤ R < 2^24)
-        isqrt(u128::from(n) << (46 - 2 * z))
+        isqrt(n << (46 - 2 * z))
     };
     Some((r as u32, z))
 }
 
 /// `n` (non-negative integer) as the integer value of the single nearest to
-/// it by `mode`.
+/// it by `mode`; 128 bits wide, since rounding to nearest carries the top of
+/// the 64-bit range to 2^64 (#295).
 // spec: S-0205 claim 4 (single precision keeps 24 significant bits)
-fn single_of_integer(n: u64, mode: Rounding) -> u64 {
-    let len = 64 - n.leading_zeros();
+fn single_of_integer(n: u64, mode: Rounding) -> u128 {
+    let n = u128::from(n);
+    let len = 128 - n.leading_zeros();
     // spec: S-0205 claim 4 (single precision has a 24-bit significand)
     if len <= 24 {
         return n;
     }
     let sh = len - 24;
     let t = n >> sh;
-    let rem = n & ((1u64 << sh) - 1);
+    let rem = n & ((1u128 << sh) - 1);
     let t = match mode {
         Rounding::TowardZero => t,
         Rounding::Nearest => {
-            let half = 1u64 << (sh - 1);
+            let half = 1u128 << (sh - 1);
             if rem > half || (rem == half && t & 1 == 1) {
                 t + 1
             } else {
