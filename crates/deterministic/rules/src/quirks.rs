@@ -4440,6 +4440,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
         "renderer (mapview::quirks), S-0108 claims 13 and 26; S-0405 claim 10 names it for a switched-on building's slots (S-0405 r36)",
     ),
     (
+        "named_palette_true_owner",
+        "renderer (mapview::quirks), S-0103 claim 16; S-0516 claim 37 names it for drawing a disguise in its disguise house's colours (S-0516 r20)",
+    ),
+    (
         "shroud_on_flat_grid",
         "renderer (render::shroud::Quirks), S-0110 claim 8; S-0410 claim 6 names it for the radar's shroud and gap tests (S-0410 r15, not yet followed by the radar)",
     ),
