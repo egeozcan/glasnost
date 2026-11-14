@@ -485,6 +485,16 @@ fn unit(w: &World, id: ObjectId) -> Option<&UnitHarvest> {
     w.rules().econ.harvest.vehicles.get(o.type_index as usize)
 }
 
+/// Whether `b` is a refinery for harvester `id` (S-0402 Terms): a building
+/// of one of the harvester's dock types.
+fn of_dock_type(w: &World, id: ObjectId, b: ObjectId) -> bool {
+    // spec: S-0402 Terms (a refinery is any building of a dock type of the harvester in question)
+    unit(w, id).is_some_and(|u| {
+        w.obj(b)
+            .is_some_and(|x| x.kind == Kind::Building && u.docks.contains(&x.type_index))
+    })
+}
+
 /// Whether an object is a harvester (S-0402 Terms).
 pub fn is_harvester(w: &World, id: ObjectId) -> bool {
     unit(w, id).is_some_and(|u| u.harvester)
@@ -1386,11 +1396,8 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     let refinery = match o.contact {
         Some(r) if w.obj(r).is_some() => Some(r),
         _ => match o.dest {
-            // spec: S-0402 claim 2 (an enter order on a refinery starts docking directly)
-            Some(Target::Object(r))
-                if accepts(w, r, id, false)
-                    && w.obj(r).is_some_and(|b| b.kind == Kind::Building) =>
-            {
+            // spec: S-0402 claim 2 and Terms (an enter order on a refinery, a building of one of the harvester's dock types, starts docking directly; any other building is no refinery)
+            Some(Target::Object(r)) if of_dock_type(w, id, r) && accepts(w, r, id, false) => {
                 take_contact(w, id, r);
                 Some(r)
             }
@@ -1494,10 +1501,7 @@ pub fn track_arrival(w: &mut World, id: ObjectId) {
     if !w.cells.list(n, Layer::Ground).contains(&b) {
         return;
     }
-    let docks = unit(w, id).map(|u| u.docks.clone()).unwrap_or_default();
-    let refinery = w
-        .obj(b)
-        .is_some_and(|x| x.kind == Kind::Building && docks.contains(&x.type_index));
+    let refinery = of_dock_type(w, id, b);
     // spec: S-0402 claim 10 (a dock-unload refinery; no facing, stopped or docking-cell test, and claim 8's acceptance test is not repeated)
     if !refinery || !building(w, b).is_some_and(|x| x.dock_unload) {
         return;
