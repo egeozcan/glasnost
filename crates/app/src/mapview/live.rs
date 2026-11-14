@@ -469,6 +469,14 @@ pub struct Live {
     /// follows takes it: that redraw evaluates them again only for a game
     /// at another tick (design: render (#146)).
     synced: Option<i32>,
+    /// The status extras' object order ([`Live::status_order`]) as the last
+    /// redraw found it, for the status redraws until the next tick, resume
+    /// or redraw: only those change the layers and the types it reads, and
+    /// the game's moves. The game is public, so the order also carries the
+    /// game's tick, object count and next object ID when it was found, and
+    /// an object placed or removed in between finds it again
+    /// (design: render (#139)).
+    kept_status_order: Option<((i32, usize, u32), Vec<ObjectId>)>,
     /// The drawing's quirk switches (S-0102 Edge cases).
     view_quirks: super::quirks::ViewQuirks,
     /// Images and rows the combat drawing added.
@@ -1379,6 +1387,7 @@ impl Live {
             layers: super::layers::Layers::default(),
             layer_moments: Vec::new(),
             synced: None,
+            kept_status_order: None,
             view_quirks: super::quirks::ViewQuirks::default(),
             cache: Cache::default(),
             transients: Vec::new(),
@@ -1599,6 +1608,8 @@ impl Live {
     pub fn after_tick(&mut self) {
         // design: render (#93) (a tick makes the next redraw a new drawn frame)
         self.drawn_lines = None;
+        // design: render (#139)
+        self.kept_status_order = None;
         self.layer_moments = self
             .world
             .effects
@@ -1660,6 +1671,8 @@ impl Live {
         // design: render (#98) the presentation events of the ticks the drawing did not see are not shown late
         self.world.effects.clear();
         self.drawn_lines = None;
+        // design: render (#139)
+        self.kept_status_order = None;
         self.layer_moments.clear();
         self.transients.clear();
         self.target_lines.clear();
@@ -3614,6 +3627,8 @@ impl Live {
     pub fn redraw(&mut self, inputs: &Inputs, scene: &mut Scene) {
         // design: render (#145) (the benchmark's parts of the scene update)
         let mut lap = self.lap_start();
+        // design: render (#139) (the redraw finds the status order afresh)
+        self.kept_status_order = None;
         self.learn_types(inputs);
         // design: render (#146) (the mobile objects the tick's sync placed are not evaluated again for the game at that tick: objects enter and leave the map only in a tick, and orders wait for the next)
         if self.synced.take() == Some(self.world.tick) {
@@ -4938,16 +4953,28 @@ impl Live {
             red: r.general.condition_red,
             mode: r.mode,
         };
-        let shows: Vec<(ObjectId, bool)> = self
+        // design: render (#139) (a map for the per-object lookup; the first entry of an object wins, as the scan found it)
+        let mut shows: BTreeMap<ObjectId, bool> = BTreeMap::new();
+        for (id, selected) in self
             .marked
             .iter()
             .map(|&id| (id, true))
             .chain(self.hovered.map(|h| (h, false)))
-            .collect();
+        {
+            shows.entry(id).or_insert(selected);
+        }
         let mut items = Vec::new();
         // spec: S-0111 claim 17 and State and ordering (each object's status extras, the number included, are complete before the next object's begin, in the object order of S-0102 claims 1, 6 and 7)
-        let order = self.status_order(inputs);
-        for id in order {
+        let stamp = (
+            self.world.tick,
+            self.world.objects.len(),
+            self.world.next_id,
+        );
+        let order = match self.kept_status_order.take() {
+            Some((kept, order)) if kept == stamp => order,
+            _ => self.status_order(inputs),
+        };
+        for &id in &order {
             let Some(o) = self.world.obj(id) else {
                 continue;
             };
@@ -5033,7 +5060,7 @@ impl Live {
                     }
                 }
             }
-            let bar = shows.iter().find(|(id, _)| *id == o.id).map(|(_, s)| *s);
+            let bar = shows.get(&o.id).copied();
             // spec: S-0111 claim 18 (no insignia while the unit appears disguised to the local player's house, S-0516 claims 35–36, even when drawn as its real type)
             let disguised = self.viewer.is_some()
                 && glasnost_sim::cloak::disguise::appears_disguised(&self.world, o.id, self.viewer);
@@ -5143,6 +5170,7 @@ impl Live {
                 ));
             }
         }
+        self.kept_status_order = Some((stamp, order));
         scene.items.extend(items);
     }
 
