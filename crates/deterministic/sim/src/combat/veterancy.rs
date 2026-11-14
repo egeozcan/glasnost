@@ -132,7 +132,7 @@ pub fn destruction_credited(
         // spec: S-0311 claim 7 (the credited object's house adds V to its score)
         h.combat.score = h.combat.score.wrapping_add(value);
     }
-    // spec: S-0311 claim 8 (case 2: a trainable credited object gains it itself; open-topped passengers and garrisons are seams)
+    // spec: S-0311 claim 8 (case 2: a trainable credited object gains it itself; the open-topped transport row, a passenger firing from a trainable open-topped transport giving it to the transport, is not implemented although `transport::open_topped_carrier` gives the transport)
     let trainable = |id: ObjectId| type_combat(w, id).is_some_and(|tc| tc.trainable);
     let obj = if trainable(obj) {
         obj

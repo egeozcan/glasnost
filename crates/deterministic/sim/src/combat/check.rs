@@ -247,7 +247,7 @@ fn projectile_illegal(w: &World, weapon: WeaponId, t: Target) -> bool {
             if air && !p.aa {
                 return true;
             }
-            // Render layers other than the ground layer (flying, jumping, falling, digging) are not modelled: every unit is in the ground layer.
+            // The render-layer row (an infantry or vehicle outside the ground layer, flying, jumping, falling or digging, and a projectile that is not anti-air) is not implemented here, although `temporal::ground_layer` gives a render-layer test.
             // spec: S-0306 claim 23 (not an infantry, vehicle, aircraft or building, not airborne, projectile not anti-ground)
             o.kind == Kind::Terrain && !air && !p.ag
         }

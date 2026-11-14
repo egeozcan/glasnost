@@ -168,7 +168,7 @@ pub fn in_range(
     // spec: S-0307 claim 3 and claim 26 (the air bonus: the set-A and set-B rocket types by their in-the-air answer)
     let target_air = matches!(t, Target::Object(x) if range_airborne(w, x));
     let air_bonus = super::veterancy::type_combat(w, firer).map_or(0, |tc| tc.air_range_bonus);
-    // spec: S-0307 F1 (R_b = R₀ + a · [target airborne]); the open-topped bonus is a seam
+    // spec: S-0307 F1 (R_b = R₀ + a · [target airborne]); the open-topped term is not implemented (`transport::open_topped_passenger` and the imported `open_topped_range_bonus` exist, unread here)
     let rr = if crate::structures::garrison::garrisoned(w, firer) {
         // spec: S-0307 claim 4 (a garrisoned building's range is 256 × (⌊min(W, H) / 2⌋ + G) leptons: the weapon's own range is not used, nor, with quirks.garrison_range_drops_air_bonus, the air bonus)
         let (fw, fh) = w.obj(firer).map_or((0, 0), |o| o.foundation);
@@ -266,8 +266,10 @@ pub fn in_range(
 }
 
 /// The firer's weapon range ρ(A, i) (S-0307 claim 13): 0 without a weapon
-/// in the slot, else the weapon's range field; open-topped transports
-/// (the shortest range of their passengers' current weapons) are a seam.
+/// in the slot, else the weapon's range field. The open-topped transport's
+/// row (the shortest range of its passengers' current weapons) is not
+/// implemented, although `transport::open_topped_carrier` links a passenger
+/// to its transport.
 pub fn firer_weapon_range(w: &World, firer: ObjectId, slot: usize) -> i32 {
     // spec: S-0307 claim 13 (0 without a weapon, else R₀ with no bonus)
     super::weapon::slot_weapon(w, firer, slot).map_or(0, |x| w.rules().combat.weapon(x).range)
