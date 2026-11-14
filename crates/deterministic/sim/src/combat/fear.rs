@@ -67,6 +67,10 @@ pub fn last_round(w: &mut World, id: ObjectId) {
     if !u.fraidycat || o.combat.ammo != 0 {
         return;
     }
+    // spec: S-0315 claim 2 (a shot fired from inside a transport does not trigger the panic)
+    if crate::transport::riding(w, id).is_some() {
+        return;
+    }
     let fearless = u.fearless || has_ability(w, id, Ability::Fearless);
     // spec: S-0315 claim 2 (quirks.fraidycat_ammo_panic_ignores_fearless; off: nothing for a fearless unit)
     if fearless && !rules.quirks.fraidycat_ammo_panic_ignores_fearless {
