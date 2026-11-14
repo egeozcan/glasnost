@@ -138,8 +138,16 @@ pub fn nose_b(pos: Pos, length: i32, p: F32, f: u16, mode: Rounding, bias: bool)
     let th = theta(f, mode);
     let x = trunc(fi(pos.x.into(), mode).add(fi(b, mode).mul(cos_t(th), mode), mode));
     let y = trunc(fi(pos.y.into(), mode).sub(fi(b, mode).mul(sin_t(th), mode), mode));
-    let z = trunc(fi(pos.z.into(), mode).add(l.mul(sin_t(pd), mode), mode));
+    let z = nose_height(pos, length, p, mode, bias);
     Pos::new(x as i32, y as i32, z as i32)
+}
+
+/// The world height of the nose point of S-0506 Formulas F9, which does
+/// not depend on the heading: trunc(z + L × sin(p)).
+fn nose_height(pos: Pos, length: i32, p: F32, mode: Rounding, bias: bool) -> i64 {
+    // spec: S-0506 F9 (the nose's height trunc(z + L × sin(p)), truncated only after adding the position)
+    let l = fi(length.into(), mode);
+    trunc(fi(pos.z.into(), mode).add(l.mul(sin_tb(p.to_f64(), mode, bias), mode), mode))
 }
 
 /// The pitch P × π/2 narrowed once (S-0506 F3: α and β).
@@ -537,7 +545,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 if horizontal <= i64::from(pos.z) - i64::from(aim.z) {
                     rs.phase = Some(Phase::Descent);
                 }
-            } else if contact(w, pos, aim, &rs, mode) {
+            } else if contact(w, pos, aim, &rs, p.body_length, mode) {
                 // spec: S-0506 Rocket table (lazy cruise: the claim 19 test detonates)
                 detonate = true;
             } else {
@@ -549,7 +557,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         Phase::Descent => {
             let pos = o.pos;
             let d = (aim.x - pos.x, aim.y - pos.y, aim.z - pos.z);
-            if contact(w, pos, aim, &rs, mode) {
+            if contact(w, pos, aim, &rs, p.body_length, mode) {
                 // spec: S-0506 Rocket table (descent: the claim 19 test detonates)
                 detonate = true;
             } else {
@@ -642,23 +650,20 @@ fn end_of_tilt(w: &mut World, id: ObjectId, rs: &mut RocketState, p: &RocketSet,
     });
 }
 
-/// The claim 19 test of lazy cruise and descent (S-0506 claim 19).
-fn contact(w: &World, pos: Pos, aim: Pos, rs: &RocketState, mode: Rounding) -> bool {
-    // spec: S-0506 claim 19 (the world height its move would reach)
-    let s = trunc(rs.speed);
-    let z_next = trunc(fi(pos.z.into(), mode).add(
-        crate::table_trig::sin_q(w, rs.pitch.to_f64(), mode).mul(fi(s, mode), mode),
-        mode,
-    ));
+/// The claim 19 test of lazy cruise and descent (S-0506 claim 19), with
+/// `length` the set's body length.
+fn contact(w: &World, pos: Pos, aim: Pos, rs: &RocketState, length: i32, mode: Rounding) -> bool {
+    // spec: S-0506 claim 19 (r43, Q-3066: the world height of its nose point, Formulas F9, from its position and pitch before the move)
+    let z_nose = nose_height(pos, length, rs.pitch, mode, crate::table_trig::bias(w));
     let aim_z = i64::from(aim.z);
-    if z_next <= aim_z {
+    if z_nose <= aim_z {
         return true;
     }
     let c = pos.cell();
-    // spec: S-0506 claim 19 (over a high bridge: aim height equal to the cell's terrain height, and the next height at or below aim + 416, the bridge deck)
+    // spec: S-0506 claim 19 (over a high bridge: aim height equal to the cell's terrain height, and that nose-point height at or below aim + 416, the bridge deck)
     if w.high_bridge(c) {
         let terrain = w.surface_at(c.x * 256 + 128, c.y * 256 + 128); // spec: S-0204 claim 2 (the cell centre)
-        if aim.z == terrain && z_next <= aim_z + 416 {
+        if aim.z == terrain && z_nose <= aim_z + 416 {
             // spec: S-0506 claim 19 (the 416-lepton bridge deck height)
             return true;
         }
