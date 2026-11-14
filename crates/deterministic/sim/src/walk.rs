@@ -339,7 +339,7 @@ fn own_locomotion(w: &mut World, id: ObjectId) -> bool {
 /// cell and chooses its walking target without moving (claim 3, S-0209).
 fn standing(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
-    let (dest, no_path, here) = (o.dest, o.path.steps.is_empty(), o.pos.cell());
+    let (dest, no_path, here, z) = (o.dest, o.path.steps.is_empty(), o.pos.cell(), o.pos.z);
     if dest.is_none() {
         // spec: S-0208 claim 6 (r52, A stored path kept under enter: a walker follows a stored path only towards a destination, so a destination that becomes nothing leaves it no path to follow, whatever it keeps)
         if !no_path && let Some(ob) = w.obj_mut(id) {
@@ -354,7 +354,12 @@ fn standing(w: &mut World, id: ObjectId) {
     }
     if no_path {
         let goal = path::goal_cell(w, id);
-        if goal == Some(here) || goal.is_none() {
+        // spec: S-0208 claims 16 and 18 (a cell destination is complete only within two height levels of its height: on the ground under a high-bridge deck it is not, and an exhausted path needs another path computation under S-0212)
+        let height_met = match dest {
+            Some(Target::Cell(c)) => (cell_destination_height(w, id, c) - z).abs() < 208,
+            _ => true,
+        };
+        if (goal == Some(here) && height_met) || goal.is_none() {
             // A standing walker given a destination in its own cell (no
             // arrival tick ends that walk under claim 16): the move is
             // finished.
