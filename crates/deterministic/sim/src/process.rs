@@ -498,8 +498,14 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
     }
     let armed = u.primary.is_some();
     if !armed {
-        // spec: S-0215 claim 15 row 6 (unarmed and deploying, or with area guard current: nothing changes)
-        if cur == Some(Behaviour::AreaGuard) {
+        // spec: S-0215 claim 15 row 6 (unarmed and deploying; or unarmed with unload current and a deploys-into type; or unarmed with area guard current: nothing changes); S-0517 Terms (deploying: the in-place form in transition towards deployed) (#236)
+        let deploying = matches!(
+            crate::econ::inplace::form(w, id),
+            crate::econ::inplace::Form::Deploying { .. }
+        );
+        let unloading_into = cur == Some(Behaviour::Unload)
+            && crate::econ::deploy::deploys_into(w, o.kind, o.type_index).is_some();
+        if deploying || unloading_into || cur == Some(Behaviour::AreaGuard) {
             return;
         }
         // spec: S-0215 claim 15 row 7 (unarmed: clear target and destination, queue guard)
