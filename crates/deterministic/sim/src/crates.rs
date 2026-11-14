@@ -519,9 +519,9 @@ pub fn pickup(w: &mut World, collector: ObjectId, cell: CellXY) -> bool {
         .get(usize::from(overlay))
         .is_some_and(|o| o.crate_trigger);
     if trigger_flag {
-        // spec: S-0520 claim 7 (a collector with a tag raises event 49 with itself as the causing object; a collector that no longer exists afterwards: the crate stays and a ground step is blocked)
+        // spec: S-0520 claim 7 (a collector with a tag raises event 49 with itself as the causing object; if the collector is no longer alive afterwards, nothing more happens: the crate stays, the any-crate mark is unchanged and a ground step is blocked; one in its death sequence is no longer alive) (#281)
         crate::triggers::crate_picked_up(w, collector);
-        if w.obj(collector).is_none() {
+        if w.obj(collector).is_none_or(damage::dead) {
             return true;
         }
         // spec: S-0520 claim 7 (the pickup continues: the any-crate mark is set)
