@@ -379,11 +379,7 @@ pub fn direction_real_b(x: F64, y: F64, table: bool, mode: Rounding) -> Facing {
             // spec: S-0306 Formulas (revision 90: a zero displacement, both arguments zero of either sign after the narrowing, is 16384 with quirks.table_direction off)
             return 16384;
         }
-        // Both magnitudes on the smaller of the two binary exponents.
-        let k = kx.min(ky);
-        let ax = BigUint::from(mx) << (kx - k) as u32;
-        let ay = BigUint::from(my) << (ky - k) as u32;
-        return exact_angle(nx && mx != 0, &ax, ny && my != 0, &ay);
+        return angle_of_parts(nx && mx != 0, (mx, kx), ny && my != 0, (my, ky));
     }
     direction_real(x, y, mode)
 }
@@ -417,12 +413,22 @@ fn exact_direction(x: i64, y: i64) -> Facing {
     if x == 0 && y == 0 {
         return 0;
     }
-    exact_angle(
-        x < 0,
-        &BigUint::from(x.unsigned_abs()),
-        y < 0,
-        &BigUint::from(y.unsigned_abs()),
-    )
+    angle_of_parts(x < 0, (x.unsigned_abs(), 0), y < 0, (y.unsigned_abs(), 0))
+}
+
+/// The exact direction for X = ±mx × 2^kx and Y = ±my × 2^ky (`ax` = (mx,
+/// kx), `ay` = (my, ky), signs by `neg_x` and `neg_y`, false for a zero),
+/// not both zero: [`fast_angle`], or within its margin of a half the
+/// big-integer [`exact_angle`] (#393).
+// spec: S-0204 Edge cases (exact direction with `quirks.table_direction` off)
+fn angle_of_parts(neg_x: bool, ax: (u64, i32), neg_y: bool, ay: (u64, i32)) -> Facing {
+    fast_angle(neg_x, ax, neg_y, ay).unwrap_or_else(|| {
+        // Both magnitudes on the smaller of the two binary exponents.
+        let k = ax.1.min(ay.1);
+        let bx = BigUint::from(ax.0) << (ax.1 - k) as u32;
+        let by = BigUint::from(ay.0) << (ay.1 - k) as u32;
+        exact_angle(neg_x, &bx, neg_y, &by)
+    })
 }
 
 /// The exact direction of [`exact_direction`] for X = ±`ax` and Y = ±`ay`
@@ -450,6 +456,129 @@ fn exact_angle(neg_x: bool, ax: &BigUint, neg_y: bool, ay: &BigUint) -> Facing {
     r as Facing
 }
 
+/// arctan(i/64) for i = 0 to 64, each the nearest multiple of 2^-64 (Q64),
+/// for the fast path of the exact direction ([`fast_angle`], #393); the
+/// test `fast_angle_constants_match_bigmath` checks every entry against
+/// [`bigmath::atan`].
+// nocite: engineering table of our own for the exact direction's fast path (#393), checked against bigmath in a test
+#[rustfmt::skip]
+const ATAN_64THS: [u64; 65] = [
+    0x0000000000000000, 0x03ffeaab776e5357, 0x07ff556eea5d892a, 0x0bfdc0c2186d14fd,
+    0x0ffaaddb967ef4e3, 0x13f59f0e7c559d6b, 0x17ee182602f10e8c, 0x1be39ebe6f07c37e,
+    0x1fd5ba9aac2f6dc6, 0x23c3f5f6086e4dc9, 0x27adddd18cc4d8b1, 0x2b93023c7d84d3bf,
+    0x2f72f6979cb6044d, 0x334d51d2d90c4c3a, 0x3721aea524c14409, 0x3aefabbe40ae6ce3,
+    0x3eb6ebf25901bac5, 0x4277165f618d8963, 0x462fd68c2fc5e098, 0x49e0dc815fbd16f9,
+    0x4d89dcdc1faf2f35, 0x512a90db0abc26a3, 0x54c2b6654735276d, 0x5852100c273f8659,
+    0x5bd86507937bc23a, 0x5f55812d8ecfdd6a, 0x62c934e5286c95b7, 0x6633551535ac619e,
+    0x6993bb0f308ff2db, 0x6cea44769971b1ae, 0x7036d3253b27be34, 0x73794d0cb04d425d,
+    0x76b19c1586ed3da3, 0x79dfadfc5d68d10e, 0x7d03742d50505f2e, 0x801ce39e0d205c9a,
+    0x832bf4a6d9867e2a, 0x8630a2dada1ed066, 0x892aecdfde9547b5, 0x8c1ad445f3e09b8c,
+    0x8f005d5ef7f59f9b, 0x91db8f1664f350e2, 0x94ac72c9847186f6, 0x97731420365e538c,
+    0x9a2f80e671bdda20, 0x9ce1c8e6a0b8cdba, 0x9f89fdc4f4b7a1ed, 0xa22832dbcadaae09,
+    0xa4bc7d1934f70924, 0xa746f2ddb7602294, 0xa9c7abdc4830f5c9, 0xac3ec0fb997dd6a2,
+    0xaeac4c38b4d8c080, 0xb110688aebdc6f6a, 0xb36b31c91f043691, 0xb5bcc49059ecc4b0,
+    0xb8053e2bc2319e74, 0xba44bc7dd470782f, 0xbc7b5deae98af281, 0xbea94144fd049aac,
+    0xc0ce85b8ac526641, 0xc2eb4abb661628b6, 0xc4ffaffabf8fbd55, 0xc70bd54ce602ee14,
+    0xc90fdaa22168c235,
+];
+
+/// 32768/π, the facing units per radian, as the nearest multiple of 2^-50
+/// (#393); the test `fast_angle_constants_match_bigmath` checks it against
+/// [`bigmath::pi`].
+// nocite: engineering constant of our own for the exact direction's fast path (#393), checked against bigmath in a test
+const FACINGS_PER_RADIAN_Q50: u128 = 0xa2f9_836e_4e44_152a;
+
+/// A non-zero magnitude m × 2^k with m shifted so that its top bit is bit 63.
+// nocite: normalisation of our own fixed-point representation (#393)
+fn normalised(m: u64, k: i32) -> (u64, i32) {
+    let z = m.leading_zeros();
+    (m << z, k - z as i32)
+}
+
+/// arctan(q) for 0 ≤ q ≤ 1 in Q64 (q ≤ 2^64), within a few units of 2^-64:
+/// the table entry at the nearest 64th c, plus arctan(r) for r = (q − c) /
+/// (1 + qc) by its series to the eleventh power (|r| ≤ 1/128, so the first
+/// term left out is below 2^-91).
+// nocite: Q64 fixed point, the 64ths table and the series length are our own engineering (#393)
+fn atan_q64(q: u128) -> u128 {
+    if q >= 1 << 64 {
+        return u128::from(ATAN_64THS[64]);
+    }
+    let i = ((q + (1 << 57)) >> 58) as usize;
+    let c = (i as u128) << 58;
+    let (d, below) = if q >= c {
+        (q - c, false)
+    } else {
+        (c - q, true)
+    };
+    let den = (1u128 << 64) + ((q * c) >> 64);
+    let r = (d << 64) / den;
+    let r2 = (r * r) >> 64;
+    let mut t = r;
+    let mut sum = r;
+    // The odd powers 3 to 11: r^5 and r^9 add, the others subtract.
+    for n in [3u128, 5, 7, 9, 11] {
+        t = (t * r2) >> 64;
+        if n % 4 == 1 {
+            sum += t / n;
+        } else {
+            sum -= t / n;
+        }
+    }
+    let base = u128::from(ATAN_64THS[i]);
+    if below { base - sum } else { base + sum }
+}
+
+/// The exact direction of [`exact_angle`] in 128-bit fixed point for
+/// magnitudes given as (m, k) for m × 2^k, not both zero; `None` when the
+/// angle in facing units lies within 2^-40 of a half, where the caller falls
+/// back to [`exact_angle`]. Elsewhere the result is the same: the error of
+/// the facing value here is below 2^-44, so both round the same real number
+/// on the same side of the half.
+// spec: S-0204 Edge cases (exact direction with `quirks.table_direction` off: round(arctan2(X, Y) × 65536 / (2π)), halves up, mod 65536)
+// nocite: Q64, Q50 and Q114 fixed point and the 2^-40 margin are our own engineering (#393)
+fn fast_angle(neg_x: bool, ax: (u64, i32), neg_y: bool, ay: (u64, i32)) -> Option<Facing> {
+    // b: the angle from the Y axis, arctan(|X| / |Y|), in facing units, rounded.
+    let b = if ay.0 == 0 {
+        16384
+    } else if ax.0 == 0 {
+        0
+    } else {
+        let (mx, ex) = normalised(ax.0, ax.1);
+        let (my, ey) = normalised(ay.0, ay.1);
+        let x_larger = (ex, mx) > (ey, my);
+        let ((ms, es), (ml, el)) = if x_larger {
+            ((my, ey), (mx, ex))
+        } else {
+            ((mx, ex), (my, ey))
+        };
+        // q = small / large in Q64, at most 1.
+        let shift = i64::from(el) - i64::from(es);
+        let q = if shift >= 128 {
+            0
+        } else {
+            ((u128::from(ms) << 64) / u128::from(ml)) >> shift
+        };
+        // u = arctan(q) × 32768 / π in Q114.
+        let u = atan_q64(q) * FACINGS_PER_RADIAN_Q50;
+        let half = 1u128 << 113;
+        let frac = u & ((1u128 << 114) - 1);
+        if frac.abs_diff(half) < 1u128 << 74 {
+            return None;
+        }
+        let r = ((u + half) >> 114) as u32;
+        if x_larger { 16384 - r } else { r }
+    };
+    // spec: S-0204 Edge cases (the angle clockwise from map north, mod 65536)
+    let f = match (neg_x, neg_y) {
+        (false, false) => b,
+        (false, true) => 32768 - b,
+        (true, true) => 32768 + b,
+        (true, false) => 65536 - b,
+    };
+    Some((f % 65536) as Facing)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -471,6 +600,47 @@ mod tests {
     use super::*;
 
     const RZ: Rounding = Rounding::TowardZero;
+
+    // The fast path's table and constant are the nearest Q64 and Q50 values
+    // of bigmath's arctan(i/64) and 32768/π (#393).
+    #[test]
+    fn fast_angle_constants_match_bigmath() {
+        let f = bigmath::FRAC;
+        for (i, &want) in ATAN_64THS.iter().enumerate() {
+            let a = bigmath::atan(&((BigUint::from(i) << f) / 64u32));
+            let q64: BigUint = (a + (BigUint::from(1u32) << (f - 65))) >> (f - 64);
+            assert_eq!(q64, BigUint::from(want), "arctan({i}/64)");
+        }
+        let k2 = (BigUint::from(32768u32) << (f + 51)) / bigmath::pi();
+        let k: BigUint = (k2 + 1u32) >> 1u32;
+        assert_eq!(k, BigUint::from(FACINGS_PER_RADIAN_Q50));
+    }
+
+    // spec: S-0204 Edge cases (exact direction with `quirks.table_direction` off)
+    // Displacements whose facing lies within 2^-60 of a half go to the
+    // big-integer routine; plain ones do not (#393).
+    #[test]
+    fn fast_angle_falls_back_near_a_half() {
+        // nocite: synthetic magnitudes near a rounding half, not game data
+        let near: [(u64, u64); 4] = [
+            (22915627, 159345772067),
+            (95240465374, 95249596877),
+            (175176187187, 6443712252),
+            (757313546896, 648151647047),
+        ];
+        for (a, b) in near {
+            assert_eq!(fast_angle(false, (a, 0), false, (b, 0)), None, "{a} {b}");
+            assert_eq!(fast_angle(false, (b, 0), false, (a, 0)), None, "{b} {a}");
+            assert_eq!(
+                angle_of_parts(false, (a, 0), false, (b, 0)),
+                exact_angle(false, &BigUint::from(a), false, &BigUint::from(b))
+            );
+        }
+        assert_eq!(fast_angle(false, (1, 0), false, (1, 0)), Some(8192));
+        assert_eq!(fast_angle(false, (1, 0), false, (0, 0)), Some(16384));
+        assert_eq!(fast_angle(true, (0, 0), true, (1, 0)), Some(32768));
+        assert_eq!(fast_angle(true, (1, 0), false, (0, 0)), Some(49152));
+    }
 
     // spec: S-0204 claim 5 (s = 0 below 16641; r(16641) = 128; shortfall points)
     #[test]
