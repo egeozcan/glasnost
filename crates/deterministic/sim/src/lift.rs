@@ -818,6 +818,8 @@ fn drop(w: &mut World, x: ObjectId, dropper: Option<ObjectId>, house: Option<Hou
         l.set_down = false;
         l.grip_without_dest = false;
     });
+    // A dropped unit now names its dropper (#402, `crate::census`).
+    crate::census::forget(w);
     // spec: S-0607 claim 13 (revision 33, a dropped balloon-hover vehicle: the stop on dropping first gives it no destination while it still holds its target, which S-0502 claim 28 can reject, making attack current; it then clears the target and gives no destination again, which that claim cannot reject, so it still ends with none and the direct stop; the target's clearing does not undo the change of behaviour)
     let _ = crate::jump::clear_rejected(w, x);
     if let Some(o) = w.obj_mut(x) {
@@ -1010,6 +1012,10 @@ pub fn removing(w: &mut World, id: ObjectId) {
                 o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
         }
+    }
+    // No unit names a dropper: the walk below would find none (#402).
+    if crate::census::none(w, crate::census::Held::Dropped) {
+        return;
     }
     // spec: S-0607 claim 14 (a dropper that leaves play: its dropped units no longer have a dropper but keep their dropper house)
     let dropped: Vec<ObjectId> = w
@@ -1542,6 +1548,7 @@ fn impact_credit(w: &mut World, id: ObjectId, before: &crate::world::Object) {
     }
     // The credit reads only the victim's owner, type and experience; the
     // snapshot stands in for the removed unit for that read alone.
+    crate::census::forget(w);
     w.objects.insert(id, before.clone());
     damage::credit(w, id, &hit);
     w.objects.remove(&id);
