@@ -1412,6 +1412,57 @@ pub struct Painter {
     /// The relights so far ([`Painter::relight`]): a relight changes the
     /// cell light every building drawing takes.
     relights: u64,
+    /// Each voxel vehicle and aircraft type's drawing fields that no object
+    /// changes, by import kind and registration index, read at the type's
+    /// first drawing: they come from the import, the art, the game's files
+    /// and the typed rules, none of which changes during a game.
+    // design: render (#133)
+    voxel_types: BTreeMap<(Kind, usize), Rc<VoxelType>>,
+}
+
+/// What a voxel vehicle or aircraft type is drawn with whatever the object
+/// (design: render (#133)): each field is what [`Builder::vehicle_voxels`]
+/// read for every drawing before, read once.
+struct VoxelType {
+    /// The main body's file and model (S-0105 claims 12, 29; S-0504 F5).
+    main_file: Vec<u8>,
+    main_model: Option<Rc<voxel::VoxelModel>>,
+    /// The main body's frame count, `None` without a model (S-0105 claim
+    /// 16).
+    main_frames: Option<u32>,
+    /// The alternative body's file and frame count, only for a vehicle type
+    /// with the option and an alternative body file (S-0105 claim 12).
+    alt: Option<(Vec<u8>, Option<u32>)>,
+    /// The turret displacement δ (S-0105 Import mapping, S-0313 claim 11).
+    offset: i32,
+    /// The depth option (S-0105 Import mapping, UseBuffer).
+    depth_buffered: bool,
+    /// The hunter-seeker property (S-0105 claim 44).
+    hunter_seeker: bool,
+    /// The shadow section and the aircraft-like flag, `None` with the
+    /// no-shadow option (S-0105 claims 29 to 31).
+    shadow: Option<(usize, bool)>,
+    /// The turret and barrel parts, `None` for a type that draws none
+    /// (S-0105 claims 4, 8, 12 and 45).
+    turret: Option<TurretParts>,
+    /// The pitch angle, bank angle and pitch speed of a flying body (S-0105
+    /// claim 42).
+    flight: (f64, f64, f64),
+}
+
+/// A voxel type's turret and barrel part names and files (S-0105 claim 12,
+/// S-0007 claims 16 and 17).
+struct TurretParts {
+    multi: bool,
+    /// The turret count, at most 18 (S-0007 claim 17).
+    count: i32,
+    /// The turret and barrel part of each selectable index: numbered for a
+    /// multi-turret type (index 0 … count − 1), else the one plain pair.
+    parts: Vec<[(String, Option<Vec<u8>>); 2]>,
+    /// The parts a multi-turret type draws without a selected index (none).
+    unselected: [(String, Option<Vec<u8>>); 2],
+    /// The plain turret model's frame count (S-0105 claim 16).
+    turret_frames: Option<u32>,
 }
 
 /// What one live building's drawing is made from besides the painter's
@@ -1760,7 +1811,10 @@ impl<'a> Builder<'a> {
     }
 
     fn note(&mut self, n: &str) {
-        self.built.notes.insert(n.to_owned());
+        // design: render (#133) (a note already met is not allocated again)
+        if !self.built.notes.contains(n) {
+            self.built.notes.insert(n.to_owned());
+        }
     }
 
     fn drop_object(&mut self, why: &str) {
@@ -5326,7 +5380,7 @@ impl<'a> Builder<'a> {
     /// How a body is posed: its heading alone, a rocket's nose pitch, a
     /// flying body's pitch and bank (S-0105 claims 41, 42), or a sinking
     /// vehicle's lean (S-0504 claims 15, 16).
-    fn tilt(&self, m: &Mobile, q: &VoxelQuirks) -> Tilt {
+    fn tilt(m: &Mobile, flight: (f64, f64, f64), q: &VoxelQuirks) -> Tilt {
         match m.attitude {
             Attitude::None => Tilt::Plain,
             Attitude::Sinking { pitch, roll, drawn } => Tilt::Rocked {
@@ -5362,13 +5416,7 @@ impl<'a> Builder<'a> {
                 crashing,
                 tumble: (pitch, roll),
             } => {
-                let (kind, idx) = (m.kind, m.idx);
-                let pitch_angle =
-                    rule_angle(self.import, kind, idx, b"PitchAngle", PITCH_ANGLE_DEFAULT);
-                let bank_angle =
-                    rule_angle(self.import, kind, idx, b"RollAngle", ROLL_ANGLE_DEFAULT);
-                let pitch_speed =
-                    rule_real(self.import, kind, idx, b"PitchSpeed").unwrap_or(PITCH_SPEED_DEFAULT);
+                let (pitch_angle, bank_angle, pitch_speed) = flight;
                 if crashing {
                     // spec: S-0113 claim 20 (at zero or negative signed height a crashing body is turned to its heading only: no tumble, no α and no β)
                     if height <= 0 {
@@ -5397,6 +5445,134 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// Type `(kind, idx)`'s voxel drawing fields, read at its first drawing
+    /// and kept (design: render (#133)); `None` without a main body. `art`
+    /// is the type's art.
+    fn voxel_type(
+        &mut self,
+        kind: Kind,
+        idx: usize,
+        art: &glasnost_convert::art::TypeArt,
+    ) -> Option<Rc<VoxelType>> {
+        if let Some(t) = self.p.voxel_types.get(&(kind, idx)) {
+            return Some(t.clone());
+        }
+        let main_file = art.voxels.get("body")?.clone();
+        let main_model = self.voxel_model(&main_file);
+        let main_frames = main_model.as_ref().map(|b| b.frame_count() as u32);
+        // spec: S-0105 claim 12 (the alternative body replaces the main body while no spawned
+        // aircraft is docked, only for a type with the option and an alternative body file; the
+        // main body otherwise, and the shadow is the main body's, claim 29)
+        let alt = match art.voxels.get("alternate_body") {
+            Some(file)
+                if kind == Kind::Vehicles
+                    && rule_bool(self.import, kind, idx, b"NoSpawnAlt", false) =>
+            {
+                let frames = self.voxel_model(file).map(|b| b.frame_count() as u32);
+                Some((file.clone(), frames))
+            }
+            _ => None,
+        };
+        let art_int = |b: &Self, key: &[u8], d: i32| {
+            b.art_value(kind, idx, key)
+                .and_then(value::integer)
+                .unwrap_or(d)
+        };
+        // spec: S-0105 Import mapping (TurretOffset, Art [image], default 0); S-0313 claim 11 (the
+        // turret is drawn with the same displacement δ that F2 uses for the fire point: the
+        // simulation's imported value when the typed rules name the type, else the art read)
+        let offset = self
+            .sim_turret_offset(kind, idx)
+            .unwrap_or_else(|| art_int(self, b"TurretOffset", 0));
+        let name = &self.import.outcome.registries[&kind][idx].name;
+        // spec: S-0105 Import mapping (UseBuffer is read from the art section of the type's own name)
+        let depth_buffered = self
+            .p
+            .art
+            .value(name, b"UseBuffer")
+            .and_then(value::boolean)
+            .unwrap_or(false);
+        // spec: S-0105 claim 44 Locomotors (our engine: claim 40's P itself for a vehicle type with the hunter-seeker property, a corrected presentation glitch without a switch)
+        let hunter_seeker =
+            kind == Kind::Vehicles && rule_bool(self.import, kind, idx, b"HunterSeeker", false);
+        // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option)
+        let shadow = (!rule_bool(self.import, kind, idx, b"NoShadow", false)).then(|| {
+            let section = art_int(self, b"ShadowIndex", 0).max(0) as usize;
+            // spec: S-0105 Import mapping (ConsideredAircraft absent: yes for an aircraft type, no for every other type)
+            let aircraft_like = rule_bool(
+                self.import,
+                kind,
+                idx,
+                b"ConsideredAircraft",
+                kind == Kind::Aircraft,
+            );
+            (section, aircraft_like)
+        });
+        // spec: S-0105 claims 4, 8 (a turret part only with the turret flag); claim 45 (an aircraft-kind object draws no turret and no barrel, in any attitude, whatever its turret flag)
+        let turret = (kind != Kind::Aircraft
+            && rule_bool(self.import, kind, idx, b"Turret", false))
+        .then(|| {
+            // spec: S-0105 claim 12 (a multi-turret type draws the turret and barrel models of its
+            // selected turret index k, claim 43, instead of the ordinary ones; S-0007 claim 16 names
+            // them turret k and barrel k)
+            let multi = multi_turret(self.import, kind, idx);
+            // spec: S-0007 claim 17 (the turret count, at most 18 numbered parts)
+            let count = rule_int(self.import, kind, idx, b"TurretCount", 0).clamp(0, 18);
+            let part = |name: String| {
+                let file = art.voxels.get(name.as_str()).cloned();
+                (name, file)
+            };
+            let parts = if multi {
+                (0..count)
+                    .map(|k| [part(format!("turret{k}")), part(format!("barrel{k}"))])
+                    .collect()
+            } else {
+                vec![[part("turret".to_string()), part("barrel".to_string())]]
+            };
+            let unselected = [part(String::new()), part(String::new())];
+            (multi, count, parts, unselected)
+        })
+        .map(|(multi, count, parts, unselected)| {
+            // spec: S-0105 claim 16 (the plain turret model's frame count, for the turret frame of body frame 0)
+            let turret_frames = if multi {
+                None
+            } else {
+                parts[0][0]
+                    .1
+                    .clone()
+                    .and_then(|f| self.voxel_model(&f))
+                    .map(|t| t.frame_count() as u32)
+            };
+            TurretParts {
+                multi,
+                count,
+                parts,
+                unselected,
+                turret_frames,
+            }
+        });
+        // spec: S-0105 claim 42 (a flying body's pitch angle, bank angle and pitch speed)
+        let flight = (
+            rule_angle(self.import, kind, idx, b"PitchAngle", PITCH_ANGLE_DEFAULT),
+            rule_angle(self.import, kind, idx, b"RollAngle", ROLL_ANGLE_DEFAULT),
+            rule_real(self.import, kind, idx, b"PitchSpeed").unwrap_or(PITCH_SPEED_DEFAULT),
+        );
+        let t = Rc::new(VoxelType {
+            main_file,
+            main_model,
+            main_frames,
+            alt,
+            offset,
+            depth_buffered,
+            hunter_seeker,
+            shadow,
+            turret,
+            flight,
+        });
+        self.p.voxel_types.insert((kind, idx), t.clone());
+        Some(t)
+    }
+
     /// A vehicle's or aircraft's voxel body, turret, barrel and shadow
     /// (S-0105 claims 3 to 11, 16, 29 to 31; S-0102 claims 13, 18).
     fn vehicle_voxels(
@@ -5410,42 +5586,24 @@ impl<'a> Builder<'a> {
     ) -> Vec<Item> {
         let q = VoxelQuirks::default();
         let (kind, idx) = (m.kind, m.idx);
-        let Some(main_file) = art.voxels.get("body").cloned() else {
+        // design: render (#133) (the type's fields, read once)
+        let Some(t) = self.voxel_type(kind, idx, art) else {
             return Vec::new();
         };
+        let t = &*t;
+        let main_file = &t.main_file;
         // spec: S-0105 claim 12 (the alternative body replaces the main body while no spawned
         // aircraft is docked, only for a type with the option and an alternative body file; the
         // main body otherwise, and the shadow is the main body's, claim 29)
-        let alt_drawn = m.alternative
-            && kind == Kind::Vehicles
-            && rule_bool(self.import, kind, idx, b"NoSpawnAlt", false)
-            && art.voxels.contains_key("alternate_body");
-        let body_file = if alt_drawn {
-            art.voxels["alternate_body"].clone()
-        } else {
-            main_file.clone()
+        let alt = t.alt.as_ref().filter(|_| m.alternative);
+        let alt_drawn = alt.is_some();
+        let (body_file, body_frames) = match alt {
+            Some((file, frames)) => (file, *frames),
+            None => (main_file, t.main_frames),
         };
-        let art_int = |b: &Self, key: &[u8], d: i32| {
-            b.art_value(kind, idx, key)
-                .and_then(value::integer)
-                .unwrap_or(d)
-        };
-        // spec: S-0105 Import mapping (TurretOffset, Art [image], default 0); S-0313 claim 11 (the
-        // turret is drawn with the same displacement δ that F2 uses for the fire point: the
-        // simulation's imported value when the typed rules name the type, else the art read)
-        let offset = self
-            .sim_turret_offset(kind, idx)
-            .unwrap_or_else(|| art_int(self, b"TurretOffset", 0));
-        let name = self.import.outcome.registries[&kind][idx].name.clone();
-        // spec: S-0105 Import mapping (UseBuffer is read from the art section of the type's own name)
-        let depth_buffered = self
-            .p
-            .art
-            .value(&name, b"UseBuffer")
-            .and_then(value::boolean)
-            .unwrap_or(false);
+        let (offset, depth_buffered) = (t.offset, t.depth_buffered);
         let (body_raw, turret_raw, elevation) = (m.body, m.turret, m.elevation);
-        let tilt = self.tilt(m, &q);
+        let tilt = Self::tilt(m, t.flight, &q);
         // spec: S-0105 Terms and claim 3 (flight drawing heading: a flying-locomotor aircraft's body and shadow take its aiming facing, a rocket and every other body its body facing)
         let heading = if matches!(tilt, Tilt::Flying(_) | Tilt::Tumbling { .. }) {
             turret_raw
@@ -5459,8 +5617,9 @@ impl<'a> Builder<'a> {
                 roll,
                 drawn: true,
                 ..
-            } => self
-                .voxel_model(&main_file)
+            } => t
+                .main_model
+                .as_ref()
                 .and_then(|b| b.sections.first().map(|s| s.size))
                 .map(|size| voxel::Rocking::new(pitch, roll, size))
                 .filter(voxel::Rocking::rocks),
@@ -5508,9 +5667,7 @@ impl<'a> Builder<'a> {
         // position at the terrain surface height there, 60 pixels higher over a qualifying high
         // bridge, whatever its flight height; it is not the body's lifted point).
         // spec: S-0105 claim 44 Locomotors (our engine: claim 40's P itself for a vehicle type with the hunter-seeker property, a corrected presentation glitch without a switch)
-        let hunter_seeker =
-            kind == Kind::Vehicles && rule_bool(self.import, kind, idx, b"HunterSeeker", false);
-        let shadow_point = if kind == Kind::Aircraft || hunter_seeker {
+        let shadow_point = if kind == Kind::Aircraft || t.hunter_seeker {
             let anchor = m.shadow.unwrap_or_else(|| ShadowAnchor {
                 ground: self.terrain_height(m.pos.0, m.pos.1),
                 deck: false,
@@ -5522,30 +5679,18 @@ impl<'a> Builder<'a> {
             vehicle_shadow_point(point, m.above)
         };
         let mut items = Vec::new();
-        // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option)
-        let shadow =
-            (!sinking && !rule_bool(self.import, kind, idx, b"NoShadow", false)).then(|| {
-                let section = art_int(self, b"ShadowIndex", 0).max(0) as usize;
-                // spec: S-0105 Import mapping (ConsideredAircraft absent: yes for an aircraft type, no for every other type)
-                let aircraft_like = rule_bool(
-                    self.import,
-                    kind,
-                    idx,
-                    b"ConsideredAircraft",
-                    kind == Kind::Aircraft,
-                );
-                (section, aircraft_like)
-            });
+        // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option); S-0504 claim 16 (none while sinking)
+        let shadow = t.shadow.filter(|_| !sinking);
         // spec: S-0105 claim 31 (shadow key: ramp, 32-step body facing; bodies stand on flat ground), claims 41 and 42 (the 32-step flight drawing heading for a flying-locomotor aircraft, no pitch or bank class)
         let shadow_key = voxel::shadow_key(voxel::RAMP_FLAT, heading);
-        let shadow_file = main_file.clone();
-        let draw_shadow = move |b: &mut Self, (section, aircraft_like): (usize, bool)| {
-            let body = b.voxel_model(&shadow_file)?;
+        let shadow_model = &t.main_model;
+        let draw_shadow = |b: &mut Self, (section, aircraft_like): (usize, bool)| {
+            let body = shadow_model.as_ref()?;
             // spec: S-0105 claim 32 (a shadow never enables depth mode, whatever the type's option)
             let img =
                 b.p.canvas
-                    .draw_shadow(&body, section, &pose().shadow, 0, aircraft_like, &q);
-            b.limit_checked(&shadow_file, "shadow", shadow_key, img)
+                    .draw_shadow(body, section, &pose().shadow, 0, aircraft_like, &q);
+            b.limit_checked(main_file, "shadow", shadow_key, img)
         };
         // spec: S-0113 claim 20 (a crashing body's shadow follows only the heading and the slope shape, and its image key is S-0105 claim 42's), so it is the level flying body's image, not one kept apart under the angles.
         // spec: S-0105 claim 41 (a rocket's shadow is unpitched): it is the settled image, not one kept apart under the fresh pitch
@@ -5578,9 +5723,7 @@ impl<'a> Builder<'a> {
         let mut placed = Vec::new();
         // spec: S-0105 claim 16 (f_b = ν mod F_body, ν the walk-animation counter: the view's walk
         // counter of S-0102 claim 22, design Q-2176; a body without a motion file has one frame)
-        let body_frame = self.voxel_model(&body_file).map_or(0, |b| {
-            voxel::body_frame(m.walk.counter, b.frame_count() as u32)
-        });
+        let body_frame = body_frames.map_or(0, |n| voxel::body_frame(m.walk.counter, n));
         // spec: S-0105 claim 26 (body key; flat ground, the alternative-model state as drawn:
         // claim 12's alternative body while no spawned aircraft is docked)
         // spec: S-0105 claims 26, 41, 42 (a rocket body's key: heading, frame and pitch class; a flying body's: flight drawing heading, frame, pitch presence and bank state; neither has a ramp state)
@@ -5596,7 +5739,7 @@ impl<'a> Builder<'a> {
             }
         };
         if let Some(part) = self.cached_part_in(kind, idx, list, key, |b| {
-            let body = b.voxel_model(&body_file)?;
+            let body = b.voxel_model(body_file)?;
             let vpl = b.vpl();
             let img = b.p.canvas.draw_part(
                 &body,
@@ -5606,7 +5749,7 @@ impl<'a> Builder<'a> {
                 depth_buffered,
                 &q,
             );
-            b.limit_checked(&body_file, "body", key, img)
+            b.limit_checked(body_file, "body", key, img)
         }) {
             placed.push(part);
             // spec: S-0102 claim 13 (a voxel vehicle: bias U, upright, a reader)
@@ -5620,38 +5763,30 @@ impl<'a> Builder<'a> {
             ));
         }
         // spec: S-0105 claims 4, 8 (a turret part only with the turret flag); claim 45 (an aircraft-kind object draws no turret and no barrel, in any attitude, whatever its turret flag)
-        if kind != Kind::Aircraft && rule_bool(self.import, kind, idx, b"Turret", false) {
+        if let Some(tp) = &t.turret {
             // spec: S-0105 claim 12 (a multi-turret type draws the turret and barrel models of its
             // selected turret index k, claim 43, instead of the ordinary ones; S-0007 claim 16 names
             // them turret k and barrel k). With the index none, or k outside 0 … N − 1, neither a
             // turret nor a barrel is drawn; a missing barrel k alone leaves turret k drawn.
-            let multi = multi_turret(self.import, kind, idx);
-            // spec: S-0007 claim 17 (the turret count, at most 18 numbered parts)
-            let count = rule_int(self.import, kind, idx, b"TurretCount", 0).clamp(0, 18);
+            let multi = tp.multi;
             let index = if multi {
                 m.turret_index
-                    .filter(|k| (0..count).contains(k))
+                    .filter(|k| (0..tp.count).contains(k))
                     .and_then(|k| u8::try_from(k).ok())
             } else {
                 None
             };
-            let (turret_part, barrel_part) = match (multi, index) {
-                (true, Some(k)) => (format!("turret{k}"), format!("barrel{k}")),
-                (true, None) => (String::new(), String::new()),
-                (false, _) => ("turret".to_string(), "barrel".to_string()),
+            let [turret_part, barrel_part] = match (multi, index) {
+                (true, Some(k)) => &tp.parts[usize::from(k)],
+                (true, None) => &tp.unselected,
+                (false, _) => &tp.parts[0],
             };
             let turret_frame = if multi {
                 // spec: S-0105 claim 16 (a numbered turret model is drawn in frame f_b whatever its value, never from the animation-frame counter; claim 13 reduces it modulo the model's own HVA frame count, and its turret key records the same frame)
                 body_frame
             } else {
                 // spec: S-0105 claim 16 (body frame 0: the turret frame from the animation-frame counter, which S-0609 claim 14 advances while a gattling vehicle spins)
-                let frames = art
-                    .voxels
-                    .get(turret_part.as_str())
-                    .cloned()
-                    .and_then(|f| self.voxel_model(&f))
-                    .map(|t| t.frame_count() as u32);
-                voxel::vehicle_turret_frame(body_frame, m.anim, frames)
+                voxel::vehicle_turret_frame(body_frame, m.anim, tp.turret_frames)
             };
             // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
             let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
@@ -5665,29 +5800,21 @@ impl<'a> Builder<'a> {
                 false,
                 turret_frame,
             );
-            let mut parts = vec![
-                (
-                    false,
-                    turret_part.as_str(),
-                    voxel::ImageKey::Turret(turret_key),
-                ),
+            let mut parts = [
+                (false, turret_part, voxel::ImageKey::Turret(turret_key)),
                 // spec: S-0105 claim 26 (barrel key: the turret's key plus the current 32-step elevation)
-                (
-                    true,
-                    barrel_part.as_str(),
-                    voxel::barrel_key(turret_key, elevation),
-                ),
+                (true, barrel_part, voxel::barrel_key(turret_key, elevation)),
             ];
             // spec: S-0105 claim 11 (turret first when its 4-step facing is 1 or 2)
             if !voxel::turret_drawn_first(m.turret) {
                 parts.reverse();
             }
-            for (is_barrel, part_name, key) in parts {
-                let Some(file) = art.voxels.get(part_name).cloned() else {
+            for (is_barrel, (part_name, file), key) in parts {
+                let Some(file) = file else {
                     continue;
                 };
                 if let Some(part) = self.cached_part_in(kind, idx, list, key, |b| {
-                    let model = b.voxel_model(&file)?;
+                    let model = b.voxel_model(file)?;
                     let vpl = b.vpl();
                     let p = pose();
                     let (draw, frame) = if is_barrel {
@@ -5703,7 +5830,7 @@ impl<'a> Builder<'a> {
                         depth_buffered,
                         &q,
                     );
-                    b.limit_checked(&file, part_name, key, img)
+                    b.limit_checked(file, part_name, key, img)
                 }) {
                     placed.push(part);
                     items.push(Self::part_item(
@@ -6420,6 +6547,7 @@ impl Painter {
             buildings: BTreeMap::new(),
             building_context: None,
             relights: 0,
+            voxel_types: BTreeMap::new(),
         }
     }
 
