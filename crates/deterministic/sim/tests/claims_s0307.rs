@@ -1784,3 +1784,98 @@ fn quirk_negative_range_fields_off() {
     assert_eq!(s.w.rules().combat.weapon(s.wp).range, -512); // spec: S-0307 Constants (unlimited-range sentinel −512 leptons)
     assert!(test(&s));
 }
+
+// ---------------------------------------------------------------------
+// Claim 27 (r24, Q-3069; #431): a floor-bound firer against an airborne
+// target. The code already followed it; these tests pin it.
+
+/// `base(range)` with an anti-air straight projectile, carried by the TOWER
+/// (a 1 × 1 building with a raised fire point).
+fn tower_rules(range: &str) -> Ruleset {
+    let mut r = base(range);
+    line(&mut r).aa = Some(true);
+    r.sim.buildings.get_mut("TOWER").unwrap().primary = Some("Probe".into());
+    r
+}
+
+/// A TOWER of house 0 at the middle cell, and an unarmed buggy of house 1
+/// three cells east (moved into the air by the tests).
+fn tower_setup(r: &Ruleset) -> S {
+    let mut w = testkit::game_with(r, N, 1);
+    let a = testkit::spawn(&mut w, Kind::Building, "TOWER", 0, testkit::mid(N, 0, 0), 0);
+    let t = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, testkit::mid(N, 3, 0), 0);
+    let wp = w.rules().combat.weapon_index["Probe"];
+    S { w, a, t, wp }
+}
+
+// spec: S-0307 claim 27 (a) (M_T keeps the airborne target's world height; S is the building's reference point at its own height, neither the fire point nor the building's height raises it, so Δz is the target's whole height above S) and claim 27 (b) (not arcing: in range only while ⌊r(Δx² + Δy² + Δz²)⌋ ≤ R)
+#[test]
+fn claim27a_full_height_above_the_reference_point() {
+    let r = tower_rules("4");
+    let mut s = tower_setup(&r);
+    let a = s.w.reference_point(s.a);
+    put(&mut s.w, s.t, Pos::new(a.x, a.y, a.z + 1024));
+    assert_eq!(
+        source_point(&s.w, s.a, s.wp, Target::Object(s.t)),
+        a,
+        "S is the reference point at its own height"
+    );
+    assert!(test(&s), "1024 straight up is within R = 1024");
+    let z = first_beyond(1024);
+    put(&mut s.w, s.t, Pos::new(a.x, a.y, a.z + z));
+    assert!(!test(&s), "just above R straight up is out of range");
+}
+
+// spec: S-0307 claim 27 (b) (a firer whose R is a little above the flier's height reaches it only within a planar distance of about √(R² − Δz²) of S)
+#[test]
+fn claim27b_planar_reach_shrinks_with_height() {
+    let r = tower_rules("4");
+    let mut s = tower_setup(&r);
+    let a = s.w.reference_point(s.a);
+    // Δz = 600: √(1024² − 600²) ≈ 829.8 leptons of planar reach.
+    put(&mut s.w, s.t, Pos::new(a.x + 800, a.y, a.z + 600));
+    assert!(test(&s), "800 in plan, 600 up: within R");
+    put(&mut s.w, s.t, Pos::new(a.x + 860, a.y, a.z + 600));
+    assert!(!test(&s), "860 in plan, 600 up: beyond R spatially");
+    // The same planar distance on the ground (floor-bound) is in range.
+    put(&mut s.w, s.t, Pos::new(a.x + 860, a.y, a.z));
+    assert!(test(&s), "860 on the ground is within R");
+}
+
+// spec: S-0307 claim 27 (c) (the air bonus of claim 3 is the only term that adds to R because the target is airborne)
+#[test]
+fn claim27c_air_bonus_is_the_only_addition() {
+    for (bonus, fires) in [(None, false), (Some("1"), true)] {
+        let mut r = tower_rules("4");
+        r.sim
+            .buildings
+            .get_mut("TOWER")
+            .unwrap()
+            .combat
+            .air_range_bonus = bonus.map(d);
+        let mut s = tower_setup(&r);
+        let a = s.w.reference_point(s.a);
+        // Spatially 1100 + a little: beyond R = 1024, within R + 256.
+        put(&mut s.w, s.t, Pos::new(a.x + 800, a.y, a.z + 760));
+        assert_eq!(test(&s), fires, "air bonus {bonus:?}");
+    }
+}
+
+// spec: S-0307 claim 27 (d) (a building holding an airborne target makes no shot on a firing check asked with a weapon for which this test fails: that check answers out of range) and claim 12
+#[test]
+fn claim27d_firing_check_answers_out_of_range() {
+    use glasnost_sim::combat::check::{Answer, check};
+    let r = tower_rules("4");
+    let mut s = tower_setup(&r);
+    let a = s.w.reference_point(s.a);
+    put(&mut s.w, s.t, Pos::new(a.x + 860, a.y, a.z + 600));
+    assert_eq!(
+        check(&s.w, s.a, Some(Target::Object(s.t)), 0, true),
+        Answer::OutOfRange
+    );
+    put(&mut s.w, s.t, Pos::new(a.x + 500, a.y, a.z + 600));
+    assert_ne!(
+        check(&s.w, s.a, Some(Target::Object(s.t)), 0, true),
+        Answer::OutOfRange
+    );
+}

@@ -261,17 +261,31 @@ fn deactivate(w: &mut World, id: ObjectId) {
     }
 }
 
-/// A building's first placement (claims 23 and 40): a sensor array or
-/// detector in operation adds its coverage for its owner, once.
+/// A building's first placement (claims 23 and 40). Every building is
+/// marked placed here, so its removal lowers its owner's counts whether or
+/// not it ever added its coverage. A building that enters play set up, not
+/// in its build-up, has its grand opening here (S-0108 claim 11).
 pub fn building_placed(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     if o.kind != Kind::Building || o.cloak.placed {
         return;
     }
+    let building_up = o.econ.construction.building_up;
     if let Some(ob) = w.obj_mut(id) {
         ob.cloak.placed = true;
     }
-    // spec: S-0516 claim 23 and quirks.sensor_building_activation_once (at the first placement, only if in operation then)
+    // spec: S-0516 claim 23 (r20, Q-3060: an array the map places at game set-up passes the behaviour condition at its grand opening; one under construction has its grand opening later, at its handover or inside an owner change)
+    if !building_up {
+        grand_opening(w, id);
+    }
+}
+
+/// A sensor array's or detector's grand opening (claims 23 and 40,
+/// S-0108 claim 11): with `quirks.sensor_building_activation_once` on, it
+/// adds its coverage for its owner if it is in operation (S-0405 claim 8)
+/// now. Nothing later adds it.
+pub(crate) fn grand_opening(w: &mut World, id: ObjectId) {
+    // spec: S-0516 claim 23 (r20, Q-3060: Activation only at the grand opening, only if in operation at that moment) and quirks.sensor_building_activation_once
     if w.rules().quirks.sensor_building_activation_once && crate::econ::power::in_operation(w, id) {
         activate(w, id);
     }

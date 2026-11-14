@@ -282,16 +282,16 @@ pub fn pier_reference(w: &World, c: CellXY, line: Line) -> Option<CellXY> {
     Some(CellXY::new(x0 + r % tw, y0 + r / tw))
 }
 
-/// The reference cell of the pier at `c` for an attempt or a notice
-/// (S-0511 claims 2, 4 and 6): [`pier_reference`], taken only when that
-/// cell holds `c`'s own tile number at the reference sub-tile. A cell
-/// painted over, or a part of the pier cut off from it in another state,
-/// gives none (Q-3046).
+/// The reference cell of the pier at `c` for a direct attempt (S-0511
+/// claims 2 and 6): [`pier_reference`], taken only when that cell holds
+/// `c`'s own tile number at the reference sub-tile. A cell painted over,
+/// or a part of the pier cut off from it in another state, gives none
+/// (r13, Q-3046). A received notice uses no reference cell.
 pub fn pier_reference_of(w: &World, c: CellXY, line: Line) -> Option<CellXY> {
     let tile = w.cells.cell(c)?.tile;
     let r = pier_reference(w, c, line)?;
     let rc = w.cells.cell(r)?;
-    // nocite: our own input validation (#166; Q-3046 asks what the original does with a reference cell that does not hold the pier)
+    // spec: S-0511 claim 6 (r13, Q-3046, A reference cell that does not hold the pier: a direct attempt acts only when its reference cell holds the attempted cell's own tile, at sub-tile r: the same family, axis and state)
     (rc.tile == tile && rc.sub_tile == reference_sub(line)).then_some(r)
 }
 

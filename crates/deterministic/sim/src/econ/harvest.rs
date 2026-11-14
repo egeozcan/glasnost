@@ -1616,17 +1616,19 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
             // spec: S-0402 claim 11 (counter set to 0; its period is not restarted)
             x.counter.zero(t);
         }
-        // spec: S-0402 claim 11 (the building plays its payment animation unless that is already playing; before the smoke event, Q-3062's interim)
-        crate::depot_anim::payment(w, b);
-        // spec: S-0402 claim 11 and S-0616 claim 1 (each payment row makes one smoke event on the building in the neighbouring cell, before the payment of its processing)
+        // spec: S-0402 claim 11 and S-0616 claim 1 (each payment row makes one smoke event on the building in the neighbouring cell, first in its row: r84, Order within the two rows)
         crate::emitters::refinery_smoke(w, b);
+        // spec: S-0402 claim 11 (r84: then the building plays its payment animation unless that is already playing)
+        crate::depot_anim::payment(w, b);
         pay(w, b, tib, amount);
         return 1;
     }
-    // spec: S-0402 claim 11 (load empty: the payment animation, if playing, is stopped, and a refinery-flag building plays its unloading animation; before the smoke event, Q-3062's interim)
-    crate::depot_anim::load_emptied(w, b, refinery);
-    // spec: S-0402 claim 11 and S-0616 claim 1 (the empty-load row that makes the harvester finishing also makes one smoke event, so k + 1 events for k tiberiums)
+    // spec: S-0402 claim 11 and S-0616 claim 1 (the empty-load row that makes the harvester finishing also makes one smoke event, first in its row, so k + 1 events for k tiberiums)
     crate::emitters::refinery_smoke(w, b);
+    // spec: S-0402 claim 11 (r84, load empty: the building plays its payment animation unless that is already playing, as in the payment row)
+    crate::depot_anim::payment(w, b);
+    // spec: S-0402 claim 11 (r84: then a refinery-flag building's unloading animation, then the payment animation's stop, last)
+    crate::depot_anim::load_emptied(w, b, refinery);
     // spec: S-0402 claim 11 (load empty and the counter allows: finishing, the counter left as it is)
     if let Some(x) = state(w, id) {
         x.finishing = true;

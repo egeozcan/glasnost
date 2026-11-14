@@ -2509,3 +2509,168 @@ fn claim_14_harvester_flagged_slave_miner_takes_claim_13_rows_after_no_wake() {
         assert_eq!(l.harvest_before_wake, None, "{l:?}");
     }
 }
+
+// ---------------------------------------------------------------------
+// S-0107 claim 21a (r52, Q-3059; #422): shovel while harvesting.
+
+/// `rules()` with SLAVE *shovel* (4 image frames) and *stand* entries
+/// (invented).
+fn shovel_rules() -> Ruleset {
+    let mut r = rules();
+    let s = r.sim.infantry.get_mut("SLAVE").unwrap();
+    for (k, n) in [("shovel", 4), ("stand", 1)] {
+        s.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: n,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    r
+}
+
+/// A working building's first slave at rest in *harvest*, and its cell.
+fn harvesting_slave(r: &Ruleset) -> (World, ObjectId, CellXY) {
+    let mut w = game_on(r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let s = on_map(&w, b)[0];
+    if let Some(o) = w.obj_mut(s) {
+        o.dest = None;
+        o.beh.current = Some(Behaviour::Harvest);
+        o.beh.queued = None;
+    }
+    let c = w.obj(s).unwrap().pos.cell();
+    (w, s, c)
+}
+
+fn seq_state(w: &World, s: ObjectId) -> glasnost_sim::infantry::InfantryState {
+    w.obj(s).unwrap().infantry.clone().unwrap()
+}
+
+// spec: S-0107 claim 21a (Start: a processing of harvest at which the capacity is not 0, the cell is a resource cell and the unit is not full asks for shovel, not forced; tested before the load step) and scenario M21 part a
+#[test]
+fn s0107_claim_21a_harvest_processing_starts_shovel() {
+    let r = shovel_rules();
+    let (mut w, s, c) = harvesting_slave(&r);
+    put(&mut w, c, ORE, 5);
+    slaves::process_slave(&mut w, s);
+    assert_eq!(
+        seq_state(&w, s).seq,
+        Some(glasnost_sim::infantry::Seq::Shovel)
+    );
+}
+
+// spec: S-0107 claim 21a (Start: the tests come before the load step, so a processing whose load step fills the unit still asks for shovel)
+#[test]
+fn s0107_claim_21a_filling_step_still_asks_for_shovel() {
+    let r = shovel_rules();
+    let (mut w, s, c) = harvesting_slave(&r);
+    put(&mut w, c, ORE, 5);
+    let load = &mut w.obj_mut(s).unwrap().econ.slave.as_mut().unwrap().load;
+    if load.is_empty() {
+        load.push(0);
+    }
+    load[0] = STORE - 1;
+    slaves::process_slave(&mut w, s);
+    assert!(
+        slaves::slave_of(&w, s).unwrap().load.iter().sum::<i32>() >= STORE,
+        "this step fills the slave"
+    );
+    assert_eq!(
+        seq_state(&w, s).seq,
+        Some(glasnost_sim::infantry::Seq::Shovel)
+    );
+}
+
+// spec: S-0107 claim 21a (No restart: while shovel is current, a processing that passes the three tests makes no request at all, so claim 7's water record is not updated and the stage is not set back) and scenario M21 part b
+#[test]
+fn s0107_claim_21a_no_restart_while_shovel_current() {
+    let r = shovel_rules();
+    let (mut w, s, c) = harvesting_slave(&r);
+    put(&mut w, c, ORE, 5);
+    slaves::process_slave(&mut w, s);
+    let t0 = seq_state(&w, s).seq_t0;
+    // Two ticks later, with no other rule of those ticks run (in a full tick
+    // the slave's other rules end its shovel here).
+    w.tick += 2;
+    if let Some(i) = w.obj_mut(s).unwrap().infantry.as_mut() {
+        i.wet = None;
+    }
+    slaves::process_slave(&mut w, s);
+    let st = seq_state(&w, s);
+    assert_eq!(st.seq, Some(glasnost_sim::infantry::Seq::Shovel));
+    assert_eq!(st.seq_t0, t0, "the stage is not set back");
+    assert_eq!(st.wet, None, "no request: the water record is untouched");
+}
+
+// spec: S-0107 claim 21a (What ends shovel before it completes: a processing on a non-resource cell, while full or with capacity 0 asks for stand, not forced, and queues guard, S-0402 claim 26)
+#[test]
+fn s0107_claim_21a_failing_processing_asks_for_stand() {
+    let r = shovel_rules();
+    let (mut w, s, c) = harvesting_slave(&r);
+    put(&mut w, c, ORE, 5);
+    slaves::process_slave(&mut w, s);
+    assert_eq!(
+        seq_state(&w, s).seq,
+        Some(glasnost_sim::infantry::Seq::Shovel)
+    );
+    put(&mut w, c, glasnost_map::NO_OVERLAY, 0);
+    assert_eq!(slaves::process_slave(&mut w, s), 1);
+    assert_eq!(
+        seq_state(&w, s).seq,
+        Some(glasnost_sim::infantry::Seq::Stand)
+    );
+    assert_eq!(w.obj(s).unwrap().beh.queued, Some(Behaviour::Guard));
+}
+
+// spec: S-0107 claim 21a (Start: a capacity of 0 fails the tests; a negative one passes them under quirks.slave_negative_capacity_stalls and asks for shovel while it takes nothing; with the switch off it is treated as 0)
+#[test]
+fn s0107_claim_21a_capacity_tests() {
+    for (storage, stalls, shovels) in [(0, true, false), (-1, true, true), (-1, false, false)] {
+        let mut r = shovel_rules();
+        r.sim.infantry.get_mut("SLAVE").unwrap().storage = Some(storage);
+        r.globals.quirks.slave_negative_capacity_stalls = stalls;
+        let (mut w, s, c) = harvesting_slave(&r);
+        put(&mut w, c, ORE, 5);
+        slaves::process_slave(&mut w, s);
+        assert_eq!(
+            seq_state(&w, s).seq == Some(glasnost_sim::infantry::Seq::Shovel),
+            shovels,
+            "storage {storage}, stalls {stalls}"
+        );
+    }
+}
+
+// spec: S-0107 State and ordering (follow-up table: shovel, the unit is harvesting: shovel, forced, which loops; otherwise stand, forced) and claim 21a (Harvesting: current behaviour harvest, or none current and harvest queued; the stage of a shovel that stays current is never set back) and scenario M21 part c
+#[test]
+fn s0107_claim_21a_completion_loops_while_harvesting() {
+    use glasnost_sim::infantry::Seq;
+    let r = shovel_rules();
+    let (mut w, s, c) = harvesting_slave(&r);
+    put(&mut w, c, ORE, 5);
+    slaves::process_slave(&mut w, s);
+    let t0 = w.tick - 1000;
+    if let Some(i) = w.obj_mut(s).unwrap().infantry.as_mut() {
+        i.seq_t0 = t0;
+    }
+    // Complete, harvesting: shovel loops, its stage not set back.
+    glasnost_sim::infantry::sequence_turn(&mut w, s, false, false);
+    assert_eq!(seq_state(&w, s).seq, Some(Seq::Shovel));
+    assert_eq!(seq_state(&w, s).seq_t0, t0);
+    // No current behaviour, harvest queued: still harvesting.
+    if let Some(o) = w.obj_mut(s) {
+        o.beh.current = None;
+        o.beh.queued = Some(Behaviour::Harvest);
+    }
+    glasnost_sim::infantry::sequence_turn(&mut w, s, false, false);
+    assert_eq!(seq_state(&w, s).seq, Some(Seq::Shovel));
+    // Not harvesting (guard current; a queued harvest behind it does not count): stand, forced.
+    if let Some(o) = w.obj_mut(s) {
+        o.beh.current = Some(Behaviour::Guard);
+    }
+    glasnost_sim::infantry::sequence_turn(&mut w, s, false, false);
+    assert_eq!(seq_state(&w, s).seq, Some(Seq::Stand));
+}
