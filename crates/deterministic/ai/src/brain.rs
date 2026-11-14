@@ -1358,6 +1358,11 @@ impl Brain {
         cands
             .into_iter()
             .filter_map(|(c, building)| {
+                // A block of vehicles with no seen enemy near is never worth it, whatever it reaches: asked before the block is read (design: own AI, #54).
+                let fighting = enemies.iter().any(|&(_, e)| dist2(e, c) <= FIGHT * FIGHT);
+                if !building && !fighting {
+                    return None;
+                }
                 let reached = reached_by(c);
                 // spec: S-0513 claim 23 (every reached infantry unit dies, of any house)
                 let own_infantry = reached
@@ -1374,7 +1379,6 @@ impl Brain {
                     .iter()
                     .filter(|o| o.owner == Some(house) && self.army_vehicle(w, o))
                     .count();
-                let fighting = enemies.iter().any(|&(_, e)| dist2(e, c) <= FIGHT * FIGHT);
                 let worth_it = if building {
                     reached.iter().any(|o| attacked.contains(&o.id))
                 } else {
@@ -3535,5 +3539,146 @@ mod defend_tests {
             intruded > 0 && raided > 0,
             "{intruded} intruded, {raided} raided"
         );
+    }
+}
+
+#[cfg(test)]
+mod curtain_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// [`Brain::curtain_cell`] as before #54: every candidate block read
+    /// before its enemies near are asked.
+    fn curtain_cell_as_before(b: &Brain, w: &World) -> Option<(CellXY, bool)> {
+        let house = b.house();
+        let me = &w.houses[usize::from(house.0)];
+        let friend = |h: Option<HouseId>| h.is_some_and(|h| h == house || me.allied_with(h));
+        let enemies = b.script.seen_enemies(w);
+        let reached_by = |c: CellXY| {
+            use glasnost_sim::superweapons as sw;
+            let mut ids: Vec<ObjectId> = sw::block(w, c)
+                .into_iter()
+                .flat_map(|(_, x)| {
+                    sw::swept_layers(w, x)
+                        .into_iter()
+                        .flat_map(move |l| sw::listed(w, x, l))
+                })
+                .collect();
+            ids.sort();
+            ids.dedup();
+            ids.into_iter()
+                .filter_map(|id| w.obj(id))
+                .filter(|o| o.health > 0)
+                .filter(|o| friend(o.owner) || crate::in_view(w, house, o.id))
+                .collect::<Vec<_>>()
+        };
+        let attacked: Vec<ObjectId> = enemies
+            .iter()
+            .filter_map(|&(e, _)| match w.obj(e)?.target {
+                Some(Target::Object(t))
+                    if w.obj(t)
+                        .is_some_and(|x| x.kind == Kind::Building && x.owner == Some(house)) =>
+                {
+                    Some(t)
+                }
+                _ => None,
+            })
+            .collect();
+        let mut cands: Vec<(CellXY, bool)> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.owner == Some(house) && b.army_vehicle(w, o))
+            .map(|o| (o.pos.cell(), false))
+            .chain(
+                attacked
+                    .iter()
+                    .filter_map(|&x| w.obj(x))
+                    .map(|x| (w.reference_point(x.id).cell(), true)),
+            )
+            .collect();
+        cands.sort_by_key(|&(c, x)| (c.y, c.x, x));
+        cands.dedup();
+        cands
+            .into_iter()
+            .filter_map(|(c, building)| {
+                let reached = reached_by(c);
+                let own_infantry = reached
+                    .iter()
+                    .any(|o| o.kind == Kind::Infantry && friend(o.owner));
+                let protects_others = reached
+                    .iter()
+                    .any(|o| o.kind != Kind::Infantry && !friend(o.owner) && o.owner.is_some());
+                if own_infantry || protects_others {
+                    return None;
+                }
+                let vehicles = reached
+                    .iter()
+                    .filter(|o| o.owner == Some(house) && b.army_vehicle(w, o))
+                    .count();
+                let fighting = enemies.iter().any(|&(_, e)| dist2(e, c) <= FIGHT * FIGHT);
+                let worth_it = if building {
+                    reached.iter().any(|o| attacked.contains(&o.id))
+                } else {
+                    vehicles >= CURTAIN_VEHICLES && fighting
+                };
+                if !worth_it {
+                    return None;
+                }
+                let worth: i64 = reached
+                    .iter()
+                    .filter(|o| o.owner == Some(house) && o.kind != Kind::Infantry)
+                    .map(|o| i64::from(production::cost_field(w, tech::type_of(o))))
+                    .sum();
+                Some((worth, c, building))
+            })
+            .max_by_key(|&(worth, c, _)| (worth, std::cmp::Reverse((c.y, c.x))))
+            .map(|(_, c, building)| (c, building))
+    }
+
+    /// Our tooling for speed (design: own AI, #54): the curtain's cell with
+    /// the enemies near asked before a vehicle block is read is the cell as
+    /// before, for every house at many points of the M6c, M7a and M7b
+    /// duels.
+    #[test]
+    fn the_curtain_cell_asking_for_enemies_first_is_the_cell_as_before() {
+        let games = [
+            (
+                crate::fixture_m6c::rules(),
+                crate::fixture_m6c::map(),
+                crate::fixture_m6c::MAP_NAME,
+                crate::fixture_m6c::setup(2),
+            ),
+            (
+                crate::fixture_m7a::rules(),
+                crate::fixture_m7a::map(),
+                crate::fixture_m7a::MAP_NAME,
+                crate::fixture_m7a::setup(17),
+            ),
+            (
+                crate::fixture_m7b::rules(),
+                crate::fixture_m7b::map(),
+                crate::fixture_m7b::MAP_NAME,
+                crate::fixture_m7b::setup(11),
+            ),
+        ];
+        let (mut asked, mut aimed) = (0, 0);
+        for (rules, map, map_name, setup) in games {
+            let mut g = Game::new(rules, &map, map_name, fixture::catalogue(), setup)
+                .expect("the duel loads");
+            for _ in 0..300 {
+                for _ in 0..30 {
+                    g.step();
+                }
+                let w = &g.world;
+                for b in g.brains() {
+                    let want = curtain_cell_as_before(b, w);
+                    let at = format!("{map_name}, tick {}, {:?}", w.tick, b.house());
+                    assert_eq!(b.curtain_cell(w), want, "{at}");
+                    asked += 1;
+                    aimed += usize::from(want.is_some());
+                }
+            }
+        }
+        assert!(asked > 0 && aimed > 0, "{asked} asked, {aimed} aimed");
     }
 }
