@@ -5,9 +5,13 @@
 //! Formulas). The per-call figures of the report come from the ignored
 //! `per_call_figures`.
 
-// The ignored timing test reads the host clock; it is a measurement in a
-// test, never simulation code.
-#![allow(clippy::disallowed_methods, clippy::disallowed_types)]
+// The ignored timing test reads the host clock and prints its figures; it is
+// a measurement in a test, never simulation code.
+#![allow(
+    clippy::disallowed_macros,
+    clippy::disallowed_methods,
+    clippy::disallowed_types
+)]
 
 use std::time::Instant;
 
