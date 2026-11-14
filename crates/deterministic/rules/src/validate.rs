@@ -142,6 +142,43 @@ pub fn validate(r: &Ruleset) -> Vec<Problem> {
             }
         }
     }
+    // spec: S-0214 and S-0404 Import mapping (one `Cloning` key); S-0308 Import mapping (`Naval`); S-0303 and S-0513 Import mapping (`LightningWarhead`, `WeatherConBoltExplosion`); S-0302, S-0303, S-0414 and S-0513 Import mapping (`C4Warhead`): one key each, stored in two fields that different consumers read, so the copies must agree (#323)
+    let mut agree = |a: String, b: String, same: bool| {
+        if !same {
+            problem(
+                a.clone(),
+                format!("differs from {b}: both hold one imported key and must be set alike"),
+            );
+        }
+    };
+    for (id, b) in &r.sim.buildings {
+        agree(
+            format!("sim.buildings.{id}.cloning"),
+            format!("sim.buildings.{id}.econ.cloning"),
+            b.cloning == b.econ.cloning,
+        );
+        agree(
+            format!("sim.buildings.{id}.naval"),
+            format!("sim.buildings.{id}.combat.naval"),
+            b.naval == b.combat.naval,
+        );
+    }
+    let g = &r.sim.general;
+    agree(
+        "sim.general.lightning_warhead".into(),
+        "sim.general.superweapons.lightning_warhead".into(),
+        g.lightning_warhead == g.superweapons.lightning_warhead,
+    );
+    agree(
+        "sim.general.weather_con_bolt_explosion".into(),
+        "sim.general.superweapons.weather_con_bolt_explosion".into(),
+        g.weather_con_bolt_explosion == g.superweapons.weather_con_bolt_explosion,
+    );
+    agree(
+        "sim.general.c4_warhead".into(),
+        "sim.general.economy.c4_warhead".into(),
+        g.c4_warhead == g.economy.c4_warhead,
+    );
     if !r.colour_add.is_empty() && r.colour_add.len() != COLOUR_ADD_LEN {
         problem(
             "colour_add".into(),
