@@ -128,6 +128,20 @@ pub fn validate(r: &Ruleset) -> Vec<Problem> {
             }
         }
     }
+    // nocite: our own rules format (PLAN.md 4.6, #293): the importer writes each versus item as the exact decimal of its double, after S-0003 claim 13's `%` readings; a `%` item has no reading in our format
+    for (id, wh) in &r.sim.warheads {
+        for (i, d) in wh.verses.iter().flatten().enumerate() {
+            if glasnost_num::decimal::exact_double(&d.0).is_err() {
+                problem(
+                    format!("sim.warheads.{id}.verses"),
+                    format!(
+                        "item {i} is {:?}: a versus item is a plain decimal (the exact decimal of a double), without `%`",
+                        d.0
+                    ),
+                );
+            }
+        }
+    }
     if !r.colour_add.is_empty() && r.colour_add.len() != COLOUR_ADD_LEN {
         problem(
             "colour_add".into(),

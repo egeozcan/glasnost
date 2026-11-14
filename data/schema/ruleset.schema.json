@@ -14240,7 +14240,7 @@
           "default": null
         },
         "verses": {
-          "description": "`Verses`: the eleven versus values in class-index order (S-0003\nclaim 13, S-0305), each written as the exact decimal of its double.",
+          "description": "`Verses`: the eleven versus values in class-index order (S-0003\nclaim 13, S-0305), each written as the exact decimal of its double,\nwithout `%` (the importer has applied claim 13's `%` readings);\nvalidation refuses an item with `%`.",
           "type": [
             "array",
             "null"
