@@ -2052,6 +2052,10 @@ pub struct Quirks {
     // spec: S-0613 claim 12, Constants and Edge cases
     #[serde(default = "on")]
     pub wind_southeast_short: bool,
+    /// A gas particle has no on-deck state: made on a high bridge's deck, it sinks through the deck toward 5 leptons above the terrain and hits the ground layer; off: a gas particle at or above its cell's deck height treats the deck as its ground and hits the bridge-deck layer (`glasnost_sim::gas`).
+    // spec: S-0613 claim 19, Constants and Edge cases
+    #[serde(default = "on")]
+    pub gas_through_bridge_deck: bool,
     /// A kill by a fire particle has no attacking house, though its system may have one; off: the hit's attacking house is the system's owner house, as for gas (`glasnost_sim::particles`).
     // spec: S-0616 claim 14 and Edge cases
     #[serde(default = "on")]
@@ -2820,6 +2824,7 @@ impl Default for Quirks {
             berserk_zero_duration: true,
             psychic_intent_ignores_visibility: true,
             wind_southeast_short: true,
+            gas_through_bridge_deck: true,
             fire_particle_no_house: true,
             smoke_ignores_particle_cap: true,
             spark_double_gravity: true,
@@ -4151,6 +4156,7 @@ impl Quirks {
                 self.psychic_intent_ignores_visibility,
             ),
             ("wind_southeast_short", self.wind_southeast_short),
+            ("gas_through_bridge_deck", self.gas_through_bridge_deck),
             ("fire_particle_no_house", self.fire_particle_no_house),
             (
                 "smoke_ignores_particle_cap",
