@@ -1,9 +1,9 @@
 ---
 id: Q-3085
 title: Does a surviving hit clear a permanently disguising unit's copied disguise
-status: open
+status: answered
 related: [S-0302, S-0516]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need
