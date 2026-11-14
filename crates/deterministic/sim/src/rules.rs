@@ -1682,6 +1682,7 @@ impl SimRules {
                 .position(|a| a.name.as_bytes().eq_ignore_ascii_case(name))
                 .and_then(|i| u32::try_from(i).ok());
         }
+        // nocite: stack buffer size for folding a name before the look-up; longer names fold on the heap (#407)
         let mut buf = [0u8; 64];
         if let Some(b) = buf.get_mut(..name.len()) {
             b.copy_from_slice(name);
