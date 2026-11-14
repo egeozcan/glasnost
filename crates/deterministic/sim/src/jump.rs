@@ -1035,8 +1035,13 @@ fn landing_cancelled(w: &mut World, id: ObjectId) {
 }
 
 /// Gives the jumpjet a new destination itself (a neighbour step or a
-/// re-route): the order-level destination and the point.
+/// re-route): the order-level destination and the point. A seized unit
+/// keeps both, and the locomotor's record of the lift's cell.
 fn give(w: &mut World, id: ObjectId, c: CellXY) {
+    if seized(w, id) {
+        // spec: S-0607 claim 9 (a seized unit ignores every new destination, from orders, approach steps or any other rule; S-0502 claim 21's step gives its destination through the move-order rule) and claim 5 (its order-level destination is the cell of its fixed movement point) (#280)
+        return;
+    }
     if let Some(o) = w.obj_mut(id) {
         o.dest = Some(Target::Cell(c));
     }
