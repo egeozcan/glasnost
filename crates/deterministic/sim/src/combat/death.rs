@@ -570,13 +570,22 @@ fn wake_and_splash(w: &mut World, pos: Pos) {
 
 /// The death effects of a killing hit (S-0312 claim 1 and its table).
 pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
-    let _ = kill_in(w, id, hit, false);
+    let _ = kill_in(w, id, hit, false, true);
 }
 
 /// [`kill`]; with `chain` (S-0312 claim 33) an exploding object's death
 /// weapon is recorded as pending and the rest of the death effects kept as
-/// a frame, for [`set_off_death_weapon`] to go on with.
-pub(crate) fn kill_in(w: &mut World, id: ObjectId, hit: &Hit, chain: bool) -> Flow<()> {
+/// a frame, for [`set_off_death_weapon`] to go on with. Without `raises`
+/// (a delayed kill's later lethal hit with
+/// `quirks.delay_kill_credited_again` off, S-0302 claim 16) the
+/// destruction raises of claim 29 are not made again.
+pub(crate) fn kill_in(
+    w: &mut World,
+    id: ObjectId,
+    hit: &Hit,
+    chain: bool,
+    raises: bool,
+) -> Flow<()> {
     let Some(o) = w.obj(id).cloned() else {
         return Flow::Done(());
     };
@@ -595,8 +604,10 @@ pub(crate) fn kill_in(w: &mut World, id: ObjectId, hit: &Hit, chain: bool) -> Fl
         // Q-0193 (interim: no other death effect, no draws; it stays on its line with health 0)
         return Flow::Done(());
     }
-    // spec: S-0312 claim 29 and table, before step 1 (the destruction raises and the actions they fire, before the debris)
-    destruction_raises(w, id, hit);
+    // spec: S-0312 claim 29 and table, before step 1 (the destruction raises and the actions they fire, before the debris); S-0302 claim 16 and Edge cases (not again at a delayed kill's later lethal hit with quirks.delay_kill_credited_again off)
+    if raises {
+        destruction_raises(w, id, hit);
+    }
     // spec: S-0312 claim 30 (a killing hit ends a master's slave group before claims 4 to 7)
     crate::econ::slaves::master_killed(w, id, hit);
     // spec: S-0402 claim 14 (a killed slave is lost to its master: the regeneration delay starts)
