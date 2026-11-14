@@ -51,6 +51,8 @@
 //!
 //! The numbers here are tuning of our own opponent, not game behaviour.
 
+use std::sync::Arc;
+
 use glasnost_map::terrain::land;
 use glasnost_map::{CellXY, Map};
 use glasnost_num::F64;
@@ -294,6 +296,27 @@ impl Brain {
     /// tools' benchmark, `glasnost_sim::probe`); `p` reads nothing and
     /// changes nothing.
     pub fn think_with<P: Probe>(&mut self, w: &World, p: &mut P) -> Vec<Order> {
+        self.think_from(w, p, None)
+    }
+
+    /// [`Brain::think_with`], given the house's own list
+    /// (`scripted::own_by_house`) instead of scanning for it.
+    pub(crate) fn think_with_own<P: Probe>(
+        &mut self,
+        w: &World,
+        p: &mut P,
+        own: Arc<[ObjectId]>,
+    ) -> Vec<Order> {
+        self.think_from(w, p, Some(own))
+    }
+
+    /// The think, from the house's own list when given one.
+    fn think_from<P: Probe>(
+        &mut self,
+        w: &World,
+        p: &mut P,
+        own: Option<Arc<[ObjectId]>>,
+    ) -> Vec<Order> {
         let on = p.on();
         let mark = |p: &mut P, part: &'static str| {
             if on {
@@ -301,7 +324,10 @@ impl Brain {
             }
         };
         // The world does not change during the think: placement answers are kept for it.
-        self.script.begin_think();
+        match own {
+            Some(own) => self.script.begin_think_with_own(own),
+            None => self.script.begin_think(),
+        }
         mark(p, "ai:script");
         let thinks = self.thinks_at(w.tick);
         let mut out = if thinks {

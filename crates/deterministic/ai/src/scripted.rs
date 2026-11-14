@@ -430,6 +430,28 @@ pub fn is_yard(w: &World, o: &glasnost_sim::world::Object) -> bool {
             .is_some_and(|b| b.factory == Some(FactoryKind::Building))
 }
 
+/// Whether an object counts among its owner's living objects on the map
+/// ([`Script::own`]).
+fn counts_as_own(o: &Object) -> bool {
+    o.on_map && o.health > 0
+}
+
+/// Every house's [`Script::own`] list, indexed by house, from one pass over
+/// the objects, each in object order (design: own AI, AP1's seam: one pass
+/// a tick for every brain instead of one each). Issuing an order only adds
+/// it to the house's pending list (`orders::issue`), so the objects do not
+/// change while the brains of a tick think in turn, and each list is the
+/// one the house's own scan would make.
+pub(crate) fn own_by_house(w: &World) -> Vec<Vec<ObjectId>> {
+    let mut by: Vec<Vec<ObjectId>> = vec![Vec::new(); w.houses.len()];
+    for o in w.objects.values().filter(|o| counts_as_own(o)) {
+        if let Some(list) = o.owner.and_then(|h| by.get_mut(usize::from(h.0))) {
+            list.push(o.id);
+        }
+    }
+    by
+}
+
 /// Cells within which a unit moving to a cell counts as arrived, so that a
 /// crowd jammed around its goal is free for the next wave.
 const ARRIVED: i64 = 2; // nocite: tuning of our own opponent
@@ -944,6 +966,17 @@ impl Script {
         *self.placed.0.borrow_mut() = Some(Kept::default());
     }
 
+    /// [`Script::begin_think`] with the house's own list already made: the
+    /// list [`Script::own`] would scan for, from [`own_by_house`]'s one pass
+    /// (design: own AI, AP1's seam: on a tick between thinks that scan was
+    /// most of what `rebuild_yard`, which asks it first, cost).
+    pub(crate) fn begin_think_with_own(&self, own: Arc<[ObjectId]>) {
+        *self.placed.0.borrow_mut() = Some(Kept {
+            own: Some(own),
+            ..Kept::default()
+        });
+    }
+
     /// The think is over: the kept answers go.
     pub(crate) fn end_think(&self) {
         *self.placed.0.borrow_mut() = None;
@@ -1092,7 +1125,7 @@ impl Script {
     fn scan_own(&self, w: &World) -> Vec<ObjectId> {
         w.objects
             .values()
-            .filter(|o| o.owner == Some(self.house) && o.on_map && o.health > 0)
+            .filter(|o| o.owner == Some(self.house) && counts_as_own(o))
             .map(|o| o.id)
             .collect()
     }
@@ -4212,6 +4245,45 @@ mod place_cell_tests {
             }
         }
         assert!(known > 0, "{known} known");
+    }
+
+    /// Our tooling for speed (design: own AI, AP1's seam): the one pass's
+    /// list for each house is the house's own scan, and a think given it
+    /// answers [`Script::own`] as a think that scans.
+    #[test]
+    fn the_lists_of_one_pass_are_each_houses_own_scan() {
+        let mut listed = 0;
+        let mut left_out = 0;
+        for mut g in kept_games() {
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                let by = own_by_house(w);
+                assert_eq!(by.len(), w.houses.len());
+                for (h, list) in by.iter().enumerate() {
+                    let house = HouseId(h as u8);
+                    let s = Script::new(house, Plan::default());
+                    let want = s.scan_own(w);
+                    assert_eq!(*list, want, "house {h}");
+                    s.begin_think_with_own(list.clone().into());
+                    assert_eq!(s.own(w), want, "given: house {h}");
+                    s.end_think();
+                    s.begin_think();
+                    assert_eq!(s.own(w), want, "scanned: house {h}");
+                    s.end_think();
+                    listed += want.len();
+                    left_out += w
+                        .objects
+                        .values()
+                        .filter(|o| o.owner == Some(house) && !counts_as_own(o))
+                        .count();
+                }
+            }
+        }
+        assert!(listed > 0, "{listed} listed");
+        assert!(left_out > 0, "{left_out} left out");
     }
 }
 
