@@ -23,7 +23,7 @@ use crate::emit::type_keys;
 use crate::kinds::Kind;
 use crate::layers::{
     COLOUR_ADD_LEN, COMBAT_DAMAGE, Event, KeyState, LayerQuirks, Outcome, TypeRec, Warning, What,
-    is_zero,
+    is_zero_with,
 };
 use crate::names::{encode, show};
 
@@ -1493,7 +1493,13 @@ impl Builder<'_> {
                 }
                 if PERCENTAGE_KEYS.contains(&key)
                     && !v.contains(&b'%')
-                    && let IniDecimal::Value { value, .. } = value::decimal(v, DecimalField::Double)
+                    // spec: S-0003 Edge cases (quirks.decimal_conversion_rounding decides the decimal)
+                    && let IniDecimal::Value { value, .. } = value::decimal_converted(
+                        v,
+                        DecimalField::Double,
+                        true,
+                        self.i.ini_quirks.decimal_conversion_rounding,
+                    )
                     && magnitude_above_one(&value.to_exact_decimal())
                 {
                     // spec: S-0003 claim 18 (a percentage field without `%` above 1 in magnitude)
@@ -1618,7 +1624,8 @@ impl Builder<'_> {
                 // spec: S-0211 claim 2 (a) (the text; the cap at 1.0 is the simulation's)
                 if let Some(text) = self.decimal(state, None, &what) {
                     rec.put(field, jsonc::string(text.clone()));
-                    if text.starts_with('-') && !is_zero(text.as_bytes()) {
+                    let rule = self.i.ini_quirks.decimal_conversion_rounding;
+                    if text.starts_with('-') && !is_zero_with(text.as_bytes(), rule) {
                         // spec: S-0211 Edge cases (the importer warns for any negative land multiplier)
                         let (layer, line) = state
                             .and_then(|s| {
@@ -1681,6 +1688,8 @@ impl Builder<'_> {
         layers.sort_unstable();
         layers.dedup();
         let what = format!("[{section}] AARate");
+        // spec: S-0003 Edge cases (quirks.decimal_conversion_rounding decides whether the text reads as zero)
+        let rule = self.i.ini_quirks.decimal_conversion_rounding;
         let mut held: Option<String> = None;
         for l in layers {
             let given = aa_state.and_then(|s| {
@@ -1690,7 +1699,7 @@ impl Builder<'_> {
                 })
             });
             match given {
-                Some((v, line)) if !is_zero(&v) => match decimal_text(&v) {
+                Some((v, line)) if !is_zero_with(&v, rule) => match decimal_text(&v) {
                     Some(t) => held = Some(t),
                     None => {
                         // spec: S-0003 claim 8 (no number: our engine keeps the value in force, with a warning)

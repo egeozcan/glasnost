@@ -53,6 +53,14 @@ pub struct Quirks {
     /// the whitespace around them; off, name items are trimmed (S-0001's
     /// trim without its defect) and an item of only whitespace is skipped.
     pub list_items_untrimmed: bool,
+    /// `quirks.decimal_conversion_rounding` (S-0003 claim 6 and Edge
+    /// cases): decimal text converts by claim 6's rule, which drops an
+    /// exact half (and, for a whole number below 2^64, an exact three
+    /// quarters) of the last kept place; off, every decimal the importer
+    /// converts is correctly rounded (claims 6 and 13), ties to even,
+    /// subnormals included. The ruleset's switch of the same name governs
+    /// the simulation's reading of decimal text.
+    pub decimal_conversion_rounding: bool,
 }
 
 impl Default for Quirks {
@@ -65,6 +73,7 @@ impl Default for Quirks {
             ini_hash_identity: true,
             percent_list_integer_prefix: true,
             list_items_untrimmed: true,
+            decimal_conversion_rounding: true,
         }
     }
 }

@@ -515,6 +515,58 @@ fn verses_percent_rounding_follows_chop() {
     assert_eq!(q.get("chop_rounding"), Some(&false));
 }
 
+/// spec: S-0003 claim 13 and Edge cases (quirks.decimal_conversion_rounding: on, a Verses item's decimal at 53 bits drops an exact half; off, ties to even; the switch is recorded)
+#[test]
+fn verses_items_follow_decimal_conversion_rounding() {
+    // 2^53 + 3: an exact half of the last kept place, after an odd one.
+    let base = "[Warheads]\n1=Pow\n[Pow]\nVerses=9007199254740995,0.5\n";
+    let (s, _) = direct(&[base], "", &[], &[], IniQuirks::default());
+    let on = s.warheads["Pow"].verses.clone().unwrap();
+    assert_eq!(on[0].0, "9007199254740994");
+    let off = IniQuirks {
+        decimal_conversion_rounding: false,
+        ..IniQuirks::default()
+    };
+    let (s, _) = direct(&[base], "", &[], &[], off);
+    let rounded = s.warheads["Pow"].verses.clone().unwrap();
+    assert_eq!(rounded[0].0, "9007199254740996");
+    assert_eq!(rounded[1], on[1]);
+    let (_, _, q) = import(base, "", "", "", &ImportOptions::default());
+    assert_eq!(q.get("decimal_conversion_rounding"), Some(&true));
+    let options = ImportOptions {
+        ini: off,
+        ..ImportOptions::default()
+    };
+    let (_, _, q) = import(base, "", "", "", &options);
+    assert_eq!(q.get("decimal_conversion_rounding"), Some(&false));
+}
+
+/// spec: S-0006 claim 3 (a "not given" value is compared on the converted number), S-0003 Edge cases (quirks.decimal_conversion_rounding decides that number)
+#[test]
+fn not_given_values_follow_decimal_conversion_rounding() {
+    use crate::layers::{global_value_not_given_with, is_zero_with, type_value_not_given_with};
+    // 1 − 2^-25 lies halfway between 1 − 2^-24 (odd) and 1: −1 only when correctly rounded.
+    let range = |v: &[u8], rule| type_value_not_given_with(Kind::Weapons, b"Range", v, rule);
+    let crush = |v: &[u8], rule| global_value_not_given_with(COMBAT_DAMAGE, b"Crush", v, rule);
+    let recharge =
+        |v: &[u8], rule| type_value_not_given_with(Kind::Superweapons, b"RechargeTime", v, rule);
+    let tie = b"-0.9999999701976776123046875";
+    assert!(!range(tie, true));
+    assert!(range(tie, false));
+    assert!(!crush(tie, true));
+    assert!(crush(tie, false));
+    // 1e-45 is below the smallest subnormal single: 0 by claim 6's rule, that subnormal off.
+    assert!(is_zero_with(b"1e-45", true));
+    assert!(!is_zero_with(b"1e-45", false));
+    assert!(recharge(b"1e-45", true));
+    assert!(!recharge(b"1e-45", false));
+    // Plain spellings do not depend on the switch.
+    for rule in [true, false] {
+        assert!(range(b"-1.0", rule));
+        assert!(is_zero_with(b"-0", rule));
+    }
+}
+
 /// spec: S-0302 Import mapping, S-0303 Import mapping, S-0308 Import mapping (warhead fields), S-0303 and S-0312 Edge cases (warhead warnings)
 #[test]
 fn warhead_fields_and_warnings() {

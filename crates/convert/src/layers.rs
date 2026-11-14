@@ -406,10 +406,11 @@ const DIFFICULTY_KEYS: [&str; 12] = [
 const PRISM_MODIFIER_START: i64 = 100;
 
 /// F4 for a given key: trunc(*v* × 100) with *v* the field's decimal value,
-/// one double multiplication rounded toward zero (S-0518 F4).
-fn prism_modifier_scaled(stored: &[u8]) -> Option<i64> {
+/// one double multiplication rounded toward zero (S-0518 F4). `rule` is
+/// `quirks.decimal_conversion_rounding` (S-0003 Edge cases).
+fn prism_modifier_scaled(stored: &[u8], rule: bool) -> Option<i64> {
     use glasnost_ini::binfloat::{Binary, Format};
-    match value::decimal(stored, glasnost_ini::value::DecimalField::Double) {
+    match decimal_value(stored, rule) {
         glasnost_ini::value::Decimal::Value { value, .. } => {
             // spec: S-0518 F4 (v × 100 in double precision toward zero, truncated to a 32-bit integer)
             let p = value
@@ -523,26 +524,53 @@ fn global_not_given(section: &[u8], key: &[u8]) -> Option<NotGivenForm> {
 
 /// Whether a type key's stored value is its "not given" value (S-0006
 /// claim 3 and the topic specs named in [`type_not_given`]).
+#[cfg(test)]
 pub(crate) fn type_value_not_given(kind: Kind, key: &[u8], stored: &[u8]) -> bool {
-    type_not_given(kind, key).is_some_and(|f| is_not_given(f, stored))
+    type_value_not_given_with(kind, key, stored, true)
+}
+
+/// [`type_value_not_given`] with `quirks.decimal_conversion_rounding`
+/// given as `rule` (S-0003 Edge cases).
+pub(crate) fn type_value_not_given_with(kind: Kind, key: &[u8], stored: &[u8], rule: bool) -> bool {
+    type_not_given(kind, key).is_some_and(|f| is_not_given(f, stored, rule))
 }
 
 /// Whether a game-wide key's stored value is its "not given" value.
+#[cfg(test)]
 pub(crate) fn global_value_not_given(section: &[u8], key: &[u8], stored: &[u8]) -> bool {
-    global_not_given(section, key).is_some_and(|f| is_not_given(f, stored))
+    global_value_not_given_with(section, key, stored, true)
+}
+
+/// [`global_value_not_given`] with `quirks.decimal_conversion_rounding`
+/// given as `rule` (S-0003 Edge cases).
+pub(crate) fn global_value_not_given_with(
+    section: &[u8],
+    key: &[u8],
+    stored: &[u8],
+    rule: bool,
+) -> bool {
+    global_not_given(section, key).is_some_and(|f| is_not_given(f, stored, rule))
 }
 
 /// Whether `stored` is the "not given" value of its form (S-0006 claim 3:
 /// every spelling that reads as that number counts).
-fn is_not_given(form: NotGivenForm, stored: &[u8]) -> bool {
+fn is_not_given(form: NotGivenForm, stored: &[u8], rule: bool) -> bool {
     match form {
         NotGivenForm::IntegerMinusOne => value::integer(stored) == Some(-1),
-        NotGivenForm::DecimalMinusOne => match value::decimal(stored, DecimalField::Double) {
+        NotGivenForm::DecimalMinusOne => match decimal_value(stored, rule) {
             Decimal::Value { value, .. } => value.to_exact_decimal() == "-1",
             Decimal::NoNumber => false,
         },
-        NotGivenForm::DecimalZero => is_zero(stored),
+        NotGivenForm::DecimalZero => is_zero_with(stored, rule),
     }
+}
+
+/// A decimal field's value (S-0003 claims 6 to 8), its text converted as
+/// `quirks.decimal_conversion_rounding` (`rule`) says: on, claim 6's rule;
+/// off, correctly rounded (S-0003 Edge cases).
+fn decimal_value(stored: &[u8], rule: bool) -> Decimal {
+    // spec: S-0003 claims 6 to 8, Edge cases (quirks.decimal_conversion_rounding)
+    value::decimal_converted(stored, DecimalField::Double, true, rule)
 }
 
 /// trunc(v × 1000 + 0.1) toward zero, v the single-precision decimal
@@ -550,8 +578,14 @@ fn is_not_given(form: NotGivenForm, stored: &[u8]) -> bool {
 /// conversions"). `None` when the value has no number (S-0003 claim 8: our
 /// engine keeps the value in force).
 pub fn building_light_thousandths(stored: &[u8]) -> Option<i64> {
+    building_light_thousandths_with(stored, true)
+}
+
+/// [`building_light_thousandths`] with `quirks.decimal_conversion_rounding`
+/// given as `rule` (S-0003 Edge cases).
+pub fn building_light_thousandths_with(stored: &[u8], rule: bool) -> Option<i64> {
     // spec: S-0104 claim 12 (r18: v is the single-precision decimal of S-0003 claim 6, widened to double; a `%` value stays the double of S-0003 claim 7)
-    let Decimal::Value { value, .. } = value::decimal(stored, DecimalField::Double) else {
+    let Decimal::Value { value, .. } = decimal_value(stored, rule) else {
         return None;
     };
     let thousand = Binary::from_i64(Format::Double, PER_MILLE);
@@ -568,7 +602,13 @@ pub fn building_light_thousandths(stored: &[u8]) -> Option<i64> {
 /// (`quirks.extra_light_truncation` off) v × 1000 is rounded to the nearest
 /// integer instead, halves away from zero.
 pub fn extra_light_thousandths(stored: &[u8], truncate: bool) -> Option<i64> {
-    let Decimal::Value { value, .. } = value::decimal(stored, DecimalField::Double) else {
+    extra_light_thousandths_with(stored, truncate, true)
+}
+
+/// [`extra_light_thousandths`] with `quirks.decimal_conversion_rounding`
+/// given as `rule` (S-0003 Edge cases).
+pub fn extra_light_thousandths_with(stored: &[u8], truncate: bool, rule: bool) -> Option<i64> {
+    let Decimal::Value { value, .. } = decimal_value(stored, rule) else {
         return None;
     };
     let p = value.mul_rz(&Binary::from_i64(Format::Double, PER_MILLE), Format::Double);
@@ -695,6 +735,9 @@ pub fn apply_in(
         untrimmed: layers
             .first()
             .is_none_or(|l| l.doc.quirks().list_items_untrimmed),
+        rule: layers
+            .first()
+            .is_none_or(|l| l.doc.quirks().decimal_conversion_rounding),
     };
     for (li, layer) in layers.iter().enumerate() {
         if li == 0 && game == GameKind::Skirmish {
@@ -757,6 +800,10 @@ struct Run<'a> {
     /// `quirks.list_items_untrimmed` (S-0003 claim 12), from the layers'
     /// ini switches.
     untrimmed: bool,
+    /// `quirks.decimal_conversion_rounding` (S-0003 Edge cases), from the
+    /// layers' ini switches: on, decimal text converts by claim 6's rule;
+    /// off, correctly rounded.
+    rule: bool,
 }
 
 impl Run<'_> {
@@ -1076,7 +1123,7 @@ impl Run<'_> {
             given.push((e.key.clone(), winner.value.clone(), winner.line));
         }
         for (key, stored, line) in &given {
-            let what = if type_value_not_given(kind, key, stored) {
+            let what = if type_value_not_given_with(kind, key, stored, self.rule) {
                 // spec: S-0006 claim 3 (a "not given" value keeps the held value)
                 What::NotGiven(stored.clone())
             } else {
@@ -1508,7 +1555,7 @@ impl Run<'_> {
                 .get(key.as_bytes())
                 .and_then(|k| k.derived);
             let (derived, what, line) = match stored {
-                Some((_, v, line)) => match building_light_thousandths(v) {
+                Some((_, v, line)) => match building_light_thousandths_with(v, self.rule) {
                     Some(t) => (Some(t), None, *line),
                     None => {
                         self.warn(
@@ -1634,6 +1681,7 @@ impl Run<'_> {
                 }
             }
             let quirks = self.quirks;
+            let rule = self.rule;
             let keys = self.out.globals.entry(name.clone()).or_default();
             for (key, stored, line) in &given {
                 let base_only = (name.as_slice(), key.as_slice()) == MAXIMUMS_PLAYERS;
@@ -1647,7 +1695,7 @@ impl Run<'_> {
                     });
                     continue;
                 }
-                if global_value_not_given(&name, key, stored) {
+                if global_value_not_given_with(&name, key, stored, rule) {
                     // spec: S-0209, S-0210 and S-0215 Import mapping (a "not given" value keeps the held value)
                     state.history.push(Event {
                         layer: li,
@@ -1667,7 +1715,8 @@ impl Run<'_> {
                     && EXTRA_LIGHT_KEYS
                         .iter()
                         .any(|k| k.as_bytes() == key.as_slice())
-                    && let Some(t) = extra_light_thousandths(stored, quirks.extra_light_truncation)
+                    && let Some(t) =
+                        extra_light_thousandths_with(stored, quirks.extra_light_truncation, rule)
                 {
                     state.derived = Some(t);
                 }
@@ -1743,7 +1792,7 @@ impl Run<'_> {
                     .find(|(k, _, _)| k.as_slice() == b"PrismSupportModifier")
                     .map(|(_, v, l)| (v.clone(), *l));
                 let next = match &given_value {
-                    Some((v, _)) => prism_modifier_scaled(v).unwrap_or(held),
+                    Some((v, _)) => prism_modifier_scaled(v, rule).unwrap_or(held),
                     None if quirks.prism_modifier_reread_scale => {
                         i64::from((held as i32).wrapping_mul(100))
                     }
@@ -1909,7 +1958,14 @@ fn numbered_suffix(digits: &[u8]) -> Option<u32> {
 
 /// Whether a decimal stored value is zero (either sign).
 pub fn is_zero(stored: &[u8]) -> bool {
-    match value::decimal(stored, DecimalField::Double) {
+    is_zero_with(stored, true)
+}
+
+/// [`is_zero`] with `quirks.decimal_conversion_rounding` given as `rule`
+/// (S-0003 Edge cases: off, a value from half the smallest subnormal up is
+/// not zero).
+pub fn is_zero_with(stored: &[u8], rule: bool) -> bool {
+    match decimal_value(stored, rule) {
         Decimal::Value { value, .. } => {
             let sign = match value.format {
                 Format::Single => 1u64 << 31,

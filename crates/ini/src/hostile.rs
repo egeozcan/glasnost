@@ -16,6 +16,7 @@ pub fn run(data: &[u8]) {
         ini_hash_identity: false,
         percent_list_integer_prefix: false,
         list_items_untrimmed: false,
+        decimal_conversion_rounding: false,
     };
     // Hash order on with identity off: the pair comparison (S-0002 Edge cases).
     let pairs = Quirks {

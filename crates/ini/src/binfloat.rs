@@ -543,6 +543,77 @@ pub fn decimal_to_binary(text: &DecimalText, format: Format) -> Conversion {
     Conversion { value, uncovered }
 }
 
+/// [`decimal_to_binary`] as `quirks.decimal_conversion_rounding` says: on
+/// (`rule`), claim 6's rule; off, the value correctly rounded to `format`
+/// (ties to even, subnormals included, an infinity from the largest finite
+/// value plus half a unit). The warning test is the same in both settings.
+// spec: S-0003 Edge cases (quirks.decimal_conversion_rounding: off, every decimal correctly rounded, claims 6 and 13; the importer's warnings do not depend on the switch)
+pub fn decimal_to_binary_rounded(text: &DecimalText, format: Format, rule: bool) -> Conversion {
+    let conv = decimal_to_binary(text, format);
+    if rule {
+        return conv;
+    }
+    Conversion {
+        value: nearest_binary(text, format),
+        uncovered: conv.uncovered,
+    }
+}
+
+/// Decimal text correctly rounded to `format`: to nearest, ties to even,
+/// subnormals included (S-0003 Edge cases, the switch off).
+// spec: S-0003 Edge cases (quirks.decimal_conversion_rounding off: correctly rounded, ties to even, subnormals included)
+fn nearest_binary(text: &DecimalText, format: Format) -> Binary {
+    let Some(first) = text.digits.iter().position(|&d| d != b'0') else {
+        return Binary::zero(format, text.neg);
+    };
+    let digits = &text.digits[first..];
+    let magnitude = digits.len() as i64 + text.exp10;
+    if magnitude > DECIMAL_EXPONENT_LIMIT {
+        return Binary::infinity(format, text.neg);
+    }
+    if magnitude < -DECIMAL_EXPONENT_LIMIT {
+        return Binary::zero(format, text.neg);
+    }
+    let n = BigUint::parse_bytes(digits, 10).unwrap_or_default();
+    let ten = BigUint::from(10u32);
+    let (num, den) = if text.exp10 >= 0 {
+        (n * ten.pow(text.exp10 as u32), BigUint::from(1u32))
+    } else {
+        (n, ten.pow((-text.exp10) as u32))
+    };
+    let p = i64::from(format.precision());
+    let mut e = num.bits() as i64 - den.bits() as i64 - (p - 1);
+    let (mut t, mut rem, mut d) = scaled_quotient(&num, &den, e);
+    let lo = BigUint::from(1u32) << ((p - 1) as u32);
+    let hi = BigUint::from(1u32) << (p as u32);
+    while t >= hi {
+        e += 1;
+        (t, rem, d) = scaled_quotient(&num, &den, e);
+    }
+    while t < lo {
+        e -= 1;
+        (t, rem, d) = scaled_quotient(&num, &den, e);
+    }
+    if e + (p - 1) < format.emin() {
+        // Below the smallest normal: to the nearest multiple of the smallest subnormal.
+        e = format.emin() - (p - 1);
+        (t, rem, d) = scaled_quotient(&num, &den, e);
+    }
+    let two_rem = &rem << 1u32;
+    let odd = t.bit(0);
+    let mut t = u128::try_from(t).unwrap_or(0);
+    if two_rem > d || (two_rem == d && odd) {
+        t += 1;
+    }
+    if t == 0 {
+        return Binary::zero(format, text.neg);
+    }
+    if e + bitlen(t) - 1 > format.emax() {
+        return Binary::infinity(format, text.neg);
+    }
+    Binary::round_toward_zero(format, text.neg, t, e)
+}
+
 fn bitlen(t: u128) -> i64 {
     i64::from(128 - t.leading_zeros())
 }
@@ -742,6 +813,51 @@ mod tests {
             one.add_rz(&tiny, Format::Double).bits,
             0x3FEF_FFFF_FFFF_FFFF
         );
+    }
+
+    // spec: S-0003 Edge cases (quirks.decimal_conversion_rounding off: correctly rounded, ties to even, subnormals included; warnings unchanged)
+    #[test]
+    fn decimal_conversion_rounding_off_rounds_correctly() {
+        let both = |s: &str, f: Format| {
+            let on = decimal_to_binary_rounded(&dec(s), f, true);
+            let off = decimal_to_binary_rounded(&dec(s), f, false);
+            assert_eq!(on, decimal_to_binary(&dec(s), f), "{s}");
+            assert_eq!(on.uncovered, off.uncovered, "{s}");
+            (on.value.to_exact_decimal(), off.value.to_exact_decimal())
+        };
+        let s = Format::Single;
+        // Exact halves: claim 6 drops them; off, ties go to the even neighbour.
+        assert_eq!(both("16777219", s), ("16777218".into(), "16777220".into()));
+        assert_eq!(both("33554435", s), ("33554432".into(), "33554436".into()));
+        assert_eq!(both("8388609.5", s), ("8388609".into(), "8388610".into()));
+        assert_eq!(both("8388608.5", s), ("8388608".into(), "8388608".into()));
+        assert_eq!(both("16777217", s), ("16777216".into(), "16777216".into()));
+        // Not a tie: both agree.
+        assert_eq!(both("0.1", s).0, both("0.1", s).1);
+        assert_eq!(both("8388608.75", s), ("8388609".into(), "8388609".into()));
+        // Subnormals: claim 6's engine truncates; off rounds to nearest.
+        let (on, off) = both("1e-45", s);
+        assert_eq!(on, "0");
+        let smallest = Binary::round_toward_zero(s, false, 1, -149);
+        assert_eq!(off, smallest.to_exact_decimal());
+        assert_eq!(both("1e-40", s).0, both("1e-40", s).1);
+        assert_eq!(both("-1e-46", s).1, "-0");
+        // Overflow: past the largest finite value plus half a unit, infinity.
+        let largest = Binary {
+            bits: 0x7F7F_FFFF,
+            format: s,
+        };
+        assert_eq!(both("3.4028235e38", s).1, largest.to_exact_decimal());
+        assert_eq!(both("3.4028236e38", s).1, "inf");
+        assert_eq!(both("-1e39", s).1, "-inf");
+        assert_eq!(both("0", s).1, "0");
+        // Double (claim 13): 2^53 + 3 is a tie.
+        let d = Format::Double;
+        assert_eq!(
+            both("9007199254740995", d),
+            ("9007199254740994".into(), "9007199254740996".into())
+        );
+        assert_eq!(both("9007199254740993", d).1, "9007199254740992");
     }
 
     #[test]
