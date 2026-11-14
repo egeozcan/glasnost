@@ -788,6 +788,15 @@ impl anims::Env for AnimEnv<'_> {
     }
 }
 
+/// The view animation of serial number `serial`. Serial numbers are
+/// unique among the playing animations (they wrap only after 2³²
+/// animations) and a new one is pushed at the end, so the search runs
+/// from the back: the animation just created is the first one looked at
+/// (design: render (#142)).
+fn anim_mut(anims: &mut [LiveAnim], serial: u32) -> Option<&mut LiveAnim> {
+    anims.iter_mut().rev().find(|a| a.serial == serial)
+}
+
 /// The surface anchor of an aircraft's voxel shadow (S-0105 claim 40): the
 /// terrain height at its exact position, and whether a qualifying high
 /// bridge raises the anchor.
@@ -1772,7 +1781,7 @@ impl Live {
                     // spec: S-0608 claim 5 (the drain animation is attached to the drainer and follows it)
                     self.counts.anims += 1;
                     self.create_anim(&name, pos, now, None, false);
-                    if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                    if let Some(a) = anim_mut(&mut self.anims, serial) {
                         a.drainer = Some(d);
                     }
                     continue;
@@ -1787,7 +1796,7 @@ impl Live {
                     self.counts.anims += 1;
                     self.create_anim(&name, pos, now, None, false);
                     let house = self.deploying_owner(&String::from_utf8_lossy(&name), pos);
-                    if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                    if let Some(a) = anim_mut(&mut self.anims, serial) {
                         if let (Role::Ordinary, Some(firer)) = (s.role, s.owner) {
                             // spec: S-0301 claim 22 and S-0102 claim 3 (a shot animation attached to its firer: in the ground layer)
                             a.layer = super::slots::Layer::Ground;
@@ -1802,7 +1811,7 @@ impl Live {
                     }
                 }
             }
-            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
                 a.sim = Some(id);
             }
         }
@@ -1827,7 +1836,7 @@ impl Live {
             self.counts.anims += 1;
             let serial = self.anim_serial;
             self.create_anim(&name, pos, now, None, false);
-            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
                 a.walker = Some(id);
             }
         }
@@ -1844,7 +1853,7 @@ impl Live {
             self.counts.anims += 1;
             let serial = self.anim_serial;
             self.create_anim(&name, pos, now, None, false);
-            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
                 a.maker = Some(id);
             }
         }
@@ -2510,6 +2519,14 @@ impl Live {
         name: &str,
         pos: glasnost_sim::world::Pos,
     ) -> Option<(Vec<u8>, (SimKind, u32))> {
+        // design: render (#142) (no vehicle type has `name` as its deploying animation: no vehicle can be found below, so the game's objects are not walked; read from the rules now, as below)
+        if !self.rules.vehicles.iter().any(|u| {
+            u.deploying_anim
+                .as_deref()
+                .is_some_and(|d| d.eq_ignore_ascii_case(name))
+        }) {
+            return None;
+        }
         let w = &self.world;
         let o = w
             .objects
@@ -2554,7 +2571,7 @@ impl Live {
         self.counts.anims += 1;
         let serial = self.anim_serial;
         self.create_anim(name, pos, now, drawn, false);
-        if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+        if let Some(a) = anim_mut(&mut self.anims, serial) {
             a.owner = Some(trooper);
             // spec: S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
             a.layer = super::slots::Layer::Ground;
@@ -2715,7 +2732,7 @@ impl Live {
         });
         for (serial, house, cell) in colours {
             let light = self.painter.ground_light(cell);
-            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
                 // spec: S-0611 claim 8 (drawn in its owner's colour, including after claim 9's fallback; without an owner its ordinary palette)
                 a.carrier = house.map(|h| (h, light));
             }
@@ -2740,7 +2757,7 @@ impl Live {
             self.counts.anims += 1;
             let serial = self.anim_serial;
             self.create_anim(&name, pos, now, None, false);
-            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
                 a.dominating = Some(id);
             }
         }
@@ -2839,9 +2856,10 @@ impl Live {
             {
                 return true;
             }
-            let before = a.player.name.clone();
+            // design: render (#142) (the playback changes its type's name only in a switch to a follow-up type, which it reports; the entry of an unchanged name is the one it has)
+            env.switched = false;
             let alive = a.player.update(now, &mut env, &q);
-            if alive && a.player.name != before {
+            if alive && env.switched {
                 // spec: S-0109 claim 15 (the same animation continues as the follow-up type)
                 a.entry = env.lookup(&a.player.name).0;
             }
@@ -2925,7 +2943,7 @@ impl Live {
             {
                 let serial = self.anim_serial;
                 self.attach_parachute(*trooper, *pos, now, *delay);
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.sim = *anim;
                 }
             }
@@ -2942,7 +2960,7 @@ impl Live {
                 let serial = self.anim_serial;
                 // spec: S-0301 claim 22 and S-0109 claim 29 (created in the firer's turn: first update in the creation tick; no loop delay, repeat factor 1, no reverse request)
                 let sprite = self.create_anim(&name_bytes(name), *pos, now, *delay, false);
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     if attached.is_some() {
                         // spec: S-0301 claim 22 and S-0102 claim 3 (attached to a firer that is not a building: in the ground layer, even for an aircraft in flight)
                         a.layer = super::slots::Layer::Ground;
@@ -2978,7 +2996,7 @@ impl Live {
                 // in the creation tick; the lost update of claim 29 needs playback in the simulation)
                 let sprite = self.create_anim(&name_bytes(name), *pos, now, *delay, *reverse);
                 if let Some((house, ty)) = self.deploying_owner(name, *pos)
-                    && let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial)
+                    && let Some(a) = anim_mut(&mut self.anims, serial)
                 {
                     // spec: S-0103 claim 8 row 3 (a unit's deploy or undeploy animation is drawn with
                     // its object: the owner's house-colour palette, at brightness 1000); claim 16 (its
@@ -2987,12 +3005,12 @@ impl Live {
                     a.named = Some(ty);
                 }
                 if z_adjust.is_some()
-                    && let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial)
+                    && let Some(a) = anim_mut(&mut self.anims, serial)
                 {
                     // spec: S-0102 claim 13 and S-0506 claim 19 (its creator replaces the animation's depth adjustment: −15 for a rocket detonation's explosion)
                     a.z_adjust = *z_adjust;
                 }
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.sim = *id;
                 }
                 if !sprite && self.debug_markers {
@@ -3015,7 +3033,7 @@ impl Live {
                 self.counts.anims += 1;
                 let serial = self.anim_serial;
                 self.create_anim(&name_bytes(name), *pos, now, None, false);
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.walker = Some(*id);
                 }
             }
@@ -3032,7 +3050,7 @@ impl Live {
                 self.counts.anims += 1;
                 let serial = self.anim_serial;
                 self.create_anim(&name_bytes(name), *pos, now, None, false);
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.maker = Some(*id);
                 }
             }
@@ -3054,7 +3072,7 @@ impl Live {
                 let serial = self.anim_serial;
                 let pos = o.pos;
                 self.create_anim(&name_bytes(name), pos, now, *delay, false);
-                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.drainer = Some(*drainer);
                 }
             }
