@@ -374,14 +374,16 @@ fn repair_from(w: &mut World, c: CellXY, line: Line, filter: Option<Family>) {
             }
             repair_span(w, start, line, family);
         }
-        Piece::Pier(..) => {
-            let Some(r) = pieces::pier_reference(w, start, line) else {
-                return;
-            };
-            // spec: S-0511 claim 18 (a selected pier is restored, with the bridge selected from the cell two steps toward its start side, before its own far-side span receives sections)
-            restore_pier(w, r, line);
-            high::name_cell(w, r, true);
-            // spec: S-0511 claim 18 (the bridge selected from the cell two steps toward the start side)
+        Piece::Pier(_, k) => {
+            // spec: S-0511 claims 18 and 19 (r13, Q-3046: a start-piece pier is restored only from collapsed, state 4; one in states 1 to 3 keeps its state)
+            if k == 4 {
+                let raised = at(start, f, -1);
+                // spec: S-0511 claim 19 (Restoring a pier: from a start piece, the cell one step toward the start side and its two neighbours across rise)
+                restore_pier(w, start, raised, line);
+                // spec: S-0511 claim 19 (Connectivity: a restored start-piece pier names the cell one step toward the start side)
+                high::name_cell(w, raised, true);
+            }
+            // spec: S-0511 claim 18 (the bridge selected from the cell two steps toward the start side, before its own far-side span receives sections)
             repair_from(w, at(start, f, -2), line, filter);
             repair_span(w, start, line, family);
         }
@@ -389,19 +391,23 @@ fn repair_from(w: &mut World, c: CellXY, line: Line, filter: Option<Family>) {
     }
 }
 
-/// Restores the pier with reference cell `r` (claim 19).
-fn restore_pier(w: &mut World, r: CellXY, line: Line) {
+/// Restores the pier at selected cell `sel` (claim 19): its affected tile
+/// cells, the component around `sel`, go back to state 0, and, if it was
+/// collapsed, the pier column around `raised` rises. Within a span both
+/// are the selected cell; from a start piece `raised` is the cell one step
+/// toward the start side.
+fn restore_pier(w: &mut World, sel: CellXY, raised: CellXY, line: Line) {
     // spec: S-0511 Terms (span repair uses its selected axis)
-    let Some((family, k)) = pieces::pier_along(w, r, line) else {
+    let Some((family, k)) = pieces::pier_along(w, sel, line) else {
         return;
     };
     // spec: S-0511 claim 19 (the pier's tile goes back to state 0 on all its cells, whatever state it was in)
-    let cells = high::set_pier(w, r, family, line, 0);
+    let cells = high::set_pier(w, sel, family, line, 0);
     // spec: S-0511 claim 19 (a collapsed pier, state 4, also regains its height)
     if k == 4 {
         if w.rules().quirks.pier_repair_partial_height {
-            // spec: S-0511 claim 19 and Constants (the reference cell and its two neighbours across each rise by 4 height levels)
-            for c in pieces::strip(line, r) {
+            // spec: S-0511 claim 19 and Constants (the selected cell within a span, or the cell one step toward the start side from a start piece, and its two neighbours across each rise by 4 height levels)
+            for c in pieces::strip(line, raised) {
                 if let Some(cell) = w.cells.grid.get_mut(c) {
                     cell.level = cell.level.saturating_add(4);
                 }
@@ -417,7 +423,7 @@ fn restore_pier(w: &mut World, r: CellXY, line: Line) {
             }
         }
         let mut touched = cells.clone();
-        touched.extend(pieces::strip(line, r));
+        touched.extend(pieces::strip(line, raised));
         crate::load::recalc_cells(w, &touched);
         for c in touched {
             crate::regions::cell_changed(w, c);
@@ -445,7 +451,7 @@ fn repair_span(w: &mut World, start: CellXY, line: Line, family: Family) {
         if pieces::pier_along(w, x, line).is_some()
             && pieces::sub(w, x) == Some(pieces::reference_sub(line))
         {
-            restore_pier(w, x, line);
+            restore_pier(w, x, x, line);
             named.push(x);
         }
     }

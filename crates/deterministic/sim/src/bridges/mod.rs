@@ -189,7 +189,7 @@ fn attempt_in(w: &mut World, c: CellXY, ctx: &mut Ctx) -> bool {
         && pieces::sub(w, c).is_some_and(|s| pieces::pier_body_sub(line, s))
     {
         let Some(r) = pieces::pier_reference_of(w, c, line) else {
-            // nocite: our own input validation (#166; Q-3046: a reference cell that does not hold the hit cell's pier tile: nothing happens and the attempt fails, with a warning, as claim 2 does for a high-bridge cell with no responsible section)
+            // spec: S-0511 claim 6 (r13, Q-3046, A reference cell that does not hold the pier: the attempt changes nothing, fails and sends no notice, and our engine warns)
             w.note("S-0511 claim 2: a pier cell whose reference cell does not hold its tile; the attempt does nothing (Q-3046)");
             return false;
         };

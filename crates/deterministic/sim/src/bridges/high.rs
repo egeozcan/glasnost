@@ -100,12 +100,8 @@ pub fn notice(w: &mut World, c: CellXY, kind: Notice, side: Side, ctx: &mut Ctx)
     }
     match pieces::piece_at(w, c) {
         Some((family, Piece::Pier(line, k))) => {
-            if let Some(r) = pieces::pier_reference_of(w, c, line) {
-                pier_notice(w, r, family, line, k, kind, side, ctx);
-            } else {
-                // nocite: our own input validation (#166; Q-3046: a notice at a pier cell whose reference cell does not hold its tile changes nothing, with a warning)
-                w.note("S-0511 claim 4: a notice at a pier cell whose reference cell does not hold its tile changes nothing (Q-3046)");
-            }
+            // spec: S-0511 claim 6 (r13, Q-3046, A received notice uses no reference cell: it reads the state of the cell it arrives at and replaces that cell's component)
+            pier_notice(w, c, family, line, k, kind, side, ctx);
         }
         Some((_, Piece::StartRamp(_) | Piece::FarRamp(_))) => {
             // spec: S-0511 claim 4 (either kind gives the ramp's whole tile its alternate look; drawing only)
@@ -204,8 +200,9 @@ pub(super) fn set_pier(
     cells
 }
 
-/// A collapse lowers the pier's changed tile cells `cells` to the reference
-/// cell's pre-collapse level − 4 (claim 6), remembering their levels.
+/// A collapse lowers the pier's changed tile cells `cells` to cell `r`'s
+/// pre-collapse level − 4 (claim 6), remembering their levels: the
+/// reference cell for a direct attempt, the centre cell for a notice.
 fn lower_pier(w: &mut World, r: CellXY, cells: &[CellXY]) {
     let Some(ref_level) = w.cells.cell(r).map(|x| x.level) else {
         return;
@@ -273,33 +270,38 @@ pub fn attempt_pier(
     true
 }
 
-/// A notice sent by the pier with reference cell `r` to cell `c`. A cell
-/// of the pier's own tile without a section is not another piece: the
-/// notice changes nothing there.
+/// A notice sent from cell `sender` of a pier to cell `c`. A cell of the
+/// same pier (the same reference cell) without a section is not another
+/// piece: the notice changes nothing there.
 #[allow(clippy::too_many_arguments)]
 fn from_pier(
     w: &mut World,
-    r: CellXY,
+    sender: CellXY,
     line: Line,
     c: CellXY,
     kind: Notice,
     side: Side,
     ctx: &mut Ctx,
 ) {
-    if pieces::section_in(w, c).is_none()
+    // spec: S-0511 claim 6 (a notice goes to the neighbouring piece; the pier's own cells are not one) and Terms (the pier's reference cell)
+    let own = pieces::pier_reference(w, sender, line);
+    if own.is_some()
+        && pieces::section_in(w, c).is_none()
         && matches!(pieces::piece_at(w, c), Some((_, Piece::Pier(..))))
-        && pieces::pier_reference(w, c, line) == Some(r)
+        && pieces::pier_reference(w, c, line) == own
     {
         return;
     }
     notice(w, c, kind, side, ctx);
 }
 
-/// A notice to the pier with reference cell `r` in state `k` (claim 6).
+/// A notice arriving at cell `c` of a pier, whose state there is `k`
+/// (claim 6). It uses no reference cell (r13, Q-3046): the state read and
+/// the component replaced are `c`'s.
 #[allow(clippy::too_many_arguments)]
 fn pier_notice(
     w: &mut World,
-    r: CellXY,
+    c: CellXY,
     family: Family,
     line: Line,
     k: i32,
@@ -324,14 +326,20 @@ fn pier_notice(
     if next == k {
         return;
     }
-    // spec: S-0511 claim 6 (states 1 to 3 are set; state 4 is a collapse)
+    // spec: S-0511 claim 6 (states 1 to 3 are set; state 4 is a collapse; r13: on the arriving cell's component)
     if next < 4 {
-        let _ = set_pier(w, r, family, line, next);
+        let _ = set_pier(w, c, family, line, next);
         return;
     }
-    // spec: S-0511 claim 6 (collapse from a notice: the loss passes onward first, on the side away from the sender)
-    let pre = column_levels(w, r, line);
-    from_pier(w, r, line, onward(r, line, side), Notice::Loss, side, ctx);
+    // spec: S-0511 claim 6 (r13, A received notice uses no reference cell: the collapse's centre cell is the arriving cell when its sub-tile is even along x or below 5 along y, otherwise the cell one step from it toward the start side)
+    let centre = if pieces::sub(w, c).is_some_and(|s| pieces::pier_body_sub(line, s)) {
+        c
+    } else {
+        at(c, line.step(), -1)
+    };
+    let pre = column_levels(w, centre, line);
+    // spec: S-0511 claim 6 (collapse from a notice: the loss passes onward first, on the side away from the sender; r13: from the arriving cell)
+    from_pier(w, c, line, onward(c, line, side), Notice::Loss, side, ctx);
     // spec: S-0511 claim 6 (then its blow-ups: centre, decreasing y, increasing y along x; decreasing x, centre, increasing x along y)
     let order = match line {
         Line::X => [pre[1], pre[0], pre[2]],
@@ -340,9 +348,9 @@ fn pier_notice(
     for (c, level) in order {
         blow::blow_up(w, c, level, ctx);
     }
-    // spec: S-0511 claim 6 (its tile and height change as for a direct collapse, with no span check or connectivity of its own)
-    let cells = set_pier(w, r, family, line, 4);
-    lower_pier(w, r, &cells);
+    // spec: S-0511 claim 6 (its tile and height change as for a direct collapse, with no span check or connectivity of its own; r13: the arriving cell's component takes the centre cell's level minus 4)
+    let cells = set_pier(w, c, family, line, 4);
+    lower_pier(w, centre, &cells);
 }
 
 // ---------------------------------------------------------------------
