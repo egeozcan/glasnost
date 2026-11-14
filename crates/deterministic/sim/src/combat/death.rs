@@ -1211,13 +1211,8 @@ fn crew_position(w: &mut World, id: ObjectId, cid: ObjectId) -> Option<(Pos, Lay
             (Pos::new(x, y, w.surface_at(x, y)), Layer::Ground)
         })
     } else {
-        // spec: S-0312 claim 13 (another height, a bridge deck for example: no choice and no draw, the vehicle's exact position)
-        let layer = if w.high_bridge(c) && p.z > surface {
-            Layer::Deck
-        } else {
-            Layer::Ground
-        };
-        Some((p, layer))
+        // spec: S-0312 claim 13 (another height, a bridge deck for example: no choice and no draw, the vehicle's exact position) and S-0209 Terms (cell layer: the crew at the vehicle's position is on the vehicle's layer)
+        Some((p, o.layer))
     };
     // spec: S-0312 claim 13 and S-0209 Terms (one entry test, an ordinary return placement: S-0209 claim 4's infantry table, no approach direction and no source elevation; only clear accepts the crew, moving blocker included in the refusals)
     let chosen = chosen.filter(|_| {
