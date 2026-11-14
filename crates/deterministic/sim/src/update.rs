@@ -69,12 +69,13 @@ impl UpdateOrder {
             return;
         }
         if let Some(cur) = self.cur {
-            // spec: S-0203 claim 10 (a removal counts when the object is the current one or stands before it)
-            if p <= cur {
+            // spec: S-0203 claim 10 (a removal counts when the object is the current one or stands before it; once the current one has left, index `cur` holds the object that stood after it, whose removal costs nobody a turn)
+            let current = p == cur && !self.cur_gone;
+            if p < cur || current {
                 if removal_skip {
                     self.skips += 1;
                 }
-                if p == cur {
+                if current {
                     self.cur_gone = true;
                 } else {
                     self.cur = Some(cur - 1);
