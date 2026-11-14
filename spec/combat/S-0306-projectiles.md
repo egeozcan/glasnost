@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 89
+revision: 90
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-14
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526, Q-2998, Q-3054]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526, Q-2998, Q-3054, Q-3082]
 supersedes: []
 ---
 
@@ -1758,11 +1758,24 @@ game state. They answer Q-1570.
 Every floating-point step is rounded toward zero in the original (S-0205 claim 5,
 `quirks.chop_rounding`); trunc is truncation toward zero. *r* is the table square root (S-0204 F1,
 `quirks.table_root_distance`); for a real argument *x* it is applied to |*x*| narrowed to single
-precision. The table angle *A*(*Y*, *X*) and the facing scale are those of S-0204 F3
-(`quirks.table_direction`), with both arguments narrowed to single precision. This spec defines no
-switch of its own for these. Angles from a facing *f*: θ(*f*) = (*f* − 16383) × (−π / 32767)
+precision. The table angle *A*(*Y*, *X*) and the facing scale *c*₂ are those of S-0204 F3, with
+both arguments narrowed to single precision, and a direction (claim 5, F11, F14) is S-0204 F3's
+facing under its switch `quirks.table_direction`. This spec defines no switch of its own for these.
+Angles from a facing *f*: θ(*f*) = (*f* − 16383) × (−π / 32767)
 radians, the constant being the double nearest −π/32767 (Constants), with *f* read as a signed
 16-bit value as for the pitch facing (Terms): every facing and pitch facing in this spec is.
+
+With `quirks.table_direction` off (S-0204 Edge cases), θ(*f*) of a facing in the map plane, that is
+θ(*y*) and θ(*b*) in F1, θ(*f*_ξ) in F5, θ(*b*) in F6 and θ(*y*′) in F11, is θ(*f*) = (*f* − 16384) ×
+(−2π / 65536) instead, the constant being the double nearest −2π/65536, with *f* the same signed
+value (S-0204's *f̂*) and *f* − 16384 exact integer arithmetic; everything else in θ(*f*) is
+unchanged. θ of a pitch facing (θ(*p*), θ(*p*_c) and θ(*p*′) in Terms, F1, F12 and claim 15) keeps
+the scale above, since pitch conversions stay on the table with the switch off (S-0204 Edge
+cases), and so do the angle-to-facing conversions with *c*₂ (F1's radial segments, F4, F5, F12,
+F13 and F14's drawn pitch facing, which is S-0204 F6's): the switch does not reach them. The direction of a zero displacement,
+both arguments being zero (of either sign) after the narrowing (claim 5 at a planar distance of 0,
+F11's *y*_c or *y*_g, F14's φ), is 16383 (map east) with the switch on and 16384, map east on the
+exact scale, with it off.
 
 **F1. Initial velocity** (claim 7). With launch facing *y* (S-0204 F3 output), pitch facing *p* and
 the start speed *s* of claim 2 (1 for a steering or vertical projectile whose firer type has no
@@ -1781,7 +1794,7 @@ larger values (S-0204 claim 5); *M* is a second table root of the rotated horizo
 > *y* = trunc(RZ₅₃(RZ₅₃(RZ₅₃(θ(*b*) + *φ*ₖ) − π/2) × *c*₂)), with *φ*ₖ = RZ₅₃(RZ₅₃(RZ₅₃(π / *n*) × *k*) − π/2),
 
 *b* being the body facing, *n* the radial segment count and *k* the shot's index; π and π/2 are
-the doubles nearest them, *c*₂ the facing scale of S-0204, θ(*b*) the double of Terms, and every
+the doubles nearest them, *c*₂ the facing scale of S-0204, θ(*b*) the double of the Formulas preamble, and every
 step is in double precision rounded toward zero.
 
 **F2. Arc speed.** *v*(*L*, *g*) = trunc(*r*(RZ₅₃(RZ₅₃(*L* × *g*) × 1.2))), *L* in leptons, *g* in
@@ -1852,7 +1865,7 @@ is in double precision, rounded toward zero (RZ₅₃); no step is narrowed to s
 > *Q*ₓ = trunc(RZ₅₃(*P*ₓ + RZ₅₃(cos_t(θ(*f*_ξ)) × *σ*))), *Q*ᵧ = trunc(RZ₅₃(*P*ᵧ − RZ₅₃(sin_t(θ(*f*_ξ)) × *σ*))), *Q*_z = *P*_z,
 
 where *k*_ξ = 4.656612877414201 × 10⁻¹⁰ is the double nearest 1/2147483646, 2π and π/2 are the
-doubles nearest them, *c*₂ is the facing scale of S-0204 F3, θ(*f*_ξ) is the double of Terms, sin_t
+doubles nearest them, *c*₂ is the facing scale of S-0204 F3, θ(*f*_ξ) is the double of the Formulas preamble, sin_t
 and cos_t are the single-precision table values (S-0105 F1), and *P* and *σ* are integers. In
 claim 4, *P* is the displacement from the fire point *F* to the aim point (aim point − *F*, integer
 components) and the result (*Q*ₓ, *Q*ᵧ, *Q*_z) is likewise a displacement from *F*: the impact
@@ -1868,7 +1881,7 @@ narrowed to single precision:
 > aim point = (trunc(RZ₅₃(*x* + RZ₅₃(cos_t(θ(*b*)) × ℓ))), trunc(RZ₅₃(*y* − RZ₅₃(sin_t(θ(*b*)) × ℓ))), *z*),
 
 with (*x*, *y*, *z*) the reference point of the firer's target, *b* the vehicle's body facing,
-θ(*b*) the double of Terms, 0.9 the double nearest it, and *D*₃, *w*, *u*, ℓ, *x*, *y* integers.
+θ(*b*) the double of the Formulas preamble, 0.9 the double nearest it, and *D*₃, *w*, *u*, ℓ, *x*, *y* integers.
 (A map coordinate needs up to 17 integer bits, so single precision would give other leptons; the
 original uses double precision here.) When *w* = 0, RZ₅₃(*w* × 0.9) is 0 and the quotient is
 infinite (or not a number when *D*₃ = 0 or *u* = 0), and the conversion of S-0205 claim 7 turns
@@ -1984,7 +1997,7 @@ With `quirks.building_pitch_term` off, *Z* = Δ*z* and *τ* = 20 for every targe
 **F14. Drawn direction and pitch** (claims 29 and 30). Let *V* be the projectile's velocity after
 its latest turn. The *drawn facing* φ is S-0204 F3's facing with *X* = *V*ₓ and *Y* = −*V*ᵧ, each
 narrowed to single precision before F3's quotient (F3 with *X* = *Y* = 0 gives θ = 0, so φ = 16383,
-map east). Its 32-step facing is *ψ* = f₃₂(φ) = ⌊(⌊φ / 1024⌋ + 1) / 2⌋ mod 32 (glossary). The
+map east; 16384 with `quirks.table_direction` off, Formulas preamble). Its 32-step facing is *ψ* = f₃₂(φ) = ⌊(⌊φ / 1024⌋ + 1) / 2⌋ mod 32 (glossary). The
 rotating sprite's image frame is
 
 > image frame = (28 − *ψ*) mod 32 (non-negative remainder).
@@ -2047,7 +2060,7 @@ scaling. Since the vectors have unit length, the shade lies from 0 to 16.
 | Straight pitch threshold, allowance | 200, 20 | leptons | Claim 6 c |
 | Building pitch term factor | 200 | leptons per unit of the building's art height value | Claim 6 c |
 | Minimum horizontal distance in pitch | 0.05 | leptons | Claim 6 c |
-| Pitch scale | the double nearest −π/32767 | radians per facing unit | Terms |
+| Facing-to-angle scale, zero-angle facing | the double nearest −π/32767, 16383; with `quirks.table_direction` off, for a facing in the map plane: the double nearest −2π/65536, 16384 | radians per facing unit, facing units | Terms, Formulas preamble |
 | Uphill arc pitch | 8191 | facing units | Claim 6 a |
 | Zero-distance launch pitches | 0 (straight up), 32766 (straight down), −16383 (backwards); table index 2049 for the flatter shot's test | facing units (signed 16-bit), table index | F4 |
 | Pitch facings that give an exactly level velocity | 16380 to 16386 | facing units | Terms (table trigonometry steps) |
@@ -3277,7 +3290,8 @@ fire point (S-0313, the fire point's height term in the test file) and check the
     under a gravity above 0; a high bridge over flat ground, with no wall overlay on the map. In c1 the firer stands still on the deck at
     the centre of a cell in the middle of the bridge; in c2 it stands still on the ground under
     the deck at the centre of such a cell. No other object stands in the firer's cell, on the
-    deck or under it, and no object enters or leaves play in the tick of the shot. The enemy
+    deck or under it, and no object other than the shot's projectile enters or leaves play in the
+    tick of the shot. The enemy
     target is in range, outside the firer's cell.
   - Observable: the tick of the shot, the fire point, the detonation tick and point, and the
     terrain height of the firer's cell.
@@ -4434,7 +4448,8 @@ b and 6 a, T1's first row).**
   the conditions it states: such a shot detonates in its first turn at the centre of the firer's cell
   at the deck height, for a firer on the deck or under it alike, so its area damage looks at the
   bridge-deck layer and its animation is made at the deck height (S-0303 claims 4 and 21).
-  S-0613 claim 20 can point to S-0306 claim 3 (a) and drop the open question. Medium,
+  S-0613 claim 20 can cite S-0306 claim 3 (a) for the shots that meet its conditions and keep the
+  open question for the others. Medium,
   `measurable` by scenario P17 run c here.
 
 - S-0316 claim 3 says that "the bolt of an area-fire shot runs down from the fire point to the
@@ -4446,6 +4461,17 @@ b and 6 a, T1's first row).**
   and S-0518 claim 20 give as "the target cell's centre at its height" is the same target point,
   and those two specs could say so. Medium, `unmeasured`: no scenario here or there ends a bolt or
   a beam at a high-bridge cell.
+
+- S-0204 Edge cases, `quirks.table_direction`: the Off form φ = round(arctan2(*X*, *Y*) × 65536 /
+  (2π)) mod 65536 is not defined for *X* = *Y* = 0, which a rule meets for a zero displacement (here
+  claim 5, F11 and F14). S-0204 could define it as 16384, map
+  east on the exact scale and the counterpart of F3's 16383, for both arguments zero of either
+  sign, as this spec's Formulas preamble does. The same entry names S-0208 F3 as the reverse scale
+  that the switch covers; it could name beside it this spec's θ(*f*) of a facing in the map plane
+  (Formulas preamble: F1, F5, F6 and F11), whose Off form is the same θ = (*f̂* − 16384) ×
+  (−2π / 65536), and say beside its pitch exclusion that θ of a pitch facing (θ(*p*) of Terms
+  here) stays on the short scale with the switch off. High,
+  `unmeasured`: a design choice for the Off form, which the original does not have.
 
 ## Questions for the project lead
 
