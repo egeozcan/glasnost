@@ -194,7 +194,7 @@ Base main a3f48b8, not rebased. Save format 138 and AI game format 113 (15212d6)
 
 Lanes compare base a3f48b8 with the batch at 15212d6.
 
-**Oracle arena.** M-0001 goes from 9 to 10 failing of 96. LTNK against E1 goes from 0/12 to 2/12 and fails the side outcome. Four games against E1 change: LTNK A2 and B1 change winner, and LTNK B5, YTNK A0 and CAOS B2 end on another frame. Two games were traced:
+**Oracle arena.** M-0001 goes from 9 to 10 failing of 96. LTNK against E1 goes from 0/12 to 2/12 and fails the side outcome. Five games against E1 change: LTNK A2 and B1 change winner, and LTNK B5, YTNK A0 and CAOS B2 end on another frame. Two games were traced:
 - **LTNK against E1, side A, seed 2.** The first difference is at frame 492, A#432, an LTNK in a Move override that crushes B#453, the E1 it holds as its target. Base leaves it destination B#462; the batch leaves it none, and at 493 it falls to AreaGuard.
 - **YTNK against E1, side A, seed 0.** The first difference is at frame 163, A#430. Its killing hit on B#460 reverts its override, and the revert gives back the put-aside destination B#460. Base keeps that destination; the batch makes the empty assignment.
 
