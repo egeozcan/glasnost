@@ -610,6 +610,21 @@ fn harvesting(w: &World, id: ObjectId) -> bool {
     })
 }
 
+/// Whether the unit's speed fraction (S-0107 Terms) is above 0.1, read as
+/// S-0310 claim 8 reads it: a jumpjet's fraction, else a walker's 0 or 1. A
+/// unit with neither answers true, so the movement-in-progress test alone
+/// decides for it (no spec gives its fraction).
+fn fraction_above_tenth(w: &World, id: ObjectId) -> bool {
+    if let Some(f) = crate::jump::speed_fraction(w, id) {
+        // spec: S-0107 Constants (moving test at completion: above 0.1, the double nearest to 0.1, compared exactly) and S-0502 claim 20 (a jumpjet's fraction)
+        return f.gt(crate::consts::TENTH);
+    }
+    // spec: S-0310 Terms (a walker's infantry speed fraction is 0 or 1) and S-0208 claims 16 and 17
+    w.obj(id)
+        .and_then(|o| o.walk.as_ref())
+        .is_none_or(|s| s.fraction)
+}
+
 /// The completion follow-up (S-0107 claim 8) and the movement rule (claim
 /// 10) of a tick: the part of the sequence rules that comes after the
 /// firing rules of the same tick (S-0107 State and ordering: the fear and
@@ -655,8 +670,8 @@ pub fn sequence_turn(w: &mut World, id: ObjectId, moving_now: bool, in_progress:
                 Seq::Stand
             }),
             _ => {
-                // spec: S-0107 State and ordering ("not moving": no movement in progress)
-                let moving = in_progress;
+                // spec: S-0107 State and ordering ("not moving": no movement in progress, or a speed fraction of at most 0.1) and Constants (moving test at completion 0.1)
+                let moving = in_progress && fraction_above_tenth(w, id);
                 Some(match (moving, s.prone, cur) {
                     (false, _, Some(Seq::Deployed | Seq::DeployedFire | Seq::DeployedIdle)) => {
                         Seq::Deployed
