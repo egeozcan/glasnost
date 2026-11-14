@@ -701,21 +701,20 @@ fn play(
     let income = &mut g.income;
     let harvest_ticks = &mut g.harvest_ticks;
     let feats = &mut g.features;
-    let (mut shots, mut killed, mut drained) = (0usize, 0usize, 0usize);
+    let (mut shots, mut killed) = (0usize, 0usize);
     let first = &mut g.first;
     let t = Instant::now();
     let world = run
         .replay
         .run(rules.clone(), map, tiles.clone(), |w| {
-            // The effects pile up in a replay: count the new ones.
-            for e in w.effects.iter().skip(drained) {
+            // The replay takes each tick's effects after this call (#398).
+            for e in &w.effects {
                 match e {
                     Effect::Shot { .. } => shots += 1,
                     Effect::Killed { .. } => killed += 1,
                     _ => {}
                 }
             }
-            drained = w.effects.len();
             features(w, feats);
             for h in 0..PLAYERS {
                 watch(w, h, &mut seen[h], &mut first[h]);

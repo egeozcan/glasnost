@@ -248,12 +248,16 @@ impl Replay {
     /// Continues the replay on a world (a new game or a loaded save) up to
     /// tick `until` (counted by [`crate::tick::ticks_run`]), calling `each`
     /// after every tick. No tick runs after the final one (S-0414 claim 8).
+    /// `each` sees the effects of its tick only: the replay takes them
+    /// afterwards, as a drawing driver would (they are presentation, neither
+    /// saved nor hashed; #398).
     pub fn run_on(&self, w: &mut World, until: i32, mut each: impl FnMut(&World)) {
         // spec: S-0201 claim 1 and S-0414 claim 8 (the final tick leaves the tick number at itself; no tick runs after it)
         while crate::tick::ticks_run(w) < until && !w.econ.end.finished {
             self.issue_due(w);
             crate::tick::step(w);
             each(w);
+            w.effects.clear();
         }
     }
 }
