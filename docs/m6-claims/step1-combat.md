@@ -164,7 +164,7 @@ New quirk switches: none.
 | 10 | b | Sinking after it starts is S-0504 claims 4-5. A grappling parasite's cull starts sinking without a killing hit, whatever the weight, with health unchanged and no death effects (S-0614 claim 11). | `combat/death.rs:276`. |
 | 16 | b | Aircraft crash motion is S-0501 claim 9 (the fall counter is a downward contribution, not net descent; sinking branch). Rocket missiles are excluded from the impact rules. An intercepted rocket above ground keeps rocket flight and full detonation on its next positive-speed move attempt (map-edge rejection included); at zero speed it waits; on the ground it is removed without detonation (S-0506 claims 19, 20). | No crash code. |
 | State table | b | New cull-sinking row; crash rows limited to non-rocket objects. | — |
-| `quirks.crash_death_weapon_twice` | b | Now "non-rocket"; the rocket quirk is S-0506's (`quirks.destroyed_rocket_still_detonates`). Existing switch, not new. | `crates/deterministic/rules/src/quirks.rs:733`; no crash code uses it yet. |
+| `quirks.crash_death_weapon_twice` | b | Now "non-rocket"; the rocket quirk is S-0506's (`quirks.destroyed_rocket_still_detonates`). Existing switch, not new. | `crates/deterministic/rules/src/quirks.rs:733`; read by `combat::death::kill_in` since sim batch S13 (#252; Q-3112 for its scope). |
 | 4 (debris via S-0303 F6) | a (via S-0303) | Unchanged text, but the F6 rewrite above changes death debris allocation. | `combat/death.rs:62` -> `deal_debris`. |
 | Backing, scenarios D8 and D11, Open questions | c | Pointers to S-0504 N5/N6, S-0614 P6, S-0501 AC5, S-0506 R13. Sinking question removed. | — |
 
