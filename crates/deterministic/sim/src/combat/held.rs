@@ -63,6 +63,7 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
         .filter(|o| o.target == Some(Target::Object(gone)))
         .map(|o| o.id)
         .collect();
+    let mut reverted_holders = Vec::new();
     for x in ids {
         // spec: S-0309 claim 27 (the drop resets the targeting timer: the draw first, S-0501 claim 37)
         timer_draw(w, x);
@@ -94,6 +95,7 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
             crate::spawn::clear_own_target(ob);
         }
         if reverted {
+            reverted_holders.push(x);
             // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
             crate::emitters::retarget_let_go(w, x);
             note_revert(w, x);
@@ -113,6 +115,62 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
     }
     // spec: S-0501 claim 53 (r183, Q-3041: an aircraft loses the object as its destination at the moments claim 32 gives for the loss of a target, the killing hit, going off the map and removal; a revert comes first, in the same moment, before the loss clears the object as destination)
     crate::air::destination_lost(w, gone);
+    // spec: S-0309 claim 27a (r140, Q-3061, Order within the action: a put-aside destination that is the object, which the revert of claim 27's drop gave back, is lost from the destination later in the same action, so the holder is left with no destination; an aircraft's was cleared by claim 53's loss just above)
+    for x in reverted_holders {
+        if w.obj(x)
+            .is_some_and(|o| o.dest == Some(Target::Object(gone)))
+        {
+            crate::econ::assign_destination(w, x, None);
+        }
+    }
+    // spec: S-0309 claim 27a (r140, Q-3061: then every holder whose override goes on loses the object from its put-aside target and destination; no exception)
+    aside_lost(w, gone, |_, _| false);
+    // spec: S-0309 claim 23 (d) and claim 27a (r140, Q-3061: the loss of a remembered target, at the killing hit, going off the map or removal, turns the memory in the same action into a remembered destination at the cell of the target's position then; the engaged mark is kept)
+    if let Some(cell) = w.obj(gone).map(|o| o.pos.cell()) {
+        let remembered = crate::world::AttackMoveMemory::Target(Target::Object(gone));
+        for ob in w.objects.values_mut() {
+            if ob.attack_move == Some(remembered) {
+                ob.attack_move = Some(crate::world::AttackMoveMemory::Dest(Target::Cell(cell)));
+            }
+        }
+    }
+}
+
+/// Every holder whose override is in effect (S-0215 claim 10) loses `gone`
+/// from its put-aside slots (S-0309 claim 27a): a put-aside target that is
+/// `gone` unless `keep_target` says the holder's house keeps it, and a
+/// put-aside destination that is `gone` always. No draw, no revert: the
+/// override stays in effect. Slots of another object or a cell are kept.
+pub(crate) fn aside_lost(
+    w: &mut World,
+    gone: ObjectId,
+    keep_target: impl Fn(&World, Option<HouseId>) -> bool,
+) {
+    let it = Some(Target::Object(gone));
+    // spec: S-0309 claim 27a (r140, Q-3061: every holder, in key order; a slot that names another object or a cell is kept)
+    let changes: Vec<(ObjectId, (Option<Target>, Option<Target>))> = w
+        .objects
+        .values()
+        .filter_map(|o| {
+            let (t, d) = o.beh.aside?;
+            if t != it && d != it {
+                return None;
+            }
+            // spec: S-0309 claim 27a (r140: at claim 28's moments a put-aside target is kept when the holder's house senses the object's cell; a put-aside destination that is the object is lost whatever senses it)
+            let t = if t == it && !keep_target(w, o.owner) {
+                None
+            } else {
+                t
+            };
+            let d = if d == it { None } else { d };
+            Some((o.id, (t, d)))
+        })
+        .collect();
+    for (x, slots) in changes {
+        if let Some(ob) = w.obj_mut(x) {
+            ob.beh.aside = Some(slots);
+        }
+    }
 }
 
 /// Whether object `x`, held as a target, is one that only a revert can
