@@ -661,6 +661,8 @@ fn ground(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
     }
     // spec: S-0417 claim 1 (K queues unloading; claim 2 governs when it becomes current)
     queue_unload(w, k);
+    // design: the rally spread reads the reach regions, which must be up to date (#298)
+    crate::regions::ensure(w);
     // design: C7-P5 rally spread (quirks.rally_point_shared off: the saved guard spot is a cell of the unit's own round the rally point)
     let spot = crate::orders::rally_cell(w, unit, rally(w, k));
     if let Some(o) = w.obj_mut(unit) {
@@ -773,6 +775,8 @@ fn naval_row(w: &mut World, k: ObjectId, unit: ObjectId) -> Outcome {
     let p = Pos::centre(exit, 0);
     // spec: S-0404 claim 13 and Constants (the exit cell's centre, facing 16384)
     put(w, unit, p.x, p.y, 0, VEHICLE_FACING);
+    // design: the rally spread reads the reach regions, which must be up to date (#298)
+    crate::regions::ensure(w);
     // design: C7-P5 rally spread (quirks.rally_point_shared off: the move goes to a cell of the unit's own round the rally point)
     if let Some(t) = crate::orders::rally_cell(w, unit, goal) {
         // spec: S-0404 claim 13 (with a rally point, a move order to it)
@@ -854,6 +858,8 @@ fn infantry(w: &mut World, k: ObjectId, unit: ObjectId, copies: bool) -> Outcome
         direction(i64::from(ec.x - c.x), i64::from(ec.y - c.y), table),
         256,
     ) * 256) as Facing;
+    // design: the rally spread reads the reach regions, which must be up to date (#298)
+    crate::regions::ensure(w);
     // design: C7-P5 rally spread (quirks.rally_point_shared off: the saved guard spot is a cell of the unit's own round the rally point)
     let spot = crate::orders::rally_cell(w, unit, rally(w, k));
     if let Some(o) = w.obj_mut(unit) {
