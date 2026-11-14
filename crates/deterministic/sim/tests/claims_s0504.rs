@@ -1975,3 +1975,44 @@ fn claim_15_a_vessel_afloat_is_level() {
     tick::step(&mut w);
     assert_ne!(naval::pitch(&w, skiff), F32::ZERO);
 }
+
+// spec: S-0504 claim 10 (beginning the killing-hit sinking state cancels the vessel's destination and its own target and asks its locomotor to stop); claim 5 (an active track stays: no locomotor progress while sinking) (#269)
+#[test]
+fn issue_269_killing_hit_sinking_cancels_destination_and_own_target() {
+    let mut w = world(rules());
+    let skiff = at(&mut w, "SKIFF", 0, -8, 0);
+    let foe = at(&mut w, "SKIFF", 1, 10, 0);
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
+    // An attack order on a far enemy: the ship takes the target and approaches.
+    click_attack(&mut w, skiff, foe);
+    for _ in 0..20 {
+        tick::step(&mut w);
+    }
+    {
+        let o = w.obj(skiff).unwrap();
+        assert_eq!(o.target, Some(Target::Object(foe)), "it holds its target");
+        assert!(o.dest.is_some(), "it has a destination");
+        assert!(!o.path.steps.is_empty(), "it has stored steps");
+    }
+    let track = w.obj(skiff).unwrap().drive.as_ref().unwrap().track.clone();
+    assert_eq!(damage::apply(&mut w, skiff, lethal()), HitResult::NowDead);
+    assert!(naval::sinking(&w, skiff), "the killing hit sets it sinking");
+    assert_eq!(w.obj(skiff).unwrap().health, 1);
+    // Right after the hit, before any further update.
+    let o = w.obj(skiff).unwrap();
+    assert_eq!(o.target, None, "claim 10: its own target is cancelled");
+    assert_eq!(o.dest, None, "claim 10: the destination is cancelled");
+    assert!(o.path.steps.is_empty(), "claim 10: the locomotor stop clears the stored steps");
+    assert_eq!(
+        o.drive.as_ref().unwrap().track,
+        track,
+        "claim 5: the active track stays"
+    );
+    for _ in 0..40 {
+        tick::step(&mut w);
+        let o = w.obj(skiff).expect("still in play during the descent");
+        assert_eq!((o.dest, o.target), (None, None));
+    }
+}
