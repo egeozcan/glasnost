@@ -9,6 +9,7 @@
 //! request, and listed in [`Built::notes`].
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use glasnost_convert::Import;
 use glasnost_convert::art::ProjectileColour;
@@ -1343,8 +1344,10 @@ pub struct Painter {
     canvas: voxel::VoxelCanvas,
     /// Parsed voxel models by file.
     models: BTreeMap<Vec<u8>, Option<std::rc::Rc<voxel::VoxelModel>>>,
-    /// The voxel lighting table, once read.
-    vpl: Option<Option<Vpl>>,
+    /// The voxel lighting table, once read. Shared, so that handing it to
+    /// a part draw is not a copy of its rows.
+    // design: render (#134)
+    vpl: Option<Option<Rc<Vpl>>>,
     /// Tile files decoded once, by upper-case name.
     tile_files: BTreeMap<Vec<u8>, Option<TileFile>>,
     /// The shared building companion depth image (S-0102 claims 31 and
@@ -3659,7 +3662,7 @@ impl<'a> Builder<'a> {
             let shades = voxel::projectile_shade_table(&draw, mode, &q);
             let vpl = b.vpl();
             // spec: S-0306 claim 30 (motion-file frame 0)
-            let img = voxel::draw_model_shaded(&model, 0, &draw, vpl.as_ref(), &shades, &q);
+            let img = voxel::draw_model_shaded(&model, 0, &draw, vpl.as_deref(), &shades, &q);
             b.limit_checked(&file, "projectile", key, img)
         });
         let Some(part) = part else {
@@ -3751,7 +3754,7 @@ impl<'a> Builder<'a> {
                 // spec: S-0317 claim 23 (the section drawn with claim 22's transform only, no motion-file transform)
                 let one = voxel::VoxelModel::from_sections(vec![section.clone()], None, &q);
                 let vpl = self.vpl();
-                let body = voxel::draw_model_shaded(&one, 0, &r, vpl.as_ref(), &shades, &q);
+                let body = voxel::draw_model_shaded(&one, 0, &r, vpl.as_deref(), &shades, &q);
                 let body = self.limit_checked(&file, "piece", "its orientation", body);
                 // spec: S-0317 claim 27 and F11 (the footprint of the drawn section under the rotation alone)
                 let shadow = voxel::draw_piece_shadow(&section, &r, &q);
@@ -4231,9 +4234,17 @@ impl<'a> Builder<'a> {
         let mut items = Vec::new();
         // spec: S-0105 claim 16 (the animation-frame counter: 0 before any attack); S-0609 claim 14 (a gattling building's counter advances while it spins)
         let counter = anim;
+        // The pose is worked out only when a part's image is drawn, not on a
+        // cache hit.
+        // design: render (#134)
+        #[derive(Clone, Copy)]
+        enum Pose {
+            Turret,
+            Barrel,
+            BarrelOnly,
+        }
         let parts = match turret {
             Some(t) => {
-                let pose = voxel::building_turret_parts(facing, offset, elevation, &q);
                 let turret_frame = voxel::building_turret_frame(counter, t.0.frame_count() as u32);
                 // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
                 let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
@@ -4243,19 +4254,19 @@ impl<'a> Builder<'a> {
                 let mut v = vec![
                     (
                         Some(t),
-                        pose.turret,
+                        Pose::Turret,
                         turret_frame,
                         voxel::ImageKey::Turret(turret_key),
                     ),
                     (
                         barrel,
-                        pose.barrel,
+                        Pose::Barrel,
                         barrel_frame,
                         voxel::barrel_key(turret_key, elevation),
                     ),
                 ];
                 // spec: S-0105 claim 11 (turret first when its 4-step facing is 1 or 2)
-                if !pose.turret_first {
+                if !voxel::turret_drawn_first(facing) {
                     v.reverse();
                 }
                 v
@@ -4268,20 +4279,29 @@ impl<'a> Builder<'a> {
                 });
                 vec![(
                     barrel,
-                    voxel::building_barrel_only(facing, elevation, &q),
+                    Pose::BarrelOnly,
                     frame,
                     voxel::barrel_only_key(facing, frame, elevation),
                 )]
             }
         };
-        for (model, draw, frame, key) in parts {
+        for (model, pose, frame, key) in parts {
             let Some((m, file, role)) = model else {
                 continue;
             };
             if let Some(part) = self.cached_part(k, idx, key, |b| {
+                let draw = match pose {
+                    Pose::Turret => {
+                        voxel::building_turret_parts(facing, offset, elevation, &q).turret
+                    }
+                    Pose::Barrel => {
+                        voxel::building_turret_parts(facing, offset, elevation, &q).barrel
+                    }
+                    Pose::BarrelOnly => voxel::building_barrel_only(facing, elevation, &q),
+                };
                 let img =
                     b.p.canvas
-                        .draw_part(&m, frame, &draw, vpl.as_ref(), depth_buffered, &q);
+                        .draw_part(&m, frame, &draw, vpl.as_deref(), depth_buffered, &q);
                 b.limit_checked(&file, role, key, img)
             }) {
                 items.push(Self::part_item(
@@ -5001,7 +5021,7 @@ impl<'a> Builder<'a> {
                 &model,
                 barrel_frame,
                 &pose,
-                vpl.as_ref(),
+                vpl.as_deref(),
                 depth_buffered,
                 &q,
             );
@@ -5113,12 +5133,17 @@ impl<'a> Builder<'a> {
     /// is S-0013's). A missing or too short file gives the
     /// empty table, whose rows all read as zero (claim 38,
     /// `quirks.vpl_unloaded_rows_blank`).
-    fn vpl(&mut self) -> Option<Vpl> {
+    fn vpl(&mut self) -> Option<Rc<Vpl>> {
         let assets = self.assets;
         let v = self
             .p
             .vpl
-            .get_or_insert_with(|| assets.get(VPL_FILE).and_then(|b| Vpl::parse(b).ok()))
+            .get_or_insert_with(|| {
+                assets
+                    .get(VPL_FILE)
+                    .and_then(|b| Vpl::parse(b).ok())
+                    .map(Rc::new)
+            })
             .clone();
         let blank = VoxelQuirks::default().vpl_unloaded_rows_blank;
         let v = match v {
@@ -5149,7 +5174,7 @@ impl<'a> Builder<'a> {
                 } else {
                     notes::VPL_REJECTED
                 });
-                Vpl::empty()
+                Rc::new(Vpl::empty())
             }
         };
         Some(v)
@@ -5555,7 +5580,7 @@ impl<'a> Builder<'a> {
                 &body,
                 body_frame,
                 &pose().body,
-                vpl.as_ref(),
+                vpl.as_deref(),
                 depth_buffered,
                 &q,
             );
@@ -5652,7 +5677,7 @@ impl<'a> Builder<'a> {
                         &model,
                         frame,
                         &draw,
-                        vpl.as_ref(),
+                        vpl.as_deref(),
                         depth_buffered,
                         &q,
                     );
