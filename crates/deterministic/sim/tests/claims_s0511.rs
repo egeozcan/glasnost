@@ -16,6 +16,7 @@ use glasnost_map::{CellXY, Map, NO_OVERLAY};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
     BuildingType, Decimal, LandRow, LandType, Locomotor, OverlayType, UnitType, WarheadType,
+    WeaponType,
 };
 use glasnost_sim::bridges::blow::Ctx;
 use glasnost_sim::bridges::pieces::{self, Family, Line, Role};
@@ -2003,6 +2004,57 @@ fn claim_6_r13_a_notice_collapse_centres_on_the_arriving_cell() {
         data(&w, at(5, 0)),
         start,
         "the onward notice goes from at(5, 1), not from the reference cell"
+    );
+}
+
+/// A pier in state 3 at x = 4 collapses from the loss notice of the section
+/// on its start side, with a CART in the ground layer of its reference cell
+/// (no deck there). With `exploding`, the CART's death weapon has a wall
+/// warhead, so its death in the column blow-up attempts the pier again.
+/// Returns the reference cell's level afterwards.
+fn notice_collapse_level(exploding: bool) -> i8 {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 9, &[4]);
+    let mut r = ruleset();
+    r.sim.weapons.insert(
+        "Boom".into(),
+        WeaponType {
+            damage: Some(100),
+            rof: Some(30),
+            range: Some(dec("2")),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("BLAST".into()),
+            ..Default::default()
+        },
+    );
+    if exploding {
+        let v = r.sim.vehicles.get_mut("CART").unwrap();
+        v.combat.explodes = Some(true);
+        v.combat.death_weapon = Some("Boom".into());
+    }
+    let mut w = game(&r, &m);
+    w.econ.settings.bridge_destruction = Some(true);
+    let p = at(4, 0);
+    assert!(!w.cells.is_bridge(p), "the reference cell has no deck");
+    spawn(&mut w, Kind::Vehicle, "CART", p);
+    assert!(!bridges::attempt(&mut w, p));
+    assert_eq!(pier_k(&w, p), Some(3));
+    // The start-side section is damaged, then lost: its loss notice reaches the pier.
+    assert!(bridges::attempts(&mut w, at(3, 0), 2));
+    assert_eq!(pier_k(&w, p), Some(4));
+    assert_eq!(w.cells.pier_levels.get(&p).copied(), Some(4));
+    w.cells.cell(p).unwrap().level
+}
+
+// spec: S-0511 claim 6 (a collapse leaves every cell of the pier's tile at the pre-collapse level minus 4, from a notice as from a direct attempt, even when a death weapon in the column attempts the pier during the blow-ups)
+#[test]
+fn claim_6_a_notice_collapse_lowers_the_pier_once() {
+    assert_eq!(notice_collapse_level(false), 0, "control: no death weapon");
+    assert_eq!(
+        notice_collapse_level(true),
+        0,
+        "with a death weapon in the column"
     );
 }
 
