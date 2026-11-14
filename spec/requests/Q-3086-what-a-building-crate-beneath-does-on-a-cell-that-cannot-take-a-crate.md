@@ -1,9 +1,9 @@
 ---
 id: Q-3086
 title: What a building's crate beneath does on a top-left cell that holds an overlay or lies outside the usable area
-status: open
+status: answered
 related: [S-0312, S-0520]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
