@@ -1,9 +1,9 @@
 ---
 id: Q-3103
 title: Projectile direction of a non-finite displacement, and a fragment's zero displacement, with quirks.table_direction off
-status: open
+status: answered
 related: [S-0204, S-0306, S-0318]
-answered-by: []
+answered-by: [S-0204]
 ---
 
 ## Need
