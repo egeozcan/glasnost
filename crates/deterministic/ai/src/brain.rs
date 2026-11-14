@@ -2439,6 +2439,10 @@ impl Brain {
             return;
         };
         let house = self.house();
+        // design: own AI (#56): the intruders and raiders as a set, asked
+        // once per order a unit holds instead of read through each time.
+        let threats: std::collections::BTreeSet<ObjectId> =
+            intruders.iter().chain(&raiders).map(|&(e, _)| e).collect();
         for id in self.script.of_role(w, Role::Army) {
             let Some(o) = w.obj(id) else { continue };
             let at = o.pos.cell();
@@ -2448,7 +2452,7 @@ impl Brain {
             // on the unit and is no raider any more; the fight goes on).
             let threat = |t: Option<Target>| {
                 matches!(t, Some(Target::Object(t))
-                if intruders.iter().chain(&raiders).any(|&(e, _)| e == t)
+                if threats.contains(&t)
                     || w.obj(t).is_some_and(|x| {
                         x.owner.is_some_and(|h| h != house)
                             && matches!(x.target, Some(Target::Object(v))
@@ -2485,34 +2489,33 @@ impl Brain {
             // one that did not take that order (`memory`), is not sent
             // again: a person does not click the same every second.
             let memory = &self.special.memory;
+            // design: own AI (#56): the enemies are tried nearest first and
+            // the first that passes is the nearest that passes, so the
+            // weapon and reach tests run for the enemies up to it only.
             let raider = (near_home || idle(w, id))
                 .then(|| {
-                    raiders
-                        .iter()
-                        .filter(|&&(e, c)| {
-                            dist2(c, at) <= RECALL * RECALL
-                                && can_attack(w, id, e)
+                    nearest_first(&raiders, at)
+                        .into_iter()
+                        .take_while(|&(_, c)| dist2(c, at) <= RECALL * RECALL)
+                        .find(|&(e, _)| {
+                            can_attack(w, id, e)
                                 && memory.ok(w, id, Target::Object(e))
                                 && !memory.pending(w, id, Target::Object(e))
                         })
-                        .min_by_key(|&&(e, c)| (dist2(c, at), e))
                 })
                 .flatten();
             // design: own AI (#4): an intruder the unit cannot go for (out of its reach region and of its weapon's range from there, S-0212 claim 4) is not attacked, and one it was sent at is judged like a raider (`memory`): an attack the sim drops for want of an approach (S-0307 claim 17) was given again on every tick
-            let region = self.script.reach_region(w, id);
-            let pick = raider.copied().or_else(|| {
+            let pick = raider.or_else(|| {
                 near_home
                     .then(|| {
-                        intruders
-                            .iter()
-                            .filter(|&&(e, c)| {
-                                can_attack(w, id, e)
-                                    && self.script.reaches(w, id, region, e, c)
-                                    && memory.ok(w, id, Target::Object(e))
-                                    && !memory.pending(w, id, Target::Object(e))
-                            })
-                            .min_by_key(|&&(e, c)| (dist2(c, at), e))
-                            .copied()
+                        // design: own AI (#56): the region only for a unit that looks for an intruder
+                        let region = self.script.reach_region(w, id);
+                        nearest_first(&intruders, at).into_iter().find(|&(e, c)| {
+                            can_attack(w, id, e)
+                                && self.script.reaches(w, id, region, e, c)
+                                && memory.ok(w, id, Target::Object(e))
+                                && !memory.pending(w, id, Target::Object(e))
+                        })
                     })
                     .flatten()
             });
@@ -2532,6 +2535,16 @@ impl Brain {
             }
         }
     }
+}
+
+/// The enemies `of`, nearest `at` first and on equal distance by object:
+/// the order in which `min_by_key` on `(distance, object)` ranks them, so
+/// the first that passes a test is the one that `min_by_key` over the
+/// passing ones picks (design: own AI, #56).
+fn nearest_first(of: &[(ObjectId, CellXY)], at: CellXY) -> Vec<(ObjectId, CellXY)> {
+    let mut v = of.to_vec();
+    v.sort_unstable_by_key(|&(e, c)| (dist2(c, at), e));
+    v
 }
 
 /// Whether unit `id` can drive to a cell: it lies in the reach region the
@@ -3208,5 +3221,165 @@ mod land_cell_tests {
             }
         }
         assert!(found > 0 && found < compared, "{found} of {compared}");
+    }
+}
+
+#[cfg(test)]
+mod defend_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// [`Brain::defend`] as before #56: the threats read through as a
+    /// list, every enemy tested before the nearest passing one is picked,
+    /// the reach region found for every unit.
+    fn defend_as_before(b: &mut Brain, w: &World, out: &mut Vec<Order>) {
+        let intruders = b.intruders(w);
+        let raiders = b.raiders(w);
+        if intruders.is_empty() && raiders.is_empty() {
+            return;
+        }
+        let Some(home) = b.script.home(w) else {
+            return;
+        };
+        let house = b.house();
+        for id in b.script.of_role(w, Role::Army) {
+            let Some(o) = w.obj(id) else { continue };
+            let at = o.pos.cell();
+            let near_home = dist2(at, home) <= RECALL * RECALL;
+            let threat = |t: Option<Target>| {
+                matches!(t, Some(Target::Object(t))
+                if intruders.iter().chain(&raiders).any(|&(e, _)| e == t)
+                    || w.obj(t).is_some_and(|x| {
+                        x.owner.is_some_and(|h| h != house)
+                            && matches!(x.target, Some(Target::Object(v))
+                                if w.obj(v).is_some_and(|v| v.owner == Some(house)))
+                    }))
+            };
+            let attacking = matches!(o.beh.current, Some(Behaviour::Attack))
+                || matches!(o.beh.queued, Some(Behaviour::Attack));
+            let busy = threat(o.target) || (attacking && threat(o.dest));
+            let sent = threat(b.special.memory.sent_here(w, id));
+            let bound = o.beh.current == Some(Behaviour::Eaten)
+                || o.beh.queued == Some(Behaviour::Eaten)
+                || (o.beh.current == Some(Behaviour::Enter)
+                    && glasnost_sim::structures::bunker::entering_bunker(w, id))
+                || glasnost_sim::structures::bunker::bunkered(w, id);
+            let berserk = glasnost_sim::psychic::berserk(w, id);
+            let spent = o.kind == Kind::Aircraft && !glasnost_sim::air::ammo_left(w, id);
+            if busy || sent || bound || berserk || spent {
+                continue;
+            }
+            let memory = &b.special.memory;
+            let raider = (near_home || idle(w, id))
+                .then(|| {
+                    raiders
+                        .iter()
+                        .filter(|&&(e, c)| {
+                            dist2(c, at) <= RECALL * RECALL
+                                && can_attack(w, id, e)
+                                && memory.ok(w, id, Target::Object(e))
+                                && !memory.pending(w, id, Target::Object(e))
+                        })
+                        .min_by_key(|&&(e, c)| (dist2(c, at), e))
+                })
+                .flatten();
+            let region = b.script.reach_region(w, id);
+            let pick = raider.copied().or_else(|| {
+                near_home
+                    .then(|| {
+                        intruders
+                            .iter()
+                            .filter(|&&(e, c)| {
+                                can_attack(w, id, e)
+                                    && b.script.reaches(w, id, region, e, c)
+                                    && memory.ok(w, id, Target::Object(e))
+                                    && !memory.pending(w, id, Target::Object(e))
+                            })
+                            .min_by_key(|&&(e, c)| (dist2(c, at), e))
+                            .copied()
+                    })
+                    .flatten()
+            });
+            if let Some((e, _)) = pick {
+                let order = Order::Behaviour {
+                    actor: id,
+                    behaviour: Behaviour::Attack,
+                    attack_move: false,
+                    target: Some(Target::Object(e)),
+                    dest: None,
+                };
+                if raider.is_some() {
+                    b.special.count_economy_defence();
+                }
+                b.special.memory.offer(std::slice::from_ref(&order));
+                out.push(order);
+            }
+        }
+    }
+
+    /// Our tooling for speed (design: own AI, #56): the defence that tries
+    /// the enemies nearest first gives the orders, counts and memory notes
+    /// of the one that tested them all, for every house's brain as the game
+    /// left it, at many points of the M6c, M7a and M7b duels.
+    #[test]
+    fn the_nearest_first_defence_is_the_defence_of_every_enemy() {
+        let games = [
+            (
+                crate::fixture_m6c::rules(),
+                crate::fixture_m6c::map(),
+                crate::fixture_m6c::MAP_NAME,
+                crate::fixture_m6c::setup(2),
+            ),
+            (
+                crate::fixture_m7a::rules(),
+                crate::fixture_m7a::map(),
+                crate::fixture_m7a::MAP_NAME,
+                crate::fixture_m7a::setup(17),
+            ),
+            (
+                crate::fixture_m7b::rules(),
+                crate::fixture_m7b::map(),
+                crate::fixture_m7b::MAP_NAME,
+                crate::fixture_m7b::setup(11),
+            ),
+        ];
+        let mut defended = 0;
+        let mut orders = 0;
+        for (rules, map, map_name, setup) in games {
+            let mut g = Game::new(rules, &map, map_name, fixture::catalogue(), setup)
+                .expect("the duel loads");
+            for _ in 0..120 {
+                for _ in 0..75 {
+                    g.step();
+                }
+                let w = &g.world;
+                for brain in g.brains() {
+                    let mut now = brain.clone();
+                    let mut before = brain.clone();
+                    let (mut out_now, mut out_before) = (Vec::new(), Vec::new());
+                    now.script.begin_think();
+                    now.defend(w, &mut out_now);
+                    now.script.end_think();
+                    before.script.begin_think();
+                    defend_as_before(&mut before, w, &mut out_before);
+                    before.script.end_think();
+                    assert_eq!(out_now, out_before, "{map_name}, tick {}", w.tick);
+                    assert_eq!(
+                        format!("{now:?}"),
+                        format!("{before:?}"),
+                        "{map_name}, tick {}",
+                        w.tick
+                    );
+                    defended += usize::from(
+                        !before.intruders(w).is_empty() || !before.raiders(w).is_empty(),
+                    );
+                    orders += out_before.len();
+                }
+            }
+        }
+        assert!(
+            defended > 0 && orders > 0,
+            "{defended} defences, {orders} orders"
+        );
     }
 }
