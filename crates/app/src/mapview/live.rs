@@ -718,6 +718,10 @@ struct AnimEnv<'a> {
     rules: &'a SimRules,
     rng: &'a mut glasnost_sim::rng::Rng,
     speed: u8,
+    /// A playback switched to a follow-up type since this was last
+    /// cleared (design: render (#136): the slot update takes the new
+    /// type's entry only then).
+    switched: bool,
 }
 
 impl AnimEnv<'_> {
@@ -752,6 +756,9 @@ impl anims::Env for AnimEnv<'_> {
     }
     fn normalise(&self) -> bool {
         self.rules.quirks.speed_normalised_delays
+    }
+    fn switched(&mut self, _name: &[u8]) {
+        self.switched = true;
     }
 }
 
@@ -1922,6 +1929,8 @@ impl Live {
         let enable_unfreezes = self.view_quirks.enable_unfreezes_unpowered;
         let w = &self.world;
         let mode = self.rules.mode;
+        // design: render (#136): the map's buildings as a set, looked up once per building
+        let set_up: BTreeSet<ObjectId> = self.building_ids.values().copied().collect();
         let present: Vec<(ObjectId, usize, slot_play::TypeKind, slot_play::State, bool)> = w
             .objects
             .values()
@@ -1981,7 +1990,7 @@ impl Live {
                         != Some(Behaviour::Construction)
                         || o.econ.construction.opened,
                     // spec: S-0108 claim 11 (a building of the map was placed during the game's set-up)
-                    setup: self.building_ids.values().any(|b| *b == o.id),
+                    setup: set_up.contains(&o.id),
                     damaged: super::build::condition_of(&self.rules, o.health, r.strength).0,
                     // spec: S-0108 Terms (occupied: at least one occupant; held infantry are not occupants)
                     occupied: !o.structure.occupants.is_empty(),
@@ -2009,13 +2018,30 @@ impl Live {
                 Some((o.id, idx, kind, st, erased))
             })
             .collect();
-        self.slot_anims
-            .retain(|id, _| present.iter().any(|(p, ..)| p == id));
+        // design: render (#136): the present buildings as a set for the retain
+        let present_ids: BTreeSet<ObjectId> = present.iter().map(|(p, ..)| *p).collect();
+        self.slot_anims.retain(|id, _| present_ids.contains(id));
+        // design: render (#136): the tick's events by building, each building's in their order
+        let mut walls_of: BTreeMap<ObjectId, Vec<_>> = BTreeMap::new();
+        for (b, pair, start, damaged) in &events {
+            walls_of
+                .entry(*b)
+                .or_default()
+                .push((*pair, *start, *damaged));
+        }
+        let mut depot_of: BTreeMap<ObjectId, Vec<_>> = BTreeMap::new();
+        for (b, active1, start, damaged) in &depot_events {
+            depot_of
+                .entry(*b)
+                .or_default()
+                .push((*active1, *start, *damaged));
+        }
         let mut env = AnimEnv {
             table: &self.anim_table,
             rules: &self.rules,
             rng: &mut self.cosmetic,
             speed: self.world.game_speed,
+            switched: false,
         };
         let q = AnimQuirks::from(&env.rules.quirks); // spec: S-0109 Edge cases
         for (id, idx, kind, st, erased) in present {
@@ -2026,16 +2052,19 @@ impl Live {
             slots.prepare(&kind, &st, enable_unfreezes);
             let mut finished = Vec::new();
             for (slot, r) in &mut slots.running {
-                let before = r.anim.player.name.clone();
+                env.switched = false;
                 // spec: S-0109 claim 23 (held while frozen by S-0108 claim 13 or while its building is being erased; the two causes are independent)
                 let held = r.frozen || erased;
                 // spec: S-0109 claims 5 to 16 (each running slot animation plays; claim 16: it ends) and claim 23 (a held one does not advance)
                 if !r.anim.player.update_held(now, &mut env, &q, held) {
                     finished.push(*slot);
-                } else if r.anim.player.name != before
+                } else if env.switched
                     && let Some(e) = env.lookup(&r.anim.player.name).0
                 {
                     // spec: S-0109 claim 15 (the same animation continues as the follow-up type)
+                    // design: render (#136): taken after any switch, not only one to another name:
+                    // the entry already is the lookup of an unchanged name whenever that lookup
+                    // finds a type (the type table is fixed), so the result is the same
                     r.anim.entry = e;
                 }
             }
@@ -2044,10 +2073,10 @@ impl Live {
                 slots.finished(slot, &kind, defs, &st, &mut mk);
             }
             slots.update(&kind, defs, &st, &mut mk);
-            for (_, pair, start, damaged) in events.iter().filter(|(b, ..)| *b == id) {
+            for (pair, start, damaged) in walls_of.get(&id).into_iter().flatten() {
                 slots.walls(*pair, *start, *damaged, defs, &mut mk);
             }
-            for (_, active1, start, damaged) in depot_events.iter().filter(|(b, ..)| *b == id) {
+            for (active1, start, damaged) in depot_of.get(&id).into_iter().flatten() {
                 slots.depot(*active1, *start, *damaged, defs, &mut mk);
             }
         }
@@ -2386,6 +2415,7 @@ impl Live {
             rules: &self.rules,
             rng: &mut self.cosmetic,
             speed,
+            switched: false,
         };
         let (entry, mut play) = env.lookup(name);
         if reverse {
@@ -2753,6 +2783,7 @@ impl Live {
             rules: &self.rules,
             rng: &mut self.cosmetic,
             speed,
+            switched: false,
         };
         let q = AnimQuirks::from(&env.rules.quirks); // spec: S-0109 Edge cases
         self.anims.retain_mut(|a| {
