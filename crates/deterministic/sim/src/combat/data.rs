@@ -21,7 +21,9 @@ pub type WarheadId = u32;
 // spec: S-0308 Constants (18 weapon slots, numbered 0 to 17)
 pub const SLOTS: usize = 18;
 
-/// A double from the exact value of a decimal field.
+/// A decimal field's value as a double: the single of S-0003 claim 6
+/// widened exactly, or with `%` the double product of claim 7, which is
+/// kept as a double (unlike [`single`], which narrows that product).
 fn dec(d: &Option<Decimal>, mode: Rounding) -> Option<F64> {
     d.as_ref().map(|d| d.value(mode))
 }
@@ -379,8 +381,6 @@ impl WarheadRules {
     }
 }
 
-/// The eighteen veterancy abilities in the order of their import names
-/// (S-0311 Terms).
 /// The class of the locomotor a seizing warhead names (S-0607 claims 5 and
 /// 22).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -426,6 +426,8 @@ impl SeizeLocomotor {
     }
 }
 
+/// The eighteen veterancy abilities in the order of their import names
+/// (S-0311 Terms).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum Ability {
