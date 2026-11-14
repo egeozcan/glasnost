@@ -1101,21 +1101,19 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let deck_new = w.high_bridge(nc).then(|| terrain_new + 416);
     let crossing = |a: i32, b: i32, deck: Option<i32>| -> Option<i32> {
         let d = deck?;
-        // spec: S-0306 T1 (crossing a bridge deck height going up (deck height) or down (20 below it))
+        // spec: S-0306 T1 row 1 (revision 89: crossing a bridge deck height going up, from P below it to P′ at or above it, gives 20 below it; going down, from P at or above it to P′ below it, the deck height)
         if a < d && b >= d {
-            Some(d)
-        } else if a >= d && b < d {
             Some(d - 20)
+        } else if a >= d && b < d {
+            Some(d)
         } else {
             None
         }
     };
-    let cross =
-        crossing(start.z, newpos.z, deck_old).or_else(|| crossing(start.z, newpos.z, deck_new));
-    // spec: S-0306 T1 (vertical: a high-bridge cell, old or new; deck height = terrain height of the cell of P′ + 416)
-    let deck_here = Some(terrain_new + 416);
-    let vertical_cross = (w.high_bridge(start.cell()) || w.high_bridge(nc))
-        && crossing(start.z, newpos.z, deck_here).is_some();
+    // spec: S-0306 T1 rows 1 and vertical (a high-bridge cell, old or new; the deck height is the terrain height of the cell of P′ + 416)
+    let deck_here = (w.high_bridge(start.cell()) || w.high_bridge(nc)).then_some(terrain_new + 416);
+    let cross = crossing(start.z, newpos.z, deck_here);
+    let vertical_cross = cross.is_some();
     let in_map = w.cells.cell(nc).is_some();
     if matches!(kind, ProjectileKind::Straight | ProjectileKind::Arcing) {
         let owned = has_firer(w, &pr);
@@ -1201,7 +1199,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
             }
         }
         if !(rows.steering_dist || rows.steer_ground || rows.safety || rows.orbit) {
-            // spec: S-0306 T1 (steering: P′ strictly crosses the deck height of a high-bridge cell, old or new; z at the deck height)
+            // spec: S-0306 T1 (steering: P′ strictly crosses the deck height of a high-bridge cell, old or new; z at the deck height); Q-3114 interim (each cell's own deck height when the two differ)
             let strict = |deck: Option<i32>| {
                 deck.filter(|&d| (start.z < d && newpos.z > d) || (start.z > d && newpos.z < d))
             };
