@@ -1803,15 +1803,16 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         let s = progress(w, id, u);
         record_step(w, id, s);
         add_budget(w, id, s);
-        let ended = spend_and_stop(w, id);
+        let mut ended = spend_and_stop(w, id);
         let mut more = ended && move_goes_on(w, id);
-        // spec: S-0207 claim 12 (a tick begun without a track finishes at most one; quirks.drive_track_end_cap off: no limit)
+        // spec: S-0207 claim 12 (a tick begun without a track finishes at most one; quirks.drive_track_end_cap off: no limit) and claim 11 (rest with ρ = 0 only when the last track worked on ended at a track target with no further step)
         while more && !cap {
             if !begin_track(w, id, u) {
                 break;
             }
             update_rho(w, id, u);
-            more = spend_and_stop(w, id) && move_goes_on(w, id);
+            ended = spend_and_stop(w, id);
+            more = ended && move_goes_on(w, id);
         }
         if ended && !move_goes_on(w, id) {
             arrive_or_rest(w, id);
