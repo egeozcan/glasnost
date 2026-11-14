@@ -8757,3 +8757,87 @@ fn status_extras_follow_a_tower_entering_at_a_redraw() {
 fn status_extras_follow_a_tower_entering_at_a_resume() {
     entering_tower_status_follows(|live, _, _| live.resume());
 }
+
+// ---------------------------------------------------------------------------
+// A view animation's follow-up type (#142)
+
+/// spec: S-0109 claim 15 (at the end of its passes an animation continues
+/// as its follow-up type, with that type's art); design: render (#142)
+/// (the drawing takes the follow-up's art when the playback switches).
+/// BOOMX (frames 2 × 2 pixels) is followed by TAILX (frames 5 × 5).
+#[test]
+fn a_view_animation_draws_its_follow_up_types_art() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let rules = format!("{RULES}[Animations]\n0=BOOMX\n1=TAILX\n");
+    let art = format!(
+        "{}[BOOMX]\nRate=900\nNext=TAILX\n[TAILX]\nRate=900\n",
+        super::tests::ART
+    );
+    let (mut import, catalogue, mut assets) = super::tests::context_full(&rules, &art);
+    import.arts.insert(
+        (Kind::Animations, 0),
+        super::tests::art_of("BOOMX", "boomx.shp"),
+    );
+    import.arts.insert(
+        (Kind::Animations, 1),
+        super::tests::art_of("TAILX", "tailx.shp"),
+    );
+    assets.insert(b"boomx.shp", shp((10, 10), 3, (2, 2), (4, 4)));
+    assets.insert(b"tailx.shp", shp((10, 10), 3, (5, 5), (2, 2)));
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let world = testkit::new_game(5);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, testkit::rules(), testkit::setup(5), Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    live.step();
+    live.world.effects.push(Effect::Anim {
+        name: "boomx".into(),
+        pos: Pos {
+            x: 5 * 256 + 128,
+            y: 5 * 256 + 128,
+            z: 0,
+        },
+        delay: None,
+        reverse: false,
+        z_adjust: None,
+        id: None,
+    });
+    live.after_tick();
+    let widths = |scene: &Scene| -> Vec<u32> {
+        use glasnost_render::scene::Group;
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Effects)
+            .map(|i| scene.images[i.image as usize].width())
+            .collect()
+    };
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(widths(&scene), [2], "BOOMX's art first");
+    let mut seen = Vec::new();
+    for _ in 0..8 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        seen.extend(widths(&scene));
+    }
+    assert!(seen.contains(&5), "TAILX's art after the switch: {seen:?}");
+}
