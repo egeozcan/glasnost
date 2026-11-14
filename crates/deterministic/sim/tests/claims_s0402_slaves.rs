@@ -2587,7 +2587,9 @@ fn s0107_claim_21a_no_restart_while_shovel_current() {
     put(&mut w, c, ORE, 5);
     slaves::process_slave(&mut w, s);
     let t0 = seq_state(&w, s).seq_t0;
-    testkit::run(&mut w, 2);
+    // Two ticks later, with no other rule of those ticks run (in a full tick
+    // the slave's other rules end its shovel here).
+    w.tick += 2;
     if let Some(i) = w.obj_mut(s).unwrap().infantry.as_mut() {
         i.wet = None;
     }

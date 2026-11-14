@@ -1276,10 +1276,20 @@ pub fn process_slave(w: &mut World, id: ObjectId) -> i32 {
         || cap == 0
         || (cap < 0 && !negative_stalls);
     if guard {
+        // spec: S-0107 claim 21a (r52, Q-3059: a processing that fails one of the three tests asks for stand, not forced, whether or not shovel is current; claim 6 decides it)
+        crate::infantry::request(w, id, crate::infantry::Seq::Stand, false);
         if let Some(ob) = w.obj_mut(id) {
             ob.beh.queue(Some(Behaviour::Guard));
         }
         return GUARD_QUEUED_DELAY;
+    }
+    // spec: S-0107 claim 21a (r52, Q-3059: a processing that passes the three tests, made before its load step, asks for shovel, not forced, unless shovel is current; no request while it is)
+    let shovelling = w
+        .obj(id)
+        .and_then(|o| o.infantry.as_ref())
+        .is_some_and(|s| s.seq == Some(crate::infantry::Seq::Shovel));
+    if !shovelling {
+        crate::infantry::request(w, id, crate::infantry::Seq::Shovel, false);
     }
     let Some((tib, _)) = resource else { return h };
     let total: i32 = st.load.iter().sum();

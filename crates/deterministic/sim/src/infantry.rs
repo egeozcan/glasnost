@@ -594,6 +594,17 @@ pub(crate) fn begins_frozen(w: &World, id: ObjectId) -> bool {
         .is_some_and(|s| s.seq_delay == 0)
 }
 
+/// Whether the unit is harvesting in the sense of S-0107 claim 21a: its
+/// current behaviour is *harvest*, or it has none and its queued one is.
+fn harvesting(w: &World, id: ObjectId) -> bool {
+    use crate::rules::Behaviour;
+    // spec: S-0107 claim 21a (r52, Harvesting: nothing else is tested; a behaviour only queued behind a current harvest does not count)
+    w.obj(id).is_some_and(|o| match o.beh.current {
+        Some(b) => b == Behaviour::Harvest,
+        None => o.beh.queued == Some(Behaviour::Harvest),
+    })
+}
+
 /// The completion follow-up (S-0107 claim 8) and the movement rule (claim
 /// 10) of a tick: the part of the sequence rules that comes after the
 /// firing rules of the same tick (S-0107 State and ordering: the fear and
@@ -632,6 +643,12 @@ pub fn sequence_turn(w: &mut World, id: ObjectId, moving_now: bool, in_progress:
             Some(Seq::Die1 | Seq::Die2 | Seq::Die3 | Seq::Die4 | Seq::Die5)
             | Some(Seq::WetDie1 | Seq::WetDie2 | Seq::AirDeathEnd)
             | Some(Seq::Parachute) => None,
+            // spec: S-0107 State and ordering and claim 21a (r52, Q-3059: a completed shovel: shovel (forced), which loops, while the unit is harvesting; stand (forced) otherwise)
+            Some(Seq::Shovel) => Some(if harvesting(w, id) {
+                Seq::Shovel
+            } else {
+                Seq::Stand
+            }),
             _ => {
                 // spec: S-0107 State and ordering ("not moving": no movement in progress)
                 let moving = in_progress;
