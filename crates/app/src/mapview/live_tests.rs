@@ -8522,3 +8522,96 @@ fn a_mobile_drawn_again_follows_the_owner_colour_options() {
         }
     });
 }
+
+// ---------------------------------------------------------------------------
+// The layers synced after a tick are not synced again at its redraw (#146)
+
+/// design: render (#146): a move marker made after the tick's layers were
+/// synced, before the redraw (S-0214 claim 30), enters the air layer at
+/// the redraw (S-0102 claims 3, 4 and 7).
+#[test]
+fn a_move_marker_after_the_tick_enters_its_layer_at_the_redraw() {
+    use super::slots::Layer;
+    use glasnost_sim::world::Pos;
+    let (import, catalogue, assets) = anim_context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (
+            testkit::new_game(5),
+            testkit::rules(),
+            testkit::setup(5),
+            Vec::new(),
+        ),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    let anims = |live: &Live| {
+        live.layer_list(Layer::Air)
+            .iter()
+            .filter(|e| matches!(e, Entrant::Anim(_)))
+            .count()
+    };
+    live.step();
+    assert_eq!(anims(&live), 0);
+    live.move_marker(Pos {
+        x: 5 * 256 + 128,
+        y: 5 * 256 + 128,
+        z: 0,
+    });
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(anims(&live), 1, "the marker's animation is in the air list");
+    assert_eq!(live.counts.anims_drawn, 1);
+}
+
+/// design: render (#146): a game that moved on by a tick after the layers
+/// were synced (the redraw reads the game it is handed) has its new
+/// objects placed at the redraw (S-0102 claims 3 and 4).
+#[test]
+fn a_game_moved_on_after_the_sync_is_placed_at_the_redraw() {
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, _, _) = two_carts(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.step();
+    let mut moved = live.world.clone();
+    let id = testkit::spawn(
+        &mut moved,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 3, 3),
+        0,
+    );
+    testkit::run(&mut moved, 1);
+    live.world = moved;
+    assert_eq!(live.layer_of(id), None);
+    live.redraw(&inputs, &mut scene);
+    assert!(live.layer_of(id).is_some(), "the new cart is placed");
+}
