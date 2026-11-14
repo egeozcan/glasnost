@@ -417,6 +417,10 @@ pub enum SearchContext {
     Teleport,
     /// The break-off search of a charging unit (S-0518 claim 15): no targeting-timer gate or reset draw, and the held target is neither tested nor protected.
     BreakOff,
+    /// The deployed-firing search (claim 1's fifth row, S-0517 claim 16):
+    /// the targeting timer restarts as claim 4 gives, and a target it finds
+    /// is not an opportunity target (claim 24).
+    DeployedFiring,
 }
 
 /// The search classes (S-0309 claim 5): infantry, vehicles, aircraft,
