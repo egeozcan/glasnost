@@ -813,6 +813,68 @@ fn an_order_dropped_by_the_pending_limit_is_not_given_up() {
     assert_eq!(brain.given_up(), 0);
 }
 
+// design: own AI (#19): the use counters count the orders the brain gives, as the memory notes them: an engineer order the full pending list drops (S-0213 claim 2, quirks.pending_order_limit) is not counted; with room it is.
+#[test]
+fn an_order_dropped_by_the_pending_limit_is_not_counted() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = engineer_scene(&g);
+    assert!(w.rules().quirks.pending_order_limit);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+    assert_eq!(brain.special_uses().engineers, 1, "given with room");
+    // The house's pending list full (a stop leaves the behaviour as it is).
+    for _ in 0..glasnost_sim::orders::PENDING_LIMIT {
+        assert!(glasnost_sim::orders::issue(
+            &mut w,
+            HouseId(0),
+            Order::Stop { actor: unit }
+        ));
+    }
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+    assert_eq!(
+        brain.special_uses().engineers,
+        0,
+        "the full list drops the order"
+    );
+}
+
+// design: own AI (#19): an order a later part of the brain replaces is not given, so it is not counted: an occupier sent to a hut and, later in the same think, at an enemy beside the base (`defend`) gets the attack, and the garrison counter stays at 0.
+#[test]
+fn an_order_a_later_part_replaces_is_not_counted() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, hut, unit) = scene(&g, 0);
+    let at = w.obj(unit).unwrap().pos.cell();
+    let enemy = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "GARRI",
+        1,
+        glasnost_map::CellXY::new(at.x + 1, at.y - 2),
+        0,
+    );
+    reveal(&mut w, 0, at);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    let garrison = orders
+        .iter()
+        .position(|o| garrison_orders(std::slice::from_ref(o), unit, hut));
+    let last = orders.iter().rposition(|o| o.actor() == Some(unit));
+    assert!(
+        garrison.is_some() && last > garrison,
+        "a garrison order, then another for the unit: {orders:?}"
+    );
+    assert!(
+        matches!(&orders[last.unwrap()], Order::Behaviour { target: Some(Target::Object(e)), .. } if *e == enemy),
+        "{orders:?}"
+    );
+    assert_eq!(brain.special_uses().garrisons, 0);
+}
+
 // PLAN §4.7 (memory): an engineer that gave up one building is sent at another it can see.
 #[test]
 fn an_engineer_that_gave_up_a_building_goes_for_another() {

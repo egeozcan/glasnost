@@ -155,6 +155,31 @@ fn orders_a_prism_building() {
     assert_eq!(builds(&brain.think(&w), "PRSM", &w), 0);
 }
 
+// design: own AI (#19): a build order the full pending list drops (S-0213 claim 2, quirks.pending_order_limit) is not counted: the prism counter counts the prism buildings the brain gives.
+#[test]
+fn a_prism_order_dropped_by_the_pending_limit_is_not_counted() {
+    let mut g = game();
+    let mut w = free_line(&mut g);
+    assert!(w.rules().quirks.pending_order_limit);
+    let own = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+        .map(|o| o.id)
+        .expect("an object of house 0");
+    for _ in 0..glasnost_sim::orders::PENDING_LIMIT {
+        assert!(glasnost_sim::orders::issue(
+            &mut w,
+            HouseId(0),
+            Order::Stop { actor: own }
+        ));
+    }
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert_eq!(builds(&orders, "PRSM", &w), 1, "{orders:?}");
+    assert_eq!(brain.special_uses().prisms, 0, "the full list drops it");
+}
+
 /// A world of [`game_with`] after 900 ticks with plenty of credits and the
 /// house's building line free.
 fn free_line(g: &mut Game) -> World {
