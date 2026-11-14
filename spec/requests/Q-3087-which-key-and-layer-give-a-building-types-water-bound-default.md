@@ -3,7 +3,7 @@ id: Q-3087
 title: Which key and which layers give a building type's water-bound default
 status: open
 related: [S-0406, S-0211, S-0006]
-answered-by: []
+answered-by: [S-0406]
 ---
 
 ## Need

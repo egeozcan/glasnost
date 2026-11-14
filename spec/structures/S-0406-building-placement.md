@@ -2,13 +2,13 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 11
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-11-14
 measurements: []
-requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282, Q-0798]
+requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282, Q-0798, Q-3087]
 supersedes: []
 ---
 
@@ -198,7 +198,7 @@ names the top-left cell of the foundation. In addition:
        Import mapping) the original forces the water role unset whatever the theater data says
        (S-0010, claim 4).
 
-     For a water-bound type (Import mapping) instead: the land multiplier of the cell's land type
+     For a water-bound type (claim 21) instead: the land multiplier of the cell's land type
      for the *float* locomotion class (S-0211) is not 0. The bridge, slope, buildable-flag and
      tile-range conditions do not apply to a water-bound type, whatever its naval flag says. So a
      water-bound type may stand on a sloped cell, or on a cell that a high bridge marks without any
@@ -757,6 +757,37 @@ names the top-left cell of the foundation. In addition:
     - Backing: `measurable` (PL15)
     - Confidence: high
 
+21. **Which rules layers make a building type water-bound (Q-3087).** A building type's
+    water-bound flag (claim 3 d) is decided again in every rules layer whose section for the type
+    gives its water-bound field or its locomotion-class field (Import mapping). A layer that gives
+    neither, or has no section for the type, keeps the flag (S-0006, claims 3 and 7). In a layer
+    that gives one of them:
+    - (a) when the layer gives the water-bound field, its value is the flag, whatever class the
+      same layer gives,
+    - (b) otherwise the flag is on when the class names *float*, in any letter case, and off for
+      any other class name of S-0211 (*float-on-beach* and *amphibious* included) and for text that
+      names no class. That last case is the original's behaviour for a building type (PL17 part
+      g). S-0211 claim 3's departure, which treats such text as absent for a mobile type, does not
+      apply to a building type's class field.
+
+    So after all layers the flag comes from the last layer that gives either field, and within that
+    layer from the water-bound field when it gives one. A later layer that gives only the class
+    overrides an explicit value of an earlier layer: an earlier *yes* followed by a later class
+    *wheel* leaves the type not water-bound, and an earlier *no* followed by a later class *float*
+    makes it water-bound. A type to which no layer gives either field is not water-bound (but see
+    open question 7). An entry with no value, of either field, is absent (S-0006, claim 3; PL17
+    parts l and m), and a water-bound value that S-0003 (claim 2) does not recognise counts as not
+    given, so (b) or keeping applies (PL17 part k).
+
+    Within this spec's placement rules, a building type's locomotion-class field acts only through
+    this flag (open question 8 lists a use outside them that was not traced).
+    - Backing: `measurable` (PL17) for parts (a) and (b), the order across layers and the empty and
+      unrecognised entries; `unmeasured`
+      for the absence of other placement effects: no single run observes every use of the field.
+    - Confidence: high (parts (a) and (b), the order across layers and the empty and unrecognised
+      entries, PL17); medium (no other
+      placement effect)
+
 ## Formulas
 
 > **F1. Adjacency ring.** For a foundation rectangle with top-left cell (*x*₀, *y*₀) and size *W* ×
@@ -882,6 +913,8 @@ Observable consequences:
 - **Water-bound types skip the bridge, slope, buildable-flag and tile-range conditions** (claim 3 d,
   scenario PL4, parts c to f). No switch: it is the rule of the water-bound flag, which tests the
   float multiplier instead.
+- **A later layer's class overrides an earlier explicit water-bound value** (claim 21, PL17 parts
+  d and e). No switch: the flag follows the last layer that gives either field.
 - **A placed building's build-up runs twice** (claim 17). The place order leaves *construction*
   queued until the build-up's first run reports its last stage, and the first construction
   processing then restarts the build-up at stage 0, so the whole build-up of a placed building
@@ -949,7 +982,8 @@ Observable consequences:
 | `BuildOffAlly` (rules, `MultiplayerDialogSettings`; S-0412 owns it) | default of the build-off-ally option (claim 4) | boolean | yes |
 | `PlaceAnywhere` (rules, building type) | place-anywhere flag (claim 3) | boolean | no |
 | `Foundation` (art; S-0108) | foundation word and size (claim 2); the word `3x3Refinery` is the 8-cell 3 × 3 word | word (S-0108) | `1x1` |
-| `WaterBound` (rules, building type) | water-bound type, tested with the class *float* (claim 3 d) | boolean | no, unless the type's locomotion-class key already names *float* |
+| `WaterBound` (rules, building type) | water-bound flag, tested with the class *float* (claim 3 d), decided per layer (claim 21) | boolean (S-0003, claim 2); an unrecognised value counts as not given | in a layer that omits it: set from that layer's `SpeedType` when the layer gives one, otherwise kept (claim 21); no when no layer gives either key |
+| `SpeedType` (rules, building type) | the water-bound flag in a layer that omits `WaterBound` (claim 21): on for `Float`, off for any other text | name, matched as in S-0211's `SpeedType` row (case ignored) | no effect |
 | `Naval` (rules, building type) | naval flag (claim 3 d) | boolean | no |
 | `Wall` (rules, building type) | wall type (claim 10); ignored, with an importer warning, when the type has no `ToOverlay` | boolean | no |
 | `ToOverlay` (rules, building type) | wall overlay of the type (claims 8 to 11) | overlay type name | none |
@@ -1560,6 +1594,40 @@ Each scenario names its observed area, the cells in which the void rule applies.
 - Tool: scripted normal input plus a read-only recorder. No game-state writes or harness
   changes are required.
 
+**PL17. The water-bound flag across rules layers (claim 21).**
+- Observed area: two named cells, one 1 × 1 test building per placement.
+- Setup: a buildable 1 × 1 test building type with neither the naval flag nor the place-anywhere
+  flag. Test rules give the water land type a float multiplier that is not zero and the buildable
+  flag off, and the clear land type a float multiplier of zero and the buildable flag on. Named
+  cells: a flat water cell and a flat clear cell, both explored and within adjacency range of a
+  building of the placing house. Each part writes the type's two fields as listed, in the test rules
+  file (the base layer) and in the test map's section for the type (the map layer); a field not
+  listed is absent from that layer. Parts:
+  - (a) base: class *float*.
+  - (b) base: class *float*; map: class *wheel*.
+  - (c) base: neither field; map: class *float*.
+  - (d) base: water-bound *yes*; map: class *wheel*.
+  - (e) base: water-bound *no*; map: class *float*.
+  - (f) base: class *float* and water-bound *no*.
+  - (g) base: class *float*; map: a class text that names no class.
+  - (h) base: class *float*; map: a section for the type that gives one unrelated field only.
+  - (i) base: class *float* written in lower case.
+  - (j) base: class *float-on-beach*.
+  - (k) base: water-bound *yes*; map: class *wheel* and a water-bound text that S-0003 claim 2 does
+    not recognise.
+  - (l) base: water-bound *yes*; map: class *wheel* and a water-bound entry with no value.
+  - (m) base: class *float*; map: a class entry with no value and no other field.
+- Observable: placement success on each named cell, one fresh game per part and cell.
+- Expected: water-bound in parts a, c, e, h, i and m: the water cell succeeds and the clear cell
+  refuses. Not water-bound in parts b, d, f, g, j, k and l: the water cell refuses and the clear
+  cell succeeds.
+- Falsified if: any part gives the other part group's pair of results, for instance (d) succeeds on
+  the water cell (the earlier explicit value would then stand), or (g) succeeds on the water cell
+  (text that names no class would then keep the earlier class), or (k) or (l) succeeds on the
+  water cell (the unrecognised or empty value would then keep the earlier *yes*), or (m) refuses
+  on the water cell (the empty class entry would then count as text that names no class).
+- Tool: the bench with a test rules file and a test map; scripted placement orders.
+
 ## Open questions
 
 1. The firestorm-wall fill rule (claim 11), the fate of an own laser-fence building under a placed
@@ -1584,6 +1652,13 @@ Each scenario names its observed area, the cells in which the void rule applies.
 6. Placement display details for to-tile types, gate display extents, wall-fill preview
    and a missing placement display image are not specified by claim 19. The ordinary arrow
    relationship is established for placement mode independently of these display details.
+7. A building type that reads no section in any rules layer. Claim 21 treats it as not
+   water-bound; this is our engine's choice, a departure with no switch. The original's ground test
+   for such a type is not established: the reading is that it tests the *foot* locomotion class's
+   land multiplier in place of claim 3 (d)'s conditions (confidence low, `unmeasured`: whether any
+   data can place such a type, or deploy into one, was not established).
+8. Whether any building rule passes a building type's class to S-0212 claim 25's nearby search
+   was not traced, and no such use is identified. This is the open part of Q-3087 question 5.
 
 ## Changes for other specs
 
@@ -1597,3 +1672,7 @@ Each scenario names its observed area, the cells in which the void rule applies.
 - S-0404 claim 10: its place-order row's no-recheck sentence refers only to adjacency and
   explored ground. Upgrade target ownership, compatibility and room are checked again at
   application under claim 12 here; make that distinction explicit at joint hand-off.
+- S-0006 claim 5, *Keys that reset to another key's value*: add the water-bound flag of a building
+  type. In a layer whose section for the type gives the locomotion-class field but not the
+  water-bound field, the flag is set from that class, replacing the value an earlier layer gave,
+  even an explicit one. S-0406 claim 21 owns the rule.

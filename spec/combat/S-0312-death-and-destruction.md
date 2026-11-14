@@ -2,14 +2,14 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 77
+revision: 78
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-13
+approved-on: 2026-11-14
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132,
-Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000, Q-3042]
+Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000, Q-3042, Q-3086]
 supersedes: []
 ---
 
@@ -752,11 +752,38 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     of the list in force, S-0004; the index is built into the original, so the overlay list decides
     which type it is: `quirks.rubble_overlay_by_index`, Edge cases), with its overlay data value
     left as it was, and the building's top-left cell remembers the building's type for drawing the
-    rubble (rendering specs). When the type has a crate beneath, a crate appears on the building's
-    top-left foundation cell: a money crate (power-up 0) when the type says so, otherwise a crate
-    with random contents (S-0520 claim 5).
-    - Backing: `measurable` (scenario D14, variant b; S-0520 scenario CR3 for contents)
-    - Confidence: medium for the rubble condition and the crate cell; high for the contents
+    rubble (rendering specs).
+
+    When the type has a crate beneath, the crate is placed after any rubble, through a crate place
+    (S-0520 claim 1). Its cell is the result of S-0212 claim 25's single-cell nearby search centred
+    on the building's top-left foundation cell: *float* locomotion class when that cell's land type
+    (after any rubble, S-0211 claim 5) is *water* and *track* otherwise, *normal* movement zone, no
+    reach region, deck mode off, no height condition, no further test, no no-overlay condition,
+    bridges allowed and no reference cell. The building has already left its cells (claim 21), so
+    its own presence does not keep the top-left cell from qualifying. No crate appears, and no other
+    cell is tried, when the search finds no cell, when every crate place is occupied, or when the
+    selected cell is outside the height-aware usable area or holds an overlay of any kind; none of
+    these takes a draw. A crate beneath therefore never replaces an overlay. Otherwise the selected
+    cell receives a water-crate overlay when its land type is *water* and a wooden-crate overlay
+    otherwise, with S-0520 claim 3's overlay draws and lifetime request, and the crate holds the
+    money power-up (0) when the type says so and random contents otherwise (S-0520 claim 5).
+
+    So when the top-left cell qualifies for the search and passes its visibility test, it is the
+    selected cell: the crate appears there when the cell holds no overlay, and no crate appears at
+    all when it holds one, a resource overlay or the building's own rubble alike. When the top-left
+    cell does not qualify (it lies outside the usable area, its land type or overlay keeps the class
+    out by S-0211 claim 10, or an object stands on it), the crate can appear on another cell that the search selects,
+    provided that cell holds no overlay. Quirk `quirks.crate_beneath_overlay_refusal` (Edge cases)
+    covers the lost crate.
+    - Backing: `measurable` (scenario D14, variant b, for the top-left cell with and without an
+      overlay and with rubble; S-0520 scenario CR3 for contents). `unmeasured` for a top-left cell
+      that does not qualify, for a *water* top-left cell and for occupied crate places: D14 places
+      its buildings on clear ground inside the usable area, with no object on the top-left cell and
+      free crate places.
+    - Confidence: medium for the rubble condition; high for the contents, for rubble being placed
+      first and for the outcomes at a qualifying top-left cell on land; medium for the search settings at a
+      top-left cell that does not qualify, for the *water* class and image, and for occupied crate
+      places
 
 21. **When a destroyed building leaves play.** Here only the type's explodes flag counts (a
     veterancy ability or a weapon's suicide flag, which make an object exploding elsewhere in this
@@ -1245,7 +1272,7 @@ otherwise. No measurement has been completed for this revision.
 | 18, F4 | `unmeasured` for countries without a side and side numbers beyond 2: D10 and D13 do not construct those owners. The eight-cell 3 × 3 foundation is also unmeasured here: D13 uses a full nine-cell foundation. |
 | 18 | `unmeasured`, low confidence, for equating the owner's survivor-suppression state with defeat: no setup separates the two possible moments in Open questions. Ordinary undefeated-owner runs test the rest. |
 | 19(f) | `unmeasured` for the exact eligibility kinds, suppression by an earlier destruction-smoke system and the below-terrain height boundary: D14 f tests creation, displacement and marking at removal, not these conditions. |
-| 20 | `unmeasured` for the sprite-frame threshold: D14 b tests a type already having a rubble image, not the threshold. Crate contents use S-0520 claim 5 and scenario CR3. Remembering the building type for rubble drawing is a pointer to the rendering specs, not independently tested by D14 b. |
+| 20 | `unmeasured` for the sprite-frame threshold: D14 b tests a type already having a rubble image, not the threshold. `unmeasured` for a crate beneath at a top-left cell that does not qualify for the search, on *water*, or with every crate place occupied (claim 20 gives the reason). Crate contents use S-0520 claim 5 and scenario CR3. Remembering the building type for rubble drawing is a pointer to the rendering specs, not independently tested by D14 b. |
 | 24 | `unmeasured` for vehicle passenger placement and credit to a separately remembered planter: D16 establishes neither vehicle absorption nor a surviving planter for failed releases. |
 | 26, F2 | `unmeasured` for the zero-coordinate anchor, footprints beyond legal map cells and nearby-point fallback beyond coordinate 511: no reachable death/smudge setup exercising those boundaries is supplied. D17 tests fitting within the map. Negative tile numbers other than the no-tile marker retain claim 26's backing. |
 | Edge-case departures on bad data | `unmeasured` for the original's out-of-list, missing-type, hang and beyond-foundation results: no scenario here isolates those bad-data outcomes. The safe alternatives, warnings and non-default quirk settings are design rules, not observations of the original. |
@@ -1472,6 +1499,12 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
   list keeps the same rubble; the importer warns when that type is missing. With the switch on, the
   importer warns when the overlay at index 239 is not the one at that index in the unmodified base
   rules, or is missing.
+- **`quirks.crate_beneath_overlay_refusal`** (default: on, the original). Claim 20 places the
+  rubble first and then refuses a crate beneath whose selected cell holds an overlay, so a type that
+  leaves rubble loses its crate whenever its rubbled top-left cell is selected, and an overlay
+  already on that cell has the same effect. On: as claim 20. Off: the search for a crate beneath
+  also asks for the no-overlay condition (S-0212 claim 25), so it selects a nearby cell without an
+  overlay.
 - **`quirks.barrel_probe_top_left_only`** (default: on, the original). Claim 23 probes from the
   building's position, so for a larger foundation the east and south probes fall on the building
   itself. Off: the east probe is the cell next to the foundation's east edge in the top row and the
@@ -2022,9 +2055,16 @@ per destruction (claim 19 (a)), at the centre of the cell of its position, and n
 1 × 1 building, with scorch marks and craters about half each over the 200 destructions (claim 19
 (a): below 50 a scorch mark). Variant b: a building type that leaves rubble leaves the rubble
 overlay of registration index 239 on every foundation cell; record overlay data immediately
-before the kill and after rubble placement, expecting it unchanged. A type with a money crate
-beneath leaves a money crate on its top-left cell. A wrong index, changed data or different
-crate cell falsifies b. Variant c
+before the kill and after rubble placement, expecting it unchanged. A 1 × 1 type with a money crate
+beneath and no rubble leaves a money crate on its cell. The same type is then destroyed (i) with an
+overlay of another type laid on its cell before the kill, and (ii) given the rubble flag and
+rubble image of b's rubble type as well; a test rules file gives both overlay types a land type
+that *track* can enter (S-0211 claim 10) and none of the wall, rock and crushable flags.
+*Expected* in (i) and (ii): no crate appears in the tick the building leaves play, the
+cell keeps its overlay ((i)'s, or the rubble in (ii)), and the number of raw values the recorder
+reports for the destruction includes none for a crate (S-0520 claim 3's overlay draws and
+lifetime request). A wrong index, changed data or a different crate cell falsifies b; so does a
+crate in (i) or (ii), a replaced overlay, or raw values taken for a crate there. Variant c
 (claim 21): a test building type with the explodes flag and rubble, with an object recorder each
 tick from the killing hit, killed (i) by an object whose turn comes before the building's in the
 turn pass and (ii) by one whose turn comes after it. *Expected of c:* after its death effects the
@@ -2550,6 +2590,15 @@ crashable vehicle that stands on a bridge deck when it is destroyed is at height
 surface: it starts no crash and leaves play at the end of its death effects, with no crash-start
 draws (claim 15, scenario D11 variant h). The claim should say "above the surface" for a vehicle
 and point to claim 15 here; for an aircraft it stays "above the terrain" (claim 16).
+
+S-0212 claim 25, table T5: add a row *Building crate beneath (S-0312 claim 20)* with these
+settings: the building's top-left foundation cell as centre, *float* when the centre's land type
+is *water* and *track* otherwise, *normal* movement zone, no reach region, deck mode never, no
+height condition, no further test and no reference cell. Add it to the rows that allow bridge cells and ask for no no-overlay
+condition (with `quirks.crate_beneath_overlay_refusal` off it asks for that condition), to the
+sentence on trigger and random crates whose selection is not placement (S-0312 claim 20 owns
+its refusals), and to the tick list: the tick of placement, which is the tick the building leaves
+play (S-0312 claim 21).
 
 ## Questions for the project lead
 

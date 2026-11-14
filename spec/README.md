@@ -58,7 +58,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0313](combat/S-0313-firing-positions.md) | Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack, shot animation position) | combat | 42 | approved | — |
 | [S-0311](combat/S-0311-veterancy.md) | Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience) | combat | 13 | approved | — |
 | [S-0401](economy/S-0401-ore-and-gems.md) | Ore and gems (resource cells, bales and value, growth, spread, ore mines) | economy | 17 | approved | — |
-| [S-0406](structures/S-0406-building-placement.md) | Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades) | structures | 11 | approved | — |
+| [S-0406](structures/S-0406-building-placement.md) | Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades) | structures | 13 | approved | — |
 | [S-0412](simulation/S-0412-skirmish-setup-rules.md) | Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings) | simulation | 14 | approved | — |
 | [S-0413](simulation/S-0413-country-bonuses.md) | Country bonuses (what each country field does, which spec owns it, and the fields with no effect) | simulation | 6 | approved | — |
 | [S-0414](simulation/S-0414-victory-and-defeat.md) | Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders) | simulation | 30 | approved | — |
@@ -90,7 +90,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 85 | approved | — |
 | [S-0209](movement/S-0209-occupancy-crowding.md) | Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests) | movement | 76 | approved | — |
 | [S-0302](combat/S-0302-damage-resolution.md) | Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds) | combat | 43 | approved | — |
-| [S-0312](combat/S-0312-death-and-destruction.md) | Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains) | combat | 77 | approved | — |
+| [S-0312](combat/S-0312-death-and-destruction.md) | Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains) | combat | 78 | approved | — |
 | [S-0205](simulation/S-0205-number-domains.md) | Number domains (integers, floating point, the round-toward-zero mode, conversions) | simulation | 10 | approved | — |
 | [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 53 | approved | — |
 | [S-0409](visibility/S-0409-shroud-sight.md) | Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire) | visibility | 16 | approved | — |
