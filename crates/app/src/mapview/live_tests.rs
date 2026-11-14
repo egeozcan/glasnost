@@ -8210,13 +8210,13 @@ fn drawn_again_follows(
     });
 }
 
-/// design: render (#145): the building's own state (here its cell, S-0102
-/// claim 13: where it is drawn).
+/// design: render (#145): the building's own state (here its running slot
+/// animation, S-0108 Terms: the slot's offset), on the same cell.
 #[test]
 fn a_live_building_drawn_again_follows_its_state() {
-    let mut moved = slot_hut_on_map();
-    moved.cell = glasnost_map::CellXY::new(7, 9);
-    drawn_again_follows(&[], "", slot_hut_on_map(), moved, |_, _, _| {});
+    let mut shifted = slot_hut_on_map();
+    shifted.slots = vec![slot_a(5)];
+    drawn_again_follows(&[], "", slot_hut_on_map(), shifted, |_, _, _| {});
 }
 
 /// design: render (#145): the effect tint the house-colour tables show
