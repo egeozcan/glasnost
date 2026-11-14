@@ -510,6 +510,10 @@ fn smooth_ground(grid: &CellGrid, c: CellXY, tile: i32, rules: &RecalcRules<'_>)
         if l < 0 && (which != 0 || !q.unset_role_range) {
             continue;
         }
+        // spec: S-0010 Edge cases (quirks.unset_role_range off: a pair with an unset ground role is skipped too)
+        if g < 0 && !q.unset_role_range {
+            continue;
+        }
         let belongs = |t: i32| {
             // spec: S-0010 claim 10 (belongs: the ground start, or the 16 transition tiles)
             (if g < 0 {
