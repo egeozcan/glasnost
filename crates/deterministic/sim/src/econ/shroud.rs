@@ -960,8 +960,10 @@ fn add_sight_with(w: &mut World, id: ObjectId, radius: Option<i32>) {
     }
 }
 
-/// Brings an object's sight to its present position (S-0502 claim 15: a
-/// jumpjet that has touched down refreshes its sight at its new position).
+/// Brings an object's sight to its present position: a walking or driving
+/// unit at each arrival in a cell (S-0409 claim 8 and Terms, the movement
+/// arrival update), a jumpjet that has touched down (S-0502 claim 15). An
+/// object that holds no sight yet adds it in its own turn.
 pub fn refresh_sight(w: &mut World, id: ObjectId) {
     if !may_hold(w, id) {
         return;
@@ -1054,8 +1056,9 @@ pub fn owner_changed(w: &mut World, id: ObjectId) {
 }
 
 /// An object's own turn (claim 8): it adds its sight once it may hold one,
-/// moves it on each arrival in a cell (walking or driving units) and every
-/// 15 ticks while it moves, and follows a change of owner.
+/// moves it every 15 ticks while it moves, and follows a change of owner.
+/// The move on each arrival in a cell of a walking or driving unit is made
+/// at the arrival update itself ([`refresh_sight`]).
 pub fn object_turn(w: &mut World, id: ObjectId, moved: bool) {
     let t = w.tick;
     if !may_hold(w, id) {
@@ -1066,19 +1069,14 @@ pub fn object_turn(w: &mut World, id: ObjectId, moved: bool) {
         return;
     }
     let Some(o) = w.obj(id) else { return };
-    let cell = o.pos.cell();
-    let (applied_owner, last_cell, refreshed) = match &o.econ.sight.sight {
-        Some(a) => (Some(a.owner), o.econ.sight.cell, o.econ.sight.refreshed),
-        None => (None, None, o.econ.sight.refreshed),
-    };
-    let Some(applied_owner) = applied_owner else {
+    let refreshed = o.econ.sight.refreshed;
+    let Some(applied_owner) = o.econ.sight.sight.as_ref().map(|a| a.owner) else {
         // spec: S-0409 claim 8 (it adds its sight when it enters the map, in its own turn)
         add_sight(w, id);
         return;
     };
-    let walker_or_driver = matches!(o.kind, Kind::Infantry | Kind::Vehicle);
-    // spec: S-0409 claim 8 (a walking or driving unit moves its sight on each arrival in a cell)
-    let arrival = walker_or_driver && last_cell != Some(cell);
+    // A walking or driving unit's arrival in a cell is not judged here: the
+    // locomotor's arrival update calls `refresh_sight` (claim 8 and Terms).
     // spec: S-0409 claim 8 (a moving object refreshes when at least 15 ticks have passed since its last such refresh)
     let refresh = moved && refreshed.is_none_or(|r| t.wrapping_sub(r) >= REFRESH_PERIOD);
     // spec: S-0409 claim 8 (a change of owner: removed for the old owner, added for the new one)
@@ -1086,7 +1084,7 @@ pub fn object_turn(w: &mut World, id: ObjectId, moved: bool) {
     if refresh && let Some(ob) = w.obj_mut(id) {
         ob.econ.sight.refreshed = Some(t);
     }
-    if arrival || refresh || owner {
+    if refresh || owner {
         remove_sight(w, id);
         add_sight(w, id);
     }
