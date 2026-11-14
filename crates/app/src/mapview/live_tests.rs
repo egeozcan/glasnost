@@ -8615,3 +8615,71 @@ fn a_game_moved_on_after_the_sync_is_placed_at_the_redraw() {
     live.redraw(&inputs, &mut scene);
     assert!(live.layer_of(id).is_some(), "the new cart is placed");
 }
+
+// ---------------------------------------------------------------------------
+// The status extras redrawn between ticks follow the game (#139)
+
+/// design: render (#139): the status extras are drawn between ticks (a
+/// selection change), a cart joins the game, `change` brings the drawing
+/// up to it, and the selected new cart's status extras are drawn at the
+/// next status redraw (S-0111 claims 3 and 17).
+fn new_cart_status_follows(change: impl Fn(&mut Live, &Inputs, &mut Scene)) {
+    use glasnost_render::scene::Group;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, earlier, _) = two_carts(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let status_of = |scene: &Scene, id: ObjectId| {
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
+            .count()
+    };
+    live.redraw(&inputs, &mut scene);
+    live.set_marks(&[earlier], None);
+    live.redraw_status(&inputs, &mut scene);
+    assert!(status_of(&scene, earlier) > 0, "the selected cart's bar");
+    let id = testkit::spawn(
+        &mut live.world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 3, 3),
+        0,
+    );
+    change(&mut live, &inputs, &mut scene);
+    live.set_marks(&[earlier, id], None);
+    live.redraw_status(&inputs, &mut scene);
+    assert!(status_of(&scene, id) > 0, "the new cart's bar");
+    assert!(status_of(&scene, earlier) > 0);
+}
+
+/// design: render (#139): brought up to the game by the tick's update.
+#[test]
+fn status_extras_follow_a_tick() {
+    new_cart_status_follows(|live, _, _| live.after_tick());
+}
+
+/// design: render (#139): brought up to the game by a redraw.
+#[test]
+fn status_extras_follow_a_redraw() {
+    new_cart_status_follows(|live, inputs, scene| live.redraw(inputs, scene));
+}
+
+/// design: render (#139): brought up to a game put in place (#98).
+#[test]
+fn status_extras_follow_a_resume() {
+    new_cart_status_follows(|live, _, _| live.resume());
+}
