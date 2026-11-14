@@ -373,8 +373,16 @@ impl Brain {
                         .field_refinery_type(w)
                         .filter(|&t| credits < both(t))
                 });
+                let had = plant.is_some_and(|t| out.contains(&Order::Build { what: t }));
                 let n = crate::power::plant_first(w, self.house(), plant, lost, &mut out);
-                self.special.count_plants_first(n);
+                // design: own AI (#19): `plant_first` leaves one plant order however many orders it turned, so that order is the use, offered only when no earlier part of the think had ordered the plant
+                if n > 0
+                    && !had
+                    && let Some(t) = plant
+                {
+                    self.special
+                        .offer_use_of(Use::PlantFirst, Order::Build { what: t });
+                }
             }
         }
         mark(p, "ai:fire_superweapons");
@@ -467,7 +475,7 @@ impl Brain {
             } => !crate::mind::swaps_victim(w, *actor, *t),
             _ => true,
         });
-        // design: own AI (#19): the memory notes only the orders given: those left after the filters, within the room the house's pending list has left (S-0213 claim 2: an order issued while the list is full is dropped; quirks.pending_order_limit)
+        // design: own AI (#19): the memory notes, and the use counters count, only the orders given: those left after the filters, within the room the house's pending list has left (S-0213 claim 2: an order issued while the list is full is dropped; quirks.pending_order_limit)
         let room = if w.rules().quirks.pending_order_limit {
             let pending = w
                 .houses
@@ -477,7 +485,7 @@ impl Brain {
         } else {
             usize::MAX
         };
-        self.special.memory.note_given(w, &out, room);
+        self.special.note_given(w, &out, room);
         self.script.end_think();
         out
     }

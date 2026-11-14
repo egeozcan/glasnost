@@ -156,9 +156,9 @@ pub struct Uses {
     /// weapon (S-0308 claims 5 and 6, `gunner`).
     #[serde(default)]
     pub gunner_loads: u32,
-    /// Building orders turned into a power plant order because the
-    /// building's drain would have left the house short of power
-    /// (`power::plant_first`).
+    /// Power plant orders given because a building's drain would have left
+    /// the house short of power (`power::plant_first`): at most one a
+    /// think, and none when the think had ordered the plant already.
     #[serde(default)]
     pub plants_first: u32,
     /// Army units sent at an enemy draining one of the house's power
@@ -245,6 +245,7 @@ pub(crate) enum Use {
     EconomyHold,
     Resume,
     GunnerLoad,
+    PlantFirst,
     EconomyDefence,
     CurtainedBuilding,
     SuperweaponHold,
@@ -298,6 +299,7 @@ impl Uses {
             Use::EconomyHold => &mut self.economy_holds,
             Use::Resume => &mut self.resumes,
             Use::GunnerLoad => &mut self.gunner_loads,
+            Use::PlantFirst => &mut self.plants_first,
             Use::EconomyDefence => &mut self.economy_defence,
             Use::CurtainedBuilding => &mut self.curtained_buildings,
             Use::SuperweaponHold => &mut self.superweapon_holds,
@@ -325,6 +327,11 @@ pub struct Special {
     /// The crate orders given lately (`crates`).
     #[serde(default)]
     pub(crate) crate_orders: crate::crates::Sent,
+    /// The uses offered in this think, each with the order offered for it,
+    /// counted once the brain knows which orders it gives
+    /// ([`Special::note_given`]); empty between thinks.
+    #[serde(skip)]
+    offered_uses: Vec<(Use, Order)>,
 }
 
 /// The click a person would give `unit` on `target`, as orders, when the
@@ -365,13 +372,46 @@ impl Special {
     /// a brain), every order it gives is noted as given.
     pub fn think(&mut self, script: &Script, w: &World, out: &mut Vec<Order>) {
         self.think_with(script, w, out, &mut ());
-        self.memory.note_given(w, out, usize::MAX);
+        self.note_given(w, out, usize::MAX);
+    }
+
+    /// Notes the orders the brain gives with `out`, the think's final
+    /// orders, of which the house's pending list takes the first `room`
+    /// ([`Memory::note_given`]), and counts the uses offered for them
+    /// ([`Uses`]). A behaviour order counts when it is its actor's last
+    /// behaviour order in `out`, within `room`, as the memory judges it;
+    /// any other order when an equal order that no other use has claimed
+    /// stands in `out` within `room`. The rest were not given and count for
+    /// nothing.
+    // design: own AI (#19): every offered order was counted, also those a filter dropped, a later part replaced or the full pending list refused (S-0213 claim 2, quirks.pending_order_limit)
+    pub(crate) fn note_given(&mut self, w: &World, out: &[Order], room: usize) {
+        self.memory.note_given(w, out, room);
+        let offered = std::mem::take(&mut self.offered_uses);
+        if offered.is_empty() {
+            return;
+        }
+        let last = crate::memory::last_behaviours(out);
+        let mut claimed = vec![false; out.len().min(room)];
+        for (u, o) in offered {
+            let given = if matches!(o, Order::Behaviour { .. }) {
+                crate::memory::behaviour_given(&last, out, room, &o)
+            } else if let Some(i) = (0..claimed.len()).find(|&i| !claimed[i] && out[i] == o) {
+                claimed[i] = true;
+                true
+            } else {
+                false
+            };
+            if given {
+                self.uses.add(u);
+            }
+        }
     }
 
     /// [`Special::think`], telling `p` which ability runs (the tools'
     /// benchmark, `glasnost_sim::probe`); `p` reads nothing and changes
-    /// nothing. Its orders are offered to the memory, and noted when the
-    /// caller tells it which it gave ([`Memory::note_given`]).
+    /// nothing. Its orders are offered to the memory and its uses to the
+    /// counters, and noted and counted when the caller tells it which it
+    /// gave ([`Special::note_given`]).
     pub fn think_with<P: Probe>(
         &mut self,
         script: &Script,
@@ -464,19 +504,24 @@ impl Special {
 
     /// Offers the order just given, the last of `out`, as a use of `u`
     /// ([`Uses`]): one order for each ability use, the click's last order
-    /// when a click gives several.
+    /// when a click gives several. It counts if the brain gives it
+    /// ([`Special::note_given`]).
     pub(crate) fn offer_use(&mut self, u: Use, out: &[Order]) {
         debug_assert!(!out.is_empty(), "an order is given before it is offered");
-        self.uses.add(u);
+        if let Some(o) = out.last() {
+            self.offered_uses.push((u, o.clone()));
+        }
     }
 
-    /// Counts building orders turned into power plant orders.
-    pub(crate) fn count_plants_first(&mut self, n: usize) {
-        self.uses.plants_first += n as u32;
+    /// Offers order `o`, given in this think, as a use of `u`
+    /// ([`Special::offer_use`] for an order that is not the last).
+    pub(crate) fn offer_use_of(&mut self, u: Use, o: Order) {
+        self.offered_uses.push((u, o));
     }
 
     /// Counts attack orders dropped for gattling units that keep firing
-    /// at their targets (S-0609, `gattling`).
+    /// at their targets (S-0609, `gattling`): the filter's drops, not
+    /// orders given, so counted at once.
     pub(crate) fn count_spins_kept(&mut self, n: usize) {
         self.uses.spins_kept = self.uses.spins_kept.saturating_add(n as u32);
     }
