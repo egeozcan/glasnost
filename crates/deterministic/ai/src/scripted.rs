@@ -1489,6 +1489,44 @@ impl Script {
             .find(|&b| self.placeable(w, b))
     }
 
+    /// Every building the tech climb could ever give
+    /// ([`Script::unblocker`]): a building that meets a prerequisite entry
+    /// of some type, or a factory. The rules alone decide the list, so it
+    /// holds every answer of the climb whatever the house has.
+    fn climbable(w: &World) -> BTreeSet<TypeRef> {
+        let tech = &w.rules().econ.tech;
+        let factories = w
+            .rules()
+            .buildings
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.factory.is_some())
+            .map(|(i, _)| i as u32);
+        all_types(w)
+            .into_iter()
+            .filter_map(|x| tech.of(x))
+            .flat_map(|f| f.prereq.iter().flat_map(|&p| Self::meeting(w, p)))
+            .chain(factories)
+            .map(|index| TypeRef {
+                kind: Kind::Building,
+                index,
+            })
+            .collect()
+    }
+
+    /// Whether the line of every building the base walk or the tech climb
+    /// could give ([`Script::candidates`] for power, [`Script::climbable`])
+    /// is busy: then [`Script::order_build`] orders none of them, whichever
+    /// the searches would find (our own tooling for speed, #52: the searches
+    /// ran every think while a building was in production and their answer
+    /// was thrown away).
+    fn climb_lines_busy(&self, w: &World) -> bool {
+        self.candidates(w, Role::Power)
+            .into_iter()
+            .chain(Self::climbable(w))
+            .all(|t| self.busy(w, t))
+    }
+
     /// The credits the house earned over the last whole window of
     /// [`INCOME_WINDOW`] ticks; none before one has passed since the watch
     /// began.
@@ -2171,7 +2209,10 @@ impl Script {
             };
             if let Some(role) = wanted {
                 self.build(w, role, &mut out);
-            } else if !selling && self.harvesters_kept(w) {
+            } else if !selling && self.harvesters_kept(w) && !self.climb_lines_busy(w) {
+                // design: own AI (#52): with every line a walk or climb
+                // building could go on busy, the search's building would
+                // not be ordered (`order_build`), so it is not searched for
                 mark("ai:script:buildings:walk");
                 let walked = walk();
                 mark("ai:script:buildings:climb");
@@ -3804,6 +3845,54 @@ mod place_cell_tests {
         assert!(seen > 0, "no enemy seen");
         assert!(free > 0 && free < tested, "{free} of {tested}");
         assert!(roles_found > 0 && candidates_found > 0);
+    }
+
+    /// Our tooling for speed (design: own AI, #52): every building the
+    /// tech climb's search gives, for every type at every depth, is one of
+    /// [`Script::climbable`], so that while the lines of all of them and of
+    /// the power plants are busy ([`Script::climb_lines_busy`]) neither the
+    /// climb's nor the base walk's building could be ordered; at several
+    /// points of each fixture game, for every house.
+    #[test]
+    fn every_climb_answer_is_a_climbable_building() {
+        let mut answers = 0;
+        let mut busy = 0;
+        for mut g in kept_games() {
+            let climbable = Script::climbable(&g.world);
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                for h in 0..w.houses.len() {
+                    let s = Script::new(HouseId(h as u8), Plan::default());
+                    s.begin_think();
+                    for t in all_types(w) {
+                        for depth in 0..=CLIMB_DEPTH {
+                            if let Some(b) = s.unblocker(w, t, depth) {
+                                assert!(
+                                    climbable.contains(&b),
+                                    "house {h}, {t:?}, depth {depth}: {b:?}"
+                                );
+                                answers += 1;
+                            }
+                        }
+                    }
+                    if s.climb_lines_busy(w) {
+                        busy += 1;
+                        assert!(s.climb(w).is_none_or(|t| s.busy(w, t)), "house {h}");
+                        assert!(
+                            s.candidates(w, Role::Power)
+                                .into_iter()
+                                .all(|t| s.busy(w, t)),
+                            "house {h}"
+                        );
+                    }
+                    s.end_think();
+                }
+            }
+        }
+        assert!(answers > 0 && busy > 0, "{answers} answers, {busy} busy");
     }
 }
 
