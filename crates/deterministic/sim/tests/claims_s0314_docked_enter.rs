@@ -78,7 +78,14 @@ fn ordered(v1_health: i32) -> (World, ObjectId, ObjectId, ObjectId) {
     for h in &mut w.houses {
         h.credits = 10_000;
     }
-    let a = testkit::spawn(&mut w, Kind::Building, "PAD", 0, testkit::mid(SIZE, 0, 0), 0);
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "PAD",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     let b = testkit::spawn(
         &mut w,
         Kind::Building,

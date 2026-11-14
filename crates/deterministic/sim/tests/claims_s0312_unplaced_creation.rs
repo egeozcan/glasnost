@@ -77,7 +77,11 @@ fn a_refused_crew_takes_its_creation_set_with_it() {
             no_escape: false,
         },
     );
-    assert_eq!(w.next_id - ids_before, 3, "crew and two slaves were created");
+    assert_eq!(
+        w.next_id - ids_before,
+        3,
+        "crew and two slaves were created"
+    );
     assert_eq!(of_type(&w, "CREWM"), 0, "the refused crew is gone");
     assert_eq!(of_type(&w, "SLV"), 0, "and so are its slaves");
 }

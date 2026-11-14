@@ -47,7 +47,10 @@ fn a_seized_vehicle_without_destination_rests_on_its_body() {
     assert!(lift::seized(&w, v), "still seized in its fall");
     assert_eq!(o.target, None, "no target");
     assert_eq!(o.dest, None, "no movement destination");
-    assert!(t0 - o.last_fired >= g + 5, "G + 5 ticks since the last shot");
+    assert!(
+        t0 - o.last_fired >= g + 5,
+        "G + 5 ticks since the last shot"
+    );
     assert_eq!(o.body.value(t0), body, "the body did not turn");
     assert_eq!(
         o.turret.target, body,

@@ -116,8 +116,22 @@ fn a_building_drain_sum_wraps() {
 #[test]
 fn the_house_output_sum_wraps() {
     let mut w = world(true);
-    let a = testkit::spawn(&mut w, Kind::Building, "GEN", 0, testkit::mid(SIZE, 0, 0), 0);
-    let b = testkit::spawn(&mut w, Kind::Building, "GEN", 0, testkit::mid(SIZE, 3, 0), 0);
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "GEN",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
+    let b = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "GEN",
+        0,
+        testkit::mid(SIZE, 3, 0),
+        0,
+    );
     let expect = power::building_output(&w, a).wrapping_add(power::building_output(&w, b));
     testkit::run(&mut w, 2);
     assert_eq!(w.houses[0].econ.power.output, expect);

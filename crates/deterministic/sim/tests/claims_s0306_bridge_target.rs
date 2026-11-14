@@ -91,7 +91,11 @@ fn the_aim_point_of_a_high_bridge_cell_is_at_its_deck_height() {
     let terrain = Pos::centre(c, 0);
     assert_eq!(
         led_aim_point(&w, a, Target::Cell(c)),
-        Pos::new(terrain.x, terrain.y, w.surface_at(terrain.x, terrain.y) + 416)
+        Pos::new(
+            terrain.x,
+            terrain.y,
+            w.surface_at(terrain.x, terrain.y) + 416
+        )
     );
 }
 

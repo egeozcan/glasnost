@@ -64,7 +64,14 @@ fn detonations(w: &World) -> Vec<Pos> {
 fn shot_down(twice: bool) -> (usize, usize) {
     let r = rules(twice);
     let mut w = testkit::game_with(&r, SIZE, 11);
-    let id = testkit::spawn(&mut w, Kind::Aircraft, "JET", 0, testkit::mid(SIZE, 0, 0), 0);
+    let id = testkit::spawn(
+        &mut w,
+        Kind::Aircraft,
+        "JET",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     w.obj_mut(id).unwrap().pos.z += 600;
     assert!(air::height(&w, id) > 0, "in the air");
     w.effects.clear();

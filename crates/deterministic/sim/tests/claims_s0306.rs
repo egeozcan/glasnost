@@ -2414,7 +2414,10 @@ fn t1_row1_deck_height_is_that_of_the_new_cell() {
     let p = c(-3, 2, 430);
     let q = c(-2, 2, 400);
     let deck = s.w.surface_at(q.x, q.y) + 416;
-    assert!(deck > p.z, "the new cell's deck height is above both points");
+    assert!(
+        deck > p.z,
+        "the new cell's deck height is above both points"
+    );
     // V_z −20 falls by g (10) to −30 (claim 10): P′ is q.
     let id = place(&mut s, far(), p, [i64::from(q.x - p.x), 0, -20]);
     assert_eq!(step(&mut s, id), Out::Flying(q), "no deck crossing");
@@ -2430,13 +2433,13 @@ fn t1_row1_deck_crossing_into_a_lower_cell() {
     let p = c(-3, 2, 430);
     let q = c(-2, 2, 400);
     let deck = s.w.surface_at(q.x, q.y) + 416;
-    assert!(p.z >= deck && q.z < deck, "a crossing of the new cell's deck height");
+    assert!(
+        p.z >= deck && q.z < deck,
+        "a crossing of the new cell's deck height"
+    );
     // V_z −20 falls by g (10) to −30 (claim 10): P′ is q.
     let id = place(&mut s, far(), p, [i64::from(q.x - p.x), 0, -20]);
-    assert_eq!(
-        step(&mut s, id),
-        Out::Detonated(Pos::new(q.x, q.y, deck))
-    );
+    assert_eq!(step(&mut s, id), Out::Detonated(Pos::new(q.x, q.y, deck)));
 }
 
 // spec: S-0306 T1 row 1 (crossing a bridge deck going down, from P at or above the deck height to P′ below it: z at the deck height)

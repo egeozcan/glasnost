@@ -34,7 +34,10 @@ fn a_regiven_turn_in_place_begins_the_track_when_the_body_arrives() {
         }
     }
     let (t0, theta) = first.expect("a turn in place was given");
-    assert!(theta > 6, "a turn long enough to stop and re-give inside it");
+    assert!(
+        theta > 6,
+        "a turn long enough to stop and re-give inside it"
+    );
     let arrives = t0 + theta;
 
     // Into the turn: stop. The body keeps its turn.
