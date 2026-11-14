@@ -1164,13 +1164,17 @@ fn action(
                             crate::structures::ownership::Cause::Trigger,
                         );
                     } else if o.owner != Some(h) {
-                        let old = o.owner;
+                        let (old, spawner) = (o.owner, o.spawn.is_some());
                         if let Some(ob) = w.obj_mut(id) {
                             ob.owner = Some(h);
                         }
                         crate::econ::events::owner_changed(w, id, old);
                         // spec: S-0309 claim 31 (a trigger's change-owner action, a listed cause of claim 30: the orders reset inside the change)
                         crate::structures::ownership::reset_orders(w, id);
+                        if spawner {
+                            // spec: S-0506 claim 13 (a spawner that changes house clears its slots)
+                            crate::spawn::owner_changed(w, id);
+                        }
                     }
                 }
             }
