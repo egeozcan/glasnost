@@ -1,9 +1,9 @@
 ---
 id: Q-3102
 title: When the attack a moving vehicle's attack-move search queues becomes current
-status: open
+status: answered
 related: [S-0309, S-0215]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
