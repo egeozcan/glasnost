@@ -8458,8 +8458,7 @@ fn voxel_types_drawn_together_draw_as_each_alone() {
             for (m, entry) in all.iter().zip(&entries) {
                 let (built, mut fresh) = build_parts(inputs, true);
                 let mut fresh_scene = built.scene;
-                let (expect, _) =
-                    fresh.mobiles(inputs, &mut fresh_scene, std::slice::from_ref(m));
+                let (expect, _) = fresh.mobiles(inputs, &mut fresh_scene, std::slice::from_ref(m));
                 let now = drawn_look(&scene, &entry.items);
                 assert!(!now.is_empty(), "round {round}: {:?} draws", m.kind);
                 assert_eq!(
