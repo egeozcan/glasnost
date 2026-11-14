@@ -1670,7 +1670,7 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
             if w.obj(a).is_some_and(|x| x.target.is_some())
                 && let Some(ob) = w.obj_mut(a)
             {
-                // spec: S-0309 claim 23 (a target: queues attack with an immediate start and counts as engaged)
+                // spec: S-0309 claim 23 (a target: queues attack with an immediate start and counts as engaged); interim, Q-3102 (#229): attack starts at once, whether or not the object is ready, since S-0215 claims 7 and 11 would keep a moving vehicle's attack queued until its arrival, against S-0309 scenario A6 part g
                 ob.beh
                     .queue_and_start_at_once(Behaviour::Attack, tick, stale);
                 ob.combat.engaged = true;
@@ -1693,6 +1693,7 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
             let found = w.obj(a).is_some_and(|x| x.target.is_some());
             if let Some(ob) = w.obj_mut(a) {
                 if found {
+                    // spec: S-0309 claim 23 (a target: queues attack with an immediate start and counts as engaged); interim, Q-3102 (#229): at once, whether or not the object is ready, as in the destination row
                     ob.beh
                         .queue_and_start_at_once(Behaviour::Attack, tick, stale);
                     ob.combat.engaged = true;

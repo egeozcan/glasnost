@@ -120,8 +120,11 @@ fn ty(w: &World, id: ObjectId) -> Option<Ty> {
         fighter: e.fighter.unwrap_or(false),
         fly_by: e.fly_by.unwrap_or(false),
         fly_back: e.fly_back.unwrap_or(false),
-        // spec: S-0501 Import mapping (a type's FlightLevel absent: the game-wide value)
-        cruise: e.flight_level.unwrap_or(r.air.flight_level),
+        // spec: S-0501 Import mapping (a type's FlightLevel absent: the game-wide value; absent stays unset, −1, which means "use the game-wide value", not a height of −1) (#227)
+        cruise: e
+            .flight_level
+            .filter(|&v| v != -1)
+            .unwrap_or(r.air.flight_level),
         // spec: S-0501 Import mapping (SlowdownDistance absent: 500, S-0207)
         slowdown: u.slowdown_distance,
         // spec: S-0501 claim 4 (V: the imported type speed, without bonuses); F6 (Vₜ: the same converted speed of S-0207 claim 1, not the raw field)
@@ -768,6 +771,22 @@ pub fn placed(w: &mut World, id: ObjectId) {
     a.kept_filed = ground && !t.landable;
     // spec: S-0501 claim 1 (a type placed carrying passengers is a passenger carrier for life)
     a.passenger_carrier |= passengers(w, id) > 0;
+    if !warped {
+        // spec: S-0501 claim 1 (a placement puts the aircraft on the ground or at cruise height, at rest) and claim 40 (a freshly placed aircraft has no unfinished flight); claim 8 (an aircraft on the ground and not landing takes off whatever the cell): the flight it was in when it left the map is not its flight (#226)
+        a.taking_off = false;
+        a.landing = false;
+        a.sliding = false;
+        a.stranded = false;
+        a.origin = false;
+        a.flying_to = None;
+        a.handed = None;
+        a.lost = false;
+        a.raised = false;
+        a.own_point = false;
+        a.ignored = None;
+        a.unfinished = false;
+        a.released = false;
+    }
     a.entered = usable;
     // spec: S-0513 r115 claim 36 (a member that does not move from one bridge deck to another appears on the deck when it lands on a high-bridge cell from the ground; on a high-bridge cell the bridge lift is added) and S-0501 claim 43 (the deck mark is the aircraft's own standing-on-deck state)
     let on_deck = warped && w.high_bridge(cell) && o.pos.z - surface >= DECK_ALLOWANCE;
@@ -4295,6 +4314,10 @@ fn guard_move(w: &mut World, id: ObjectId, t: &Ty) {
 /// aircraft on the ground by its height, or landing, takes off (claim 8).
 fn regive(w: &mut World, id: ObjectId) {
     let Some(t) = ty(w, id) else { return };
+    if w.obj(id).is_some_and(|o| o.dest.is_none()) && st(w, id).own_point {
+        // spec: S-0501 claim 6 (the new flight point is chosen at the moment the aircraft is given no destination, and it flies to that point) and claim 40 (the move's processing hands over its destination's flight point; with no destination there is none to hand over, and claim 8's exception makes a hand-over of the point it already flies to change nothing) (#225)
+        return;
+    }
     let dest = flight_target(w, id);
     if dest.is_some() {
         give_point(w, id, &t, dest);
@@ -5205,7 +5228,11 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
                     set_stage(w, id, next);
                     Some(standard(w, id))
                 }
-                Answer::Cloaked | Answer::Rearming => Some(standard(w, id)),
+                // spec: S-0501 T1 (refiring, rearming: standard delay; cloaked: uncloak, standard delay); S-0516 claim 11 (a) (a firer that tries to fire and gets cloaked starts uncloaking) (#228)
+                Answer::Cloaked | Answer::Rearming => {
+                    crate::cloak::machine::firing_answer(w, id, 0, tgv, ans);
+                    Some(standard(w, id))
+                }
                 other => {
                     let next = if !ammo_left(w, id) {
                         Stage::Done

@@ -259,3 +259,67 @@ fn linked_state_survives_a_save_and_load() {
         w.obj(coil).unwrap().combat.chargers
     );
 }
+
+// Sim issues S11, #231: the charging scan of area guard (S-0215 claim 26).
+
+/// A charger in *area guard* next to an own overpowerable building, its
+/// targeting timer set to `timer`. Returns the world, the unit, the
+/// building and whether the unit took the building within 600 ticks.
+fn area_guarding_charger(
+    timer: i32,
+    tweak: impl FnOnce(&mut glasnost_rules::schema::Ruleset),
+) -> (World, ObjectId, ObjectId, bool) {
+    let mut w = world(tweak);
+    let coil = spawn(&mut w, Kind::Building, "COIL", 0, at(1, 0));
+    let u = spawn(&mut w, Kind::Infantry, "CHARGER", 0, at(0, 0));
+    let tick = w.tick;
+    let stale = w.rules().quirks.stale_suspended_revert;
+    if let Some(o) = w.obj_mut(u) {
+        o.beh.force(Behaviour::AreaGuard, tick, stale);
+        o.targeting_timer = timer;
+    }
+    let mut took = false;
+    for _ in 0..600 {
+        testkit::run(&mut w, 1);
+        if w.obj(u).unwrap().target == Some(Target::Object(coil)) {
+            took = true;
+            break;
+        }
+    }
+    (w, u, coil, took)
+}
+
+// spec: S-0215 claim 26 (no target once the leash and the search have taken effect: the automatic charging scan runs; a search that finds nothing is followed by the idle action) and S-0518 claim 14 (attack queued, the charging mark set)
+#[test]
+fn issue_231_area_guard_scan_after_a_search_that_finds_nothing() {
+    let (w, u, _, took) = area_guarding_charger(0, |_| {});
+    assert!(took, "the scan took the building");
+    let o = w.obj(u).unwrap();
+    assert!(o.combat.charging);
+}
+
+// spec: S-0215 claim 26 (the scan runs whether or not the actor may search: its targeting timer has not run out)
+#[test]
+fn issue_231_area_guard_scan_when_the_timer_has_not_run_out() {
+    let (w, u, _, took) = area_guarding_charger(1_000_000, |_| {});
+    let o = w.obj(u).unwrap();
+    assert!(o.guard_spot.is_some(), "area guard was processed");
+    assert!(took, "the scan took the building; target {:?}", o.target);
+    assert!(o.combat.charging);
+}
+
+// spec: S-0215 claim 26 (the scan runs whether or not the actor may search: a type with no passive acquisition)
+#[test]
+fn issue_231_area_guard_scan_without_passive_acquisition() {
+    let (w, u, _, took) = area_guarding_charger(0, |r| {
+        r.sim
+            .infantry
+            .get_mut("CHARGER")
+            .unwrap()
+            .combat
+            .can_passive_aquire = Some(false);
+    });
+    let o = w.obj(u).unwrap();
+    assert!(took, "the scan took the building; target {:?}", o.target);
+    assert!(o.combat.charging);
+}

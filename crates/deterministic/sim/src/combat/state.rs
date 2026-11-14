@@ -118,10 +118,14 @@ pub struct CombatState {
     /// `quirks.berserk_zero_duration` stays berserk until the unit's next
     /// countdown update); `None` when not berserk.
     pub berserk: Option<i32>,
-    /// The turret was turning at the end of the previous tick (S-0310
-    /// claim 3).
+    /// Unused: never set and never read; always `false`. It stays only
+    /// because it is part of the saved state, so removing it changes the
+    /// state hash (issue #237).
     pub turret_was_turning: bool,
-    /// The tick of the last aim by the attack processing (S-0215 claim 32).
+    /// Unused: the target an infantry unit's firing sequence last started
+    /// against (written by the firing step in `combat::behave`), never
+    /// read. It stays only because it is part of the saved state, so
+    /// removing it changes the state hash (issue #237).
     pub last_shot_target: Option<Target>,
     /// Hostile-hit mark (S-0314 Terms): a surviving hit by a known attacker
     /// not allied from this object's owner's side. Never cleared.

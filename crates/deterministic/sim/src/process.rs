@@ -10,6 +10,12 @@
 //! processed as a behaviour without a processing rule; that is recorded as
 //! a note on the world.
 //!
+//! Not built: the hover-attack cell of claim 23's general *attack* rules
+//! and claim 24's *guard* table, by which a hover-attack type at no height
+//! above its surface takes a nearby cell as its destination. No spec gives
+//! that cell (Q-3101, issue #234), so a hover-attack type is processed like
+//! any other type in *attack* and *guard*.
+//!
 //! Gates (claim 35): a gate's *open* runs its stages here, the door moves at
 //! every turn of the gate before its per-tick start and processing (claim
 //! 35 (d)), [`gate_open`] gives the passage state that S-0209's gate rows
@@ -492,8 +498,14 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
     }
     let armed = u.primary.is_some();
     if !armed {
-        // spec: S-0215 claim 15 row 6 (unarmed and deploying, or with area guard current: nothing changes)
-        if cur == Some(Behaviour::AreaGuard) {
+        // spec: S-0215 claim 15 row 6 (unarmed and deploying; or unarmed with unload current and a deploys-into type; or unarmed with area guard current: nothing changes); S-0517 Terms (deploying: the in-place form in transition towards deployed) (#236)
+        let deploying = matches!(
+            crate::econ::inplace::form(w, id),
+            crate::econ::inplace::Form::Deploying { .. }
+        );
+        let unloading_into = cur == Some(Behaviour::Unload)
+            && crate::econ::deploy::deploys_into(w, o.kind, o.type_index).is_some();
+        if deploying || unloading_into || cur == Some(Behaviour::AreaGuard) {
             return;
         }
         // spec: S-0215 claim 15 row 7 (unarmed: clear target and destination, queue guard)
@@ -706,6 +718,8 @@ pub fn late_start(w: &mut World, id: ObjectId) {
 fn refresh_attack_move(w: &mut World, id: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
+    // spec: S-0215 claim 7 (an immediate start is the readiness-dependent one: the queued behaviour starts only when the object is ready, claim 11) (#229)
+    let rd = ready(w, id);
     let Some(ob) = w.obj_mut(id) else { return };
     let Some(mem) = ob.attack_move else { return };
     // spec: S-0309 claim 23 (b) (resumed when engaged or in guard; otherwise the memory is removed, with its engaged mark)
@@ -720,14 +734,15 @@ fn refresh_attack_move(w: &mut World, id: ObjectId) {
         AttackMoveMemory::Dest(d) => {
             // spec: S-0309 claim 23 (b) (a destination: move queued with an immediate start, the memory's destination the object's)
             let before = ob.dest;
-            ob.beh.queue_and_start_at_once(Behaviour::Move, t, stale);
+            ob.beh.queue_and_start(Some(Behaviour::Move), rd, t, stale);
             ob.dest = Some(d);
             // spec: S-0107 claim 15 (a destination assigned: the destination-driven get-up)
             crate::infantry::destination_assigned(w, id, before);
         }
         AttackMoveMemory::Target(x) => {
             // spec: S-0309 claim 23 (b) (only a target: attack queued with an immediate start, the memory's target the object's)
-            ob.beh.queue_and_start_at_once(Behaviour::Attack, t, stale);
+            ob.beh
+                .queue_and_start(Some(Behaviour::Attack), rd, t, stale);
             let before = ob.target;
             ob.target = Some(x);
             // spec: S-0309 claim 24 (every setting of a target, even to the same one, leaves a target that is not an opportunity target)
@@ -1025,6 +1040,12 @@ fn immune_deployed(w: &mut World, id: ObjectId) -> i32 {
     // spec: S-0215 claim 31 and S-0525 claim 7 (only a field centred on the unit's cell counts, by its current integer field level)
     let suppressed = crate::radiation::centre_field_level(w, cell).is_some_and(|l| l >= threshold);
     let target = Target::Cell(cell);
+    if !suppressed && let Some(ob) = w.obj_mut(id) {
+        // spec: S-0215 claim 31 (Q-0983: the own cell is the target for the firing check and this immediate shot only, assigned in the deciding processing and cleared there after the shot or the refusal); S-0306 claim 3 (the launch direction, elevation and scatter are computed towards the aim point, the reference point of the firer's target) (#233)
+        crate::spawn::set_own_target(ob, Some(target));
+        // spec: S-0301 claim 5, Moment of a retarget's let-go (at the change of the firer's target)
+        crate::emitters::retarget_let_go(w, id);
+    }
     if !suppressed && check(w, id, Some(target), 1, true) == Answer::CanFire {
         // spec: S-0215 claim 31 (fires at its own cell, drops the target, starts its deployed-fire sequence; Q-0983: the shot is made at once)
         crate::combat::fire::shot(w, id, 1, target);
@@ -1166,8 +1187,22 @@ fn process_unload_infantry(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0215 claim 30 (deployed: 450 ticks)
         NO_RULE_DELAY
     } else {
-        // spec: S-0215 claim 30 (an undeployed unit starts its deploy sequence; area-fire weapons wait for M4)
+        // spec: S-0215 claim 30 (an undeployed unit starts its deploy sequence)
         infantry::request(w, id, Seq::Deploy, false);
+        // spec: S-0215 claim 30 and Terms (the deploy weapon: the secondary, or the primary for a type with the spray-attack flag)
+        let spray = w
+            .rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.spray_attack.unwrap_or(false));
+        let slot = if spray { 0 } else { 1 };
+        let area = crate::combat::weapon::slot_weapon(w, id, slot)
+            .is_some_and(|x| w.rules().combat.weapon(x).area_fire);
+        if area && let Some(ob) = w.obj_mut(id) {
+            // spec: S-0215 claim 30 (a deploy weapon with the area-fire flag: a unit of any type but the one singled out by name takes its own cell as its target); Q-3100 (interim: no type is singled out, in both positions of quirks.named_deploy_area_fire, so the named type's rows are not built) (#232)
+            crate::spawn::set_own_target(ob, Some(Target::Cell(o.pos.cell())));
+            // spec: S-0301 claim 5, Moment of a retarget's let-go (at the change of the firer's target)
+            crate::emitters::retarget_let_go(w, id);
+        }
         // spec: S-0215 claim 30 (undeployed: the undeploy delay when 0 or more, else 450 ticks)
         if delay >= 0 { delay } else { NO_RULE_DELAY }
     };
@@ -1194,11 +1229,19 @@ fn process_move(w: &mut World, id: ObjectId) -> i32 {
             .and_then(|s| s.seq)
             .is_some_and(Seq::is_deploy);
     if deployed {
-        // spec: S-0215 claim 22 (deployed infantry: clears its destination, 1 tick)
-        if let Some(ob) = w.obj_mut(id) {
-            ob.dest = None;
+        if crate::combat::acquire::player_owned(w, id) {
+            // spec: S-0215 claim 22 (Infantry: a deployed unit of a human-controlled owner clears its destination, 1 tick; in our engine every player house, Terms, houses in our engine)
+            if let Some(ob) = w.obj_mut(id) {
+                ob.dest = None;
+            }
+            return 1;
         }
-        return 1;
+        if undeploy_delay(w, id) < 0 {
+            // spec: S-0215 claim 22 (Infantry: one of a computer-controlled owner whose undeploy delay is negative starts its undeploy sequence, the delay that sequence's frame count; the neutral, special and test-only computer-controlled player houses keep the original's rules, Terms) (#235)
+            infantry::request(w, id, Seq::Undeploy, false);
+            return frame_count(w, id, Seq::Undeploy);
+        }
+        // spec: S-0215 claim 22 (Infantry: one of a computer-controlled owner whose undeploy delay is 0 or more follows the general rule) (#235)
     }
     // spec: S-0215 claim 22 (no destination, not moving, nothing queued: falls back to rest, 1 tick)
     if o.dest.is_none() && !moving(w, id) && o.beh.queued.is_none() {
@@ -1288,8 +1331,8 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
             .as_ref()
             .and_then(|s| s.seq)
             .is_some_and(Seq::is_deploy);
-        if deployed && o.target.is_some() {
-            // spec: S-0215 claim 23 (deployed infantry: its deployed-firing rule, S-0517 claim 16, the standard delay not halved)
+        if deployed && crate::combat::acquire::player_owned(w, id) {
+            // spec: S-0215 claim 23 (third infantry row: a human-controlled owner, deployed, with or without a target, runs its deployed-firing rule, S-0517 claim 16, the standard delay not halved; in our engine every player house, while the neutral, special and test-only computer-controlled player houses keep the original's rule, which has no such row: Terms, houses in our engine) (#230)
             deployed_firing(w, id);
             return standard_delay(w, id);
         }
@@ -1726,12 +1769,8 @@ pub(crate) fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
             if found.is_some() {
                 return 1;
             }
-            // spec: S-0518 claim 14 (area guard: after the guard spot and automatic search steps, a charger still without a target looks for a building to charge; when it takes one its idle action does not run and the area guard delay follows: the rate delay plus a draw over 1 to 5, divided by 6 under the close-range condition on the new building; Q-0985 answered by revision 3)
-            if !(w.obj(id).is_some_and(|x| x.target.is_none())
-                && crate::linked::start_charging(w, id))
-            {
-                idle(w);
-            }
+            // spec: S-0215 claim 26 (a search that finds nothing is followed by an attempt at the idle action)
+            idle(w);
         } else if holds || o.target.is_none() {
             // spec: S-0215 claim 26 (may not search: attempts its idle action)
             idle(w);
@@ -1742,6 +1781,10 @@ pub(crate) fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     }
     if w.obj(id).is_none() {
         return NO_RULE_DELAY;
+    }
+    if w.obj(id).is_some_and(|x| x.target.is_none()) {
+        // spec: S-0215 claim 26 (in a processing none of rows 1 to 5 ends, any actor, with or without a guard spot, that has no target once the leash and the search have taken effect runs S-0518 claim 14's automatic charging scan; it does not undo an idle action already attempted, and the area-guard delay below stays in effect, its close-range test on the resulting target) and S-0518 claim 14 (#231)
+        crate::linked::start_charging(w, id);
     }
     let dr = rate_delay(w, id);
     // spec: S-0215 claim 26 and F0 (D = k × D_r + U(1, 5), k = 2 for aircraft and 1 for every other kind)
