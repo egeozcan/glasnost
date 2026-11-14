@@ -638,7 +638,7 @@ fn cell_of(x: i32, y: i32) -> CellXY {
 /// off a bridge deck (S-0207 claim 5). `at_point`: the position is a track
 /// point or the track target, where the world height is set (claim 5);
 /// between points (claim 4) the height is kept.
-fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool) {
+fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool, crush: bool) {
     let Some(o) = w.obj(id) else { return };
     let (pos, old_layer) = (o.pos, o.layer);
     let old = pos.cell();
@@ -660,7 +660,8 @@ fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool) {
         // spec: S-0212 claims 13 and 16a (recorded in a cell of another threat block: its threat amount moves there)
         crate::threat::relisted(w, id, new);
         crate::load::recalc_cells(w, &[old, new]);
-        crate::crush::entered_cell(w, id, new);
+        // spec: S-0210 claim 9 (each time it drives into a new cell on a crush-mode track: the track being driven, also when the move to its target, made after the track is cleared, is the entry)
+        crate::crush::entered_cell_on(w, id, new, crush);
     }
 }
 
@@ -1657,7 +1658,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
                 d2.track = None;
                 d2.between_steps = true;
             }
-            set_pos(w, id, tr.target.0, tr.target.1, true);
+            set_pos(w, id, tr.target.0, tr.target.1, true, tr.crush);
             if let Some(&(_, _, f)) = pts.last() {
                 set_facing(w, id, f);
             }
@@ -1677,7 +1678,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
         let p: Point = pts[next - 1];
         let (x, y) = (tr.target.0 + p.0, tr.target.1 + p.1);
         // spec: S-0207 claim 5 (at a point: ground position target + displacement, height H, facing 256f)
-        set_pos(w, id, x, y, true);
+        set_pos(w, id, x, y, true, tr.crush);
         set_facing(w, id, p.2);
         last = (x, y);
     }
@@ -1719,7 +1720,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             q0
         };
         if dest != cur {
-            set_pos(w, id, dest.0, dest.1, false);
+            set_pos(w, id, dest.0, dest.1, false, tr.crush);
         }
     }
     if let Some(d2) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {

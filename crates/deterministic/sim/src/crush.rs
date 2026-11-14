@@ -41,17 +41,24 @@ pub fn warn_ahead(w: &mut World, id: ObjectId, first: CellXY) {
 }
 
 /// A driving vehicle drives into a new cell (S-0210 claim 9, driving
-/// locomotor case).
+/// locomotor case), on its current track.
 pub fn entered_cell(w: &mut World, id: ObjectId, c: CellXY) {
+    let crush_track = w
+        .obj(id)
+        .and_then(|o| o.drive.as_ref())
+        .and_then(|d| d.track.as_ref())
+        .is_some_and(|t| t.crush);
+    entered_cell_on(w, id, c, crush_track);
+}
+
+/// A driving vehicle drives into a new cell (S-0210 claim 9) on a track
+/// whose crush mode is `crush_track`: the track being driven, also when the
+/// move to its target, which clears it first, makes the entry.
+pub fn entered_cell_on(w: &mut World, id: ObjectId, c: CellXY, crush_track: bool) {
     let Some(o) = w.obj(id) else { return };
     let Some(u) = w.rules().unit(o.kind, o.type_index) else {
         return;
     };
-    let crush_track = o
-        .drive
-        .as_ref()
-        .and_then(|d| d.track.as_ref())
-        .is_some_and(|t| t.crush);
     // spec: S-0607 claims 22 and 23 (a seized unit's stand-in, not its own type's locomotor, is the one that moves it)
     if crate::lift::current_locomotor(w, id) == Some(crate::rules::Locomotor::Ship) {
         ship_entered_cell(w, id, c, crush_track);
