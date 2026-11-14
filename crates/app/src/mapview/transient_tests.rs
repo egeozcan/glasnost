@@ -28,7 +28,10 @@ fn with_painter(f: impl FnOnce(&Inputs, &mut Painter, &mut Scene)) {
 }
 
 /// [`with_painter`] with the vehicle's body and turret drawn from `model`.
-fn with_painter_of(model: glasnost_fmt::vxl::Vxl, f: impl FnOnce(&Inputs, &mut Painter, &mut Scene)) {
+fn with_painter_of(
+    model: glasnost_fmt::vxl::Vxl,
+    f: impl FnOnce(&Inputs, &mut Painter, &mut Scene),
+) {
     let rules = format!("{RULES}[CARX]\nTurret=yes\n");
     let (mut import, catalogue, mut assets) = context_with(&rules);
     import.arts.insert(
@@ -42,11 +45,7 @@ fn with_painter_of(model: glasnost_fmt::vxl::Vxl, f: impl FnOnce(&Inputs, &mut P
             ..Default::default()
         },
     );
-    assets.insert(
-        b"hull.vxl",
-        VxlWriter { model: &model }
-        .write(),
-    );
+    assets.insert(b"hull.vxl", VxlWriter { model: &model }.write());
     let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
     let map = decode(
         &doc,
@@ -324,7 +323,10 @@ fn huge_run(drawn: u16, idle: u32) -> (Vec<u64>, u64) {
 #[test]
 fn oversized_settled_images_are_released_when_unused() {
     let (held, largest) = huge_run(8, 8);
-    assert!(largest > 1 << 21, "the model's images are huge: {largest} pixels");
+    assert!(
+        largest > 1 << 21,
+        "the model's images are huge: {largest} pixels"
+    );
     let start = held[0];
     let peak = held.iter().copied().max().unwrap() - start;
     let after = held.last().unwrap() - start;

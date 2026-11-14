@@ -1253,7 +1253,11 @@ fn claim_19_gas_sinks_through_the_deck() {
         settle(&mut w, i, at, 2) < DECK,
         "below the deck's height after the first odd-tick move"
     );
-    assert_eq!(settle(&mut w, i, at, 200), 5, "5 above the terrain under the bridge");
+    assert_eq!(
+        settle(&mut w, i, at, 200),
+        5,
+        "5 above the terrain under the bridge"
+    );
 }
 
 /// spec: S-0613 claim 19 **Off** (with `quirks.gas_through_bridge_deck` off, a gas particle at or
@@ -1271,7 +1275,10 @@ fn claim_19_off_gas_settles_on_the_deck() {
             cell.slope = slope;
         }
         if slope != 0 {
-            assert!(w.surface_at(at.x, at.y) + DECK > start, "H + 416 is above the start");
+            assert!(
+                w.surface_at(at.x, at.y) + DECK > start,
+                "H + 416 is above the start"
+            );
         }
         let i = puff(&mut w, "WISP", Pos::new(at.x, at.y, start));
         edit(&mut w, i, |p| p.life = 1000);
