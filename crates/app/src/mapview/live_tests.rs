@@ -1077,6 +1077,152 @@ fn overlays_changed_in_play_are_redrawn() {
     assert_eq!(scene.items.len(), before);
 }
 
+/// The palette rows each drawing of `items` takes, as it would draw: a lit
+/// drawing's table rows with its brightness and mask.
+fn drawn_rows<'a>(
+    scene: &Scene,
+    items: impl Iterator<Item = &'a glasnost_render::scene::Item>,
+) -> Vec<(Vec<[u16; 256]>, u16, u16)> {
+    items
+        .filter_map(|i| match i.paint {
+            Paint::Lit(s) | Paint::LitDiamond(s) | Paint::Translucent(s, _) => Some((
+                scene.rows[s.base as usize..][..usize::from(s.rows)].to_vec(),
+                s.rho,
+                s.mask,
+            )),
+            Paint::Row(r) | Paint::Diamond(r) => Some((vec![scene.rows[r]], 0, 0)),
+            Paint::Shadow | Paint::Pixel(_) => None,
+        })
+        .collect()
+}
+
+/// spec: S-0104 claims 4, 5 and 9 (the game's lighting changed: the cells are
+/// lit again) and S-0112 claims 1 to 9 (the overlays changed in play, drawn
+/// from the game's cells, take their cells' light): the overlays changed
+/// before a relight are drawn again with the new light, as those changed
+/// after it are (#152).
+#[test]
+fn a_relight_draws_the_changed_overlays_again() {
+    let (import, catalogue, assets) = context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let wall = |live: &mut Live| {
+        // A clear level-0 cell of the synthetic map, lit by the map's light.
+        let cell = live.world.cells.grid.get_mut(testkit::cell(0, 6)).unwrap();
+        assert_eq!(cell.overlay, glasnost_map::NO_OVERLAY);
+        // FENCEX (the import's overlay 2) with data value 1.
+        cell.overlay = 2;
+        cell.overlay_data = 1;
+    };
+    // An invented change of the current ambient, hundredths.
+    let dim = |live: &mut Live| live.world.lighting.current += 37;
+    // The drawings after the cell pass that name no object: the changed
+    // overlays (the synthetic game draws no other).
+    let overlays = |scene: &Scene| {
+        drawn_rows(
+            scene,
+            scene.items[scene.cell_pass_len..]
+                .iter()
+                .filter(|i| i.object.is_none()),
+        )
+    };
+    // The wall built before the light changes.
+    let (mut before, mut scene_before) = synthetic_live();
+    before.redraw(&inputs, &mut scene_before);
+    wall(&mut before);
+    before.redraw(&inputs, &mut scene_before);
+    let old = overlays(&scene_before);
+    dim(&mut before);
+    before.redraw(&inputs, &mut scene_before);
+    // The wall built after it.
+    let (mut after, mut scene_after) = synthetic_live();
+    after.redraw(&inputs, &mut scene_after);
+    dim(&mut after);
+    after.redraw(&inputs, &mut scene_after);
+    wall(&mut after);
+    after.redraw(&inputs, &mut scene_after);
+    let drawn = overlays(&scene_after);
+    assert!(!drawn.is_empty(), "the wall is drawn lit");
+    assert!(drawn != old, "the new light shades the wall otherwise");
+    assert!(overlays(&scene_before) == drawn, "the wall built before");
+}
+
+/// spec: S-0104 claims 4, 5 and 9 (the game's lighting changed: the cells are
+/// lit again; objects take their cell's light when drawn): the mobiles
+/// drawn on the tick of a relight take the new light, as they do on the
+/// ticks after it (#152).
+#[test]
+fn mobiles_drawn_with_a_relight_take_the_new_light() {
+    use glasnost_sim::rules::Kind as SimKind;
+    // The combat ruleset's infantry, drawn with the test art's infantry sprite.
+    let rules = RULES.replace("1=MANX\n", "1=MANX\n2=WALKER\n");
+    let art = format!("{}[WALKER]\nSequence=MANSEQ\n", super::tests::ART);
+    let (mut import, catalogue, assets) = super::tests::context_full(&rules, &art);
+    let i = import.outcome.registries[&Kind::Infantry]
+        .iter()
+        .position(|t| t.name == b"WALKER")
+        .unwrap();
+    import.arts.insert(
+        (Kind::Infantry, i),
+        super::tests::art_of("WALKER", "manx.shp"),
+    );
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut world = testkit::game_with(&testkit::combat_ruleset(), 24, 3);
+    let walker = testkit::spawn(
+        &mut world,
+        SimKind::Infantry,
+        "WALKER",
+        0,
+        testkit::mid(24, 0, 0),
+        16384,
+    );
+    let sim_rules = world.rules_arc();
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, sim_rules, testkit::setup(3), Vec::new()),
+    );
+    let mut scene = built.scene;
+    let code = sim_code(walker);
+    let walker_rows =
+        |scene: &Scene| drawn_rows(scene, scene.items.iter().filter(|i| i.object == Some(code)));
+    live.redraw(&inputs, &mut scene);
+    let lit = walker_rows(&scene);
+    assert!(!lit.is_empty(), "the walker is drawn");
+    // An invented change of the current ambient, hundredths.
+    live.world.lighting.current += 37;
+    live.redraw(&inputs, &mut scene);
+    let relit = walker_rows(&scene);
+    assert!(relit != lit, "the new light shades the walker otherwise");
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(relit, walker_rows(&scene));
+}
+
 // ---------------------------------------------------------------------------
 // Combat in the live view (synthetic combat ruleset, invented overlay art)
 // ---------------------------------------------------------------------------
