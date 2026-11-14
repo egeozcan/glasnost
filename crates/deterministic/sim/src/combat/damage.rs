@@ -1033,7 +1033,7 @@ fn killing_hit(
         let s = strength(w, id);
         // spec: S-0302 F5 (H′ = max(trunc(RZ₅₃(S × 0.25)), 1))
         let h = d(i64::from(s), mode)
-            .mul(crate::rules::nearest_double("0.25"), mode)
+            .mul(crate::consts::QUARTER, mode)
             .to_i32_common()
             .max(1);
         set_health(w, id, h);

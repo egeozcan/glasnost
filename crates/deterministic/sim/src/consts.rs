@@ -94,6 +94,128 @@ pub const TWO_PI: F64 = F64(0x4019_21fb_5444_2d18);
 // spec: S-0503 F6 (m = 1.1 for an even object number, the binary64 number nearest exact decimal 1.1; Q-0690 answered)
 pub const EVEN_BOB_FACTOR: F64 = F64(0x3ff1_9999_9999_999a);
 
+// The decimals below are read by per-tick code (#406). Each is the double
+// nearest the decimal named in its comment; the tests check every pattern.
+
+/// The double nearest 4.656612877414201 × 10⁻¹⁰, the scale that turns a
+/// raw draw into a fraction.
+// spec: S-0306 F5 (k_ξ, the double nearest 1/2147483646) and S-0616 Constants (scale and spark chance scale 4.656612877414201 × 10⁻¹⁰)
+pub const DRAW_SCALE: F64 = F64(0x3e00_0000_0040_0000);
+
+/// The double nearest 4.656613 × 10⁻¹⁰, before its narrowing to single
+/// precision.
+// spec: S-0616 F16 (the single-precision scale 4.656613 × 10⁻¹⁰)
+pub const COLOUR_START_SCALE: F64 = F64(0x3e00_0000_0751_0c0e);
+
+/// The double nearest 0.05.
+// spec: S-0306 F13 (max(d′, 0.05)) and S-0616 Constants (colour progress jitter 0.05)
+pub const TWENTIETH: F64 = F64(0x3fa9_9999_9999_999a);
+
+/// The double nearest 0.9.
+// spec: S-0306 F6 (w × 0.9)
+pub const NINE_TENTHS: F64 = F64(0x3fec_cccc_cccc_cccd);
+
+/// The double nearest 0.06666666666666667 (1/15).
+// spec: S-0306 F7 (j × 0.06666666666666667 × 2π)
+pub const FIFTEENTH: F64 = F64(0x3fb1_1111_1111_1111);
+
+/// 1.5 (exact in binary).
+// spec: S-0306 F7 (q* = trunc(q × 1.5)) and S-0616 claim 1 and Constants (natural-smoke yellow factor 1.5)
+pub const THREE_HALVES: F64 = F64(0x3ff8_0000_0000_0000);
+
+/// *a* of S-0409 F2: the double nearest 0.14350360082660085.
+// spec: S-0409 F2 (a, the binary64 constant nearest 0.14350360082660085 pixels per lepton)
+pub const SIGHT_LIFT_SCALE: F64 = F64(0x3fc2_5e53_7434_4960);
+
+/// The double nearest 0.8.
+// spec: S-0107 claim 10 (a speed fraction of at most 0.8; the double nearest 0.8)
+pub const FOUR_FIFTHS: F64 = F64(0x3fe9_9999_9999_999a);
+
+/// The double nearest 0.3 (not the single-precision [`BRAKE_FLOOR`]).
+// spec: S-0401 F3 and claim 4 (k = the double nearest 0.3)
+pub const THREE_TENTHS: F64 = F64(0x3fd3_3333_3333_3333);
+
+/// The double nearest 10⁻⁶.
+// spec: S-0401 F8 (the double nearest 10⁻⁶) and S-0616 Constants (normalised speed threshold 10⁻⁶)
+pub const MILLIONTH: F64 = F64(0x3eb0_c6f7_a0b5_ed8d);
+
+/// The double nearest 0.1.
+// spec: S-0310 claim 8 and Constants (the infantry speed fraction above 0.1, compared in double precision)
+pub const TENTH: F64 = F64(0x3fb9_9999_9999_999a);
+
+/// The double nearest 0.01.
+// spec: S-0409 F1 (b′ × 0.01), S-0504 Constants (sinking pitch step 0.01 radians, double precision)
+pub const HUNDREDTH: F64 = F64(0x3f84_7ae1_47ae_147b);
+
+/// The double nearest 0.001.
+// spec: S-0306 F3 (d = 0 counts as 0.001)
+pub const THOUSANDTH: F64 = F64(0x3f50_624d_d2f1_a9fc);
+
+/// The double nearest 0.02.
+// spec: S-0616 F8 (φ = k × 0.02 + 1.0 in double precision)
+pub const FIFTIETH: F64 = F64(0x3f94_7ae1_47ae_147b);
+
+/// 0.25 (exact in binary).
+// spec: S-0302 F5 (H′ = max(trunc(RZ₅₃(S × 0.25)), 1))
+pub const QUARTER: F64 = F64(0x3fd0_0000_0000_0000);
+
+/// 0.125 (exact in binary).
+// spec: S-0616 F6 (V[i] = trunc(sinₜ(0.125 × i) × 12.0 + 0.49))
+pub const EIGHTH: F64 = F64(0x3fc0_0000_0000_0000);
+
+/// The double nearest 0.49.
+// spec: S-0616 F6 (V[i] = trunc(sinₜ(0.125 × i) × 12.0 + 0.49))
+pub const SWING_BIAS: F64 = F64(0x3fdf_5c28_f5c2_8f5c);
+
+/// The double nearest 0.35.
+// spec: S-0616 F4 and Constants (S = S − (T − T₀) × 0.35 in double precision)
+pub const SMOKE_SPEED_LOSS: F64 = F64(0x3fd6_6666_6666_6666);
+
+/// *c* of S-0303 F2: the double nearest 0.99.
+// spec: S-0303 F2 (c = the double nearest 0.99)
+pub const AREA_C99: F64 = F64(0x3fef_ae14_7ae1_47ae);
+
+/// The arc speed margin: the double nearest 1.2.
+// spec: S-0306 Constants (arc speed margin 1.2, the double nearest it)
+pub const ARC_SPEED_MARGIN: F64 = F64(0x3ff3_3333_3333_3333);
+
+/// Margin *a* of S-0307 F4 for infantry: the double nearest 281.6.
+// spec: S-0307 F4 and Constants (margin a: 281.6 leptons for infantry, the nearest double)
+pub const APPROACH_MARGIN_INFANTRY: F64 = F64(0x4071_9999_9999_999a);
+
+/// Margin *a* of S-0307 F4 for vehicles: the double nearest 179.2.
+// spec: S-0307 F4 and Constants (margin a: 179.2 leptons for vehicles, the nearest double)
+pub const APPROACH_MARGIN_VEHICLE: F64 = F64(0x4066_6666_6666_6666);
+
+/// The smallest radius of S-0307 F4, excluded: the double nearest 204.8.
+// spec: S-0307 F4 and Constants (radii strictly greater than 204.8 leptons)
+pub const APPROACH_RADIUS_CUT: F64 = F64(0x4069_9999_9999_999a);
+
+/// *c* of S-0313 F2: the double nearest −π/16.
+// spec: S-0313 F2 (c = −0.19634954084936207, the double nearest −π/16)
+pub const FIRE_C16: F64 = F64(0xbfc9_21fb_5444_2d18);
+
+/// α of S-0313 F3, a single-precision constant held as its double.
+// spec: S-0313 F3 (α = 4.26669979095459, a single-precision constant)
+pub const PIXEL_ALPHA: F64 = F64(0x4011_1119_c000_0000);
+
+/// β of S-0313 F3, a single-precision constant held as its double.
+// spec: S-0313 F3 (β = 8.53339958190918, a single-precision constant)
+pub const PIXEL_BETA: F64 = F64(0x4021_1119_c000_0000);
+
+/// The cliff speed line: the double nearest −0.0002.
+// spec: S-0317 claim 10 and S-0319 claim 6 and Constants (the cliff speed line −0.0002, compared in double precision)
+pub const CLIFF_SPEED_LINE: F64 = F64(0xbf2a_36e2_eb1c_432d);
+
+/// *k* of S-0317 F7: the double nearest 6.967.
+// spec: S-0317 F7 and Constants (k = 6.967, our engine's value)
+pub const PIECE_TRAILER_K: F64 = F64(0x401b_de35_3f7c_ed91);
+
+/// The sinking pitch limit *L*: π/4 in single precision, exact as a
+/// decimal.
+// spec: S-0504 F4 and Constants (L = 0.785398185253143310546875, π/4 in single precision)
+pub const SINK_PITCH_LIMIT: F64 = F64(0x3fe9_21fb_6000_0000);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,5 +293,53 @@ mod tests {
         let one = F64::from_i64(1, Rounding::Nearest);
         let d = F64::from_i64(4_294_967_295, Rounding::Nearest);
         assert_eq!(MAP_GENERATOR_C, one.div(d, Rounding::Nearest));
+    }
+
+    // spec: S-0306 F3, F5, F6, F7 and F13, S-0616 F4, F6, F8, F16 and Constants, S-0409 F1 and F2, S-0107 claim 10, S-0401 F3 and F8, S-0310 Constants, S-0302 F5, S-0303 F2, S-0307 F4, S-0313 F2 and F3, S-0317 F7 and claim 10, S-0319 claim 6, S-0504 F4 (the doubles nearest the decimals the per-tick code used to parse, #406)
+    #[test]
+    fn per_tick_decimals() {
+        let t: [(F64, &str); 31] = [
+            (DRAW_SCALE, "4.656612877414201e-10"),
+            (COLOUR_START_SCALE, "4.656613e-10"),
+            (TWENTIETH, "0.05"),
+            (NINE_TENTHS, "0.9"),
+            (FIFTEENTH, "0.06666666666666667"),
+            (THREE_HALVES, "1.5"),
+            (SIGHT_LIFT_SCALE, "0.14350360082660085"),
+            (FOUR_FIFTHS, "0.8"),
+            (THREE_TENTHS, "0.3"),
+            (MILLIONTH, "0.000001"),
+            (TENTH, "0.1"),
+            (HUNDREDTH, "0.01"),
+            (THOUSANDTH, "0.001"),
+            (FIFTIETH, "0.02"),
+            (QUARTER, "0.25"),
+            (EIGHTH, "0.125"),
+            (SWING_BIAS, "0.49"),
+            (SMOKE_SPEED_LOSS, "0.35"),
+            (AREA_C99, "0.99"),
+            (ARC_SPEED_MARGIN, "1.2"),
+            (APPROACH_MARGIN_INFANTRY, "281.6"),
+            (APPROACH_MARGIN_VEHICLE, "179.2"),
+            (APPROACH_RADIUS_CUT, "204.8"),
+            (FIRE_C16, "-0.19634954084936207"),
+            (PIXEL_ALPHA, "4.26669979095459"),
+            (PIXEL_BETA, "8.53339958190918"),
+            (CLIFF_SPEED_LINE, "-0.0002"),
+            (PIECE_TRAILER_K, "6.967"),
+            (SINK_PITCH_LIMIT, "0.785398185253143310546875"),
+            (HALF, "0.5"),
+            (THREAT_COEFFICIENT_MIN, "0.00001"),
+        ];
+        for (c, s) in t {
+            assert_eq!(c, nearest_double(s), "{s}");
+        }
+        // The literals the per-tick code parsed for constants already here.
+        assert_eq!(TWO_PI, nearest_double("6.283185307179586"));
+        assert_eq!(WALK_C2, nearest_double("-0.00009587672516830327"));
+        // α and β are singles: narrowing them changes nothing.
+        for c in [PIXEL_ALPHA, PIXEL_BETA, SINK_PITCH_LIMIT] {
+            assert_eq!(c, c.to_f32(Rounding::Nearest).to_f64());
+        }
     }
 }

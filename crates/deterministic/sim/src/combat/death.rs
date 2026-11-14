@@ -23,7 +23,7 @@ pub fn nearby_point(w: &World, q: Pos, r: i32, b: u32, snap: bool) -> Pos {
     // spec: S-0312 F2 (f = 256 b for b < 128, 256 b − 65536 otherwise)
     let f = if b < 128 { 256 * b } else { 256 * b - 65536 };
     // spec: S-0312 F2 (κ = the double nearest −π / 32767)
-    let kappa = crate::rules::nearest_double("-0.00009587672516830327");
+    let kappa = crate::consts::WALK_C2;
     let theta = F64::from_i64(f - 16383, mode).mul(kappa, mode);
     let rd = F64::from_i64(i64::from(r), mode);
     // spec: S-0312 F2 (y′ = trunc(RZ₅₃(y − RZ₅₃(r × sin θ))), x′ = trunc(RZ₅₃(RZ₅₃(r × cos θ) + x)))
@@ -176,7 +176,7 @@ fn death_weapon(w: &World, id: ObjectId) -> Option<(WeaponId, i32)> {
     let g = r.combat.general.death_weapon?;
     // spec: S-0312 F3 (the game-wide death weapon: D = trunc(RZ₅₃(H × 0.5)))
     let dmg = F64::from_i64(i64::from(damage::strength(w, id)), mode)
-        .mul(crate::rules::nearest_double("0.5"), mode)
+        .mul(crate::consts::HALF, mode)
         .to_i32_common();
     Some((g, dmg))
 }

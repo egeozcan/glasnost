@@ -1230,8 +1230,8 @@ fn stop_with(w: &mut World, id: ObjectId, order_level: bool, lifter_ended: bool)
 /// The two-pi constant of F2, the stored double.
 fn two_pi(mode: Rounding) -> F64 {
     let _ = mode;
-    // spec: S-0502 F2 (2π denotes the stored double 6.283185307179586)
-    glasnost_num::decimal::nearest_double("6.283185307179586")
+    // spec: S-0502 F2 (2π denotes the stored double 6.283185307179586, the pattern of consts::TWO_PI)
+    crate::consts::TWO_PI
 }
 
 /// F1: the speed update.

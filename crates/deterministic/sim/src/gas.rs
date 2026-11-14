@@ -748,7 +748,7 @@ impl ColourState {
             let r = r.unwrap_or(0);
             let single = |x: F64| x.to_f32(m).to_f64();
             // spec: S-0616 F16 (f = r × 4.656613 × 10⁻¹⁰ in single precision)
-            let k = single(crate::rules::nearest_double("4.656613e-10")); // spec: S-0616 F16 (the single-precision scale 4.656613 × 10⁻¹⁰)
+            let k = single(crate::consts::COLOUR_START_SCALE); // spec: S-0616 F16 (the single-precision scale 4.656613 × 10⁻¹⁰)
             let f = single(single(F64::from_i64(i64::from(r), m)).mul(k, m));
             let one_minus = single(F64::from_i64(1, m).sub(f, m));
             let [s1, s2] = look.start;
@@ -773,8 +773,8 @@ impl ColourState {
     /// the update's colour draw `r`.
     pub fn advance(&mut self, look: &ParticleLook, r: i32, m: Rounding) {
         // spec: S-0616 F16 and Constants (t ← (r × 4.656612877414201 × 10⁻¹⁰ × 0.05 + v) + t, double precision, summed in that order)
-        let k = crate::rules::nearest_double("4.656612877414201e-10"); // spec: S-0616 Constants (scale 4.656612877414201 × 10⁻¹⁰)
-        let jitter = crate::rules::nearest_double("0.05"); // spec: S-0616 Constants (colour progress jitter 0.05)
+        let k = crate::consts::DRAW_SCALE; // spec: S-0616 Constants (scale 4.656612877414201 × 10⁻¹⁰)
+        let jitter = crate::consts::TWENTIETH; // spec: S-0616 Constants (colour progress jitter 0.05)
         let step = F64::from_i64(i64::from(r), m)
             .mul(k, m)
             .mul(jitter, m)

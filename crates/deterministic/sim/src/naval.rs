@@ -60,11 +60,11 @@ pub const SETTLING_DELAY: i32 = 3;
 /// The sinking pitch step *c*, radians, as a decimal read to the nearest
 /// double (S-0504 claim 15, F4, Constants).
 // spec: S-0504 Constants (sinking pitch step 0.01 radians per own update, double precision)
-const PITCH_STEP: &str = "0.01";
+const PITCH_STEP: F64 = crate::consts::HUNDREDTH;
 /// The sinking pitch limit *L*: π/4 rounded to single precision, exact as a
 /// decimal (S-0504 claim 15, F4, Constants).
 // spec: S-0504 F4 and Constants (L = 0.785398185253143310546875, π/4 in single precision; a step stops at it)
-const PITCH_LIMIT: &str = "0.785398185253143310546875";
+const PITCH_LIMIT: F64 = crate::consts::SINK_PITCH_LIMIT;
 
 /// Which end of a sinking hull goes down (S-0504 claim 15).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -111,8 +111,8 @@ pub fn lean_of(body_facing: u16) -> Lean {
 /// game's rounding mode (S-0205 claim 5, `quirks.chop_rounding`), then
 /// stopped at ±*L*. A pitch at the full lean stays there.
 pub fn pitch_step(p: F32, lean: Lean, mode: Rounding) -> F32 {
-    let c = crate::rules::nearest_double(PITCH_STEP);
-    let limit = crate::rules::nearest_double(PITCH_LIMIT);
+    let c = PITCH_STEP;
+    let limit = PITCH_LIMIT;
     match lean {
         Lean::BowDown => {
             // spec: S-0504 F4 (p′ = min(RZ₂₄(p + c), L) when 1 ≤ g ≤ 5)

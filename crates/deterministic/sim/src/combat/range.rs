@@ -329,9 +329,9 @@ fn approach_u_prime(w: &World, r_prime: i32, beta: i32, infantry: bool) -> i32 {
     let mode = w.rules().mode;
     // spec: S-0307 F4 and Constants (margin a: 281.6 leptons for infantry, 179.2 for vehicles, the nearest doubles)
     let margin = if infantry {
-        crate::rules::nearest_double("281.6")
+        crate::consts::APPROACH_MARGIN_INFANTRY
     } else {
-        crate::rules::nearest_double("179.2")
+        crate::consts::APPROACH_MARGIN_VEHICLE
     };
     // spec: S-0307 F4 (u = max(0, trunc(RZ₅₃(ρ′ + β − a))); ρ′ + β wraps as a 32-bit sum)
     let sum = wrap(i64::from(r_prime) + i64::from(beta));
@@ -349,7 +349,7 @@ pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec
     let mode = w.rules().mode;
     let first = approach_u_prime(w, r_prime, beta, infantry);
     // spec: S-0307 F4 and Constants (radii u′, u′ − 256, …, strictly greater than 204.8 leptons)
-    let cut = crate::rules::nearest_double("204.8");
+    let cut = crate::consts::APPROACH_RADIUS_CUT;
     (0..)
         .map(|k: i32| first.wrapping_sub(k.wrapping_mul(256))) // spec: S-0307 F4 (steps of 256 leptons)
         .take_while(|&rad| F64::from_i64(i64::from(rad), mode).gt(cut))
@@ -472,7 +472,7 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
     );
     let b = glasnost_num::geom::n_step(f, 256) as i32; // spec: S-0307 F4 (a 256-step facing)
     // spec: S-0307 F4 (c = the double nearest −0.00009587672516830327 radians per facing unit)
-    let c = crate::rules::nearest_double("-0.00009587672516830327");
+    let c = crate::consts::WALK_C2;
     let a_cell = ap.cell();
     let t_cell = tp.cell();
     let q = &r.quirks;

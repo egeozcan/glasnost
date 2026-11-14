@@ -170,8 +170,8 @@ fn mode(w: &World) -> Rounding {
 
 /// The fraction threshold, the double nearest 10⁻⁵ (S-0401 Constants).
 fn threshold() -> F64 {
-    // spec: S-0401 Constants (fraction threshold: the double nearest 0.00001)
-    nearest_double("0.00001")
+    // spec: S-0401 Constants (fraction threshold: the double nearest 0.00001, the pattern of consts::THREAT_COEFFICIENT_MIN)
+    crate::consts::THREAT_COEFFICIENT_MIN
 }
 
 /// A fraction stops an update when it is at most 10⁻⁵ (S-0401 Terms).
@@ -829,7 +829,7 @@ pub fn growth_period(w: &World, t: usize) -> i32 {
     let g = w.rules().econ.resource.tiberiums[t].growth;
     // spec: S-0401 F3 and claim 4 (k = the double nearest 0.3 while the grows setting is on, always in a skirmish)
     F64::from_i64(i64::from(g), m)
-        .mul(nearest_double("0.3"), m)
+        .mul(crate::consts::THREE_TENTHS, m)
         .to_i32_common()
 }
 
@@ -950,7 +950,7 @@ pub fn mine_turn(w: &mut World, id: ObjectId) {
             let m = mode(w);
             // spec: S-0401 F8 ((|r| mod 1000000) × the double nearest 10⁻⁶, RZ₅₃, compared with p)
             let x =
-                F64::from_i64(magnitude_mod(w, r, 1_000_000), m).mul(nearest_double("0.000001"), m);
+                F64::from_i64(magnitude_mod(w, r, 1_000_000), m).mul(crate::consts::MILLIONTH, m);
             // spec: S-0401 claim 15 (with R = 0 a started animation never advances and the mine stays idle)
             if x.lt(tt.animation_probability) && tt.animation_rate != 0 {
                 w.econ.resources.mines.insert(id, now);

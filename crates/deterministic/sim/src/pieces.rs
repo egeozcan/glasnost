@@ -502,8 +502,8 @@ fn trailer_point(pc: &Piece, too_high: bool, mode: Rounding) -> Pos {
     let (tx, ty) = (x.to_f64().to_i32_common(), y.to_f64().to_i32_common());
     let h = if too_high {
         // spec: S-0317 F7 and Constants (h = conv(k × z + 0.5), formed in double precision, k = 6.967, our engine's value)
-        let k = crate::rules::nearest_double("6.967");
-        let half = crate::rules::nearest_double("0.5"); // spec: S-0317 F7 (+ 0.5)
+        let k = crate::consts::PIECE_TRAILER_K;
+        let half = crate::consts::HALF; // spec: S-0317 F7 (+ 0.5)
         k.mul(z.to_f64(), mode).add(half, mode).to_i32_common()
     } else {
         // spec: S-0317 Edge cases (quirks.voxel_debris_trailer_height off: h = trunc z, the flight point)
@@ -578,7 +578,7 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
         // spec: S-0317 claim 10 and Constants (the cliff test: the new cell at least 2 height levels above the old one)
         let cliff = level(w, nc) >= level(w, oc) + HIGH;
         // spec: S-0317 claim 10 and Constants (the cliff speed line −0.0002, compared in double precision with u widened exactly)
-        let line = crate::rules::nearest_double("-0.0002");
+        let line = crate::consts::CLIFF_SPEED_LINE;
         // spec: S-0317 claim 10 (undone when u < −0.0002 and z₁ > z₀; for any other u, 0 included, when z₁ > z₀ + u + 1)
         let lifted = if u.lt(line) {
             z1.gt(z0)

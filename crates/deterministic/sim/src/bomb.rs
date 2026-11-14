@@ -233,7 +233,7 @@ pub fn charge_flash(w: &World) -> i32 {
         .ivan
         .c4_delay
         .mul(glasnost_num::F64::from_i64(900, r.mode), r.mode)
-        .mul(crate::rules::nearest_double("0.5"), r.mode)
+        .mul(crate::consts::HALF, r.mode)
         .to_i32_common()
 }
 

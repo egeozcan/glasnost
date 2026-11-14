@@ -17,7 +17,7 @@ use glasnost_num::{F64, Rounding};
 use glasnost_rules::schema::Ruleset;
 use serde::{Deserialize, Serialize};
 
-use crate::rules::{Kind, nearest_double};
+use crate::rules::Kind;
 use crate::world::{HouseId, HouseRole, ObjectId, Pos, World};
 
 /// Explored mark (S-0409 Terms).
@@ -201,13 +201,13 @@ fn level(w: &World, c: CellXY) -> i32 {
 /// floating-point lift distinct from S-0101 claim 3's exact drawing lift,
 /// because the centre decides explored cells (S-0409 claim 5).
 pub fn height_lift(z: i32, mode: Rounding) -> i32 {
-    let k = nearest_double("0.14350360082660085"); // spec: S-0409 F2 (a, the binary64 constant nearest 0.14350360082660085 pixels per lepton)
+    let k = crate::consts::SIGHT_LIFT_SCALE; // spec: S-0409 F2 (a, the binary64 constant nearest 0.14350360082660085 pixels per lepton)
     // spec: S-0409 F2 (L(Z) = trunc(RZ(RZ(RZ(Z·a) + c(Z)) + 0.5)), c(Z) = 1 when Z ≥ 728, else 0)
     let step = i64::from(z >= 728);
     F64::from_i64(i64::from(z), mode)
         .mul(k, mode)
         .add(F64::from_i64(step, mode), mode)
-        .add(nearest_double("0.5"), mode)
+        .add(crate::consts::HALF, mode)
         .to_i32_common()
 }
 
@@ -306,7 +306,7 @@ pub fn sight_radius(w: &World, id: ObjectId) -> Option<i32> {
     };
     // spec: S-0409 F1 (r₀ = trunc(RZ₅₃(S × RZ₅₃(RZ₅₃(b′ × 0.01) + 1))))
     let factor = F64::from_i64(i64::from(b), mode)
-        .mul(nearest_double("0.01"), mode)
+        .mul(crate::consts::HUNDREDTH, mode)
         .add(F64::from_i64(1, mode), mode);
     let mut rad = F64::from_i64(i64::from(field), mode)
         .mul(factor, mode)

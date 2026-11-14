@@ -7,7 +7,7 @@ use glasnost_num::{F64, Rounding};
 /// The double nearest 1.2, the arc speed margin (S-0306 F2).
 fn margin() -> F64 {
     // spec: S-0306 Constants (arc speed margin 1.2, the double nearest it)
-    crate::rules::nearest_double("1.2")
+    crate::consts::ARC_SPEED_MARGIN
 }
 
 /// The gravity of a projectile (S-0306 Terms): g, or g / 2 for a floater.
@@ -42,7 +42,7 @@ pub fn reachable(v: i32, d: i32, z: i32, g: F64, table: bool, mode: Rounding) ->
     let vd = f(i64::from(v));
     // spec: S-0306 F3 (d = 0 counts as 0.001)
     let dd = if d == 0 {
-        crate::rules::nearest_double("0.001")
+        crate::consts::THOUSANDTH
     } else {
         f(i64::from(d))
     };
