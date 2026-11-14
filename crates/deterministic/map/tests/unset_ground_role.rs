@@ -29,8 +29,10 @@ fn unset_ground_role_pair_is_skipped_with_the_switch_off() {
             no_burrowing: false,
         })
         .collect();
-    let mut roles = Roles::default();
-    roles.sand_transition = 20;
+    let roles = Roles {
+        sand_transition: 20,
+        ..Roles::default()
+    };
     let cat = TileCatalogue {
         tiles,
         roles,
