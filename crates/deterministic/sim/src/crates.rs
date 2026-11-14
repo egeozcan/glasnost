@@ -904,16 +904,20 @@ fn harvester_rule(w: &World, house: HouseId) -> Option<u32> {
 }
 
 /// The random vehicle of claim 13: requests R(0, n − 1) until a type with the
-/// crate-goodie flag is accepted (a base-unit type is refused with the bases
-/// setting off).
-fn random_vehicle(w: &mut World, _house: HouseId, half: bool) -> Option<u32> {
+/// crate-goodie flag is accepted. A base-unit-list type is refused with the
+/// bases setting off, and also with it on for a collecting house that is not
+/// human-controlled (the neutral and special houses and the test-only
+/// computer-controlled player houses); every player house accepts it then.
+fn random_vehicle(w: &mut World, house: HouseId, half: bool) -> Option<u32> {
     let r = w.rules_arc();
     let n = r.vehicles.len() as i32;
     let bases = crate::econ::setup::bases(w);
+    // spec: S-0520 claim 13 (In our engine: every player house accepts a base-unit-list type with the bases setting on; neutral and special houses retain the original's non-human restriction) and the glossary (AI house: Player houses only and Test setups, the test-only computer-controlled player houses keep it too)
+    let human = w.houses.get(usize::from(house.0)).is_some_and(|h| h.human);
     // spec: S-0520 Edge cases (no vehicle type can ever be accepted: the original never stops redrawing; our engine gives money after a bounded search with no draw)
     let acceptable = |i: usize| {
         r.crates.goodie.get(i).copied().unwrap_or(false)
-            && (bases || !r.base_units.contains(&(i as u32)))
+            && ((bases && human) || !r.base_units.contains(&(i as u32)))
     };
     if n <= 0 || !(0..n as usize).any(acceptable) {
         w.note("S-0520 Edge cases: no vehicle type is accepted by the unit power-up: the crate gives money");
