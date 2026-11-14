@@ -219,6 +219,31 @@ fn claim_3_13_no_dock_building_gives_guard() {
     assert_eq!(harvest::state_of(&w, h).total(), 0);
 }
 
+// spec: S-0402 claim 13 (the dock test is on every building the owner owns: #392 looks at the house's acquired list first and walks every object when none of it passes, so the list's contents never change the answer)
+#[test]
+fn claim_13_dock_test_does_not_depend_on_the_acquired_list() {
+    let r = ruleset();
+    // A dock building missing from the acquired list still counts.
+    let mut w = game_with_ore(&r, &field(0, 0, 5), 7);
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "HARV", 0, at(1, 1), 0);
+    assert!(w.houses[0].econ.acquired.contains(&refn));
+    w.houses[0].econ.acquired.retain(|&b| b != refn);
+    harvest_now(&mut w, h);
+    assert_eq!(w.obj(h).unwrap().beh.queued, None);
+    harvest::process_harvest(&mut w, h);
+    assert_ne!(w.obj(h).unwrap().beh.queued, Some(Behaviour::Guard));
+    // A listed building that fails the test does not count: no health left.
+    let mut w = game_with_ore(&r, &field(0, 0, 5), 7);
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "HARV", 0, at(1, 1), 0);
+    assert!(w.houses[0].econ.acquired.contains(&refn));
+    w.obj_mut(refn).unwrap().health = 0;
+    harvest_now(&mut w, h);
+    harvest::process_harvest(&mut w, h);
+    assert_eq!(w.obj(h).unwrap().beh.queued, Some(Behaviour::Guard));
+}
+
 // spec: S-0402 claim 3 and claim 13 (nothing found: idle, the no-field record set; 105 ticks later guard)
 #[test]
 fn claim_3_13_idle_and_the_no_field_record() {

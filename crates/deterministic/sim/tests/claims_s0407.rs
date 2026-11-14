@@ -144,6 +144,64 @@ fn claim_4_secret_type() {
     assert_eq!(tech::answer(&w, H, secret), Answer::Refused);
 }
 
+// spec: S-0407 claims 1 (a), 3, 4 and 8 (a): the recheck's answers match
+// the tech-tree answer of each type, with prerequisite, override and lab
+// buildings of another house, off the map, and of the house on the map
+// (#395: the recheck reads its counts from one walk of the objects).
+#[test]
+fn claim_1_recheck_answers_match_the_answer() {
+    let mut r = ruleset();
+    add_building(&mut r, "HUT2", plain(100));
+    add_building(&mut r, "KEY", plain(100));
+    let mut lab = plain(100);
+    lab.econ.secret_lab = Some(true);
+    add_building(&mut r, "LAB", lab);
+    add_infantry(&mut r, "PRE", |u| {
+        u.econ.prerequisite = Some(vec!["HUT2".into()]);
+    });
+    add_infantry(&mut r, "LIFT", |u| {
+        u.tech_level = Some(-1);
+        u.econ.prerequisite_override = Some(vec!["KEY".into()]);
+    });
+    add_infantry(&mut r, "SEC", |u| u.tech_level = Some(-1));
+    let mut w = game(&r);
+    building(&mut w, "BARRACKS", 0, 0, 0);
+    let names = ["PRE", "LIFT", "SEC"];
+    let check = |w: &mut World, want: [bool; 3]| {
+        tech::recheck(w, H);
+        for (n, want) in names.into_iter().zip(want) {
+            let ty = t(w, Kind::Infantry, n);
+            assert_eq!(tech::answer(w, H, ty) != Answer::Refused, want, "{n}");
+            assert_eq!(offered(w, ty), want, "{n}");
+        }
+    };
+    check(&mut w, [false; 3]);
+    // Another house's buildings on the map count for nobody else.
+    building(&mut w, "HUT2", 1, 6, 0);
+    building(&mut w, "KEY", 1, 6, 4);
+    let other_lab = building(&mut w, "LAB", 1, 6, 8);
+    let sec = t(&w, Kind::Infantry, "SEC");
+    w.obj_mut(other_lab).unwrap().econ.secret = Some(sec);
+    check(&mut w, [false; 3]);
+    // The house's own buildings off the map are not present.
+    let rr = w.rules_arc();
+    for n in ["HUT2", "KEY", "LAB"] {
+        let ti = rr.index_of(Kind::Building, n).unwrap();
+        let id = objects::create(&mut w, Kind::Building, ti, Some(H));
+        w.obj_mut(id).unwrap().econ.secret = Some(sec);
+    }
+    check(&mut w, [false; 3]);
+    // On the map they are.
+    building(&mut w, "HUT2", 0, -6, 0);
+    check(&mut w, [true, false, false]);
+    building(&mut w, "KEY", 0, -6, 4);
+    check(&mut w, [true, true, false]);
+    let own_lab = building(&mut w, "LAB", 0, -6, 8);
+    check(&mut w, [true, true, false]);
+    w.obj_mut(own_lab).unwrap().econ.secret = Some(sec);
+    check(&mut w, [true, true, true]);
+}
+
 // spec: S-0407 claim 5 (a) (T4: tech level −1, at, above and absent)
 #[test]
 fn claim_5_tech_level() {

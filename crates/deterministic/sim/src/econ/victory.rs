@@ -444,53 +444,70 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
 
 /// *B*: the house's counted buildings in existence (Terms; claim 4).
 pub(crate) fn counted_buildings(w: &World, h: HouseId) -> i32 {
-    let r = rules(w);
     w.objects
         .values()
-        .filter(|o| o.owner == Some(h) && o.kind == Kind::Building)
-        .filter(|o| {
-            let (ds, ins) = flags(w, Kind::Building, o.type_index);
-            let vb = r
-                .vehicle_building
-                .get(o.type_index as usize)
-                .copied()
-                .unwrap_or(false);
-            // spec: S-0414 Terms (a counted building: not counting as a vehicle, neither insignificant nor not scored)
-            !vb && !ds && !ins
-        })
+        .filter(|o| counted_building(w, h, o))
         .count() as i32
 }
 
-/// The short-game vehicle count (claim 2).
-fn short_vehicles(w: &World, h: HouseId) -> i32 {
-    let r = rules(w);
-    w.objects
-        .values()
-        .filter(|o| o.owner == Some(h) && o.kind == Kind::Vehicle)
-        .filter(|o| {
-            let (ds, ins) = flags(w, Kind::Vehicle, o.type_index);
-            // spec: S-0414 claim 2 (a vehicle of a base-unit type, not insignificant and not scored)
-            r.short_types.contains(&o.type_index) && !ds && !ins
-        })
-        .count() as i32
+/// Whether `o` is one of *B*, a counted building of house `h` (Terms;
+/// claim 4).
+fn counted_building(w: &World, h: HouseId, o: &crate::world::Object) -> bool {
+    if o.owner != Some(h) || o.kind != Kind::Building {
+        return false;
+    }
+    let (ds, ins) = flags(w, Kind::Building, o.type_index);
+    let vb = rules(w)
+        .vehicle_building
+        .get(o.type_index as usize)
+        .copied()
+        .unwrap_or(false);
+    // spec: S-0414 Terms (a counted building: not counting as a vehicle, neither insignificant nor not scored)
+    !vb && !ds && !ins
+}
+
+/// Whether `o` counts for house `h` in the short-game vehicle count
+/// (claim 2).
+fn short_vehicle(w: &World, h: HouseId, o: &crate::world::Object) -> bool {
+    if o.owner != Some(h) || o.kind != Kind::Vehicle {
+        return false;
+    }
+    let (ds, ins) = flags(w, Kind::Vehicle, o.type_index);
+    // spec: S-0414 claim 2 (a vehicle of a base-unit type, not insignificant and not scored)
+    rules(w).short_types.contains(&o.type_index) && !ds && !ins
+}
+
+/// The four on-map counts of claim 3 (*V*, *I*, *A*, *R*) summed as
+/// [`normal_sum`] adds them.
+fn on_map_sum(w: &World, h: HouseId) -> i32 {
+    let m = result(w, h).map_or([0; 4], |r| r.on_map); // nocite: four zero counts
+    m.iter().fold(0i32, |s, &x| s.wrapping_add(x))
 }
 
 /// *S* of the normal test (claim 3).
 pub fn normal_sum(w: &World, h: HouseId) -> i32 {
-    let m = result(w, h).map_or([0; 4], |r| r.on_map); // nocite: four zero counts
     // spec: S-0414 claim 3 (S = B + V + I + A + R)
-    m.iter()
-        .fold(counted_buildings(w, h), |s, &x| s.wrapping_add(x))
+    counted_buildings(w, h).wrapping_add(on_map_sum(w, h))
 }
 
 /// Whether the house passes its test (claims 2 and 3).
 pub fn passes(w: &World, h: HouseId) -> bool {
     if crate::econ::setup::short_game(w) {
         // spec: S-0414 claim 2 (a counted building or a vehicle of the first base-unit types)
-        counted_buildings(w, h) > 0 || short_vehicles(w, h) > 0
+        w.objects.values().any(|o| counted_building(w, h, o))
+            || w.objects.values().any(|o| short_vehicle(w, h, o))
     } else {
         // spec: S-0414 claim 3 (S ≠ 0; a negative S passes)
-        normal_sum(w, h) != 0
+        // S = B + m with B ≥ 0 counted buildings (fewer than 2³¹) and m the
+        // other four counts. With m > 0 the sum, wrapping or not, is never
+        // 0, and with m = 0 it is 0 exactly when B is: neither needs B
+        // counted to the end. Only a negative m needs the whole count.
+        let m = on_map_sum(w, h);
+        match m.cmp(&0) {
+            std::cmp::Ordering::Greater => true,
+            std::cmp::Ordering::Equal => w.objects.values().any(|o| counted_building(w, h, o)),
+            std::cmp::Ordering::Less => normal_sum(w, h) != 0,
+        }
     }
 }
 

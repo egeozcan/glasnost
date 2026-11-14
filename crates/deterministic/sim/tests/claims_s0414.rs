@@ -278,6 +278,41 @@ fn claim_4_nominal_survivor() {
     }
 }
 
+// spec: S-0414 claim 3 (S ≠ 0; a negative S passes): the test reads S
+// whatever the sign of the on-map counts and however many counted
+// buildings there are, the cases where B cancels them included.
+#[test]
+fn claim_3_test_reads_the_whole_sum() {
+    let cases: [([i32; 4], bool); 7] = [
+        ([0; 4], false),
+        ([0; 4], true),
+        ([1, 0, 0, 0], false),
+        ([2, -1, 0, 0], true),
+        ([0, -1, 0, 0], false),
+        ([0, -1, 0, 0], true),
+        ([1, -3, 0, 0], true),
+    ];
+    for (m, with_building) in cases {
+        let mut w = scene(false).build();
+        if with_building {
+            spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+            spawn(&mut w, Kind::Building, "HUT", 0, 4, 0);
+        }
+        w.houses[0].econ.result.on_map = m;
+        let s = victory::normal_sum(&w, A);
+        let b = if with_building { 2 } else { 0 };
+        assert_eq!(s, b + m.iter().sum::<i32>(), "{m:?} {with_building}");
+        assert_eq!(victory::passes(&w, A), s != 0, "{m:?} {with_building}");
+    }
+    // B cancelling a negative m exactly fails the test.
+    let mut w = scene(false).build();
+    spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+    spawn(&mut w, Kind::Building, "HUT", 0, 4, 0);
+    w.houses[0].econ.result.on_map = [0, -2, 0, 0];
+    assert_eq!(victory::normal_sum(&w, A), 0);
+    assert!(!victory::passes(&w, A));
+}
+
 // spec: S-0414 claim 4 (a change of owner on the map: a leaving for the old owner and an entry for the new; a not-scored vehicle stays on the old owner's V)
 #[test]
 fn claim_4_change_of_owner() {

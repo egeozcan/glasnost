@@ -617,8 +617,47 @@ pub fn take_out_quietly(w: &mut World, id: ObjectId) {
 }
 
 /// [`remove`], with the ground-cell recalculation only when `recalc`.
+/// What [`remove_with`] reads of the removed object after its hooks, taken
+/// before them (a copy of these fields, not of the whole object).
+#[derive(Clone, Copy)]
+struct Removed {
+    kind: Kind,
+    pos: Pos,
+    on_map: bool,
+    layer: Layer,
+    owner: Option<HouseId>,
+    type_index: u32,
+    health: i32,
+    foundation: (i32, i32),
+    walk_target: Option<Pos>,
+    teleport_mark: Option<(CellXY, Layer)>,
+    rocket: bool,
+}
+
+impl Removed {
+    fn of(o: &Object) -> Self {
+        Removed {
+            kind: o.kind,
+            pos: o.pos,
+            on_map: o.on_map,
+            layer: o.layer,
+            owner: o.owner,
+            type_index: o.type_index,
+            health: o.health,
+            foundation: o.foundation,
+            walk_target: o.walk.as_ref().and_then(|s| s.target),
+            teleport_mark: o
+                .teleport
+                .as_ref()
+                .and_then(|t| t.mark.map(|c| (c, t.mark_layer))),
+            rocket: o.rocket.is_some(),
+        }
+    }
+}
+
 fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
-    let Some(o) = w.obj(id).cloned() else {
+    // The fields read below, as they are before the hooks run.
+    let Some(o) = w.obj(id).map(Removed::of) else {
         return;
     };
     // spec: S-0309 claim 27 and S-0501 claim 32 (every holder drops as its target an object that is removed, a crush included, at that moment); S-0415 r22 claim 13 (before the foundation cells are recalculated)
@@ -702,14 +741,12 @@ fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
             w.cells.leave(cell, o.layer, id);
             // spec: S-0611 claim 7 (a refused mutation victim's removal frees its standing position again)
             crate::mutation::removing(w, id);
-            if let Some(wt) = o.walk.as_ref().and_then(|s| s.target) {
+            if let Some(wt) = o.walk_target {
                 w.cells.clear_infantry(wt.cell(), o.layer, id, q);
             }
             // spec: S-0208 claim 19 (a teleporting unit's reserved standing position)
-            if let Some(t) = o.teleport.as_ref()
-                && let Some(c) = t.mark
-            {
-                w.cells.clear_infantry(c, t.mark_layer, id, q);
+            if let Some((c, ml)) = o.teleport_mark {
+                w.cells.clear_infantry(c, ml, id, q);
             }
             w.cells.clear_infantry(cell, o.layer, id, q);
         }
@@ -718,7 +755,7 @@ fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
             crate::drive::release_claims(w, id);
         }
         // spec: S-0506 claim 23 (a rocket missile is in no cell list and marks no occupancy)
-        Kind::Aircraft if o.rocket.is_some() => {}
+        Kind::Aircraft if o.rocket => {}
         Kind::Aircraft => {
             // spec: S-0209 claim 13 (an aircraft is listed in the ground layer, the deck layer or neither, by its listing height)
             w.cells.leave_both(cell, id);

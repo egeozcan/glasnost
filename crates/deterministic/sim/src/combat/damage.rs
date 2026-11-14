@@ -8,7 +8,7 @@ use glasnost_num::{F64, Rounding};
 
 use crate::combat::data::{Ability, WarheadId, WeaponId};
 use crate::combat::death::{Flow, Frame};
-use crate::combat::veterancy::{has_ability, type_combat};
+use crate::combat::veterancy::{has_ability, type_combat, type_combat_in};
 use crate::rules::Kind;
 use crate::world::{HouseId, ObjectId, World};
 
@@ -416,10 +416,14 @@ fn hit_done(w: &mut World, r: &ApplyRest, result: HitResult) {
 
 /// [`apply`] without the crush response.
 fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<HitResult> {
-    let Some(o) = w.obj(target).cloned() else {
+    let Some(o) = w.obj(target) else {
         return Flow::Done(HitResult::Unaffected);
     };
-    if o.kind == Kind::Terrain {
+    // The target as the hit reaches it.
+    let (o_kind, o_type_index, o_owner, o_health, o_pos) =
+        (o.kind, o.type_index, o.owner, o.health, o.pos);
+    let o_prone = o.infantry.as_ref().is_some_and(|s| s.prone);
+    if o_kind == Kind::Terrain {
         return Flow::Done(terrain_hit(w, target, hit));
     }
     // spec: S-0504 claim 10 (sinking is no immunity: damage delivered to a sinking vessel takes the ordinary rules)
@@ -430,11 +434,15 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<Hit
     let rules = w.rules_arc();
     let mode = rules.mode;
     let q = rules.quirks;
-    let tc = type_combat(w, target).cloned().unwrap_or_default();
-    let wh = hit.warhead.map(|h| rules.combat.warhead(h).clone());
+    let no_type = crate::combat::data::TypeCombat::default();
+    let tc = w
+        .obj(target)
+        .and_then(|x| type_combat_in(&rules, x.kind, x.type_index))
+        .unwrap_or(&no_type);
+    let wh = hit.warhead.map(|h| rules.combat.warhead(h));
     let mut hit = hit;
     // spec: S-0302 claim 17 (an infantry unit in the air hit by a warhead of infantry-death kind 9: d₀ = 0)
-    let mutated = o.kind == Kind::Infantry
+    let mutated = o_kind == Kind::Infantry
         && w.height_above_surface(target) > 0
         && wh.as_ref().is_some_and(|h| h.inf_death == 9);
     if mutated {
@@ -442,23 +450,23 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<Hit
     }
     let plus = !hit.ignore_defences && hit.amount >= 0;
     let ign = hit.ignore_defences;
-    let building = o.kind == Kind::Building;
+    let building = o_kind == Kind::Building;
     // spec: S-0217 r22 claim 3 (Q-2986 answered: a hit that has an attacker and reaches a building of the house sets L whatever the hit then does, a stopping row of S-0302 claim 8 at any stage, a final amount of 0 and a healing hit included; the building's own damage only when its type damages itself)
     if building && !(hit.attacker == Some(target) && !tc.damage_self) {
-        crate::computer::building_hit(w, target, o.owner, hit.attacker);
+        crate::computer::building_hit(w, target, o_owner, hit.attacker);
     }
-    let b = building.then(|| &rules.buildings[o.type_index as usize].building);
+    let b = building.then(|| &rules.buildings[o_type_index as usize].building);
     let same_type_owner = hit
         .attacker
         .and_then(|a| w.obj(a))
-        .is_some_and(|a| a.kind == o.kind && a.type_index == o.type_index && a.owner == o.owner);
+        .is_some_and(|a| a.kind == o_kind && a.type_index == o_type_index && a.owner == o_owner);
     // spec: S-0302 claim 8 (stage 1 rows: no side effect at all)
     let stage1 = (building && hit.attacker == Some(target) && !tc.damage_self)
         || (b.is_some_and(|b| b.laser_fence) && !ign)
         || (b.is_some_and(|b| b.bridge_repair_hut) && tc.immune)
         || (inside_factory(w, target) && !ign)
         || (tc.type_immune && same_type_owner && plus)
-        || (building && o.health <= 0)
+        || (building && o_health <= 0)
         // spec: S-0302 claim 8 (stage 1: the target is temporarily invulnerable, + hits; S-0513 claim 26)
         || (crate::superweapons::protected(w, target) && plus)
         // spec: S-0302 claim 8 (stage 1: the target is being erased, + and − hits; the leaving stage of S-0513 claim 39, the temporal beam is S-0514's seam) and S-0302 r40 claim 8 (a superweapon warp member whose beam was locked before the departure is not being erased from its departure update and takes ordinary hits, up to a later lock, from which this protection applies again: S-0513 claim 39a, in `being_erased`)
@@ -467,7 +475,7 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<Hit
         return Flow::Done(HitResult::Unaffected);
     }
     // The amount after the defences of claim 5 (d₀ for a hit that ignores defences or heals).
-    let prone = o.kind == Kind::Infantry && o.infantry.as_ref().is_some_and(|s| s.prone);
+    let prone = o_kind == Kind::Infantry && o_prone;
     let prone_factor = prone.then(|| wh.as_ref().map_or(d(1, mode), |h| h.prone));
     let d3 = if mutated && !q.airborne_mutation_hit_raised {
         // spec: S-0302 Edge cases (airborne_mutation_hit_raised off: the 0 is not raised to 1)
@@ -484,7 +492,7 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<Hit
     let allied_attacker = hit
         .attacker
         .and_then(|a| w.obj(a))
-        .is_some_and(|a| w.allied(a.owner, o.owner));
+        .is_some_and(|a| w.allied(a.owner, o_owner));
     // spec: S-0302 claim 8 (stage 2 rows: radiation, psychic, poison immunities; allies); *Hits without a warhead* (none of them holds for a hit without one)
     let stage2 = wh.as_ref().is_some_and(|h| {
         (h.radiation && tc.immune_radiation)
@@ -505,7 +513,7 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<Hit
     }
     // spec: S-0302 claim 10 (stage 3: a berserk warhead changes no health); claim 8, *Hits without a warhead* (a hit without one has no berserk effect)
     if let Some(h) = wh.as_ref().filter(|h| h.psychedelic) {
-        let house_allied = hit.house.is_some_and(|hh| w.allied(o.owner, Some(hh)));
+        let house_allied = hit.house.is_some_and(|hh| w.allied(o_owner, Some(hh)));
         if house_allied || tc.immune_psionics || building {
             return Flow::Done(HitResult::Unaffected);
         }
@@ -543,7 +551,7 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<Hit
         m0
     };
     // spec: S-0302 claim 8 (stage 4 rows: no health on a non-building, immune, an amount of 0)
-    let stage4 = (!building && o.health <= 0) || (tc.immune && !ign) || m == 0;
+    let stage4 = (!building && o_health <= 0) || (tc.immune && !ign) || m == 0;
     if !q.readiness_from_defended_damage && !stage4 {
         // spec: S-0302 Edge cases (readiness_from_defended_damage off: the final amount, not when claim 8 stops the hit)
         readiness_loss(w, target, m);
@@ -555,11 +563,11 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<Hit
         return Flow::Done(HitResult::Unaffected);
     }
     let s = strength(w, target);
-    let h = o.health;
+    let h = o_health;
     let mut lost = 0;
     // spec: S-0309 claim 16 and F8 (#173: S and C are the victim's as the hit reaches it, taken before the kill handling can remove or change it)
     let mut share = AngerShare {
-        owner: o.owner,
+        owner: o_owner,
         strength: s,
         cost: crate::combat::acquire::type_cost(w, target),
         dealt: 0,
@@ -586,16 +594,16 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<Hit
         target,
         hit,
         of: crate::econ::TypeRef {
-            kind: o.kind,
-            index: o.type_index,
+            kind: o_kind,
+            index: o_type_index,
         },
-        owner: o.owner,
-        pos: o.pos,
+        owner: o_owner,
+        pos: o_pos,
         health: h,
         share,
     };
     let result = if result == HitResult::NowDead {
-        match killing_hit(w, target, &hit, &tc, chain) {
+        match killing_hit(w, target, &hit, tc, chain) {
             Flow::Done(r) => r,
             Flow::Suspended => {
                 // spec: S-0312 claim 33 (the death weapon nests inside this killing hit: the hit event and the reactions come once it is complete)
@@ -617,7 +625,7 @@ fn apply_hit(w: &mut World, target: ObjectId, hit: Hit, chain: bool) -> Flow<Hit
             .attacker
             .map(|a| w.obj(a).map_or(hit.house, |a| a.owner));
         if let Some(ah) = attacker_house
-            && !w.allied(o.owner, ah)
+            && !w.allied(o_owner, ah)
             && let Some(ob) = w.obj_mut(target)
             && ob.health > 0
         {
@@ -724,7 +732,11 @@ fn threshold(w: &World, s: i32, h: i32, m: i32, mp: i32, h2: i32) -> HitResult {
 
 /// Readiness loss (S-0302 claim 10, F6).
 fn readiness_loss(w: &mut World, id: ObjectId, dd: i32) {
-    let Some(tc) = type_combat(w, id).cloned() else {
+    let rules = w.rules_arc();
+    let Some(tc) = w
+        .obj(id)
+        .and_then(|x| type_combat_in(&rules, x.kind, x.type_index))
+    else {
         return;
     };
     if !tc.readiness {
@@ -746,7 +758,7 @@ fn readiness_loss(w: &mut World, id: ObjectId, dd: i32) {
     if let Some(ob) = w.obj_mut(id) {
         ob.combat.ammo = a2;
         // spec: S-0301 claim 17 (the reload countdown restarts at once)
-        ob.combat.reload_left = Some(crate::combat::fire::reload_delay(&tc, a2));
+        ob.combat.reload_left = Some(crate::combat::fire::reload_delay(tc, a2));
     }
 }
 
@@ -757,40 +769,42 @@ fn damage_effect_reaction(
     result: HitResult,
     warhead: Option<WarheadId>,
 ) {
-    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(o) = w.obj(id) else { return };
+    // The object as the hit left it.
+    let (o_health, o_kind, o_damage_smoke) = (o.health, o.kind, o.combat.damage_smoke);
     let mode = w.rules().mode;
     let s = strength(w, id);
     let yellow_ratio = w.rules().general.condition_yellow;
     // spec: S-0214 Terms (health ratio: health / strength in floating point)
-    let ratio = d(i64::from(o.health), mode).div(d(i64::from(s), mode), mode);
+    let ratio = d(i64::from(o_health), mode).div(d(i64::from(s), mode), mode);
     let at_or_below = ratio.le(yellow_ratio);
     if matches!(result, HitResult::NowYellow | HitResult::NowRed) {
         // spec: S-0616 claim 1 (an object holds at most one damage-smoke system and makes a new one only when its place is empty)
-        if at_or_below && o.combat.damage_smoke.is_none() && o.kind != Kind::Building {
-            let tc = type_combat(w, id).cloned();
-            let list = tc
-                .as_ref()
-                .map(|t| t.smoke_systems.clone())
-                .unwrap_or_default();
+        if at_or_below && o_damage_smoke.is_none() && o_kind != Kind::Building {
+            let rules = w.rules_arc();
+            let tc = w
+                .obj(id)
+                .and_then(|x| type_combat_in(&rules, x.kind, x.type_index));
+            let list: &[String] = tc.map_or(&[], |t| t.smoke_systems.as_slice());
             let n = list.len() as i32;
             // spec: S-0302 claim 13 (a draw over 0 … n − 1 when n > 0 and the height is above −10 leptons)
             if n > 0 && w.height_above_surface(id) > -10 {
                 let half = w.rules().quirks.ranged_draw_half_span;
                 let k = w.rng.ranged(0, n - 1, half);
                 // spec: S-0302 claim 13 (a draw of k picks the (k + 1)-th eligible entry from the end)
-                let name = list[(n - 1 - k) as usize].clone();
+                let name = &list[(n - 1 - k) as usize];
                 let offset = tc.map_or([0; 3], |t| t.smoke_offset);
-                crate::particles::damage_smoke(w, id, &name, offset);
+                crate::particles::damage_smoke(w, id, name, offset);
             }
         }
-        if o.kind == Kind::Building && result == HitResult::NowYellow {
+        if o_kind == Kind::Building && result == HitResult::NowYellow {
             // spec: S-0616 claim 1 (after each hit that reports now yellow, S-0302 claim 12, the natural smoke's T is multiplied by 1.5; a now red hit does not multiply it)
             crate::emitters::natural_smoke_yellow(w, id);
         }
-        if o.kind == Kind::Building && warhead.is_some_and(|h| w.rules().combat.warhead(h).sparky) {
+        if o_kind == Kind::Building && warhead.is_some_and(|h| w.rules().combat.warhead(h).sparky) {
             building_fires(w, id);
         }
-    } else if !at_or_below && let Some(sys) = o.combat.damage_smoke {
+    } else if !at_or_below && let Some(sys) = o_damage_smoke {
         // spec: S-0302 claim 13 and S-0616 claim 1 (a hit that leaves the ratio above the yellow ratio marks the damage-smoke system; the object keeps it in its place until it leaves play)
         crate::particles::mark(w, sys);
     }
@@ -809,11 +823,13 @@ pub fn foundation_order(top_left: CellXY, f: (i32, i32)) -> Vec<CellXY> {
 /// followed by its loop draw for a fire of the first or second kind.
 // spec: S-0302 claim 13 (fires of the first and second kind take a loop draw)
 fn building_fires(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id).cloned() else { return };
-    let (fw, fh) = o.foundation;
+    let Some(o) = w.obj(id) else { return };
+    let (foundation, pos) = (o.foundation, o.pos);
+    let (fw, fh) = foundation;
     let half = w.rules().quirks.ranged_draw_half_span;
-    let fires = w.rules().combat.general.damage_fire_types.clone();
-    for c in foundation_order(o.pos.cell(), o.foundation) {
+    let rules = w.rules_arc();
+    let fires = &rules.combat.general.damage_fire_types;
+    for c in foundation_order(pos.cell(), foundation) {
         // spec: S-0302 claim 13 (each cell's draw over 0 … W + H + 5)
         let k = w.rng.ranged(0, fw + fh + 5, half);
         // spec: S-0302 Constants (bands: 1 to 5 the first fire, 6 to 8 the second, 9 the third)
@@ -829,9 +845,9 @@ fn building_fires(w: &mut World, id: ObjectId) {
                 let _loops = w.rng.ranged(1, 3, half);
             }
             // spec: S-0302 Edge cases (a missing fire entry starts no fire, a departure)
-            if let Some(name) = fires.get(i).cloned() {
-                let p = crate::world::Pos::centre(c, o.pos.z);
-                crate::combat::effects::anim(w, &name, p);
+            if let Some(name) = fires.get(i) {
+                let p = crate::world::Pos::centre(c, pos.z);
+                crate::combat::effects::anim(w, name, p);
             }
         }
     }
@@ -868,20 +884,28 @@ fn reactions(
     }
     // The actor as the hit left it, before its reactions: the target and destination it had
     // when hit (S-0208 claim 15; S-0215 claim 16, Order within the hit).
-    let Some(o) = w.obj(id).cloned() else { return };
-    let dealt = health_before - o.health;
+    let Some(o) = w.obj(id) else { return };
+    let (o_health, o_kind) = (o.health, o.kind);
+    let actor = ActorAsHit {
+        id,
+        kind: o.kind,
+        owner: o.owner,
+        seen: o.beh.seen(),
+        free: o.target.is_none() && o.dest.is_none(),
+    };
+    let dealt = health_before - o_health;
     let retaliation = match hit.attacker {
-        Some(a) if dealt > 0 && o.health > 0 && result != HitResult::Unaffected => {
+        Some(a) if dealt > 0 && o_health > 0 && result != HitResult::Unaffected => {
             crate::combat::acquire::retaliate(w, id, a)
         }
         _ => Retaliation::MayNot,
     };
     // spec: S-0215 claim 19 and S-0208 claim 15 (a mobile actor that takes damage and survives it; a hit reporting now dead destroys it even when it stays in play, a sinking vessel at 1 health: S-0302 claim 12, glossary *in play … destroyed, removed*)
     let survived = dealt > 0
-        && o.health > 0
-        && o.kind.is_mobile()
+        && o_health > 0
+        && o_kind.is_mobile()
         && !matches!(result, HitResult::NowDead | HitResult::PostMortem);
-    if survived && damage_scatter_sent(w, &o, hit.attacker.is_some(), retaliation) {
+    if survived && damage_scatter_sent(w, &actor, hit.attacker.is_some(), retaliation) {
         // spec: S-0215 claim 19 and S-0208 claim 15, request A (no threat point, forced, not move-anywhere)
         let req = crate::scatter::ScatterRequest {
             threat: None,
@@ -902,13 +926,25 @@ fn reactions(
         crate::process::no_threat_fall_back(w, id);
     }
     // spec: S-0215 r118 claim 16, Order within the hit (for an infantry unit request B of S-0208 claim 15, then the change of fear, after the test)
-    if survived && o.kind == Kind::Infantry {
+    if survived && o_kind == Kind::Infantry {
         threat_request(w, id, hit);
     }
     // spec: S-0215 r118 claim 16, Order within the hit (for an infantry unit the change of fear, S-0107 claim 16, comes after the test)
-    if o.kind == Kind::Infantry && o.health > 0 && dealt > 0 {
+    if o_kind == Kind::Infantry && o_health > 0 && dealt > 0 {
         crate::combat::fear::damaged(w, id, hit.attacker.is_some());
     }
+}
+
+/// What [`damage_scatter_sent`] reads of the actor as the hit left it,
+/// before its reactions.
+#[derive(Clone, Copy, Debug)]
+struct ActorAsHit {
+    id: ObjectId,
+    kind: Kind,
+    owner: Option<HouseId>,
+    seen: Option<crate::rules::Behaviour>,
+    /// Neither a target nor a destination.
+    free: bool,
 }
 
 /// Whether a hit sends the scatter from damage (S-0215 claim 19; request A
@@ -916,14 +952,14 @@ fn reactions(
 /// stood when the hit left it, after the hit's retaliation.
 fn damage_scatter_sent(
     w: &World,
-    o: &crate::world::Object,
+    o: &ActorAsHit,
     known: bool,
     retaliation: crate::combat::acquire::Retaliation,
 ) -> bool {
     use crate::combat::acquire::Retaliation;
     let r = w.rules();
     // spec: S-0215 claim 19 and S-0208 claim 15 (it had neither a target nor a destination when hit)
-    let free = o.target.is_none() && o.dest.is_none();
+    let free = o.free;
     // spec: S-0215 claim 19 and S-0208 claim 15 (the player-scatter setting, Import mapping, or the scatter veterancy ability)
     let permitted = r.general.player_scatter || has_ability(w, o.id, Ability::Scatter);
     match retaliation {
@@ -940,7 +976,7 @@ fn damage_scatter_sent(
             // spec: S-0215 claim 19 case 2 (the actor is not an aircraft)
             o.kind != Kind::Aircraft
                 // spec: S-0215 claim 19 case 2 and S-0208 claim 15 second case (its current behaviour has the scatter property, S-0215 claim 1: with none current, the queued one)
-                && o.beh.seen().is_some_and(|b| r.behaviour(b).scatter)
+                && o.seen.is_some_and(|b| r.behaviour(b).scatter)
                 // spec: S-0215 claim 19 case 2 and S-0208 claim 15 second case (not held by a tether link)
                 && !crate::econ::tethered(w, o.id)
                 // spec: S-0215 claim 19 case 2 and S-0208 claim 15 second case (its locomotor is not moving, S-0208 Terms)
@@ -979,16 +1015,20 @@ fn killing_hit(
     tc: &crate::combat::data::TypeCombat,
     chain: bool,
 ) -> Flow<HitResult> {
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return Flow::Done(HitResult::NowDead);
     };
+    // The object as the killing hit reached it.
+    let (o_kind, o_type_index, o_pos) = (o.kind, o.type_index, o.pos);
+    let o_prone = o.infantry.as_ref().is_some_and(|s| s.prone);
+    let o_delay_kill_until = o.combat.delay_kill_until;
     let rules = w.rules_arc();
     let mode = rules.mode;
     // spec: S-0302 claim 15 (a cyborg that is not prone, hit by damage that does not ignore defences, is crippled)
-    if o.kind == Kind::Infantry
+    if o_kind == Kind::Infantry
         && !hit.ignore_defences
-        && rules.unit(o.kind, o.type_index).is_some_and(|u| u.cyborg)
-        && !o.infantry.as_ref().is_some_and(|s| s.prone)
+        && rules.unit(o_kind, o_type_index).is_some_and(|u| u.cyborg)
+        && !o_prone
     {
         let s = strength(w, id);
         // spec: S-0302 F5 (H′ = max(trunc(RZ₅₃(S × 0.25)), 1))
@@ -998,9 +1038,9 @@ fn killing_hit(
             .max(1);
         set_health(w, id, h);
         crate::infantry::request(w, id, crate::infantry::Seq::GoProne, true);
-        if let Some(name) = rules.combat.general.infantry_explode.clone() {
-            let p = o.pos;
-            crate::combat::effects::anim(w, &name, p);
+        if let Some(name) = rules.combat.general.infantry_explode.as_deref() {
+            let p = o_pos;
+            crate::combat::effects::anim(w, name, p);
         }
         return Flow::Done(HitResult::NowRed);
     }
@@ -1008,8 +1048,8 @@ fn killing_hit(
         .warhead
         .map(|h| rules.combat.warhead(h))
         .filter(|h| h.causes_delay_kill);
-    if o.kind == Kind::Building
-        && rules.buildings[o.type_index as usize].building.delay_kill
+    if o_kind == Kind::Building
+        && rules.buildings[o_type_index as usize].building.delay_kill
         && let Some(h) = delay
     {
         // spec: S-0302 claim 16 (a delayed kill: 1 health, countdown K, the shorter kept)
@@ -1023,7 +1063,7 @@ fn killing_hit(
         // spec: S-0312 claim 29 (a delayed-kill building's destruction raises come on the initial lethal hit, before its health is restored to 1 and the countdown is kept or started)
         crate::combat::death::destruction_raises(w, id, hit);
         let now = w.tick;
-        let again = o.combat.delay_kill_until.is_some();
+        let again = o_delay_kill_until.is_some();
         if let Some(ob) = w.obj_mut(id) {
             if !again {
                 ob.combat.charge_planter = None;
@@ -1051,7 +1091,7 @@ fn killing_hit(
     }
     // spec: S-0504 claim 13 and S-0312 claim 32 (a further killing hit on a sinking vessel takes the ordinary path: destruction
     // registered again and the death effects; claim 10's conditions leave it at 1 health, otherwise 0 health, still sinking)
-    if o.combat.delay_kill_until.is_some() && !rules.quirks.delay_kill_credited_again {
+    if o_delay_kill_until.is_some() && !rules.quirks.delay_kill_credited_again {
         // spec: S-0302 Edge cases (delay_kill_credited_again off: no further credit)
     } else {
         credit(w, id, hit);
@@ -1077,14 +1117,14 @@ pub fn dead(o: &crate::world::Object) -> bool {
 /// Q-0081 parts 1 and 2; S-0312 claim 3), in the building's own turn.
 pub fn delay_kill_expiry_turn(w: &mut World, id: ObjectId) {
     let now = w.tick;
-    let Some(o) = w.obj(id).cloned() else { return };
-    let Some(until) = o.combat.delay_kill_until else {
+    let Some(until) = w.obj(id).and_then(|o| o.combat.delay_kill_until) else {
         return;
     };
     // spec: S-0302 claim 16 (the building's first turn at or after t + K)
     if now.wrapping_sub(until) < 0 {
         return;
     }
+    let Some(o) = w.obj(id).cloned() else { return };
     // spec: S-0302 claim 16 (only while it is still alive and in play, and neither being erased nor under an electromagnetic pulse; both read their seams)
     if o.health <= 0
         || !o.on_map
@@ -1171,15 +1211,13 @@ pub(crate) fn credit(w: &mut World, id: ObjectId, hit: &Hit) {
 
 /// A hit on a terrain object (S-0302 claim 20).
 fn terrain_hit(w: &mut World, id: ObjectId, hit: Hit) -> HitResult {
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return HitResult::Unaffected;
     };
+    let (o_type_index, h0) = (o.type_index, o.health);
     let rules = w.rules_arc();
-    let t = rules
-        .terrain
-        .get(o.type_index as usize)
-        .cloned()
-        .unwrap_or_default();
+    let no_type = crate::rules::TerrainRules::default();
+    let t = rules.terrain.get(o_type_index as usize).unwrap_or(&no_type);
     // spec: S-0302 claim 20 (stopped unless the warhead has the wood flag and the type is not immune)
     let Some(h) = hit.warhead else {
         return HitResult::Unaffected;
@@ -1193,7 +1231,6 @@ fn terrain_hit(w: &mut World, id: ObjectId, hit: Hit) -> HitResult {
         return HitResult::Unaffected;
     }
     let s = t.strength;
-    let h0 = o.health;
     if m < 0 {
         set_health(
             w,

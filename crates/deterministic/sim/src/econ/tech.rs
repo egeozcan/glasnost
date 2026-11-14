@@ -500,6 +500,12 @@ pub fn house_tech_level(w: &World, house: HouseId) -> i32 {
 /// the type on the map. Don't-score buildings, aircraft and infantry never
 /// count; a don't-score vehicle type counts by S-0414's rule (claim 4).
 pub fn present_count(w: &World, house: HouseId, t: TypeRef) -> i32 {
+    present_count_in(w, house, t, None)
+}
+
+/// [`present_count`], read from a [`Presence`] of the same house and state
+/// when one is given instead of walking the objects.
+fn present_count_in(w: &World, house: HouseId, t: TypeRef, p: Option<&Presence>) -> i32 {
     let Some(f) = tt(w, t) else { return 0 };
     if f.dont_score {
         if t.kind == Kind::Vehicle {
@@ -509,10 +515,42 @@ pub fn present_count(w: &World, house: HouseId, t: TypeRef) -> i32 {
         // spec: S-0407 Terms (don't-score buildings, aircraft and infantry are never counted)
         return 0;
     }
+    if let Some(p) = p {
+        return p.on_map.get(&t).copied().unwrap_or(0);
+    }
     w.objects
         .values()
         .filter(|o| o.on_map && o.owner == Some(house) && type_of(o) == t)
         .count() as i32
+}
+
+/// A house's objects on the map counted by type, and the secret types of
+/// its buildings on the map, from one walk of the objects (#395). A
+/// recheck answers every type from one of these instead of walking the
+/// objects once or more per type. Derived for one recheck and dropped:
+/// never saved, never hashed.
+struct Presence {
+    on_map: BTreeMap<TypeRef, i32>,
+    secrets: BTreeSet<TypeRef>,
+}
+
+impl Presence {
+    fn of(w: &World, house: HouseId) -> Self {
+        let mut on_map = BTreeMap::new();
+        let mut secrets = BTreeSet::new();
+        for o in w.objects.values() {
+            if !o.on_map || o.owner != Some(house) {
+                continue;
+            }
+            *on_map.entry(type_of(o)).or_insert(0) += 1;
+            if o.kind == Kind::Building
+                && let Some(s) = o.econ.secret
+            {
+                secrets.insert(s);
+            }
+        }
+        Presence { on_map, secrets }
+    }
 }
 
 /// The owned count of a type for a house (S-0407 Terms): its objects of the
@@ -589,6 +627,12 @@ pub fn limit_answer(w: &World, house: HouseId, t: TypeRef, production_exception:
         return Answer::Refused;
     };
     let l = f.limit;
+    // spec: S-0407 Import mapping (BuildLimit absent: 2³¹ − 1) and F2 (O < L: allowed)
+    if l == i32::MAX {
+        // The owned count, a count of objects, never reaches the largest
+        // limit: O < L without a walk.
+        return Answer::Allowed;
+    }
     if l > 0 {
         let o = owned_count(w, house, t);
         if o < l {
@@ -614,21 +658,29 @@ pub fn limit_answer(w: &World, house: HouseId, t: TypeRef, production_exception:
 
 /// Whether a type is lifted for a house (S-0407 claims 3 and 4).
 pub fn lifted(w: &World, house: HouseId, t: TypeRef) -> bool {
+    lifted_in(w, house, t, None)
+}
+
+fn lifted_in(w: &World, house: HouseId, t: TypeRef, p: Option<&Presence>) -> bool {
     let Some(f) = tt(w, t) else { return false };
     // spec: S-0407 claim 3 (an override building present lifts the type)
     if f.overrides.iter().any(|&b| {
-        present_count(
+        present_count_in(
             w,
             house,
             TypeRef {
                 kind: Kind::Building,
                 index: b,
             },
+            p,
         ) > 0
     }) {
         return true;
     }
     // spec: S-0407 claim 4 (a secret lab of the house on the map with the type as its secret type)
+    if let Some(p) = p {
+        return p.secrets.contains(&t);
+    }
     w.objects.values().any(|o| {
         o.on_map && o.owner == Some(house) && o.kind == Kind::Building && o.econ.secret == Some(t)
     })
@@ -636,12 +688,16 @@ pub fn lifted(w: &World, house: HouseId, t: TypeRef) -> bool {
 
 /// Whether a condition of claims 5 to 8 refuses a type for a house.
 pub fn conditions_refuse(w: &World, house: HouseId, t: TypeRef) -> bool {
+    conditions_refuse_in(w, house, t, None)
+}
+
+fn conditions_refuse_in(w: &World, house: HouseId, t: TypeRef, p: Option<&Presence>) -> bool {
     let Some(f) = tt(w, t) else { return true };
     if other_conditions_refuse(w, house, t, f) {
         return true;
     }
     // spec: S-0407 claim 8 (every entry of the prerequisite list must be met; an empty list is met)
-    !f.prereq.iter().all(|&p| prereq_met(w, house, p))
+    !f.prereq.iter().all(|&q| prereq_met(w, house, q, p))
 }
 
 /// The entries of a type's prerequisite list (claim 8) that a house does
@@ -657,7 +713,7 @@ pub fn unmet_prerequisites(w: &World, house: HouseId, t: TypeRef) -> Option<Vec<
         f.prereq
             .iter()
             .copied()
-            .filter(|&p| !prereq_met(w, house, p))
+            .filter(|&p| !prereq_met(w, house, p, None))
             .collect(),
     )
 }
@@ -701,33 +757,34 @@ fn other_conditions_refuse(w: &World, house: HouseId, t: TypeRef, f: &TypeTech) 
     false
 }
 
-fn prereq_met(w: &World, house: HouseId, p: Prereq) -> bool {
+fn prereq_met(w: &World, house: HouseId, p: Prereq, counts: Option<&Presence>) -> bool {
     let b = |index| TypeRef {
         kind: Kind::Building,
         index,
     };
     match p {
         // spec: S-0407 claim 8 (a) (present count above 0)
-        Prereq::Building(i) => present_count(w, house, b(i)) > 0,
+        Prereq::Building(i) => present_count_in(w, house, b(i), counts) > 0,
         Prereq::Group(g) => {
             let r = &w.rules().econ.tech;
             // spec: S-0407 claim 8 (b) (any member of the group present)
             if r.groups[g.index()]
                 .iter()
-                .any(|&i| present_count(w, house, b(i)) > 0)
+                .any(|&i| present_count_in(w, house, b(i), counts) > 0)
             {
                 return true;
             }
             // spec: S-0407 claim 8 (b) (the refinery group: also the refinery-alternative vehicle present)
             g == Group::Proc
                 && r.proc_alternate.is_some_and(|v| {
-                    present_count(
+                    present_count_in(
                         w,
                         house,
                         TypeRef {
                             kind: Kind::Vehicle,
                             index: v,
                         },
+                        counts,
                     ) > 0
                 })
         }
@@ -772,8 +829,18 @@ pub fn answer(w: &World, house: HouseId, t: TypeRef) -> Answer {
 }
 
 fn answer_with(w: &World, house: HouseId, t: TypeRef, production_exception: bool) -> Answer {
+    answer_in(w, house, t, production_exception, None)
+}
+
+fn answer_in(
+    w: &World,
+    house: HouseId,
+    t: TypeRef,
+    production_exception: bool,
+    p: Option<&Presence>,
+) -> Answer {
     // spec: S-0407 claim 2 (lifted: the build-limit answer; else refused when a condition refuses)
-    if lifted(w, house, t) || !conditions_refuse(w, house, t) {
+    if lifted_in(w, house, t, p) || !conditions_refuse_in(w, house, t, p) {
         limit_answer(w, house, t, production_exception)
     } else {
         Answer::Refused
@@ -904,9 +971,12 @@ pub fn recheck(w: &mut World, house: HouseId) -> Vec<TypeRef> {
     let before = h.econ.tech.taken_up.clone();
     let mut after = BTreeSet::new();
     let mut candidates = Vec::new();
+    // Nothing below changes the world before the admissions: one walk
+    // serves every type's present counts and lab test.
+    let presence = Presence::of(w, house);
     for t in w.rules().econ.tech.all_types() {
         // spec: S-0407 claim 1 (a) (answer allowed or at limit)
-        if answer(w, house, t) == Answer::Refused {
+        if answer_in(w, house, t, true, Some(&presence)) == Answer::Refused {
             continue;
         }
         if before.contains(&t) {
@@ -1183,10 +1253,15 @@ pub fn object_ends(w: &mut World, id: ObjectId) {
     let (Some(house), t, mobile) = (o.owner, type_of(o), o.kind.is_mobile()) else {
         return;
     };
-    // spec: S-0407 claim 12 (g) (only the answer at limit, with the production exception left out, is an event)
-    let at_limit = answer_with(w, house, t, false) == Answer::AtLimit;
     // spec: S-0407 claim 12 (o) and quirks.unit_changes_no_recheck (off: a unit's end is always an event)
-    if at_limit || (mobile && !w.rules().quirks.unit_changes_no_recheck) {
+    let unit_event = mobile && !w.rules().quirks.unit_changes_no_recheck;
+    // The build-limit answer is at limit only for a limit above 0 that the
+    // owned count can reach (F2): no other type needs the answer worked out.
+    // spec: S-0407 F2 (at limit only when L > 0) and Import mapping (BuildLimit absent: 2³¹ − 1)
+    let limited = tt(w, t).is_some_and(|f| f.limit > 0 && f.limit < i32::MAX);
+    // spec: S-0407 claim 12 (g) (only the answer at limit, with the production exception left out, is an event)
+    let at_limit = || answer_with(w, house, t, false) == Answer::AtLimit;
+    if unit_event || (limited && at_limit()) {
         recheck_due(w, house);
     }
 }

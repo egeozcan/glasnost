@@ -166,12 +166,12 @@ fn fragment(
 ) {
     let rules = w.rules_arc();
     let mode = rules.mode;
-    let wr = rules.combat.weapon(fw).clone();
+    let wr = rules.combat.weapon(fw);
     let Some(pid) = wr.projectile else {
         // A weapon without a projectile launches nothing (the importer warns).
         return;
     };
-    let fp = rules.combat.projectiles[pid as usize].clone();
+    let fp = &rules.combat.projectiles[pid as usize];
     // spec: S-0318 r27 claim 6 (towards the aim point's reference point; the direction is taken from the burst point as it is, not from the raised starting position) and S-0306 claims 3 and 5 (revision 38: a fragment is excepted from the shot's aim point, lead and launch direction)
     let tp = target_point(w, target);
     let yaw = i32::from(direction(
@@ -198,7 +198,7 @@ fn fragment(
     let mut pos = crate::combat::projectile::start_point(w, burst);
     if fp.inviso {
         // spec: S-0318 claims 5 and 6 and S-0306 claim 9 (an invisible fragment is moved at once to K, or the first blocking cell's centre; no launch scatter draw, S-0318 Open questions)
-        pos = match crate::combat::lof::walk(w, &fp, pr.house, burst, stored) {
+        pos = match crate::combat::lof::walk(w, fp, pr.house, burst, stored) {
             Some(c) => {
                 let cc = Pos::centre(c, 0);
                 Pos::new(cc.x, cc.y, w.surface_at(cc.x, cc.y))
@@ -246,7 +246,7 @@ fn fragment(
     };
     w.projectiles.insert(id, frag);
     // spec: S-0318 claim 5 and S-0306 claim 8 (the fragment enters play at once; its first turn is in the tick of the burst) and S-0203 claim 5 (revision 40: unless removals cost it that turn, then in the first later tick in which none does; S-0306 State and ordering, revision 38: n + 1 or later)
-    w.update.enter(id);
+    w.update.enter_new(id);
     let Some(a) = attacker else {
         // spec: S-0318 claim 8 (a fragment launched after the attacker has gone makes no beam and no bolt)
         return;

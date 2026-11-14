@@ -184,13 +184,17 @@ pub enum Retaliation {
 // spec: S-0215 F7 ((S + 0.5) × 256 = 256 S + 128 exactly)
 pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliation {
     use Retaliation::{Done, Held, MayNot};
-    let Some(o) = w.obj(actor).cloned() else {
+    let Some(o) = w.obj(actor) else {
         return MayNot;
     };
-    let Some(a) = w.obj(attacker).cloned() else {
+    // The actor and the attacker as the hit left them.
+    let (o_kind, o_type_index, o_owner, o_target, cur) =
+        (o.kind, o.type_index, o.owner, o.target, o.beh.seen());
+    let Some(a) = w.obj(attacker) else {
         return MayNot;
     };
-    if o.kind == Kind::Terrain {
+    let (a_kind, a_owner) = (a.kind, a.owner);
+    if o_kind == Kind::Terrain {
         return MayNot;
     }
     // spec: S-0216 claim 8 (Removal before the groups: no object targets an idle test house's objects, a retaliation included; design)
@@ -198,7 +202,10 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliat
         return MayNot;
     }
     let rules = w.rules_arc();
-    let Some(tc) = type_combat(w, actor).cloned() else {
+    let Some(tc) = w
+        .obj(actor)
+        .and_then(|x| crate::combat::veterancy::type_combat_in(&rules, x.kind, x.type_index))
+    else {
         return MayNot;
     };
     // spec: S-0309 claim 18 (the type's retaliate flag)
@@ -217,7 +224,7 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliat
         return MayNot;
     }
     // spec: S-0309 claim 18 (the attacker is not allied with it); S-0516 claim 36 (and does not appear disguised to its owner)
-    if w.allied(o.owner, a.owner) || crate::cloak::appears_disguised(w, attacker, o.owner) {
+    if w.allied(o_owner, a_owner) || crate::cloak::appears_disguised(w, attacker, o_owner) {
         return MayNot;
     }
     // spec: S-0309 claim 18 and S-0614 claim 17 (X is not the parasite attached to it)
@@ -246,16 +253,16 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliat
     if player {
         // spec: S-0309 claim 18 (human-controlled owner, building attacker: not an explosive-charges infantry unit or holder of the ability)
         let charges = rules
-            .unit(o.kind, o.type_index)
+            .unit(o_kind, o_type_index)
             .is_some_and(|u| u.raw.c4.unwrap_or(false))
             || has_ability(w, actor, Ability::C4);
-        if a.kind == Kind::Building && charges {
+        if a_kind == Kind::Building && charges {
             return MayNot;
         }
         // spec: S-0309 claim 18 (human-controlled owner: a vehicle deploying into an artillery building never retaliates)
-        if o.kind == Kind::Vehicle
+        if o_kind == Kind::Vehicle
             && rules
-                .unit(o.kind, o.type_index)
+                .unit(o_kind, o_type_index)
                 .and_then(|u| u.raw.deploys_into.as_ref())
                 .and_then(|n| rules.index_of(Kind::Building, n))
                 .is_some_and(|b| rules.buildings[b as usize].building.artillary)
@@ -264,7 +271,6 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliat
         }
     }
     // spec: S-0215 claim 18 (only while the current behaviour has the retaliate property)
-    let cur = o.beh.seen();
     if !cur.is_some_and(|b| rules.behaviour(b).retaliate) {
         return MayNot;
     }
@@ -276,28 +282,28 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliat
             cur,
             Some(Behaviour::Guard | Behaviour::AreaGuard | Behaviour::Patrol)
         );
-        if o.kind.is_mobile() && !listed && !rules.general.player_return_fire {
+        if o_kind.is_mobile() && !listed && !rules.general.player_return_fire {
             return MayNot;
         }
         // spec: S-0215 claim 18 (an actor of a player house that already has a target never retaliates)
-        if o.target.is_some() {
+        if o_target.is_some() {
             return MayNot;
         }
         // spec: S-0215 claim 18 and F7 (an actor that cannot reach the attacker overrides only within (S + 0.5) × 256)
         let reaches = crate::combat::range::in_range(w, actor, Some(weapon), Some(t), None);
         // spec: S-0215 F7 and Import mapping (Sight: the actor's type's sight in cells, a building type's too; absent 0)
-        let sight = match o.kind {
+        let sight = match o_kind {
             Kind::Building => rules
                 .buildings
-                .get(o.type_index as usize)
+                .get(o_type_index as usize)
                 .map_or(0, |b| b.raw.econ.sight.unwrap_or(0)),
-            _ => rules.unit(o.kind, o.type_index).map_or(0, |u| u.sight),
+            _ => rules.unit(o_kind, o_type_index).map_or(0, |u| u.sight),
         };
         // spec: S-0208 Terms (the distance rule is not part of *may retaliate*: an actor it holds back may retaliate but does not)
         held = !reaches && rho3(w, actor, attacker) > i64::from(256 * sight + 128);
     }
     if !player
-        && let Some(Target::Object(y)) = o.target
+        && let Some(Target::Object(y)) = o_target
         && w.obj(y).is_some_and(|x| x.kind != Kind::Terrain)
     {
         // spec: S-0309 claim 25 part h (the neutral and special houses: only when the attacker's threat sum, d in cells as in a range search, is at least the present target's, compared exactly)
@@ -1565,8 +1571,8 @@ fn opportunity_gate(w: &World, a: ObjectId) -> bool {
 /// claims 1 to 3 and 23), after the actor's processing of the tick.
 pub fn per_tick(w: &mut World, a: ObjectId) {
     let tick = w.tick;
-    let Some(o) = w.obj(a).cloned() else { return };
-    if crate::combat::damage::dead(&o)
+    let Some(o) = w.obj(a) else { return };
+    if crate::combat::damage::dead(o)
         || o.health <= 0
         || matches!(o.kind, Kind::Aircraft | Kind::Terrain)
     {

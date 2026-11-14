@@ -114,14 +114,20 @@ fn floor_i32(x: F64) -> i32 {
     }
 }
 
-/// The system type of system `sys`.
-fn sys_type(w: &World, sys: ObjectId) -> Option<crate::gas::SystemType> {
+/// The system type of system `sys`, borrowed from `r` (the world's rules,
+/// held as `World::rules_arc` so the borrow outlives changes to the world).
+fn sys_type<'r>(
+    r: &'r crate::rules::SimRules,
+    w: &World,
+    sys: ObjectId,
+) -> Option<&'r crate::gas::SystemType> {
     let s = w.gas.systems.get(&sys)?;
-    w.rules().gas.systems.get(s.type_index as usize).cloned()
+    r.gas.systems.get(s.type_index as usize)
 }
 
-fn ptype(w: &World, p: &Particle) -> Option<ParticleType> {
-    w.rules().gas.particles.get(p.type_index as usize).cloned()
+/// The particle type of `p`, borrowed from `r` as in [`sys_type`].
+fn ptype<'r>(r: &'r crate::rules::SimRules, p: &Particle) -> Option<&'r ParticleType> {
+    r.gas.particles.get(p.type_index as usize)
 }
 
 /// Marks a system to end (S-0613 claim 17, S-0616 Terms *marked*).
@@ -274,7 +280,7 @@ pub fn update_one(w: &mut World, sys: ObjectId, i: usize) {
     let Some(p) = crate::gas::particle(w, sys, i) else {
         return;
     };
-    let kind = ptype(w, &p).and_then(|t| t.kind);
+    let kind = ptype(w.rules(), &p).and_then(|t| t.kind);
     // spec: S-0616 claim 3 (the particle's own behaviour kind, not its system's, chooses the update; a particle with no kind has none)
     match kind {
         Some(Behaviour::Gas) => crate::gas::gas_update(w, sys, i),
@@ -299,14 +305,16 @@ pub fn update_one(w: &mut World, sys: ObjectId, i: usize) {
 /// (gas, smoke and fire turns). Returns `true` when a smoke particle is
 /// stopped at a bridge deck (claim 7).
 pub fn move_one(w: &World, p: &mut Particle) -> bool {
-    let Some(t) = ptype(w, p) else { return false };
+    let Some(t) = ptype(w.rules(), p) else {
+        return false;
+    };
     // spec: S-0616 claim 3 (gas: S-0613 F5; smoke: claim 7; fire: claim 13; spark, railgun and no kind: no move here)
     match t.kind {
         Some(Behaviour::Gas) => {
-            crate::gas::move_particle(w, &t, p);
+            crate::gas::move_particle(w, t, p);
             false
         }
-        Some(Behaviour::Smoke) => smoke_move(w, &t, p),
+        Some(Behaviour::Smoke) => smoke_move(w, t, p),
         Some(Behaviour::Fire) => {
             fire_move(w, p);
             false
@@ -404,7 +412,8 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
         .get(&sys)
         .is_some_and(|s| s.looped.contains(&p.id));
     // spec: S-0616 r29 claim 8a (a marked successor does not split, and takes no draw, through a next-type link on a loop of particle types)
-    if let Some(t) = ptype(w, &p)
+    let rules = w.rules_arc();
+    if let Some(t) = ptype(&rules, &p)
         && let Some(next) = t.next
         && let Some(looped) =
             w.rules()
@@ -490,7 +499,8 @@ fn smoke_update(w: &mut World, sys: ObjectId, i: usize) {
     let Some(mut p) = crate::gas::particle(w, sys, i) else {
         return;
     };
-    let Some(t) = ptype(w, &p) else { return };
+    let rules = w.rules_arc();
+    let Some(t) = ptype(&rules, &p) else { return };
     let m = mode(w);
     // spec: S-0616 claim 6 (draws on odd ticks only)
     if w.tick.rem_euclid(2) == 1 {
@@ -559,33 +569,39 @@ fn smoke_move(w: &World, t: &ParticleType, p: &mut Particle) -> bool {
 
 /// Claim 9, F4: a smoke system's emission and timer growth.
 fn smoke_emission(w: &mut World, sys: ObjectId) {
-    let Some(t) = sys_type(w, sys) else { return };
-    let Some(s) = w.gas.systems.get(&sys).cloned() else {
+    let rules = w.rules_arc();
+    let Some(t) = sys_type(&rules, w, sys) else {
         return;
     };
+    let Some(s) = w.gas.systems.get(&sys) else {
+        return;
+    };
+    // The system as its emission starts.
+    let (s_timer, s_ending, s_len, s_pos, s_target) =
+        (s.timer, s.ending, s.particles.len(), s.pos, s.target);
     let m = mode(w);
     let tick = w.tick;
     // spec: S-0616 claim 9 (an owner that is an infantry, vehicle or aircraft object inside a tunnel stops emission; tunnels, S-0212, are not built, so no owner is inside one)
     let owner_ok = true;
     // spec: S-0616 claim 9 (not marked, and the tick number a multiple of ⌊T⌋; S-0205 claim 3 for ⌊T⌋ = 0, claim 20)
-    let period = floor_i32(s.timer.to_f64());
-    if !s.ending && owner_ok && glasnost_num::int::rem(tick, period) == 0 {
+    let period = floor_i32(s_timer.to_f64());
+    if !s_ending && owner_ok && glasnost_num::int::rem(tick, period) == 0 {
         // spec: S-0616 claim 9 and F4 (two raw values r₁, r₂, taken even without a held type; D = σ + 1, S-0205 claim 3 for D = 0)
         let dd = t.spawn_radius.wrapping_add(1);
         let r1 = w.rng.raw() as i32;
         let r2 = w.rng.raw() as i32;
         let capped = !w.rules().quirks.smoke_ignores_particle_cap
-            && i32::try_from(s.particles.len()).unwrap_or(i32::MAX) >= t.cap;
+            && i32::try_from(s_len).unwrap_or(i32::MAX) >= t.cap;
         if let Some(held) = t.holds
             && !capped
         {
             // spec: S-0616 F4 (at (xₛ + (r₁ rem D), yₛ + (r₂ rem D), zₛ + 10), with the terrain floor; its target point the system's)
             let at = Pos::new(
-                s.pos.x.wrapping_add(glasnost_num::int::rem(r1, dd)),
-                s.pos.y.wrapping_add(glasnost_num::int::rem(r2, dd)),
-                s.pos.z.wrapping_add(SMOKE_EMIT_HEIGHT),
+                s_pos.x.wrapping_add(glasnost_num::int::rem(r1, dd)),
+                s_pos.y.wrapping_add(glasnost_num::int::rem(r2, dd)),
+                s_pos.z.wrapping_add(SMOKE_EMIT_HEIGHT),
             );
-            if crate::gas::add_particle(w, sys, held, at, s.target).is_some()
+            if crate::gas::add_particle(w, sys, held, at, s_target).is_some()
                 && let Some(p) = w
                     .gas
                     .systems
@@ -593,8 +609,7 @@ fn smoke_emission(w: &mut World, sys: ObjectId) {
                     .and_then(|x| x.particles.last_mut())
             {
                 // spec: S-0616 F4 and Constants (S = S − (T − T₀) × 0.35 in double precision, stored in single, raised to 2.0 below 2.0)
-                let loss = s
-                    .timer
+                let loss = s_timer
                     .to_f64()
                     .sub(d(i64::from(t.spawn_frames), m), m)
                     .mul(c("0.35"), m);
@@ -604,7 +619,7 @@ fn smoke_emission(w: &mut World, sys: ObjectId) {
                 }
                 p.speed = v;
                 // spec: S-0616 claim 9, F4 and claim 26 (its translucency rises by 25 when T > τ, compared in single precision)
-                if s.timer.to_f64().gt(t.translucency_cutoff.to_f64()) {
+                if s_timer.to_f64().gt(t.translucency_cutoff.to_f64()) {
                     p.translucency = p.translucency.wrapping_add(SMOKE_TRANSLUCENCY_STEP);
                 }
             }
@@ -688,10 +703,12 @@ pub fn fire_turn(w: &mut World, sys: ObjectId) {
         // spec: S-0616 claim 10 (the emission takes place unless the system is marked)
         return;
     }
-    let Some(t) = sys_type(w, sys) else { return };
+    let Some(spawn_frames) = sys_type(w.rules(), w, sys).map(|t| t.spawn_frames) else {
+        return;
+    };
     let tick = w.tick;
     // spec: S-0616 claim 11 (emits when the tick is a multiple of the spawn interval, or a multiple of 3 in a turn that made a sweep)
-    let due = (t.spawn_frames != 0 && glasnost_num::int::rem(tick, t.spawn_frames) == 0)
+    let due = (spawn_frames != 0 && glasnost_num::int::rem(tick, spawn_frames) == 0)
         || (swept && glasnost_num::int::rem(tick, SWEEP_CADENCE) == 0);
     if due {
         fire_emission(w, sys);
@@ -813,15 +830,14 @@ pub fn step_direction(p: Pos, q: Pos, m: Rounding) -> usize {
 
 /// Claim 11, F6, F7: a fire emission.
 fn fire_emission(w: &mut World, sys: ObjectId) {
-    let Some(s) = w.gas.systems.get(&sys).cloned() else {
+    let Some((p, q)) = w.gas.systems.get(&sys).map(|s| (s.pos, s.target)) else {
         return;
     };
-    let Some(ti) = sys_type(w, sys).and_then(|t| t.holds) else {
+    let Some(ti) = sys_type(w.rules(), w, sys).and_then(|t| t.holds) else {
         // spec: S-0616 claim 11 (with no held type nothing is made and nothing is drawn)
         return;
     };
     let m = mode(w);
-    let (p, q) = (s.pos, s.target);
     // spec: S-0616 F6 (k = t rem 500)
     let k = glasnost_num::int::rem(w.tick, SWING_PERIOD);
     let v = swing(k, m);
@@ -863,7 +879,8 @@ fn fire_update(w: &mut World, sys: ObjectId, i: usize) {
     let Some(mut p) = crate::gas::particle(w, sys, i) else {
         return;
     };
-    let Some(t) = ptype(w, &p) else { return };
+    let rules = w.rules_arc();
+    let Some(t) = ptype(&rules, &p) else { return };
     let m = mode(w);
     let zero = d(0, m);
     // spec: S-0616 claim 12 (S ≤ 0: S becomes 0 and the particle gets the dead mark; no draw)
@@ -919,7 +936,7 @@ fn fire_update(w: &mut World, sys: ObjectId, i: usize) {
     let pos = p.pos;
     crate::gas::put(w, sys, i, p);
     if due {
-        fire_hit(w, sys, &t, pos);
+        fire_hit(w, sys, t, pos);
     }
 }
 
@@ -1008,14 +1025,16 @@ fn fire_hit(w: &mut World, sys: ObjectId, t: &ParticleType, pos: Pos) {
 
 /// Claim 15, F10: a spark system's turn.
 pub fn spark_turn(w: &mut World, sys: ObjectId) {
-    let Some(t) = sys_type(w, sys) else { return };
-    let Some(s) = w.gas.systems.get(&sys).cloned() else {
+    let rules = w.rules_arc();
+    let Some(t) = sys_type(&rules, w, sys) else {
+        return;
+    };
+    let Some((k, s_pos)) = w.gas.systems.get(&sys).map(|s| (s.sparks, s.pos)) else {
         return;
     };
     let half = w.rules().quirks.ranged_draw_half_span;
     let m = mode(w);
     // spec: S-0616 claim 15 (revision 27: the table reads only K, not whether the system is marked: a marked spark system whose K is above 0 still bursts)
-    let k = s.sparks;
     if t.spark_turns <= 0 {
         // spec: S-0616 claims 15 and 20 (a type's spark-turns field of 0 or less is bad data: our engine marks the system in its first turn, with no burst and no draw of claim 15; its particles still update; a fix with no switch, lead decision)
         mark(w, sys);
@@ -1031,7 +1050,7 @@ pub fn spark_turn(w: &mut World, sys: ObjectId) {
         match t.holds {
             Some(held) => {
                 if burst {
-                    spark_burst(w, sys, &t, held, s.pos);
+                    spark_burst(w, sys, t, held, s_pos);
                 }
                 // spec: S-0616 claim 15 (the light: one ranged draw in every turn that starts with K > 0, after the burst's draws; drawing only)
                 let _light = w.rng.ranged(0, DRAW_TOP, half);
@@ -1074,10 +1093,15 @@ fn spark_burst(w: &mut World, sys: ObjectId, t: &crate::gas::SystemType, held: u
         // spec: S-0616 F10 (three raw values taken and discarded)
         let _ = w.rng.raw();
     }
-    let Some(pt) = w.rules().gas.particles.get(held as usize).cloned() else {
+    let Some([xv, yv, zmin, zrange]) = w
+        .rules()
+        .gas
+        .particles
+        .get(held as usize)
+        .map(|pt| pt.spark)
+    else {
         return;
     };
-    let [xv, yv, zmin, zrange] = pt.spark;
     let table = w.rules().quirks.table_root_distance;
     // spec: S-0616 r29 claim 20a (at most BURST_CEILING sparks, with their draws, in one burst)
     for _ in 0..count.clamp(0, BURST_CEILING) {
@@ -1189,7 +1213,7 @@ fn spark_update(w: &mut World, sys: ObjectId, i: usize) {
     p.fvel[2] = vz2; // nocite: vector and matrix dimensions (three axes)
     // spec: S-0616 claim 16 (the colour draw after any contact: one ranged draw R(0, 2147483646)); claim 29 and F16 (it moves the colour progress)
     let r = w.rng.ranged(0, DRAW_TOP, half);
-    if let Some(t) = ptype(w, &p) {
+    if let Some(t) = ptype(w.rules(), &p) {
         p.colour.advance(&t.look, r, m);
     }
     crate::gas::put(w, sys, i, p);
@@ -1216,18 +1240,29 @@ fn stops_spark(w: &World, b: Pos) -> bool {
 
 /// Claim 17, F12: a railgun system's turn.
 pub fn railgun_turn(w: &mut World, sys: ObjectId) {
-    let Some(t) = sys_type(w, sys) else { return };
-    let Some(s) = w.gas.systems.get(&sys).cloned() else {
+    let rules = w.rules_arc();
+    let Some(t) = sys_type(&rules, w, sys) else {
         return;
     };
+    let Some(s) = w.gas.systems.get(&sys) else {
+        return;
+    };
+    // The system as its turn starts.
+    let (s_ending, s_empty, s_pos, s_target, s_type_index) = (
+        s.ending,
+        s.particles.is_empty(),
+        s.pos,
+        s.target,
+        s.type_index,
+    );
     let half = w.rules().quirks.ranged_draw_half_span;
     let m = mode(w);
-    if !s.ending && s.particles.is_empty() {
+    if !s_ending && s_empty {
         // spec: S-0616 F12 (L = trunc(r(Δₓ² + Δᵧ² + Δ_z²)), n = trunc(L × p) in double precision)
         let dl = [
-            s.target.x - s.pos.x,
-            s.target.y - s.pos.y,
-            s.target.z - s.pos.z,
+            s_target.x - s_pos.x,
+            s_target.y - s_pos.y,
+            s_target.z - s_pos.z,
         ];
         let sum: u64 = dl
             .iter()
@@ -1238,9 +1273,9 @@ pub fn railgun_turn(w: &mut World, sys: ObjectId) {
         let n = d(l as i64, m).mul(t.per_coord, m).to_i32_common();
         // spec: S-0616 claim 31 (the laser beam, from the system's position to its target point, is made in every line turn whatever n, with or without a held type; a detonation railgun's is of zero length) and claim 20 (with n ≥ 1 and no held type our engine makes it too, a departure)
         w.effects.push(crate::combat::effects::Effect::RailLine {
-            system_type: s.type_index,
-            from: s.pos,
-            to: s.target,
+            system_type: s_type_index,
+            from: s_pos,
+            to: s_target,
         });
         match t.holds {
             Some(held) => {
@@ -1251,7 +1286,7 @@ pub fn railgun_turn(w: &mut World, sys: ObjectId) {
                     for _ in 0..RAIL_BEFORE {
                         let _ = w.rng.ranged(0, DRAW_TOP, half);
                     }
-                    crate::gas::add_particle(w, sys, held, s.pos, s.target);
+                    crate::gas::add_particle(w, sys, held, s_pos, s_target);
                     for _ in 0..RAIL_AFTER {
                         let _ = w.rng.ranged(0, DRAW_TOP, half);
                     }
@@ -1284,7 +1319,7 @@ fn railgun_update(w: &mut World, sys: ObjectId, i: usize) {
     let r = w.rng.ranged(0, DRAW_TOP, half);
     let m = mode(w);
     if let Some(mut p) = crate::gas::particle(w, sys, i)
-        && let Some(t) = ptype(w, &p)
+        && let Some(t) = ptype(w.rules(), &p)
     {
         // spec: S-0616 claim 29 and F16 (the update's colour draw moves the colour progress)
         p.colour.advance(&t.look, r, m);

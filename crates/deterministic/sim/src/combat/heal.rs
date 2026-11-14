@@ -24,15 +24,15 @@ pub(crate) fn multiple(t: i32, p: i32) -> bool {
 /// One object's self-healing in its turn (S-0314 claims 9 and 10, F3).
 pub fn turn(w: &mut World, id: ObjectId) {
     let t = w.tick;
-    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(o) = w.obj(id) else { return };
     // spec: S-0302 claim 16 (a building in a delayed-kill countdown is healed as claim 11 gives)
-    if crate::combat::damage::dead(&o) {
+    if crate::combat::damage::dead(o) {
         return;
     }
+    let (h, kind, owner) = (o.health, o.kind, o.owner);
     let rules = w.rules_arc();
     let g = &rules.combat.general;
     let s = crate::combat::damage::strength(w, id);
-    let h = o.health;
     // spec: S-0314 F3 (an object at 0 health or at its strength gains nothing)
     if h <= 0 || h >= s {
         return;
@@ -43,15 +43,14 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let g9 = i32::from(self_heal && multiple(t, g.repair_period));
     let organic = type_combat(w, id).is_some_and(|tc| tc.organic);
     // spec: S-0314 claim 10 (infantry and organic vehicles use the infantry total; other vehicles the vehicle total; not aircraft or buildings)
-    let which = match o.kind {
+    let which = match kind {
         Kind::Infantry => Some(0),
         Kind::Vehicle if organic => Some(0),
         Kind::Vehicle => Some(1),
         _ => None,
     };
     let g10 = which.map_or(0, |i| {
-        let total = o
-            .owner
+        let total = owner
             .and_then(|hh| w.houses.get(usize::from(hh.0)))
             .map_or(0, |hh| hh.combat.self_heal[i]);
         // spec: S-0314 F3 (a′ = a, or 0 when a is negative, a departure)
@@ -73,7 +72,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
     // spec: S-0314 claim 9 and S-0616 claim 1 (after the object's own self-healing gain, its damage smoke takes the healing-mark test)
     let own = g9 > 0;
     // spec: S-0314 claim 10 and S-0616 claim 1 (after house-wide healing only a vehicle that is not organic takes the test; infantry and organic vehicles do not)
-    let house = g10 > 0 && o.kind == Kind::Vehicle && !organic;
+    let house = g10 > 0 && kind == Kind::Vehicle && !organic;
     if own || house {
         smoke_heal_mark(w, id, h2, s);
     }

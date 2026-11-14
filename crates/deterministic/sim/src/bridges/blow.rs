@@ -192,7 +192,8 @@ fn f2(cell: i32, u: F64, mode: glasnost_num::Rounding) -> i32 {
 
 /// The explosion draws of a blown-up cell (claim 9, F2).
 fn explosions(w: &mut World, c: CellXY, level: i32) {
-    let g = w.rules().combat.general.clone();
+    let rules = w.rules_arc();
+    let g = &rules.combat.general;
     // spec: S-0511 claim 9 (an empty bridge-explosion list: no draws)
     if g.bridge_explosions.is_empty() {
         return;
@@ -214,8 +215,8 @@ fn explosions(w: &mut World, c: CellXY, level: i32) {
         let n = g.metallic_debris.len() as i32;
         let k = w.rng.ranged(0, n - 1, half_span);
         // spec: S-0511 Edge cases (an empty metallic-debris list: the draw is taken, no debris animation)
-        if let Some(name) = g.metallic_debris.get(k as usize).cloned() {
-            crate::combat::effects::anim(w, &name, at);
+        if let Some(name) = g.metallic_debris.get(k as usize) {
+            crate::combat::effects::anim(w, name, at);
         }
     }
     explosion_anim(w, &g.bridge_explosions, at);

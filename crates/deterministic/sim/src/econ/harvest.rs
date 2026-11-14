@@ -824,13 +824,25 @@ fn acceptable(w: &mut World, id: ObjectId, from: CellXY, c: CellXY, reference: i
 fn owns_dock(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let Some(owner) = o.owner else { return false };
-    let docks = unit(w, id).map(|u| u.docks.clone()).unwrap_or_default();
-    w.objects.values().any(|b| {
+    let docks: &[u32] = unit(w, id).map_or(&[], |u| u.docks.as_slice());
+    let dock = |b: &crate::world::Object| {
         b.kind == Kind::Building
             && b.owner == Some(owner)
             && b.health > 0
             && docks.contains(&b.type_index)
-    })
+    };
+    // The house's acquired buildings are looked at first: one of them that
+    // passes the test answers yes, as the walk of every object below would.
+    // Only when none passes is every object walked, so the answer is the
+    // walk's whatever the list holds.
+    let acquired = w
+        .houses
+        .get(usize::from(owner.0))
+        .map_or(&[][..], |h| h.econ.acquired.as_slice());
+    if acquired.iter().any(|&b| w.obj(b).is_some_and(dock)) {
+        return true;
+    }
+    w.objects.values().any(dock)
 }
 
 /// The docking cell of a dock-unload refinery (S-0402 Terms, claim 10):
@@ -1052,10 +1064,9 @@ fn standard(w: &mut World, id: ObjectId) -> i32 {
 /// The processing of *harvest* for a harvester (S-0402 claims 3 to 9 and
 /// 13; State and ordering).
 pub fn process_harvest(w: &mut World, id: ObjectId) -> i32 {
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(start) = w.obj(id).map(|o| o.beh.start_tick) else {
         return 1;
     };
-    let start = o.beh.start_tick;
     if let Some(s) = state(w, id)
         && s.harvest_start != Some(start)
     {

@@ -508,7 +508,7 @@ pub fn natural_smoke_yellow(w: &mut World, id: ObjectId) {
 /// behaviour processing and self-healing, before its radiation hit,
 /// movement and infantry firing (S-0616 claim 1, Q-1404 answered).
 pub fn damage_sparks(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(o) = w.obj(id) else { return };
     // spec: S-0616 claim 1 (revision 27: holding nothing in its spark place, whatever the kind of a system held there)
     if o.kind != Kind::Infantry || o.combat.spark_emitter.is_some() {
         return;
@@ -517,20 +517,21 @@ pub fn damage_sparks(w: &mut World, id: ObjectId) {
     if !o.on_map {
         return;
     }
+    let (kind, type_index, health, pos) = (o.kind, o.type_index, o.health, o.pos);
     let rules = w.rules_arc();
     // spec: S-0616 Terms (the damage-sparks flag is the cyborg flag of S-0312 claim 2)
-    if !rules.unit(o.kind, o.type_index).is_some_and(|u| u.cyborg) {
+    if !rules.unit(kind, type_index).is_some_and(|u| u.cyborg) {
         return;
     }
     let m = rules.mode;
     let s = crate::combat::damage::strength(w, id);
     // spec: S-0214 Terms (health ratio: health / strength in floating point)
-    let ratio = F64::from_i64(i64::from(o.health), m).div(F64::from_i64(i64::from(s), m), m);
+    let ratio = F64::from_i64(i64::from(health), m).div(F64::from_i64(i64::from(s), m), m);
     // spec: S-0616 claim 1 (strictly below the yellow ratio; height above the surface greater than −10 leptons)
     if !ratio.lt(rules.general.condition_yellow) || w.height_above_surface(id) <= SPARK_DEPTH {
         return;
     }
-    let Some(tc) = crate::combat::veterancy::type_combat(w, id).cloned() else {
+    let Some(tc) = crate::combat::veterancy::type_combat_in(&rules, kind, type_index) else {
         return;
     };
     let n = tc.spark_systems.len() as i32;
@@ -557,7 +558,7 @@ pub fn damage_sparks(w: &mut World, id: ObjectId) {
         return;
     };
     // spec: S-0616 claim 1 (at the object's position plus the type's damage-smoke displacement)
-    let Some(sys) = crate::particles::create(w, ti, offset(o.pos, tc.smoke_offset), None) else {
+    let Some(sys) = crate::particles::create(w, ti, offset(pos, tc.smoke_offset), None) else {
         return;
     };
     if let Some(sy) = w.gas.systems.get_mut(&sys) {
@@ -584,16 +585,17 @@ fn spark_scale() -> F64 {
 /// disabled by S-0405 claim 13 (Terms). Called first in its turn, before
 /// every other draw of that turn (S-0616 claim 1, Q-1404 answered).
 pub fn deactivated_sparks(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(o) = w.obj(id) else { return };
     if o.kind != Kind::Vehicle || !crate::econ::power::unit_disabled(w, id) {
         return;
     }
+    let (pos, number) = (o.pos, o.id.0);
     let t = w.tick;
     // spec: S-0616 claim 1 (the cadence term, integer arithmetic truncating toward zero; the object-number phase is a departure)
-    let term = (o.pos.x / DEACTIVATED_DIVISOR)
-        .wrapping_add((o.pos.y / DEACTIVATED_DIVISOR).wrapping_mul(DEACTIVATED_WEIGHT))
+    let term = (pos.x / DEACTIVATED_DIVISOR)
+        .wrapping_add((pos.y / DEACTIVATED_DIVISOR).wrapping_mul(DEACTIVATED_WEIGHT))
         .wrapping_add(t)
-        .wrapping_add(o.id.0 as i32);
+        .wrapping_add(number as i32);
     if glasnost_num::int::rem(term, DEACTIVATED_PERIOD) != 0 {
         return;
     }
@@ -606,7 +608,7 @@ pub fn deactivated_sparks(w: &mut World, id: ObjectId) {
     let dy = w.rng.ranged(-DEACTIVATED_SPREAD, DEACTIVATED_SPREAD, half);
     let dx = w.rng.ranged(-DEACTIVATED_SPREAD, DEACTIVATED_SPREAD, half);
     // spec: S-0616 claim 1 (deactivated vehicle sparks: no owner object, target point unused, no first particle)
-    crate::particles::create(w, ti, offset(o.pos, [dx, dy, 0]), None);
+    crate::particles::create(w, ti, offset(pos, [dx, dy, 0]), None);
 }
 
 /// S-0011 code 88 and S-0616 claim 1: one system of type `ti` (the number
