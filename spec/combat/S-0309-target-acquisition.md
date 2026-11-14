@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 142
+revision: 144
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -10,7 +10,7 @@ approved-on: 2026-11-14
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
 Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712, Q-2747, Q-2801, Q-2841, Q-2987,
-Q-2988, Q-3061, Q-3102]
+Q-2988, Q-3061, Q-3102, Q-3109]
 supersedes: []
 ---
 
@@ -493,7 +493,11 @@ index 1. This is a design rule, not an additional claim about the original.
    searcher's movement zone count as lying in the same region, wherever they are on the map.
    The searcher's own cell is read for its deck (S-0212 claim 4) whenever it is a bridge cell,
    whatever layer the searcher is in; the object's cell is read in the layer the object occupies,
-   always for the searcher's movement zone, never the object's.
+   always for the searcher's movement zone, never the object's. The object's cell is the cell that
+   holds its reference point (S-0204 Terms and claim 2): for a building, the centre of its
+   foundation without a bib row (S-0204 claim 4), not its own position. For a foundation side of
+   even length that centre lies on a cell edge, and the cell is the one on the larger-coordinate
+   side of that edge.
 
    *No-link deck exception.* If the searcher's own deck read finds no bridge link, target
    acquisition omits the connected-region restriction for the whole search: no object or
@@ -570,7 +574,9 @@ index 1. This is a design rule, not an additional claim about the original.
      reading of the last-filed list is `unmeasured`, as S-0501 claim 48 rates it: no scenario
      sets up an observable map-wide search against an object whose layer changed without a
      re-file. The ground-layer pass's consideration of an aircraft that cannot land, in flight:
-     `measurable` (scenario P46 part a of S-0306).
+     `measurable` (scenario P46 part a of S-0306). The reference-point cell of a building is
+     `unmeasured`: no part of A11 offers a building whose foundation cells lie in different reach
+     regions, where the cell read would matter.
    - Confidence: high (the ground-layer restriction, for a hunting vehicle whose weapon can hit
      aircraft, as parts f and k run 1 have), medium (the ground-layer restriction for other
      searchers, the zone test and the order of the passes),
@@ -580,7 +586,8 @@ index 1. This is a design rule, not an additional claim about the original.
      high (cells of no reach region), low (the deck read
      of the searcher's own cell and the no-link deck exception), medium (the ground-layer
      pass's reading of the last-filed list, as S-0501 claim 48 rates it), medium (the
-     ground-layer pass's consideration of an aircraft that cannot land, in flight)
+     ground-layer pass's consideration of an aircraft that cannot land, in flight), medium (the
+     reference-point cell of a building)
 
 8. **Radius of range and area searches.** The radius *R* in leptons, and from it the number of
    rings *n*, follow Formulas F1. For a range search *R* is the type's guard range if that is not 0
@@ -696,17 +703,30 @@ index 1. This is a design rule, not an additional claim about the original.
       mind-controlled open-topped transport and the fall-back to the last object)
 
 11. **A cell in another reach region is skipped.** For a mobile searcher other than an aircraft, an
-    area search (and a map-wide search, claim 7) skips every cell that is not in the same connected
-    region of the searcher's movement zone as the searcher's own cell, except for claim 7's
-    no-link deck case. A range search does not.
+    area search skips every cell that is not in the same connected region of the searcher's movement
+    zone as the searcher's own cell, except for claim 7's no-link deck case. A map-wide search,
+    which visits no cells, restricts the objects it considers instead, by table C's row *zone*
+    (claim 7). A range search does not.
     Both the visited cell and the searcher's own cell are read for their decks when they are
     bridge cells, and the regions are compared as in claim 7 (S-0212 claim 4), so two cells of no
     reach region of that zone count as the same region. Claim 7's no-link searcher exception
     omits this restriction for every visited cell, including other no-link decks, rather than
     comparing two no-link reads under S-0212 claim 4.
+    In an area search this skip is the only reach-region test: table C's row *zone* does not
+    apply to the object a cell offers (claim 10). So an object offered by a cell that is not
+    skipped is not rejected for the reach region of its own cell or layer, which can differ from
+    the visited cell's: for example an object on the ground under a bridge cell whose deck holds
+    no object, when the visited cell's deck read lies in the searcher's region and the ground
+    does not, or a building offered by a foundation cell other than the one that holds its
+    reference point (claim 7).
     - Backing: `measurable` (scenario A11, parts b, d, e and j); `unmeasured` for the deck reads
-      and the no-link deck exception, for the reasons in claim 7
-    - Confidence: medium (low for the deck reads and the no-link deck exception)
+      and the no-link deck exception, for the reasons in claim 7. That table C's row *zone* does
+      not apply in an area search is `unmeasured`: in parts d and j run 5 the visited cell and the
+      offered object's own cell lie in the same reach region, so the row would give the same
+      outcome, and the bridge case needs a deck read through a bridge link, which no scenario of
+      this spec places at will (claim 7).
+    - Confidence: medium (low for the deck reads and the no-link deck exception); medium (the row
+      *zone* not applying in an area search); low (the bridge example, which rests on the deck read)
 
 ### Which objects are candidates
 
@@ -2563,7 +2583,7 @@ truncated toward zero (Notation above), so the difference is an integer.
 | playfield | *T* is not on the playfield | medium | A14, part h |
 | no-threat | *T*'s current behaviour has the no-threat property (S-0215, claim 16) | high | A14, part f |
 | underground | *T*'s height above the surface is below −20 leptons | high | A14, part b |
-| zone | *T*'s cell is outside the connected region of *A*'s movement zone that holds *A*'s own cell, in the searches that claims 7 and 11 restrict (compared as claim 7 gives: two cells of no reach region of that zone count as the same region). No rejection by this row when *A*'s own deck read finds no bridge link, as claim 7 specifies | medium (low for the no-link deck exception) | A11, parts b, d and j; the no-link deck exception is `unmeasured` (claim 7) |
+| zone | in the ground-layer pass of a map-wide search by a searcher that claim 7 restricts (a mobile object other than an aircraft; any other searcher gets no rejection by this row): *T*'s cell, the cell that holds its reference point, read in the layer *T* occupies, is outside the connected region of *A*'s movement zone that holds *A*'s own cell (compared as claim 7 gives: two cells of no reach region of that zone count as the same region). No rejection by this row when *A*'s own deck read finds no bridge link, as claim 7 specifies. The row applies in no other search or pass: not in an area search, whose only reach-region test is claim 11's skip of the visited cell, nor in the aircraft pass, the airborne scan (claim 9) or a range search | medium (low for the no-link deck exception) | A11, parts b and j; the no-link deck exception, the reference-point cell of a building and the row's absence from an area search are `unmeasured` (claims 7 and 11) |
 | friendly | *T* is allied with *A*, and *A* is neither a healer for acquisition nor an engineer; or *T* is allied with *A*, *A* is a healer for acquisition or an engineer, and *T*'s health ratio is 1. The row does not apply when *A* has a friendly-row exception (Terms: *A*'s type attacks friendlies, *A* is berserk, *A* has the permanent-berserk mark, or *A* is a passenger of a mind-controlled open-topped transport) | high (low for the passenger exception) | A12 (infantry and vehicle healers; a building healer is `unmeasured`, claim 6, backing); A3, part c, and A8, part f (attacks friendlies and berserk); A14, part l (the passenger exception); the permanent-berserk exception is `unmeasured`, since nothing in our engine sets the mark (Edge cases); the engineer exemption by A15, part e, run 2 (an engineer of the neutral house, to which claim 25, part d, offers allied objects) |
 | healer | *A* is an infantry unit or vehicle that is a healer for acquisition (so its search has the *friendly* modifier, claim 6) and *T* is not allied with *A*. The row applies whatever friendly-row exception *A* has | high | A12, parts d and e |
 | healer aircraft | *A* is a vehicle that is a healer for acquisition, *T* is allied with *A*, and *T* is an aircraft whose height above the surface is above 0 leptons or that stands on a cell holding a building. The row does not apply when *A* has a friendly-row exception | high (medium for the waiver) | A12, part c; the waiver is `unmeasured` (claim 6, backing) |
