@@ -117,7 +117,7 @@ fn the_pipeline_resolves_and_validates_it() {
     assert_eq!(rover.owners, ["basalt", "heliotrope"]);
     assert_eq!(rover.armament.len(), 2);
     // IDs in first-appearance order; the hash is stable across runs.
-    assert_eq!(r.ids.get("objects", "syn_depot"), Some(0));
+    assert_eq!(r.ids.get_own("objects", "syn_depot"), Some(0));
     assert_eq!(r.sim_rules_hash, resolved().sim_rules_hash);
     let path = glasnost_rules::explain::find_path(&r.tree, "syn_crack_rover_mk2.speed").unwrap();
     let text = glasnost_rules::explain::explain(&r.tree, &r.provenance, &path);

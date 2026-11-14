@@ -11,7 +11,7 @@
 
 use glasnost_map::CellXY;
 use glasnost_rules::sim::MovementZone;
-use glasnost_sim::econ::{TypeRef, production, tech};
+use glasnost_sim::econ::{TypeRef, production};
 use glasnost_sim::jump;
 use glasnost_sim::orders::Order;
 use glasnost_sim::regions::{self, Reach};
@@ -96,7 +96,7 @@ impl Special {
             self.count_jump();
         }
         if fliers.is_empty()
-            && let Some(t) = cheapest_armed_jumpjet(w, house)
+            && let Some(t) = cheapest_armed_jumpjet(w, script)
             && !has_or_makes(w, house, t)
             && sees_unreachable_enemy(w, script, &enemies)
         {
@@ -127,8 +127,8 @@ fn sees_unreachable_enemy(w: &World, script: &Script, enemies: &[(ObjectId, Cell
 }
 
 /// The cheapest armed jumpjet type of infantry or vehicles the house can
-/// build now.
-fn cheapest_armed_jumpjet(w: &World, house: glasnost_sim::world::HouseId) -> Option<TypeRef> {
+/// build now (the script's kept buildability; design: own AI, #60).
+fn cheapest_armed_jumpjet(w: &World, script: &Script) -> Option<TypeRef> {
     all_types(w)
         .into_iter()
         .filter(|t| matches!(t.kind, Kind::Infantry | Kind::Vehicle))
@@ -137,7 +137,7 @@ fn cheapest_armed_jumpjet(w: &World, house: glasnost_sim::world::HouseId) -> Opt
                 .unit(t.kind, t.index)
                 .is_some_and(|u| u.jumpjet_locomotor && scripted::armed(u) && !u.harvester)
         })
-        .filter(|&t| tech::buildable(w, house, t))
+        .filter(|&t| script.buildable(w, t))
         .min_by_key(|&t| (production::cost_field(w, t), t.index))
 }
 

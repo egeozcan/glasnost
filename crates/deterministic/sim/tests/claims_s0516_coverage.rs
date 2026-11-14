@@ -537,3 +537,74 @@ fn claim_22_walk_and_hover_arrival_updates() {
         assert!(lagged, "{name}: the cell changes before the arrival update");
     }
 }
+
+/// Puts a building on the map the way a place order does (S-0406 claim
+/// 17): no current behaviour and *construction* queued.
+fn placed(w: &mut World, name: &str, h: HouseId, dx: i32, dy: i32) -> ObjectId {
+    let t = w.rules().index_of(Kind::Building, name).unwrap();
+    let id = objects::create(w, Kind::Building, t, Some(h));
+    glasnost_sim::econ::placement::put_on_map(w, id, at(dx, dy), true);
+    id
+}
+
+// spec: S-0516 claims 23 and 40 (r20, Q-3060: activation only at the grand opening; one placed by a place order has construction current at its handover's opening and never adds its disc, whatever its power; removal decrements its owner's counts whether or not it ever added the disc)
+#[test]
+fn claims_23_40_r20_placed_by_order_never_covers() {
+    let mut r = ruleset();
+    r.sim
+        .buildings
+        .get_mut("ARRAY")
+        .unwrap()
+        .cloak_radius_in_cells = Some(6);
+    let mut w = game(&r);
+    let a = placed(&mut w, "ARRAY", ALPHA, 0, 0);
+    let d = placed(&mut w, "DETECTOR", ALPHA, 6, 6);
+    run(&mut w, 60);
+    for id in [a, d] {
+        let o = w.obj(id).unwrap();
+        assert!(!o.econ.construction.building_up, "handed over");
+        assert!(glasnost_sim::econ::power::in_operation(&w, id));
+    }
+    assert!(!sensed_at(&w, ALPHA, 0, 0), "no sensor disc");
+    assert!(
+        !cloak::detected(&w, Some(ALPHA), at(6, 6)),
+        "no detector disc"
+    );
+    objects::remove(&mut w, a);
+    assert_eq!(count_at(&w, ALPHA, 0, 0), -1);
+    assert_eq!(count_at(&w, ALPHA, -5, 0), -1, "the cloak-radius disc");
+    objects::remove(&mut w, d);
+    let o = at(6, 6);
+    assert_eq!(
+        w.cloak.detectors.get(&(ALPHA.0, o)).copied(),
+        Some(-1),
+        "the detection range, no floor"
+    );
+}
+
+// spec: S-0516 claims 23 and 40 (r20, Q-3060: an array or detector whose owner changes during its build-up has its grand opening inside the change, for its new owner, after the change's guard request; with construction still queued that request replaced it, guard is read and the new owner gets the disc) and S-0309 claim 31 (the grand opening step of the orders reset)
+#[test]
+fn claims_23_40_r20_owner_change_in_build_up_opens_for_the_new_owner() {
+    use glasnost_sim::structures::ownership::{self, Cause};
+    let r = ruleset();
+    let mut w = game(&r);
+    let a = placed(&mut w, "ARRAY", ALPHA, 0, 0);
+    let d = placed(&mut w, "DETECTOR", ALPHA, 6, 6);
+    for id in [a, d] {
+        assert_eq!(w.obj(id).unwrap().beh.current, None);
+        ownership::change(&mut w, id, Some(BETA), Cause::Trigger);
+    }
+    assert!(sensed_at(&w, BETA, 0, 0), "the new owner senses");
+    assert!(!sensed_at(&w, ALPHA, 0, 0));
+    assert!(
+        cloak::detected(&w, Some(BETA), at(6, 6)),
+        "the new owner detects"
+    );
+    run(&mut w, 60);
+    assert!(!w.obj(a).unwrap().econ.construction.building_up);
+    assert_eq!(
+        count_at(&w, BETA, 0, 0),
+        1,
+        "the handover adds no second disc"
+    );
+}

@@ -177,6 +177,24 @@ fn ground_layer_newcomer_follows_equal_keys() {
     assert!(!g.contains(b));
 }
 
+/// spec: S-0102 claim 6 (newcomers in the order they entered, after the
+/// existing equal-key objects). A member listed twice takes its last key
+/// (#146: the update reads its members through one map).
+#[test]
+fn ground_layer_update_takes_a_twice_listed_members_last_key() {
+    let o = |n| Entrant::Object(ObjectId(n));
+    let (a, b, n, m) = (o(1), o(2), o(3), o(4));
+    let mut g = GroundLayer::default();
+    g.enter(a, 5);
+    g.enter(b, 10);
+    // N is listed twice, first at key 30 and last at key 5; M enters at 5.
+    g.update(&[(n, 30), (m, 5), (a, 5), (b, 10), (n, 5)]);
+    assert_eq!(g.order().collect::<Vec<_>>(), [a, n, m, b]);
+    // A twice: its last key moves it behind B.
+    g.update(&[(a, 5), (b, 10), (n, 5), (m, 5), (a, 20)]);
+    assert_eq!(g.order().collect::<Vec<_>>(), [n, m, b, a]);
+}
+
 /// spec: S-0107 F1, F2 (frame from stage, count and facing group)
 #[test]
 fn infantry_frames() {
@@ -4936,6 +4954,22 @@ fn protected_hut_items(
     building: LiveBuilding,
     cells: std::collections::BTreeMap<glasnost_map::CellXY, super::protection::SlotCell>,
 ) -> Vec<glasnost_render::scene::Item> {
+    with_hut_inputs(rules_extra, roles, slot_art, |inputs, painter, scene| {
+        painter.set_protected_cells(cells);
+        let (drawn, _) = painter.buildings(inputs, scene, &[building]);
+        drawn.into_iter().next().unwrap_or_default()
+    })
+}
+
+/// The painter inputs of [`protected_hut_items`]'s context (HUTX with the
+/// unloading sprites `roles`, the animation type SLOTA with art section
+/// `slot_art`, the rules `rules_extra` added), drawn by `f`.
+fn with_hut_inputs<T>(
+    rules_extra: &str,
+    roles: &[&'static str],
+    slot_art: &str,
+    f: impl FnOnce(&Inputs, &mut super::build::Painter, &mut Scene) -> T,
+) -> T {
     use super::tests::{ART, art_of, context_full};
     let rules = format!("{}[Animations]\n0=SLOTA\n{rules_extra}", protection_rules());
     let art = format!("{ART}[SLOTA]\n{slot_art}");
@@ -4983,9 +5017,7 @@ fn protected_hut_items(
     };
     let (built, mut painter) = build_parts(&inputs, true);
     let mut scene = built.scene;
-    painter.set_protected_cells(cells);
-    let (drawn, _) = painter.buildings(&inputs, &mut scene, &[building]);
-    drawn.into_iter().next().unwrap_or_default()
+    f(&inputs, &mut painter, &mut scene)
 }
 
 /// HUTX at cell (2, 2) with `protection`, unloading `unloading`.
@@ -8109,4 +8141,208 @@ fn claim_8_a_selected_building_in_the_live_view() {
             .any(|i| i.object == Some(sim_code(cart))
                 && scene.images[i.image as usize].width() == 34)
     );
+}
+
+// ---------------------------------------------------------------------------
+// A live building drawn again follows every input of its drawing (#145)
+
+/// What each item of `items` draws, its image and palette rows resolved,
+/// so that the drawings of two painters compare whatever indices their
+/// scenes gave them.
+fn drawn_look(scene: &Scene, items: &[glasnost_render::scene::Item]) -> Vec<String> {
+    items
+        .iter()
+        .map(|i| {
+            let image = &scene.images[i.image as usize];
+            let rows = |s: glasnost_render::compose::Shade| {
+                format!(
+                    "rho {} mask {} rows {:?}",
+                    s.rho,
+                    s.mask,
+                    &scene.rows[s.base as usize..][..usize::from(s.rows)]
+                )
+            };
+            let paint = match i.paint {
+                Paint::Lit(s) => format!("lit {}", rows(s)),
+                Paint::LitDiamond(s) => format!("diamond {}", rows(s)),
+                Paint::Translucent(s, t) => format!("translucent {t:?} {}", rows(s)),
+                p => format!("{p:?}"),
+            };
+            format!(
+                "{} {} {:?} {:?} {:?} {:?} {} {:?} {paint}",
+                i.x,
+                i.y,
+                i.test,
+                i.depth,
+                i.group,
+                i.object,
+                image.width(),
+                image.pixels()
+            )
+        })
+        .collect()
+}
+
+/// HUTX at cell (2, 2) with SLOTA running in its slot.
+fn slot_hut() -> LiveBuilding {
+    let mut b = hut(None, None);
+    b.slots = vec![slot_a(0)];
+    b
+}
+
+/// [`slot_hut`] on cell (6, 9), a cell of the map (cell (2, 2) is outside
+/// the map's diamond, so no cell light or level reaches it there).
+fn slot_hut_on_map() -> LiveBuilding {
+    let mut b = slot_hut();
+    b.cell = glasnost_map::CellXY::new(6, 9);
+    b
+}
+
+/// design: render (#145): a building is drawn, `change` changes the
+/// painter, and the building drawn again (from the painter's cache, when it
+/// has one) draws as a painter that saw the change before its first
+/// drawing draws it; the change shows. HUTX in [`protected_hut_items`]'s
+/// context with SLOTA's art section `slot_art` and the unloading sprites
+/// `roles`.
+fn drawn_again_follows(
+    roles: &[&'static str],
+    slot_art: &str,
+    first: LiveBuilding,
+    again: LiveBuilding,
+    change: impl Fn(&Inputs, &mut super::build::Painter, &mut Scene),
+) {
+    with_hut_inputs("", roles, slot_art, |inputs, painter, scene| {
+        let (before, _) = painter.buildings(inputs, scene, std::slice::from_ref(&first));
+        let before = drawn_look(scene, &before[0]);
+        let (same, _) = painter.buildings(inputs, scene, std::slice::from_ref(&first));
+        assert_eq!(drawn_look(scene, &same[0]), before, "unchanged");
+        change(inputs, painter, scene);
+        let (now, _) = painter.buildings(inputs, scene, std::slice::from_ref(&again));
+        let now = drawn_look(scene, &now[0]);
+        let (built, mut fresh) = build_parts(inputs, true);
+        let mut fresh_scene = built.scene;
+        change(inputs, &mut fresh, &mut fresh_scene);
+        let (expect, _) = fresh.buildings(inputs, &mut fresh_scene, &[again]);
+        assert_eq!(now, drawn_look(&fresh_scene, &expect[0]), "as drawn afresh");
+        assert_ne!(now, before, "the change shows");
+    });
+}
+
+/// design: render (#145): the building's own state (here its running slot
+/// animation, S-0108 Terms: the slot's offset), on the same cell.
+#[test]
+fn a_live_building_drawn_again_follows_its_state() {
+    let mut shifted = slot_hut_on_map();
+    shifted.slots = vec![slot_a(5)];
+    drawn_again_follows(&[], "", slot_hut_on_map(), shifted, |_, _, _| {});
+}
+
+/// design: render (#145): the effect tint the house-colour tables show
+/// (S-0104 claims 3 and 5).
+#[test]
+fn a_live_building_drawn_again_follows_the_effect_tint() {
+    // An invented effect tint, hundredths.
+    drawn_again_follows(&[], "", slot_hut(), slot_hut(), |_, painter, _| {
+        painter.set_effect_tint(Some([120, 80, 150]));
+    });
+}
+
+/// design: render (#145): a relight (S-0104 claims 4, 5 and 9): the cells'
+/// light the body and its animations take.
+#[test]
+fn a_live_building_drawn_again_follows_a_relight() {
+    let hut = slot_hut_on_map();
+    drawn_again_follows(&[], "", hut.clone(), hut, |inputs, painter, scene| {
+        let normal = inputs.map.lighting.normal;
+        // An invented darker light, hundredths.
+        let set = glasnost_map::LightingSet {
+            ambient: normal.ambient / 2,
+            tint: [60, 90, 140],
+            ..normal
+        };
+        let mut held = scene.items.clone();
+        painter.relight(inputs, scene, &mut held, set.ambient, set);
+        painter.free_unused_rows(held.iter());
+        scene.items = held;
+    });
+}
+
+/// design: render (#145): the look of the building occupying the slot
+/// animation's cell (S-0102 claim 34, animation rule).
+#[test]
+fn a_live_building_drawn_again_follows_the_protected_cells() {
+    use glasnost_sim::superweapons::ProtectKind;
+    drawn_again_follows(&[], "", slot_hut(), slot_hut(), |_, painter, _| {
+        painter.set_protected_cells(hut_cells(Some(bright(ProtectKind::ForceShield))));
+    });
+}
+
+/// design: render (#145): the rendering switches (here
+/// `quirks.roof_unload_no_fallback`, S-0108 claim 22).
+#[test]
+fn a_live_building_drawn_again_follows_the_view_quirks() {
+    let mut b = hut(None, unloading_with(true, DoorView::Closed));
+    b.slots = vec![slot_a(0)];
+    drawn_again_follows(
+        &["deploying", "under_door", "door"],
+        "",
+        b.clone(),
+        b,
+        |_, painter, _| {
+            painter.set_view_quirks(super::quirks::ViewQuirks {
+                roof_unload_no_fallback: false,
+                ..Default::default()
+            });
+        },
+    );
+}
+
+/// design: render (#145): the person's options (here the detail level, S-0109
+/// claim 19: SLOTA's detail field above it hides it).
+#[test]
+fn a_live_building_drawn_again_follows_the_options() {
+    use glasnost_render::light::DetailLevel;
+    with_hut_inputs("", &[], "DetailLevel=2\n", |inputs, painter, scene| {
+        let low_options = Options {
+            detail: DetailLevel::Low,
+            ..inputs.options.clone()
+        };
+        let low = Inputs {
+            options: &low_options,
+            ..*inputs
+        };
+        let (high_drawn, _) = painter.buildings(inputs, scene, &[slot_hut()]);
+        let high_drawn = drawn_look(scene, &high_drawn[0]);
+        let (now, _) = painter.buildings(&low, scene, &[slot_hut()]);
+        let now = drawn_look(scene, &now[0]);
+        let (built, mut fresh) = build_parts(inputs, true);
+        let mut fresh_scene = built.scene;
+        let (expect, _) = fresh.buildings(&low, &mut fresh_scene, &[slot_hut()]);
+        assert_eq!(now, drawn_look(&fresh_scene, &expect[0]), "as drawn afresh");
+        assert!(now.len() < high_drawn.len(), "the slot animation is hidden");
+    });
+}
+
+/// design: render (#145): the level of the cell the building stands on, as
+/// the game's cells hold it now (S-0102 claim 13: −L(z)).
+#[test]
+fn a_live_building_drawn_again_follows_its_cells_level() {
+    with_hut_inputs("", &[], "", |inputs, painter, scene| {
+        let hut = slot_hut_on_map();
+        let mut raised = inputs.map.cells.clone();
+        raised.get_mut(hut.cell).expect("the hut's cell").level += 4;
+        let up = Inputs {
+            cells: Some(&raised),
+            ..*inputs
+        };
+        let (flat, _) = painter.buildings(inputs, scene, std::slice::from_ref(&hut));
+        let flat = drawn_look(scene, &flat[0]);
+        let (now, _) = painter.buildings(&up, scene, std::slice::from_ref(&hut));
+        let now = drawn_look(scene, &now[0]);
+        let (built, mut fresh) = build_parts(inputs, true);
+        let mut fresh_scene = built.scene;
+        let (expect, _) = fresh.buildings(&up, &mut fresh_scene, &[hut]);
+        assert_eq!(now, drawn_look(&fresh_scene, &expect[0]), "as drawn afresh");
+        assert_ne!(now, flat, "the change shows");
+    });
 }

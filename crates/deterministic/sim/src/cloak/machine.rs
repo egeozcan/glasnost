@@ -266,6 +266,8 @@ fn drop_attackers(w: &mut World, id: ObjectId) {
             crate::infantry::destination_assigned(w, x, before);
         }
     }
+    // spec: S-0309 claim 27a (r140, Q-3061: at the moments of claim 28's drops a holder whose override goes on loses a put-aside target that is the object unless its house senses the object's cell, with no own-house exception, and a put-aside destination that is the object whatever senses its cell)
+    crate::combat::held::aside_lost(w, id, |w, h| senses(w, h, id));
 }
 
 /// The candidate distance of S-0516 claim 13 for a position (`x`, `y`) in

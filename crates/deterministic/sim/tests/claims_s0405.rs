@@ -394,7 +394,8 @@ fn claim_8_in_operation_rows() {
     w.obj_mut(def).unwrap().econ.building.switched_off = true;
     assert!(!power::in_operation(&w, def));
     w.obj_mut(def).unwrap().econ.building.switched_off = false;
-    // The current behaviour construction or selling, not the queued one.
+    // Construction or selling as the behaviour read: while a behaviour is
+    // current, the queued one is not read (r57).
     let t = w.tick;
     w.obj_mut(def).unwrap().beh.queued = Some(Behaviour::Selling);
     assert!(power::in_operation(&w, def));
@@ -1425,4 +1426,49 @@ fn claim_20_disabled_drive_vehicle_refuses_a_scatter_request() {
         step(&mut w);
     }
     assert!(vehicle_request(&mut w.clone(), d, req), "enabled again");
+}
+
+// spec: S-0405 claim 8 (r57, Q-3060: the last row reads the current behaviour, or the queued one while none is current; while a behaviour is current the queued one is not read)
+#[test]
+fn claim_8_r57_queued_behaviour_read_while_none_is_current() {
+    let mut w = game(&rules());
+    let nd = put(&mut w, "NODRAIN", 0, 2, 0);
+    step(&mut w);
+    assert!(power::in_operation(&w, nd));
+    {
+        let o = w.obj_mut(nd).unwrap();
+        o.beh.current = None;
+        o.beh.queued = Some(Behaviour::Construction);
+    }
+    assert!(
+        !power::in_operation(&w, nd),
+        "queued construction, none current"
+    );
+    w.obj_mut(nd).unwrap().beh.queued = Some(Behaviour::Selling);
+    assert!(!power::in_operation(&w, nd), "queued selling, none current");
+    w.obj_mut(nd).unwrap().beh.current = Some(Behaviour::Guard);
+    assert!(
+        power::in_operation(&w, nd),
+        "a current guard hides the queue"
+    );
+}
+
+// spec: S-0405 claim 8 and Transitions (r57, Q-3060: a sell order makes selling the building's current behaviour at once, whatever was current, so it is not in operation from the order on; S-0408 claim 4)
+#[test]
+fn claim_8_r57_sell_order_ends_operation_at_once() {
+    for before in [Behaviour::Guard, Behaviour::Construction] {
+        let mut r = rules();
+        // A build-up sprite, so that a sell order sells (S-0408 claim 4).
+        r.sim.buildings.get_mut("NODRAIN").unwrap().econ.buildup = Some(true);
+        let mut w = game(&r);
+        let nd = put(&mut w, "NODRAIN", 0, 2, 0);
+        step(&mut w);
+        let t = w.tick;
+        w.obj_mut(nd).unwrap().beh.force(before, t, true);
+        glasnost_sim::econ::sell::sell(&mut w, A, nd);
+        let o = w.obj(nd).unwrap();
+        assert_eq!(o.beh.current, Some(Behaviour::Selling), "{before:?}");
+        assert_eq!(o.beh.queued, None, "never only queued");
+        assert!(!power::in_operation(&w, nd), "{before:?}");
+    }
 }

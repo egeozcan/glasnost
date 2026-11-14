@@ -244,7 +244,7 @@ pub struct Quirks {
     // spec: S-0107 claim 22
     #[serde(default = "on")]
     pub two_sound_cues: bool,
-    /// A death request turned down because the die-1 or die-2 entry has no image frames leaves the unit in play with its current sequence; off: the resulting death kind counts as completed on the death tick. Not consulted in M3, which has no death handling (combat, M4).
+    /// A death request turned down because the die-1 or die-2 entry has no image frames leaves the unit in play with its current sequence; off: the resulting death kind counts as completed on the death tick.
     // spec: S-0107 claim 17
     #[serde(default = "on")]
     pub refused_death_keeps_unit: bool,
@@ -2324,11 +2324,11 @@ pub struct Quirks {
     // spec: S-0524 claim 2 and Edge cases (default: off)
     #[serde(default)]
     pub repeated_lightning_strike_suppressed: bool,
-    /// Off (the original): the create-crate action ignores the crate setting; on: it has no effect while crates are off. Not consulted yet (crates, S-0520, are not built).
+    /// Off (the original): the create-crate action ignores the crate setting; on: it has no effect while crates are off.
     // spec: S-0524 claim 4 and Edge cases (default: off)
     #[serde(default)]
     pub trigger_crate_respects_setting: bool,
-    /// Off (the original): an uncollected trigger crate never expires while crates are off; on: it expires after its assigned lifetime. Not consulted yet (crates, S-0520, are not built).
+    /// Off (the original): an uncollected trigger crate never expires while crates are off; on: it expires after its assigned lifetime.
     // spec: S-0524 claim 4 and Edge cases (default: off)
     #[serde(default)]
     pub trigger_crate_expiry_while_disabled: bool,
@@ -4438,6 +4438,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "enable_unfreezes_unpowered",
         "renderer (mapview::quirks), S-0108 claims 13 and 26; S-0405 claim 10 names it for a switched-on building's slots (S-0405 r36)",
+    ),
+    (
+        "named_palette_true_owner",
+        "renderer (mapview::quirks), S-0103 claim 16; S-0516 claim 37 names it for drawing a disguise in its disguise house's colours (S-0516 r20)",
     ),
     (
         "shroud_on_flat_grid",

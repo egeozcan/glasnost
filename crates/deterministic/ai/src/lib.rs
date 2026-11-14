@@ -150,10 +150,21 @@ pub fn startable(
     house: glasnost_sim::world::HouseId,
     t: glasnost_sim::econ::TypeRef,
 ) -> bool {
+    glasnost_sim::econ::tech::buildable(w, house, t) && could_start(w, house, t)
+}
+
+/// [`startable`] without its buildability test: a switched-on factory
+/// building of the house could start `t` and the order passes the
+/// sidebar's legality ([`scripted::Script::startable`] asks the kept
+/// buildability first; design: own AI, #60).
+pub(crate) fn could_start(
+    w: &glasnost_sim::world::World,
+    house: glasnost_sim::world::HouseId,
+    t: glasnost_sim::econ::TypeRef,
+) -> bool {
     use glasnost_sim::econ::tech;
     // spec: S-0404 claim 3 (a build order is applied only with a switched-on factory that could make the type)
-    tech::buildable(w, house, t)
-        && w.objects.values().any(|b| {
+    w.objects.values().any(|b| {
             b.kind == glasnost_sim::rules::Kind::Building
                 && b.owner == Some(house)
                 && !b.econ.building.switched_off

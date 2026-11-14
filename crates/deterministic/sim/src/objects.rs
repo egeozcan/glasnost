@@ -767,15 +767,7 @@ fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
             }
         }
     }
-    // spec: S-0309 claim 23 (d) (removal of a remembered target turns the memory into the cell of the target's last position; the engaged mark is kept)
-    let remembered = crate::world::AttackMoveMemory::Target(crate::world::Target::Object(id));
-    for ob in w.objects.values_mut() {
-        if ob.attack_move == Some(remembered) {
-            ob.attack_move = Some(crate::world::AttackMoveMemory::Dest(
-                crate::world::Target::Cell(cell),
-            ));
-        }
-    }
+    // S-0309 claim 23 (d)'s memory conversion was made at the start, in `held::holders_drop` (r140).
     let gone = w.objects.remove(&id);
     if recalc && let Some(left) = gone {
         // spec: S-0203 claim 13 (a) and (b) (a removed object is kept to the end of the tick, out of play and off the map, with its owner and health; our arena's Removal before the groups, S-0216 claim 8, runs before play and keeps none)

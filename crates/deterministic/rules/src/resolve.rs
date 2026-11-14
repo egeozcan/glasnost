@@ -518,7 +518,17 @@ fn overlay(base: &mut Node, own: &Node, path: &mut Path) {
                 }
                 Some(i) => overlay(&mut base_members[i].value, &om.value, path),
                 None if matches!(om.value.value, Value::Null) => {}
-                None => base_members.push(om.clone()),
+                // nocite: our own rules format (PLAN.md 4.6, #328): a new member is overlaid on nothing, so a set operation becomes its list before heirs see it
+                None => {
+                    let mut value = empty_object();
+                    overlay(&mut value, &om.value, path);
+                    value.span = om.value.span;
+                    base_members.push(Member {
+                        key: om.key.clone(),
+                        key_span: om.key_span,
+                        value,
+                    });
+                }
             }
         }
         path.pop();
@@ -593,8 +603,10 @@ fn resolve_instance(
     }
     let own = node.get(id)?.clone();
     visiting.push(id.to_owned());
+    // nocite: our own rules format (PLAN.md 4.6: `null` removes a key; a removed `inherits` names no parents)
     let parents = match own.get("inherits") {
         None => Vec::new(),
+        Some(p) if matches!(p.value, Value::Null) => Vec::new(),
         Some(p) => string_list(p).unwrap_or_else(|| {
             errors.push(error(format!(
                 "{collection}.{id}: inherits must be a list of names"
@@ -604,11 +616,28 @@ fn resolve_instance(
     };
     let mut base = empty_object();
     for parent in &parents {
-        if node.get(parent).is_none() {
-            errors.push(error(format!(
-                "{collection}.{id}: unknown parent {parent:?}"
-            )));
-            continue;
+        match node.get(parent).map(|p| &p.value) {
+            None => {
+                errors.push(error(format!(
+                    "{collection}.{id}: unknown parent {parent:?}"
+                )));
+                continue;
+            }
+            // nocite: our own rules format (PLAN.md 4.6): a parent removed by a layer's `null` is not there to inherit from (#330)
+            Some(Value::Null) => {
+                errors.push(error(format!(
+                    "{collection}.{id}: parent {parent:?} was removed by a layer"
+                )));
+                continue;
+            }
+            Some(Value::Object(_)) => {}
+            // nocite: our own rules format (PLAN.md 4.6): an instance is an object (#330)
+            Some(_) => {
+                errors.push(error(format!(
+                    "{collection}.{id}: parent {parent:?} is not an object"
+                )));
+                continue;
+            }
         }
         if let Some(p) =
             resolve_instance(collection, parent, node, done, visiting, provenance, errors)

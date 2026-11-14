@@ -107,27 +107,63 @@ impl Layers {
     }
 }
 
-/// The `globals.quirks` object of a layer, if it has one.
-fn quirks_node(tree: &Node) -> Option<&Node> {
-    tree.get("globals")?.get("quirks")
+/// What a layer does to the quirk switches.
+enum QuirksEdit<'a> {
+    /// No `globals.quirks`: the switches stay.
+    Keep,
+    /// A `null` `globals` or `globals.quirks`: every switch takes its default.
+    Reset,
+    /// A `globals.quirks` object: these members merge in.
+    Merge(&'a [jsonc::Member]),
+}
+
+/// A layer's `globals.quirks`, read as the resolve pipeline reads it: a
+/// `null` removes the key, and a `globals` or `quirks` that is neither an
+/// object nor `null` is an error.
+fn quirks_edit<'a>(tree: &'a Node, file: &str) -> Result<QuirksEdit<'a>, String> {
+    // nocite: our own rules format (PLAN.md 4.6: `null` removes a key), #331
+    let Some(globals) = tree.get("globals") else {
+        return Ok(QuirksEdit::Keep);
+    };
+    let quirks = match &globals.value {
+        Value::Null => return Ok(QuirksEdit::Reset),
+        Value::Object(_) => globals.get("quirks"),
+        _ => return Err(format!("{file}: globals must be an object")),
+    };
+    match quirks.map(|q| &q.value) {
+        None => Ok(QuirksEdit::Keep),
+        Some(Value::Null) => Ok(QuirksEdit::Reset),
+        Some(Value::Object(set)) => Ok(QuirksEdit::Merge(set)),
+        Some(_) => Err(format!("{file}: globals.quirks must be an object")),
+    }
 }
 
 /// `base` with the quirk switches `layer` sets in `globals.quirks`, read as
-/// the resolve pipeline reads them (strictly: an unknown switch or a value
-/// that is not a boolean is an error).
+/// the resolve pipeline reads them: an unknown switch or a value that is
+/// neither a boolean nor `null` is an error, a `null` switch takes its
+/// default, and a `null` `quirks` or `globals` resets every switch.
 pub fn quirks_with(base: Quirks, layer: &Source) -> Result<Quirks, String> {
     let tree = jsonc::parse(layer.text).map_err(|e| format!("{}: {e:?}", layer.file))?;
+    let set = match quirks_edit(&tree, layer.file)? {
+        QuirksEdit::Keep => return Ok(base),
+        QuirksEdit::Reset => return Ok(Quirks::default()),
+        QuirksEdit::Merge(set) => set,
+    };
     let mut members: Vec<(String, Node)> = base
         .named()
         .into_iter()
         .map(|(n, v)| (n.to_owned(), jsonc::boolean(v)))
         .collect();
-    if let Some(Value::Object(set)) = quirks_node(&tree).map(|n| &n.value) {
-        for m in set {
-            match members.iter_mut().find(|(k, _)| *k == m.key) {
-                Some(slot) => slot.1 = m.value.clone(),
-                None => members.push((m.key.clone(), m.value.clone())),
+    for m in set {
+        let at = members.iter().position(|(k, _)| *k == m.key);
+        match (at, &m.value.value) {
+            // A dropped member takes its serde default (the switch's default).
+            (Some(i), Value::Null) => {
+                members.remove(i);
             }
+            (None, Value::Null) => {}
+            (Some(i), _) => members[i].1 = m.value.clone(),
+            (None, _) => members.push((m.key.clone(), m.value.clone())),
         }
     }
     crate::de::from_node(&jsonc::object(members)).map_err(|e| format!("{}: {e}", layer.file))

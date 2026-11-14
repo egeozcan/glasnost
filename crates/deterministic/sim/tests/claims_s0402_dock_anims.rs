@@ -1,7 +1,8 @@
 //! Claim tests for S-0402 claim 11's docking, payment and unloading
 //! animations (S-0402 Terms; S-0108 claims 12 and 20) and the harvester's
-//! wait for the unloading animation (#430), on synthetic data: invented
-//! animation names, frame counts, types and loads, no game data.
+//! wait for the unloading animation (#430), with r84's order within the
+//! payment and empty-load rows (Q-3062, Q-3063), on synthetic data:
+//! invented animation names, frame counts, types and loads, no game data.
 
 mod harvest_common;
 
@@ -276,6 +277,160 @@ fn claim_11_non_refinery_dock_building_plays_no_unloading_animation() {
     let run = unload(&r, "DOCKB", vec![2, 0]);
     assert_eq!(run.e, None, "no unloading animation");
     assert_eq!(run.broken, run.f + 1, "no wait");
+}
+
+/// `rules()` with a refinery smoke type on REFN (S-0616 claim 1): the
+/// smoke system PLUME (smoke kind, PUFF, a long emission interval) at one
+/// set smoke point, with a long refinery-smoke time.
+fn smoky_rules() -> Ruleset {
+    use glasnost_rules::sim::{ParticleSystemType, ParticleType};
+    let mut r = rules();
+    r.registries
+        .entry("particles".into())
+        .or_default()
+        .push("PUFF".into());
+    r.sim.particles.insert(
+        "PUFF".into(),
+        ParticleType {
+            behaves_like: Some("smoke".into()),
+            max_ec: Some(1000),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("particle_systems".into())
+        .or_default()
+        .push("PLUME".into());
+    r.sim.particle_systems.insert(
+        "PLUME".into(),
+        ParticleSystemType {
+            behaves_like: Some("smoke".into()),
+            holds_what: Some("PUFF".into()),
+            spawn_frames: Some(1000),
+            spawn_cutoff: dec("100000.0"),
+            ..Default::default()
+        },
+    );
+    let refn = r.sim.buildings.get_mut("REFN").unwrap();
+    refn.refinery_smoke_particle_system = Some("PLUME".into());
+    refn.refinery_smoke_offsets = Some(vec![[40, 0, 0]]);
+    r.sim.general.refinery_smoke_frames = Some(5000);
+    r
+}
+
+/// The animation in building `b`'s `slot`, if one runs.
+fn slot(w: &World, b: ObjectId, s: DepotSlot) -> Option<ObjectId> {
+    w.obj(b).unwrap().depot.slots.get(&s).copied()
+}
+
+// spec: S-0402 claim 11 (r84, Refinery smoke: the smoke event comes first in its row, before the row's animations start; Order within the two rows: the smoke event's particle systems enter play, then the payment animation) and scenario H28 part a
+#[test]
+fn claim_11_r84_smoke_before_payment_animation() {
+    let r = smoky_rules();
+    let mut w = game(&r);
+    let (b, _h) = docked(&mut w, "REFN", vec![2, 0]);
+    let c0 = w.houses[0].credits;
+    until(&mut w, 100, |w| w.houses[0].credits != c0).expect("the payment");
+    let pay = slot(&w, b, DepotSlot::Special1).expect("the payment animation plays");
+    let smoke: Vec<ObjectId> = w
+        .gas
+        .systems
+        .iter()
+        .filter(|(_, s)| s.owner_object == Some(b))
+        .map(|(id, _)| *id)
+        .collect();
+    assert_eq!(smoke.len(), 1, "one smoke system at the payment");
+    assert!(
+        smoke[0] < pay,
+        "the smoke system {:?} enters play before the payment animation {pay:?}",
+        smoke[0]
+    );
+}
+
+/// The scenario-stream values taken from docking at REFN with an empty
+/// load until the tick in which the harvester becomes *finishing*, with
+/// PAY's random rate `rate`, and the world at the end of that tick.
+fn empty_docking(rate: Option<[i32; 2]>) -> (u64, World, ObjectId) {
+    let mut r = rules();
+    r.sim.animations.get_mut("PAY").unwrap().random_rate = rate;
+    let mut w = game(&r);
+    let (b, h) = docked(&mut w, "REFN", vec![0, 0]);
+    let t0 = w.rng.taken();
+    until(&mut w, 200, |w| harvest::state_of(w, h).finishing).expect("finishing");
+    (w.rng.taken() - t0, w, b)
+}
+
+// spec: S-0402 claim 11 (r84, Order within the two rows: in the empty-load row the payment animation is started unless playing and always stopped last, so one that was not playing enters play with its creation draws and leaves play in the same processing; a docking with an empty load plays it this way) and scenario H28 part b; S-0109 claim 3 (one ranged draw when d₁′ ≠ d₂′)
+#[test]
+fn claim_11_r84_empty_load_row_starts_and_stops_the_payment_animation() {
+    let (plain, _, _) = empty_docking(None);
+    let (ranged, w, b) = empty_docking(Some([450, 225]));
+    assert!(
+        ranged > plain,
+        "the payment animation's creation draw is taken: {ranged} vs {plain}"
+    );
+    assert_eq!(
+        slot(&w, b, DepotSlot::Special1),
+        None,
+        "the payment animation has left play"
+    );
+    assert!(plays(&w, b, "UNLD"), "{:?}", playing(&w, b));
+}
+
+// spec: S-0402 Terms (r84: the art read fills an empty damaged name with the normal name, S-0108 Import mapping, so a damaged building whose art gives only the normal name plays the normal animation, for each of the three alike) and scenario H28 part d
+#[test]
+fn claim_11_r84_damaged_with_only_normal_names_plays_normal() {
+    let mut r = rules();
+    names(&mut r, "REFN", |n| {
+        n.insert("PreProductionAnim".into(), pair("DOCK", "DOCK"));
+        n.insert("SpecialAnim".into(), pair("PAY", "PAY"));
+        n.insert("ProductionAnim".into(), pair("UNLD", "UNLD"));
+    });
+    let mut w = game(&r);
+    let (b, h) = docked(&mut w, "REFN", vec![2, 0]);
+    // spec: S-0003 claim C9 (the yellow threshold: the testkit's 0.5)
+    let full = w.obj(b).unwrap().health;
+    w.obj_mut(b).unwrap().health = full / 2;
+    until(&mut w, 100, |w| harvest::state_of(w, h).unloading).expect("unloading");
+    assert!(plays(&w, b, "DOCK"), "{:?}", playing(&w, b));
+    let c0 = w.houses[0].credits;
+    until(&mut w, 100, |w| w.houses[0].credits != c0).expect("the payment");
+    assert!(plays(&w, b, "PAY"), "{:?}", playing(&w, b));
+    until(&mut w, 100, |w| harvest::state_of(w, h).finishing).expect("finishing");
+    assert!(plays(&w, b, "UNLD"), "{:?}", playing(&w, b));
+    let f = w.tick;
+    let mut broken = None;
+    for _ in 0..200 {
+        testkit::run(&mut w, 1);
+        if w.obj(h).unwrap().contact.is_none() {
+            broken = Some(w.tick);
+            break;
+        }
+    }
+    assert!(
+        broken.expect("contact broken") > f + 1,
+        "the harvester waits for the normal unloading animation"
+    );
+}
+
+// spec: S-0402 Terms (r84: a start plays nothing when the art gives only the damaged name and the building is not damaged) and scenario H28 part d with H1 variant e (iii) (no animation; the harvester changes from finishing 1 tick later)
+#[test]
+fn claim_11_r84_only_damaged_names_at_full_health_play_nothing() {
+    let mut r = rules();
+    names(&mut r, "REFN", |n| {
+        n.insert("PreProductionAnim".into(), pair("", "DOCKD"));
+        n.insert("SpecialAnim".into(), pair("", "PAYD"));
+        n.insert("ProductionAnim".into(), pair("", "UNLDD"));
+    });
+    let mut w = game(&r);
+    let (b, h) = docked(&mut w, "REFN", vec![2, 0]);
+    until(&mut w, 100, |w| harvest::state_of(w, h).unloading).expect("unloading");
+    let c0 = w.houses[0].credits;
+    until(&mut w, 100, |w| w.houses[0].credits != c0).expect("the payment");
+    assert!(playing(&w, b).is_empty(), "{:?}", playing(&w, b));
+    let run = unload(&r, "REFN", vec![2, 0]);
+    assert_eq!(run.e, None);
+    assert_eq!(run.broken, run.f + 1);
 }
 
 // spec: S-0402 Terms (each is played in its damaged form when the building's health ratio is at or below the yellow threshold) and S-0108 claim 12

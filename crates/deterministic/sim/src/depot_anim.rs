@@ -285,16 +285,17 @@ pub(crate) fn payment(w: &mut World, b: ObjectId) {
     }
 }
 
-/// The empty-load row of *unload* (S-0402 claim 11): building `b`'s
-/// payment animation, if playing, is stopped, and a refinery-flag building
-/// (`refinery`) plays its unloading animation.
+/// The end of the empty-load row of *unload* (S-0402 claim 11), after the
+/// row's smoke event and payment animation: a refinery-flag building
+/// (`refinery`) plays its unloading animation, then building `b`'s payment
+/// animation is stopped.
 pub(crate) fn load_emptied(w: &mut World, b: ObjectId, refinery: bool) {
-    // spec: S-0402 claim 11 (load empty: the building's payment animation, if playing, is stopped)
-    stop(w, b, DepotSlot::Special1);
     if refinery {
-        // spec: S-0402 Terms and claim 11 (a refinery-flag building plays its unloading animation, its production animation)
+        // spec: S-0402 Terms and claim 11 (a refinery-flag building plays its unloading animation, its production animation; r84: its draws after the payment animation's)
         start(w, b, DepotSlot::Production);
     }
+    // spec: S-0402 claim 11 (r84, Order within the two rows: the payment animation is always stopped last, so one started in this row leaves play in the same processing; stopping takes no draw, S-0108 Terms)
+    stop(w, b, DepotSlot::Special1);
 }
 
 /// Whether building `b` is playing its unloading animation (S-0402 claim

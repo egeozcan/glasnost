@@ -329,14 +329,27 @@ impl GroundLayer {
     /// takes its current key, newcomers go after the existing members, and
     /// the whole list is sorted by key, stably.
     pub fn update(&mut self, members: &[(Entrant, i64)]) {
-        self.list
-            .retain(|(e, _)| members.iter().any(|(m, _)| m == e));
+        // design: render (#146) (one ordered map of the members instead of a scan per entry;
+        // a member listed twice takes its last key, and only an entrant's first entry is
+        // re-keyed, as the scans did)
+        let mut keys: BTreeMap<Entrant, i64> = BTreeMap::new();
         for &(e, key) in members {
-            if self.contains(e) {
-                self.set_key(e, key);
-            } else {
+            keys.insert(e, key);
+        }
+        let mut kept: BTreeSet<Entrant> = BTreeSet::new();
+        self.list.retain_mut(|(e, k)| {
+            let Some(&key) = keys.get(e) else {
+                return false;
+            };
+            if kept.insert(*e) {
+                *k = key;
+            }
+            true
+        });
+        for &(e, _) in members {
+            if kept.insert(e) {
                 // spec: S-0102 claim 6 (a newcomer follows existing equal-key objects)
-                self.list.push((e, key));
+                self.list.push((e, keys[&e]));
             }
         }
         self.sort();
@@ -579,6 +592,40 @@ pub struct Live {
     /// Each vehicle type's walk and idle rates (S-0102 Import mapping), by
     /// the simulation's vehicle type index.
     walk_rates: Vec<super::walk::Rates>,
+    /// A host clock in milliseconds, set only by the performance benchmark:
+    /// [`Live::after_tick`] and [`Live::redraw`] then record their parts in
+    /// [`Live::laps`] (our own tooling, #145).
+    pub lap_clock: Option<fn() -> f64>,
+    /// The parts of the scene update since the last [`Live::after_tick`],
+    /// when [`Live::lap_clock`] is set.
+    pub laps: SceneLaps,
+}
+
+/// Host-clock times of the scene update's parts, in milliseconds, for the
+/// performance benchmark (our own tooling, never game state, #145): the
+/// tick's bookkeeping in [`Live::after_tick`], then each part of
+/// [`Live::redraw`], summed over the redraws since the tick.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SceneLaps {
+    /// The tick's presentation events (`take_effects`).
+    pub effects: f64,
+    /// The buildings' slot animations (`update_slots`).
+    pub slots: f64,
+    /// The layers' membership (`sync_layers`, after the tick and in each
+    /// redraw) and the ground layer's order (`sync_ground`).
+    pub layers: f64,
+    /// The mobile objects: their looks, their items and the target lines.
+    pub mobiles: f64,
+    /// The buildings' bookkeeping and their items.
+    pub buildings: f64,
+    /// The changed overlays, the relight and the cell pass.
+    pub overlays: f64,
+    /// The animations, particles, projectiles and debris pieces.
+    pub anims: f64,
+    /// The layers' items put in order.
+    pub order: f64,
+    /// The effects, lines and status extras.
+    pub status: f64,
 }
 
 /// A running slot animation of a building (S-0108 Terms), played by
@@ -684,6 +731,10 @@ struct AnimEnv<'a> {
     rules: &'a SimRules,
     rng: &'a mut glasnost_sim::rng::Rng,
     speed: u8,
+    /// A playback switched to a follow-up type since this was last
+    /// cleared (design: render (#136): the slot update takes the new
+    /// type's entry only then).
+    switched: bool,
 }
 
 impl AnimEnv<'_> {
@@ -718,6 +769,9 @@ impl anims::Env for AnimEnv<'_> {
     }
     fn normalise(&self) -> bool {
         self.rules.quirks.speed_normalised_delays
+    }
+    fn switched(&mut self, _name: &[u8]) {
+        self.switched = true;
     }
 }
 
@@ -1362,6 +1416,8 @@ impl Live {
             walk_rates,
             setup_charges: BTreeMap::new(),
             placed: BTreeMap::new(),
+            lap_clock: None,
+            laps: SceneLaps::default(),
         };
         // spec: S-0105 claim 6 (First appearance: an object that the map places before the first tick has t₀ = 0)
         // design: render (#81) a loaded or joined game's objects count from tick 0 too: claim 6 (Saved games) keeps every turn through a save, but the game state holds no placement tick to continue from, and joining a network game is outside the spec
@@ -1546,10 +1602,36 @@ impl Live {
                 _ => None,
             })
             .collect();
+        // design: render (#145) (the benchmark's parts of the scene update)
+        self.laps = SceneLaps::default();
+        let mut lap = self.lap_start();
         self.take_effects();
+        self.laps.effects += self.lap_end(&mut lap);
         self.update_slots();
+        self.laps.slots += self.lap_end(&mut lap);
         self.sync_layers(true);
         self.sync_ground();
+        self.laps.layers += self.lap_end(&mut lap);
+    }
+
+    /// The host clock now, when the benchmark set one (our own tooling,
+    /// #145).
+    fn lap_start(&self) -> f64 {
+        self.lap_clock.map_or(0.0, |now| now())
+    }
+
+    /// The time since `*lap`, which moves on to now (zero without a host
+    /// clock; our own tooling, #145).
+    fn lap_end(&self, lap: &mut f64) -> f64 {
+        match self.lap_clock {
+            Some(now) => {
+                let t = now();
+                let d = t - *lap;
+                *lap = t;
+                d
+            }
+            None => 0.0,
+        }
     }
 
     /// Brings the drawing up to a game that moved on without it: a game
@@ -1807,27 +1889,30 @@ impl Live {
             Entrant::Piece(id) => world.pieces.contains_key(&id),
             _ => true,
         });
+        // design: render (#146) (the listed entrants gathered once; an entrant placed below
+        // joins them, so each test reads as the scan of the lists did)
+        let mut listed = self.layers.entrants();
         for (serial, layer) in anims {
-            if layer != Layer::Ground && !self.layers.contains(Entrant::Anim(serial)) {
+            if layer != Layer::Ground && listed.insert(Entrant::Anim(serial)) {
                 // spec: S-0102 claims 4 and 7 (an animation placed in a layer other than ground becomes its last)
                 self.layers.place(Entrant::Anim(serial), layer);
             }
         }
         for id in particles {
-            if !self.layers.contains(Entrant::Particle(id)) {
+            if listed.insert(Entrant::Particle(id)) {
                 // spec: S-0616 claim 30 and S-0102 claim 3 (a particle enters the air layer when it is made, at its end, and keeps its place until removed)
                 self.layers.place(Entrant::Particle(id), Layer::Air);
             }
         }
         for (id, flat) in projectiles {
-            if !self.layers.contains(Entrant::Projectile(id)) {
+            if listed.insert(Entrant::Projectile(id)) {
                 // spec: S-0102 claims 3, 4 and 7 (a projectile is in the air layer, or the surface layer when its image is flat; placed at the layer's end)
                 let layer = if flat { Layer::Surface } else { Layer::Air };
                 self.layers.place(Entrant::Projectile(id), layer);
             }
         }
         for id in pieces {
-            if !self.layers.contains(Entrant::Piece(id)) {
+            if listed.insert(Entrant::Piece(id)) {
                 // spec: S-0102 claims 3, 4 and 7 (a voxel animation is in the air layer; placed at the layer's end)
                 self.layers.place(Entrant::Piece(id), Layer::Air);
             }
@@ -1860,6 +1945,8 @@ impl Live {
         let enable_unfreezes = self.view_quirks.enable_unfreezes_unpowered;
         let w = &self.world;
         let mode = self.rules.mode;
+        // design: render (#136): the map's buildings as a set, looked up once per building
+        let set_up: BTreeSet<ObjectId> = self.building_ids.values().copied().collect();
         let present: Vec<(ObjectId, usize, slot_play::TypeKind, slot_play::State, bool)> = w
             .objects
             .values()
@@ -1919,7 +2006,7 @@ impl Live {
                         != Some(Behaviour::Construction)
                         || o.econ.construction.opened,
                     // spec: S-0108 claim 11 (a building of the map was placed during the game's set-up)
-                    setup: self.building_ids.values().any(|b| *b == o.id),
+                    setup: set_up.contains(&o.id),
                     damaged: super::build::condition_of(&self.rules, o.health, r.strength).0,
                     // spec: S-0108 Terms (occupied: at least one occupant; held infantry are not occupants)
                     occupied: !o.structure.occupants.is_empty(),
@@ -1947,13 +2034,30 @@ impl Live {
                 Some((o.id, idx, kind, st, erased))
             })
             .collect();
-        self.slot_anims
-            .retain(|id, _| present.iter().any(|(p, ..)| p == id));
+        // design: render (#136): the present buildings as a set for the retain
+        let present_ids: BTreeSet<ObjectId> = present.iter().map(|(p, ..)| *p).collect();
+        self.slot_anims.retain(|id, _| present_ids.contains(id));
+        // design: render (#136): the tick's events by building, each building's in their order
+        let mut walls_of: BTreeMap<ObjectId, Vec<_>> = BTreeMap::new();
+        for (b, pair, start, damaged) in &events {
+            walls_of
+                .entry(*b)
+                .or_default()
+                .push((*pair, *start, *damaged));
+        }
+        let mut depot_of: BTreeMap<ObjectId, Vec<_>> = BTreeMap::new();
+        for (b, active1, start, damaged) in &depot_events {
+            depot_of
+                .entry(*b)
+                .or_default()
+                .push((*active1, *start, *damaged));
+        }
         let mut env = AnimEnv {
             table: &self.anim_table,
             rules: &self.rules,
             rng: &mut self.cosmetic,
             speed: self.world.game_speed,
+            switched: false,
         };
         let q = AnimQuirks::from(&env.rules.quirks); // spec: S-0109 Edge cases
         for (id, idx, kind, st, erased) in present {
@@ -1964,16 +2068,19 @@ impl Live {
             slots.prepare(&kind, &st, enable_unfreezes);
             let mut finished = Vec::new();
             for (slot, r) in &mut slots.running {
-                let before = r.anim.player.name.clone();
+                env.switched = false;
                 // spec: S-0109 claim 23 (held while frozen by S-0108 claim 13 or while its building is being erased; the two causes are independent)
                 let held = r.frozen || erased;
                 // spec: S-0109 claims 5 to 16 (each running slot animation plays; claim 16: it ends) and claim 23 (a held one does not advance)
                 if !r.anim.player.update_held(now, &mut env, &q, held) {
                     finished.push(*slot);
-                } else if r.anim.player.name != before
+                } else if env.switched
                     && let Some(e) = env.lookup(&r.anim.player.name).0
                 {
                     // spec: S-0109 claim 15 (the same animation continues as the follow-up type)
+                    // design: render (#136): taken after any switch, not only one to another name:
+                    // the entry already is the lookup of an unchanged name whenever that lookup
+                    // finds a type (the type table is fixed), so the result is the same
                     r.anim.entry = e;
                 }
             }
@@ -1982,10 +2089,10 @@ impl Live {
                 slots.finished(slot, &kind, defs, &st, &mut mk);
             }
             slots.update(&kind, defs, &st, &mut mk);
-            for (_, pair, start, damaged) in events.iter().filter(|(b, ..)| *b == id) {
+            for (pair, start, damaged) in walls_of.get(&id).into_iter().flatten() {
                 slots.walls(*pair, *start, *damaged, defs, &mut mk);
             }
-            for (_, active1, start, damaged) in depot_events.iter().filter(|(b, ..)| *b == id) {
+            for (active1, start, damaged) in depot_of.get(&id).into_iter().flatten() {
                 slots.depot(*active1, *start, *damaged, defs, &mut mk);
             }
         }
@@ -2324,6 +2431,7 @@ impl Live {
             rules: &self.rules,
             rng: &mut self.cosmetic,
             speed,
+            switched: false,
         };
         let (entry, mut play) = env.lookup(name);
         if reverse {
@@ -2691,6 +2799,7 @@ impl Live {
             rules: &self.rules,
             rng: &mut self.cosmetic,
             speed,
+            switched: false,
         };
         let q = AnimQuirks::from(&env.rules.quirks); // spec: S-0109 Edge cases
         self.anims.retain_mut(|a| {
@@ -3489,6 +3598,8 @@ impl Live {
     /// ground entries are reused and the mobile objects are drawn from the
     /// game, all in ground-layer order.
     pub fn redraw(&mut self, inputs: &Inputs, scene: &mut Scene) {
+        // design: render (#145) (the benchmark's parts of the scene update)
+        let mut lap = self.lap_start();
         self.learn_types(inputs);
         self.sync_layers(false);
         if !self.view_quirks.unsorted_upper_layers {
@@ -3497,6 +3608,7 @@ impl Live {
             self.layers
                 .sort_by_key(|e| keys.get(&e).copied().unwrap_or(i64::MIN));
         }
+        self.laps.layers += self.lap_end(&mut lap);
         let ids: Vec<ObjectId> = self.mobile_order();
         let mobiles: Vec<Mobile> = ids
             .iter()
@@ -3534,6 +3646,7 @@ impl Live {
             }
         }
         self.draw_target_lines(inputs, scene, &mut by_code);
+        self.laps.mobiles += self.lap_end(&mut lap);
         // Buildings the game removed leave the cell pass and the ground
         // layer; so do the map's gates, which are drawn live.
         let mut gone: BTreeSet<u32> = self
@@ -3611,6 +3724,7 @@ impl Live {
             .map(|(code, _)| *code)
             .collect();
         gone.extend(changed_map.iter().copied());
+        self.laps.buildings += self.lap_end(&mut lap);
         // Overlays that changed during play are drawn again from the game's
         // cells (S-0112 claims 1 to 9); their static items leave the cell pass.
         let grid = &self.world.cells.grid;
@@ -3716,6 +3830,7 @@ impl Live {
         // The changed overlays follow the cell pass (our placeholder place
         // for them: the depth test orders them against the rest).
         scene.items.extend_from_slice(&self.live_overlays);
+        self.laps.overlays += self.lap_end(&mut lap);
         // The game's own buildings (deployed or placed), the map's gates and
         // the map's buildings drawn live (protected, changed or animated)
         // follow, in object ID order (our placeholder order; the map's
@@ -3824,6 +3939,7 @@ impl Live {
         // equal keys they go before the layer's mobiles, and among themselves in object ID order
         // (a stable sort; our engine keeps no entering order for them)
         own_ground.sort_by_key(|(k, _)| *k);
+        self.laps.buildings += self.lap_end(&mut lap);
         // The playing animations with a sprite (S-0109), by serial number.
         let playing: Vec<(u32, super::slots::Layer, AnimDraw)> = self
             .anims
@@ -3865,6 +3981,7 @@ impl Live {
         let mut particle_items = self.particle_items(inputs, scene);
         particle_items.extend(self.projectile_items(inputs, scene));
         particle_items.extend(self.piece_items(inputs, scene));
+        self.laps.anims += self.lap_end(&mut lap);
         scene.spots.clear();
         let waves = self.lines.wave_spots(self.shown_tick(), self.rules.mode);
         // spec: S-0102 claims 1 and 7 (underground and surface before the ground layer, air and
@@ -3920,11 +4037,13 @@ impl Live {
             |l| l > super::slots::Layer::Ground,
         );
         self.objects_end = scene.items.len();
+        self.laps.order += self.lap_end(&mut lap);
         self.draw_effects(scene);
         self.draw_lines(inputs, scene);
         self.draw_status(inputs, scene);
         // design: render (#104): the transient voxel images no redraw has used for a while are released
         self.painter.end_redraw(scene);
+        self.laps.status += self.lap_end(&mut lap);
     }
 
     /// The beams and beam flashes of the shown tick (S-0518 claims 19 to

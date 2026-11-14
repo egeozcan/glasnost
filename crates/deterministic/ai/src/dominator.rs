@@ -86,9 +86,29 @@ pub(crate) fn reached(w: &World, c: CellXY) -> Vec<ObjectId> {
         .collect()
 }
 
+/// Where an area hit lands and the layer of the objects it hits: the point
+/// `at`, and `layer`, the ground or a bridge deck (S-0303 claim 4).
+#[derive(Clone, Copy)]
+pub(crate) struct Blast {
+    pub at: glasnost_sim::world::Pos,
+    pub layer: Layer,
+}
+
+impl Blast {
+    /// The dominator's blast at cell `c`: the centre of the cell at its
+    /// terrain surface, ground layer.
+    pub(crate) fn ground(w: &World, c: CellXY) -> Blast {
+        Blast {
+            // spec: S-0612 claim 9 (the centre of the target cell at its terrain surface; the ground layer)
+            at: glasnost_sim::superweapons::cell_point(w, c, false),
+            layer: Layer::Ground,
+        }
+    }
+}
+
 /// The value of the objects of `owners` that an area hit of `amount` with
-/// `warhead` at the centre of cell `c`, ground layer, is expected to
-/// destroy (infantry only with `infantry`): each object within the warhead's spread radius loses the part
+/// `warhead` at `blast` is expected to destroy (infantry only with
+/// `infantry`): each object of the blast's layer within the warhead's spread radius loses the part
 /// of its value that the falloff and versus step takes of its strength
 /// (S-0303 F1, S-0302 F3), and all of it when that is at least its health. An estimate a person makes
 /// from the blast's size and what stands in it; the defences and the
@@ -96,32 +116,50 @@ pub(crate) fn reached(w: &World, c: CellXY) -> Vec<ObjectId> {
 pub(crate) fn blast_loss(
     w: &World,
     owners: &[HouseId],
-    c: CellXY,
+    blast: Blast,
     amount: i32,
     warhead: Option<glasnost_sim::combat::data::WarheadId>,
     infantry: bool,
 ) -> i64 {
-    blast_value(w, c, amount, warhead, |o| {
+    blast_value(w, blast, amount, warhead, |o| {
         o.owner.is_some_and(|x| owners.contains(&x)) && (infantry || o.kind != Kind::Infantry)
     })
 }
 
 /// The value of the objects passing `count` that an area hit of `amount`
-/// with `warhead` at the centre of cell `c` is expected to destroy (see
-/// [`blast_loss`]).
+/// with `warhead` at `blast` is expected to destroy (see [`blast_loss`]).
 pub(crate) fn blast_value(
     w: &World,
-    c: CellXY,
+    blast: Blast,
     amount: i32,
     warhead: Option<glasnost_sim::combat::data::WarheadId>,
     count: impl Fn(&Object) -> bool,
 ) -> i64 {
-    w.objects
-        .values()
-        .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Terrain)
-        .filter(|o| count(o))
+    let Some(hit) = Hit::of(w, amount, warhead) else {
+        return 0;
+    };
+    hit_value(
+        w,
+        blast,
+        hit,
+        w.objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Terrain)
+            .filter(|o| count(o)),
+    )
+}
+
+/// The value of `objects` that `hit` at `blast` is expected to destroy
+/// ([`blast_value`]'s sum).
+fn hit_value<'o>(
+    w: &World,
+    blast: Blast,
+    hit: Hit,
+    objects: impl Iterator<Item = &'o Object>,
+) -> i64 {
+    objects
         .filter_map(|o| {
-            let dmg = blast_hit(w, c, amount, warhead, o)?;
+            let dmg = hit.on(w, blast, o)?;
             if dmg >= o.health {
                 // Destroyed: its whole value.
                 return Some(value(w, o));
@@ -132,28 +170,60 @@ pub(crate) fn blast_value(
         .sum()
 }
 
-/// The damage an area hit of `amount` with `warhead` at the centre of cell
-/// `c`, ground layer, is expected to deal to `o` (S-0303 F1, S-0302 F3), or
-/// `None` when `o` is outside the warhead's spread radius or not on the
-/// ground. An estimate a person makes (see [`blast_loss`]).
-fn blast_hit(
-    w: &World,
-    c: CellXY,
+/// An area hit of `amount` with `warhead`, with the warhead's spread radius
+/// R (S-0303 F1) found once for all the objects it is tried on (design: own
+/// AI, #55: finding R for every object was most of the aim's time).
+#[derive(Clone, Copy)]
+struct Hit {
     amount: i32,
-    warhead: Option<glasnost_sim::combat::data::WarheadId>,
+    warhead: glasnost_sim::combat::data::WarheadId,
+    r: i32,
+}
+
+impl Hit {
+    /// The hit, or none with no warhead or no damage (it hurts nothing).
+    fn of(
+        w: &World,
+        amount: i32,
+        warhead: Option<glasnost_sim::combat::data::WarheadId>,
+    ) -> Option<Hit> {
+        let h = warhead?;
+        if amount <= 0 {
+            return None;
+        }
+        let (r, _) = glasnost_sim::combat::area::radii(w, h);
+        Some(Hit {
+            amount,
+            warhead: h,
+            r,
+        })
+    }
+
+    /// The damage the hit at `blast` is expected to deal to `o` (see
+    /// [`hit_within`]).
+    fn on(self, w: &World, blast: Blast, o: &Object) -> Option<i32> {
+        hit_within(w, blast, self.amount, self.warhead, self.r, o)
+    }
+}
+
+/// The damage an area hit of a positive `amount` with warhead `h`, whose
+/// spread radius is `r`, at `blast` is expected to deal to `o` (S-0303 F1,
+/// S-0302 F3), or `None` when `o` is outside the radius or not in the
+/// blast's layer. An estimate a person makes (see [`blast_loss`]).
+fn hit_within(
+    w: &World,
+    blast: Blast,
+    amount: i32,
+    h: glasnost_sim::combat::data::WarheadId,
+    r: i32,
     o: &Object,
 ) -> Option<i32> {
-    let h = warhead?;
-    if amount <= 0 {
+    // spec: S-0303 claim 4 (one layer only: the deck's on a bridge deck, else the ground's), S-0612 claim 9 (no flying objects)
+    // design: own AI (#34): the layer is the blast's, not always the ground
+    if o.layer != blast.layer || glasnost_sim::combat::weapon::in_air(w, o.id) {
         return None;
     }
-    // spec: S-0612 claim 9 (the ground layer; no flying objects)
-    if o.layer != Layer::Ground || glasnost_sim::combat::weapon::in_air(w, o.id) {
-        return None;
-    }
-    let (r, _) = glasnost_sim::combat::area::radii(w, h);
-    // spec: S-0612 claim 9 (the centre of the target cell at its terrain surface)
-    let p = glasnost_sim::superweapons::cell_point(w, c, false);
+    let p = blast.at;
     // spec: S-0303 claims 7, 8 and 10 (the distance of each hit) and claim 3 (only within R)
     let hits: Vec<i32> = glasnost_sim::combat::area::object_distances(w, p, o.id)
         .into_iter()
@@ -177,23 +247,24 @@ fn blast_hit(
 /// to destroy is not taken (S-0612 claim 10): it counts by the damage.
 fn worth(
     w: &World,
-    house: HouseId,
+    aim: &Aim,
     c: CellXY,
     takeable: &BTreeSet<ObjectId>,
     seen: &BTreeSet<ObjectId>,
 ) -> (i64, i64, usize) {
+    let house = aim.house;
     let me = &w.houses[usize::from(house.0)];
-    let d = &w.rules().superweapons.domination;
     let taken = glasnost_sim::domination::preview(w, house, c);
     let (mut gain, mut loss, mut n) = (0, 0, 0);
     let mut destroyed: BTreeSet<ObjectId> = BTreeSet::new();
     // The allied objects the sweep takes: counted whole, not again by the damage.
     let mut ally_taken: BTreeSet<ObjectId> = BTreeSet::new();
-    let wrecks = wrecks(w, house, c, seen);
+    let blast = Blast::ground(w, c);
+    let wrecks = wrecks(w, aim, blast);
     for id in taken {
         let Some(o) = w.obj(id) else { continue };
         if takeable.contains(&id) {
-            let hit = blast_hit(w, c, d.damage, d.warhead, o);
+            let hit = aim.hit.and_then(|h| h.on(w, blast, o));
             // spec: S-0303 claim 11 (a death weapon a hit sets off runs in the middle of the detonation's hits)
             let chained = wrecks && hit.is_some();
             if chained || hit.is_some_and(|x| x >= o.health) {
@@ -211,15 +282,74 @@ fn worth(
     }
     // spec: S-0612 claim 14 (own objects change no owner) and claim 9 (the area damage, of the imported amount and warhead)
     // design: own AI (#33): the damage to the allies' objects the sweep does not take is loss too, as the mutator counts it
-    loss += blast_value(w, c, d.damage, d.warhead, |o| {
+    loss += aim.value(w, blast, |o| {
         o.owner
             .is_some_and(|x| x == house || (me.allied_with(x) && !ally_taken.contains(&o.id)))
     });
     // spec: S-0612 claims 9 and 10 (the area damage hurts the seen enemy objects that are not taken: buildings, which are never taken (claim 13), units the takeover tests refuse, and takeable units it destroys)
-    gain += blast_value(w, c, d.damage, d.warhead, |o| {
+    gain += aim.value(w, blast, |o| {
         seen.contains(&o.id) && (!takeable.contains(&o.id) || destroyed.contains(&o.id))
     });
     (gain, loss, n)
+}
+
+/// What the aim of one search reads once for all its cells (design: own
+/// AI, #55: three scans of every object a cell, each finding the
+/// warhead's spread radius again for every object, were most of the aim's
+/// time): the dominator's area hit, and the objects whose damage the aim
+/// counts.
+struct Aim<'w> {
+    house: HouseId,
+    /// The dominator's area hit (S-0612 claim 9), none when it hurts
+    /// nothing.
+    hit: Option<Hit>,
+    /// The objects in play, not terrain, on the ground layer of the blast
+    /// ([`Blast::ground`]) and not in the air, that are the house's, its
+    /// allies' or seen enemies (`seen`): every object [`wrecks`] and
+    /// [`worth`]'s damage count can hurt.
+    objects: Vec<&'w Object>,
+}
+
+impl<'w> Aim<'w> {
+    /// The aim of `house`, with `seen` its seen enemy objects.
+    fn new(w: &'w World, house: HouseId, seen: &BTreeSet<ObjectId>) -> Aim<'w> {
+        let me = &w.houses[usize::from(house.0)];
+        let d = &w.rules().superweapons.domination;
+        let hit = Hit::of(w, d.damage, d.warhead);
+        let objects = if hit.is_some() {
+            w.objects
+                .values()
+                .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Terrain)
+                .filter(|o| {
+                    seen.contains(&o.id) || o.owner.is_some_and(|x| x == house || me.allied_with(x))
+                })
+                // spec: S-0303 claim 4 and S-0612 claim 9 (the dominator's blast hits the ground layer and no flying object)
+                .filter(|o| {
+                    o.layer == Layer::Ground && !glasnost_sim::combat::weapon::in_air(w, o.id)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        Aim {
+            house,
+            hit,
+            objects,
+        }
+    }
+
+    /// [`blast_value`] of the aim's hit at `blast` over its objects that
+    /// pass `count`.
+    fn value(&self, w: &World, blast: Blast, count: impl Fn(&Object) -> bool) -> i64 {
+        self.hit.map_or(0, |hit| {
+            hit_value(
+                w,
+                blast,
+                hit,
+                self.objects.iter().copied().filter(|o| count(o)),
+            )
+        })
+    }
 }
 
 /// Whether the area damage of a launch at `c` is expected to destroy any
@@ -227,17 +357,14 @@ fn worth(
 /// destroyed object's death weapon goes off in the middle of the
 /// detonation (S-0303 claim 11), so the aim does not count on taking a
 /// unit inside the blast then: in the stock lane (M8 step B3) units the
-/// estimate spared were destroyed that way.
-fn wrecks(w: &World, house: HouseId, c: CellXY, seen: &BTreeSet<ObjectId>) -> bool {
-    let me = &w.houses[usize::from(house.0)];
-    let d = &w.rules().superweapons.domination;
-    w.objects
-        .values()
-        .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Terrain)
-        .filter(|o| {
-            seen.contains(&o.id) || o.owner.is_some_and(|x| x == house || me.allied_with(x))
-        })
-        .any(|o| blast_hit(w, c, d.damage, d.warhead, o).is_some_and(|x| x >= o.health))
+/// estimate spared were destroyed that way. `blast` is the launch's
+/// ([`Blast::ground`] at `c`), and the objects are the aim's.
+fn wrecks(w: &World, aim: &Aim, blast: Blast) -> bool {
+    aim.hit.is_some_and(|hit| {
+        aim.objects
+            .iter()
+            .any(|o| hit.on(w, blast, o).is_some_and(|x| x >= o.health))
+    })
 }
 
 /// The seen enemy units a launch could take: not buildings (S-0612
@@ -302,10 +429,14 @@ fn pick(
     seen: &BTreeSet<ObjectId>,
     min: usize,
 ) -> Option<(CellXY, i64, i64, usize)> {
+    if cands.is_empty() {
+        return None;
+    }
+    let aim = Aim::new(w, script.house, seen);
     cands
         .into_iter()
         .map(|c| {
-            let (gain, loss, n) = worth(w, script.house, c, takeable, seen);
+            let (gain, loss, n) = worth(w, &aim, c, takeable, seen);
             (c, gain, loss, n)
         })
         .filter(|&(_, gain, loss, n)| gain > loss && n >= min)
@@ -461,5 +592,204 @@ pub fn probe(w: &World, house: HouseId) -> Probe {
         refused,
         not_examined,
         best: best(&script, w, &[]).map(|(_, g, l, n)| (g, l, n)),
+    }
+}
+
+#[cfg(test)]
+mod aim_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+    use glasnost_sim::world::HouseId;
+
+    /// The area hit as before #55: the spread radius found for every
+    /// object.
+    fn blast_hit_as_before(
+        w: &World,
+        blast: Blast,
+        amount: i32,
+        warhead: Option<glasnost_sim::combat::data::WarheadId>,
+        o: &Object,
+    ) -> Option<i32> {
+        let h = warhead?;
+        if amount <= 0 {
+            return None;
+        }
+        if o.layer != blast.layer || glasnost_sim::combat::weapon::in_air(w, o.id) {
+            return None;
+        }
+        let (r, _) = glasnost_sim::combat::area::radii(w, h);
+        let hits: Vec<i32> = glasnost_sim::combat::area::object_distances(w, blast.at, o.id)
+            .into_iter()
+            .filter(|&d| d <= r)
+            .collect();
+        if hits.is_empty() {
+            return None;
+        }
+        Some(
+            hits.into_iter()
+                .map(|d| glasnost_sim::combat::damage::hit_estimate(w, o.id, amount, h, d))
+                .sum(),
+        )
+    }
+
+    /// [`blast_value`] as before #55: every object scanned, the radius
+    /// found for each.
+    fn blast_value_as_before(
+        w: &World,
+        blast: Blast,
+        amount: i32,
+        warhead: Option<glasnost_sim::combat::data::WarheadId>,
+        count: impl Fn(&Object) -> bool,
+    ) -> i64 {
+        w.objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Terrain)
+            .filter(|o| count(o))
+            .filter_map(|o| {
+                let dmg = blast_hit_as_before(w, blast, amount, warhead, o)?;
+                if dmg >= o.health {
+                    return Some(value(w, o));
+                }
+                let strength = glasnost_sim::combat::damage::strength(w, o.id).max(1);
+                Some(value(w, o) * i64::from(dmg.max(0)) / i64::from(strength))
+            })
+            .sum()
+    }
+
+    /// [`wrecks`] as before #55.
+    fn wrecks_as_before(w: &World, house: HouseId, c: CellXY, seen: &BTreeSet<ObjectId>) -> bool {
+        let me = &w.houses[usize::from(house.0)];
+        let d = &w.rules().superweapons.domination;
+        let blast = Blast::ground(w, c);
+        w.objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Terrain)
+            .filter(|o| {
+                seen.contains(&o.id) || o.owner.is_some_and(|x| x == house || me.allied_with(x))
+            })
+            .any(|o| {
+                blast_hit_as_before(w, blast, d.damage, d.warhead, o).is_some_and(|x| x >= o.health)
+            })
+    }
+
+    /// [`worth`] as before #55.
+    fn worth_as_before(
+        w: &World,
+        house: HouseId,
+        c: CellXY,
+        takeable: &BTreeSet<ObjectId>,
+        seen: &BTreeSet<ObjectId>,
+    ) -> (i64, i64, usize) {
+        let me = &w.houses[usize::from(house.0)];
+        let d = &w.rules().superweapons.domination;
+        let taken = glasnost_sim::domination::preview(w, house, c);
+        let (mut gain, mut loss, mut n) = (0, 0, 0);
+        let mut destroyed: BTreeSet<ObjectId> = BTreeSet::new();
+        let mut ally_taken: BTreeSet<ObjectId> = BTreeSet::new();
+        let wrecks = wrecks_as_before(w, house, c, seen);
+        let blast = Blast::ground(w, c);
+        for id in taken {
+            let Some(o) = w.obj(id) else { continue };
+            if takeable.contains(&id) {
+                let hit = blast_hit_as_before(w, blast, d.damage, d.warhead, o);
+                let chained = wrecks && hit.is_some();
+                if chained || hit.is_some_and(|x| x >= o.health) {
+                    destroyed.insert(id);
+                    continue;
+                }
+                gain += value(w, o);
+                n += 1;
+            } else if o.owner.is_some_and(|x| x != house && me.allied_with(x)) {
+                loss += value(w, o);
+                ally_taken.insert(id);
+            }
+        }
+        loss += blast_value_as_before(w, blast, d.damage, d.warhead, |o| {
+            o.owner
+                .is_some_and(|x| x == house || (me.allied_with(x) && !ally_taken.contains(&o.id)))
+        });
+        gain += blast_value_as_before(w, blast, d.damage, d.warhead, |o| {
+            seen.contains(&o.id) && (!takeable.contains(&o.id) || destroyed.contains(&o.id))
+        });
+        (gain, loss, n)
+    }
+
+    /// Our tooling for speed (design: own AI, #55): what a launch is worth,
+    /// read off the aim's objects with the spread radius found once, is
+    /// what every object scanned with the radius found for each gives, and
+    /// so is the area damage's value for the mutator; at the cells of the
+    /// seen enemies and around the takeable ones, for every house, at many
+    /// points of the M6c, M7a and M7b duels.
+    #[test]
+    fn the_aim_read_once_is_the_aim_of_every_object() {
+        let games = [
+            (
+                crate::fixture_m6c::rules(),
+                crate::fixture_m6c::map(),
+                crate::fixture_m6c::MAP_NAME,
+                crate::fixture_m6c::setup(2),
+            ),
+            (
+                crate::fixture_m7a::rules(),
+                crate::fixture_m7a::map(),
+                crate::fixture_m7a::MAP_NAME,
+                crate::fixture_m7a::setup(17),
+            ),
+            (
+                crate::fixture_m7b::rules(),
+                crate::fixture_m7b::map(),
+                crate::fixture_m7b::MAP_NAME,
+                crate::fixture_m7b::setup(11),
+            ),
+        ];
+        let (mut compared, mut valued) = (0, 0);
+        for (rules, map, map_name, setup) in games {
+            let mut g = Game::new(rules, &map, map_name, fixture::catalogue(), setup)
+                .expect("the duel loads");
+            for _ in 0..40 {
+                for _ in 0..225 {
+                    g.step();
+                }
+                let w = &g.world;
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    let script = Script::new(house, crate::brain::default_plan());
+                    let takeable = takeable(&script, w, &[]);
+                    let seen = seen(&script, w, &[]);
+                    let aim = Aim::new(w, house, &seen);
+                    let mut cells: Vec<CellXY> = seen
+                        .iter()
+                        .filter_map(|&id| w.obj(id))
+                        .map(|o| o.pos.cell())
+                        .chain(
+                            takeable
+                                .iter()
+                                .filter_map(|&id| w.obj(id))
+                                .flat_map(|o| glasnost_sim::domination::swept(w, o.pos.cell()))
+                                .map(|(c, _)| c)
+                                .step_by(7),
+                        )
+                        .collect();
+                    cells.sort_by_key(|c| (c.y, c.x));
+                    cells.dedup();
+                    let d = &w.rules().superweapons.domination;
+                    for c in cells {
+                        let at = format!("{map_name}, tick {}, house {h}, {c:?}", w.tick);
+                        let want = worth_as_before(w, house, c, &takeable, &seen);
+                        assert_eq!(worth(w, &aim, c, &takeable, &seen), want, "{at}");
+                        let blast = Blast::ground(w, c);
+                        let mine = |o: &Object| o.owner == Some(house);
+                        assert_eq!(
+                            blast_value(w, blast, d.damage, d.warhead, mine),
+                            blast_value_as_before(w, blast, d.damage, d.warhead, mine),
+                            "{at}"
+                        );
+                        compared += 1;
+                        valued += usize::from(want.0 > 0 || want.1 > 0);
+                    }
+                }
+            }
+        }
+        assert!(valued > 0 && valued < compared, "{valued} of {compared}");
     }
 }

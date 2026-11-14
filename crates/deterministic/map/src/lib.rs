@@ -131,10 +131,13 @@ impl Cell {
         land: terrain::land::CLEAR,
     };
 
-    /// World height of the cell's flat floor in leptons (claim 9).
-    pub fn floor_height(&self) -> i32 {
-        // spec: S-0009 Formulas (z_floor = 104 × level)
-        LEVEL_HEIGHT * i32::from(self.level)
+    /// World height of the cell's flat floor in leptons (claim 9): 104ℓ,
+    /// plus 1 below level 0 when `raised` (S-0106's
+    /// `quirks.negative_level_floor_raised`, on by default).
+    pub fn floor_height(&self, raised: bool) -> i32 {
+        let level = i32::from(self.level);
+        // spec: S-0009 Formulas (z_floor = 104ℓ for ℓ ≥ 0, 104ℓ + 1 for ℓ < 0), S-0106 Edge cases (quirks.negative_level_floor_raised; off: 104ℓ)
+        LEVEL_HEIGHT * level + i32::from(level < 0 && raised)
     }
 }
 

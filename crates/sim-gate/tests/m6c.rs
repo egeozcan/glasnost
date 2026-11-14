@@ -34,6 +34,24 @@ fn every_m6c_ability_is_exercised_and_the_replay_reproduces_the_game() {
     );
 }
 
+// spec: S-0510 (spies and infiltration), design: own AI (batch 6): since a spy goes only into an enemy player's building (#39), the duel's spies must reach the enemy base; in the seeds where the sweep on main 5dcbc5c counted no infiltration, a spy infiltrates.
+#[test]
+#[ignore = "long; run in release (`cargo test --release -p glasnost-sim-gate -- --include-ignored`)"]
+fn a_spy_infiltrates_in_the_seeds_main_found_none() {
+    let seeds = [5u32, 7, 9, 10, 11, 13, 14, 15];
+    let hs: Vec<_> = seeds
+        .iter()
+        .map(|&s| std::thread::spawn(move || (s, m6c::play(s, M6C_TICKS).2.infiltrations)))
+        .collect();
+    let none: Vec<u32> = hs
+        .into_iter()
+        .map(|h| h.join().expect("the run finished"))
+        .filter(|&(_, n)| n == 0)
+        .map(|(s, _)| s)
+        .collect();
+    assert!(none.is_empty(), "no infiltration in seeds {none:?}");
+}
+
 /// Tries seeds for the M6c duel: `S=1,2,3 cargo test --release -p
 /// glasnost-sim-gate --test m6c try_seeds -- --ignored --nocapture` prints,
 /// per seed, the abilities that a full run did not exercise (a seed with

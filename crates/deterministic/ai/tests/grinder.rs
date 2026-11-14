@@ -178,6 +178,25 @@ fn a_controlled_enemy_vehicle_is_recycled() {
     assert_eq!(br.special_uses().grinds, 1);
 }
 
+// S-0601 claim 13 (a dominated object belongs to the house for good; no controller holds it), design: own AI (#35): a healthy permanently controlled vehicle frees no controller's slot, so it counts as the house's own and is not recycled.
+#[test]
+fn a_dominated_vehicle_is_not_recycled() {
+    let g = game(99);
+    let (mut w, b) = scene(&g);
+    let taken = spawn(&mut w, Kind::Vehicle, "GUNR", 1, 4, 9);
+    assert!(mind::dominate(&mut w, taken, HouseId(0)));
+    assert!(mind::permanent(&w, taken) && mind::controlled_by(&w, taken).is_none());
+    settle(&mut w);
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert_ne!(
+        sent(&orders, taken, Behaviour::Eaten),
+        Some(b),
+        "{orders:?}"
+    );
+    assert_eq!(br.special_uses().grinds, 0);
+}
+
 // S-0605 claim 7 and S-0603 claim 9, PLAN §4.7: controlled infantry go to an absorber with room; with no absorber they are recycled.
 #[test]
 fn controlled_infantry_go_to_an_absorber_first() {

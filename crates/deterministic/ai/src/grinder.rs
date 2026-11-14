@@ -19,7 +19,9 @@
 //!   controlled enemy vehicle is sent, whatever else this think told it
 //!   (the recycle order comes later and replaces it). Controlled infantry go to an
 //!   absorbing building while one has room (`absorber`, which also frees the
-//!   slot and gives power), and to the grinder only when none has;
+//!   slot and gives power), and to the grinder only when none has. A
+//!   permanently controlled unit frees no slot and belongs to the house for
+//!   good (S-0601 claim 13): it counts as the house's own;
 //! - **grinds badly damaged units.** An idle own unit at or
 //!   below [`WOUNDED_PERCENT`] of its strength, when the house has no
 //!   repair depot to send it to, is turned into money;
@@ -61,7 +63,8 @@ use glasnost_sim::targeting::{self, Action};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use glasnost_sim::{mind, psychic, transport};
 
-use crate::absorber::{HOME_REACH, KEEP};
+// design: own AI (#35): a permanently controlled unit counts as the house's own here too
+use crate::absorber::{HOME_REACH, KEEP, held_by_controller};
 use crate::scripted::{self, Script, all_types, dist2};
 use crate::special::{Special, click_if};
 
@@ -116,7 +119,7 @@ pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
     let depot = own.iter().any(|&id| glasnost_sim::depot::is_depot(w, id));
     let useful = own.iter().any(|&id| {
         free(w, id)
-            && if mind::mind_controlled(w, id) {
+            && if held_by_controller(w, id) {
                 w.obj(id).is_some_and(|o| o.kind == Kind::Vehicle)
             } else {
                 wounded(w, id, depot)
@@ -132,7 +135,7 @@ pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
     all_types(w)
         .into_iter()
         .filter(|&t| grinder_type(w, t))
-        .filter(|&t| crate::startable(w, house, t))
+        .filter(|&t| script.startable(w, t))
         .filter(|&t| !on_line(t))
         // design: own AI (#8): only while its line is free, as for the other special buildings (S-0411 claim 6: a line with an item takes no new build order)
         .filter(|&t| !script.busy(w, t))
@@ -172,7 +175,7 @@ fn free(w: &World, id: ObjectId) -> bool {
     let t = tech::type_of(o);
     // A controlled enemy harvester, engineer or the like does no work for
     // the house while it stands idle, so only the house's own are kept.
-    let own_kind_kept = !mind::mind_controlled(w, id)
+    let own_kind_kept = !held_by_controller(w, id)
         && (w
             .rules()
             .unit(o.kind, o.type_index)
@@ -208,19 +211,19 @@ impl Special {
         let free: Vec<ObjectId> = own
             .iter()
             .copied()
-            .filter(|&id| (!ordered.contains(&id) || mind::mind_controlled(w, id)) && free(w, id))
+            .filter(|&id| (!ordered.contains(&id) || held_by_controller(w, id)) && free(w, id))
             .collect();
         let absorber_room = crate::absorber::room_left(w, house);
         let controlled: Vec<ObjectId> = free
             .iter()
             .copied()
-            .filter(|&id| mind::mind_controlled(w, id))
+            .filter(|&id| held_by_controller(w, id))
             .filter(|&id| w.obj(id).is_some_and(|o| o.kind == Kind::Vehicle) || !absorber_room)
             .collect();
         let mine: Vec<ObjectId> = free
             .iter()
             .copied()
-            .filter(|&id| !mind::mind_controlled(w, id))
+            .filter(|&id| !held_by_controller(w, id))
             .collect();
         let depot = own.iter().any(|&id| glasnost_sim::depot::is_depot(w, id));
         let wounded: Vec<ObjectId> = mine

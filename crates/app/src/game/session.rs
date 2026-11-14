@@ -236,6 +236,8 @@ pub struct StepLaps {
     pub scene: f64,
     /// The radar's observation.
     pub radar: f64,
+    /// The parts of [`StepLaps::scene`] (#145).
+    pub parts: crate::mapview::live::SceneLaps,
 }
 
 /// Our own keys for the sidebar and keyboard aiming (M8 step C3; the
@@ -676,12 +678,14 @@ impl Session {
         let effects = self.play.effects.clone();
         // spec: S-0201 claim 15 (in a network game the opener's machine draws no new frame of the battlefield while the options menu is open; the ticks go on) and claim 16 (nor while its window lacks the focus)
         let draw = !(self.network && (self.paused || !self.focused));
-        self.with_live(|live, inputs, scene| {
+        let parts = self.with_live(|live, inputs, scene| {
             live.world.effects = effects;
+            live.lap_clock = clock;
             live.after_tick();
             if draw {
                 live.redraw(inputs, scene);
             }
+            live.laps
         });
         let drawn = lap();
         let house = self.play.local;
@@ -694,6 +698,7 @@ impl Session {
                 play: played - start - tick_ms,
                 scene: drawn - played,
                 radar: lap() - drawn,
+                parts: parts.unwrap_or_default(),
             };
         }
         true

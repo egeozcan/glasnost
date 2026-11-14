@@ -508,7 +508,7 @@ pub fn probe(script: &Script, w: &World) -> Probe {
     let start: Vec<TypeRef> = lit
         .iter()
         .copied()
-        .filter(|&t| crate::startable(w, script.house, t))
+        .filter(|&t| script.startable(w, t))
         .collect();
     let free = start.iter().filter(|&&t| !script.busy(w, t)).count();
     let mut units = vec![0; UNIT_TESTS.len()];
@@ -645,7 +645,7 @@ pub(crate) fn build_type_where(
         .into_iter()
         .filter(|&t| armours.iter().any(|&a| hits_air(w, t, a)))
         .filter(|&t| lit_when_placed(w, script.house, t))
-        .filter(|&t| crate::startable(w, script.house, t))
+        .filter(|&t| script.startable(w, t))
         .filter(|&t| !script.busy(w, t))
         .filter(|&t| ok(t))
         .min_by_key(|&t| (production::cost_field(w, t), t.kind, t.index))

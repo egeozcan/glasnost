@@ -165,6 +165,91 @@ fn making_nothing(w: &mut World) {
     w.rules = Some(std::sync::Arc::new(r));
 }
 
+/// `w` in explosion mode (S-0611 claim 3) with a blast warhead of our own
+/// test data: the mutating warhead's fields, a spread of 3 cells and a
+/// versus value of 1 for every armour class.
+fn exploding(w: &mut World) {
+    let mut r = (*w.rules_arc()).clone();
+    let mode = r.mode;
+    let m = &r.superweapons.mutation;
+    let from = m
+        .cell_warhead
+        .or(m.explosion_warhead)
+        .expect("the fixture's mutating warhead");
+    let mut h = r.combat.warheads[from as usize].clone();
+    h.name = "BLASTX".into();
+    h.verses = [glasnost_num::F64::from_i64(1, mode); 11];
+    h.spread = glasnost_num::F64::from_i64(3, mode);
+    r.combat.warheads.push(h);
+    let id = u32::try_from(r.combat.warheads.len() - 1).unwrap();
+    r.superweapons.mutation.explosion = true;
+    r.superweapons.mutation.explosion_warhead = Some(id);
+    w.rules = Some(std::sync::Arc::new(r));
+}
+
+/// Puts object `id` at the centre of cell `c`, on the bridge deck (its
+/// layer, 416 leptons up, S-0307 Constants) or on the ground.
+fn put(w: &mut World, id: ObjectId, c: CellXY, deck: bool) {
+    let o = w.obj_mut(id).unwrap();
+    let z = o.pos.z + if deck { 416 } else { 0 };
+    o.pos = glasnost_sim::world::Pos::centre(c, z);
+    o.layer = if deck {
+        glasnost_sim::world::Layer::Deck
+    } else {
+        glasnost_sim::world::Layer::Ground
+    };
+}
+
+// S-0611 claim 3 and F1 (one area hit centred on the mutation point, lifted onto the bridge deck on a high-bridge cell) and S-0303 claim 4 (a detonation on a bridge deck hits only deck objects), design: own AI (#34): on a high-bridge cell the expected blast loss counts the house's vehicles on the deck, which the blast destroys, and not the ones on the ground beneath it, which it does not reach.
+#[test]
+fn the_blast_estimate_on_a_bridge_deck_counts_the_deck_only() {
+    for own_on_deck in [true, false] {
+        let mut w = armed();
+        making_nothing(&mut w);
+        exploding(&mut w);
+        let h = home(&w);
+        let d = CellXY::new(h.x + 6, h.y + 6);
+        let i = w.cells.idx(d).unwrap();
+        w.cells.deck[i] = true;
+        let foes = group(&mut w, 1, &GROUP);
+        for &f in &foes {
+            put(&mut w, f, d, true);
+        }
+        let cost = |w: &World, id: ObjectId| {
+            i64::from(glasnost_sim::econ::production::cost_field(
+                w,
+                glasnost_sim::econ::tech::type_of(w.obj(id).unwrap()),
+            ))
+            .max(1)
+        };
+        let gain: i64 = foes.iter().map(|&f| cost(&w, f)).sum();
+        // Enough own vehicles that losing them all outweighs the gain.
+        let first = spawn(&mut w, Kind::Vehicle, "GUNR", 0, -6, 6);
+        let n = gain / (glasnost_ai::mutator::OUTWEIGH * cost(&w, first)) + 1;
+        let mut own = vec![first];
+        for k in 1..n {
+            own.push(spawn(&mut w, Kind::Vehicle, "GUNR", 0, -6, 6 + k as i32));
+        }
+        for &v in &own {
+            put(&mut w, v, d, own_on_deck);
+        }
+        let mut br = brain(&w);
+        let out = br.think(&w);
+        if own_on_deck {
+            assert!(
+                fired(&out, &w).is_empty(),
+                "the deck vehicles are lost: {out:?}"
+            );
+        } else {
+            assert_eq!(
+                fired(&out, &w),
+                vec![d],
+                "the vehicles beneath the deck are out of the blast's reach"
+            );
+        }
+    }
+}
+
 // S-0611 claim 4 (every listed infantry of any house in the block is hit) and PLAN §4.7 (M7b AI round 3): with no unit made, three enemy infantry outweigh one own unit of the same value at least twice over; the launch goes ahead.
 #[test]
 fn fires_when_the_enemy_gain_outweighs_the_own_loss() {

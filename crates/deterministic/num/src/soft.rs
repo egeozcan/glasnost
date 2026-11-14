@@ -467,7 +467,8 @@ impl F64 {
             Val::Zero(_) => Some(0),
             Val::Finite { neg, m, e } => {
                 let mag: i128 = if e >= 0 {
-                    if e > 70 {
+                    // nocite: i128 range (m < 2^53, so m × 2^74 < 2^127)
+                    if e > 74 {
                         return None;
                     }
                     i128::from(m) << e

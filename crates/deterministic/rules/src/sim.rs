@@ -3235,7 +3235,9 @@ pub struct WarheadType {
     #[serde(default)]
     pub inf_death: Option<i32>,
     /// `Verses`: the eleven versus values in class-index order (S-0003
-    /// claim 13, S-0305), each written as the exact decimal of its double.
+    /// claim 13, S-0305), each written as the exact decimal of its double,
+    /// without `%` (the importer has applied claim 13's `%` readings);
+    /// validation refuses an item with `%`.
     #[serde(default)]
     pub verses: Option<Vec<Decimal>>,
     /// `CellSpread` S, cells (S-0303), a single.

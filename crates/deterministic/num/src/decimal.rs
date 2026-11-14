@@ -242,11 +242,29 @@ fn scaled_quotient(num: &BigUint, den: &BigUint, e: i64) -> (BigUint, BigUint, B
 
 /// The double nearest to the value of decimal text (ties to even), for
 /// engine constants that a spec gives as "the double nearest to" a decimal.
+/// Text that is not a decimal gives 0; a `%` mark is not applied (rules
+/// data that must not carry one is checked with [`exact_double`], #293).
 // nocite: exact rational rounding helper (binary64 precision and guard bits)
 pub fn nearest_double(text: &str) -> F64 {
-    let Ok(t) = parse_text(text) else {
-        return F64::ZERO;
-    };
+    parse_text(text).map_or(F64::ZERO, |t| nearest_of(&t))
+}
+
+/// The double nearest to the value of plain decimal text (ties to even); an
+/// error for text that is not a decimal or that carries `%`, which this
+/// reading has no factor for (#293: a versus item of our rules format is the
+/// exact decimal of its double).
+// nocite: exact rational rounding helper (binary64 precision and guard bits)
+pub fn exact_double(text: &str) -> Result<F64, DecimalError> {
+    let t = parse_text(text)?;
+    if t.percent {
+        return Err(DecimalError(text.to_owned()));
+    }
+    Ok(nearest_of(&t))
+}
+
+/// RN₅₃ of the value of parsed decimal text (sign kept; `%` not applied).
+// nocite: exact rational rounding helper (binary64 precision and guard bits)
+fn nearest_of(t: &DecimalText) -> F64 {
     let n = BigUint::parse_bytes(&t.digits, 10).unwrap_or_default();
     let ten = BigUint::from(10u32);
     let (num, den) = if t.exp10 >= 0 {
@@ -338,6 +356,17 @@ mod tests {
         assert_eq!(ticks("0.3", RZ), 270);
         assert_eq!(ticks("0.3", RN), 270);
         assert_eq!(ticks("0.5009765625", RZ), 450);
+    }
+
+    // nocite: our own rules format (#293): the exact-double reading has no `%` factor
+    #[test]
+    fn exact_double_refuses_a_percent() {
+        assert_eq!(exact_decimal(exact_double("0.5").unwrap()), "0.5");
+        assert_eq!(exact_decimal(exact_double("-0.25").unwrap()), "-0.25");
+        assert!(exact_double("50%").is_err());
+        assert!(exact_double("x").is_err());
+        assert_eq!(nearest_double("50%"), nearest_double("50"));
+        assert_eq!(nearest_double("x"), F64::ZERO);
     }
 
     #[test]

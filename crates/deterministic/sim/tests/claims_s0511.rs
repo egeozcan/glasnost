@@ -1576,6 +1576,30 @@ fn claim_19_high_bridge_repair() {
     }
 }
 
+// spec: S-0511 claim 18 (r13, Q-3046: Repair extent: a selected start-piece pier is restored only if it is collapsed and otherwise keeps its state; either way the bridge from two steps toward its start side and its own far-side span are repaired) and claim 19 (Connectivity: only a restored pier names a cell)
+#[test]
+fn claim_18_r13_a_damaged_start_piece_pier_keeps_its_state() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 10, &[4]);
+    // No start ramp: the walk from two steps toward the start side selects
+    // nothing, so only the pier's own far-side span is repaired.
+    put_tile(&mut m, at(-1, 0), 0, 0, 0);
+    put_tile(&mut m, at(0, 0), 0, 0, 0);
+    let mut w = game(&ruleset(), &m);
+    // State 3; its damage notice chips the far span's first section.
+    assert!(!bridges::attempt(&mut w, at(4, 0)));
+    assert_eq!(pier_k(&w, at(4, 0)), Some(3));
+    assert_ne!(data(&w, at(5, 0)), Some(0));
+    hut::repair(&mut w, at(7, 0));
+    for c in [at(4, -1), at(4, 0), at(4, 1), at(5, 0)] {
+        assert_eq!(pier_k(&w, c), Some(3), "{c:?}: not restored");
+        assert_eq!(w.cells.cell(c).unwrap().level, 4, "{c:?}: not raised");
+    }
+    for x in [5, 6, 7, 8, 9] {
+        assert_eq!(data(&w, at(x, 0)), Some(0), "x = {x}: the far span");
+    }
+}
+
 // spec: S-0511 claim 20 (the whole run: damaged, destroyed, I₄ and I₅ become Iᵣ with r from the map-generator stream, F4; a damaged end piece becomes whole; the scenario stream takes no draw)
 #[test]
 fn claim_20_low_bridge_repair() {
@@ -1864,7 +1888,7 @@ fn tile_at(w: &World, c: CellXY) -> i32 {
     w.cells.cell(c).unwrap().tile
 }
 
-// spec: S-0511 Terms (the reference cell is the pier's cell at sub-tile 4; a different tile laid over part of a pier is not changed) and claim 6; Q-3046 (interim: no pier at the reference cell, the attempt does nothing and fails)
+// spec: S-0511 Terms (the reference cell is the pier's cell at sub-tile 4; a different tile laid over part of a pier is not changed) and claim 6 (r13, Q-3046: A reference cell that does not hold the pier: a reference position painted over, the attempt changes nothing, fails and sends no notice); scenario B17 a, our engine's expected result
 #[test]
 fn claim_6_a_painted_over_reference_cell_floods_nothing() {
     let mut m = base();
@@ -1885,7 +1909,7 @@ fn claim_6_a_painted_over_reference_cell_floods_nothing() {
     );
 }
 
-// spec: S-0511 claim 6 (a collapse lowers the pier's own cells); Q-3046 (interim: no pier at the reference cell, no collapse and no success)
+// spec: S-0511 claim 6 (a collapse lowers the pier's own cells; r13, Q-3046: A reference cell that does not hold the pier, in state 3 too: no collapse and no success); scenario B17 a3, our engine's expected result
 #[test]
 fn claim_6_a_painted_over_reference_cell_in_state_3_collapses_nothing() {
     let mut m = base();
@@ -1908,7 +1932,7 @@ fn claim_6_a_painted_over_reference_cell_in_state_3_collapses_nothing() {
     assert_eq!(pier_k(&w, at(4, -1)), Some(3));
 }
 
-// spec: S-0511 claim 6 (a collapsed pier, state 4, is not attempted; the collapse lowers it once); Q-3046 (interim: a cut-off part in another state than the reference cell does nothing)
+// spec: S-0511 claim 6 (a collapsed pier, state 4, is not attempted; the collapse lowers it once; r13, Q-3046: a cut-off part in another state than the reference cell does nothing, fails and warns); scenario B17 b, our engine's expected result
 #[test]
 fn claim_6_a_cut_off_part_does_not_restore_or_collapse_again() {
     let mut m = base();
@@ -1930,6 +1954,56 @@ fn claim_6_a_cut_off_part_does_not_restore_or_collapse_again() {
     assert_eq!(pier_k(&w, r), Some(4), "the collapsed pier stays collapsed");
     assert!(!bridges::attempt(&mut w, r), "no second collapse");
     assert_eq!(w.cells.cell(r).unwrap().level, 0, "lowered once");
+}
+
+// spec: S-0511 claim 6 (r13, Q-3046: A received notice uses no reference cell: it reads the state of the cell it arrives at and replaces that cell's component, so a cut-off part changes only through notices that arrive at its own cells) and Terms (the affected tile cells of a replacement by a notice: the component around the cell the notice arrives at)
+#[test]
+fn claim_6_r13_a_notice_at_a_cut_off_part_changes_that_part() {
+    use glasnost_sim::bridges::high::{Notice, Side};
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 9, &[4]);
+    let t = tile(Family::Bridge, M1);
+    // at(4, 1) painted over with ground; at(4, 2), sub-tile 12, cut off.
+    put_tile(&mut m, at(4, 1), 0, 0, 4);
+    put_tile(&mut m, at(4, 2), t, 12, 6);
+    let mut w = game(&ruleset(), &m);
+    let mut ctx = Ctx::default();
+    high::notice(&mut w, at(4, 2), Notice::Damage, Side::Start, &mut ctx);
+    assert_eq!(pier_k(&w, at(4, 2)), Some(1), "the arriving cell's part");
+    for c in [at(4, -1), at(4, 0), at(5, 0)] {
+        assert_eq!(pier_k(&w, c), Some(0), "{c:?}: the rest of the pier");
+    }
+}
+
+// spec: S-0511 claim 6 (r13, Q-3046: a collapse from a notice takes its blow-up cells and its height from a centre cell, the arriving cell when its sub-tile is even along x and otherwise the cell one step toward the start side; the three blow-ups are the centre and its two neighbours across, centre first along x; every cell of the replaced component takes the centre's level minus 4; the onward notice goes from the arriving cell)
+#[test]
+fn claim_6_r13_a_notice_collapse_centres_on_the_arriving_cell() {
+    use glasnost_sim::bridges::high::{Notice, Side};
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 9, &[4]);
+    let t3 = tile(Family::Bridge, M1) + 3;
+    put_tile(&mut m, at(4, -1), t3, 0, 4);
+    put_tile(&mut m, at(4, 0), t3, 4, 4);
+    put_tile(&mut m, at(4, 1), t3, 8, 6);
+    put_tile(&mut m, at(5, 0), t3, 5, 4);
+    // A pier cell at an odd sub-tile, with no deck, below the span start.
+    put_tile(&mut m, at(5, 1), t3, 9, 4);
+    let mut w = game(&ruleset(), &m);
+    let start = data(&w, at(5, 0));
+    let mut ctx = Ctx::default();
+    high::notice(&mut w, at(5, 1), Notice::Loss, Side::Start, &mut ctx);
+    assert_eq!(pier_k(&w, at(5, 1)), Some(4));
+    // The centre is at(4, 1), one step toward the start side.
+    assert_eq!(&ctx.blown[..3], &[at(4, 1), at(4, 0), at(4, 2)]);
+    for c in [at(4, -1), at(4, 0), at(4, 1), at(5, 0), at(5, 1)] {
+        assert_eq!(pier_k(&w, c), Some(4), "{c:?}");
+        assert_eq!(w.cells.cell(c).unwrap().level, 2, "{c:?}: 6 − 4");
+    }
+    assert_eq!(
+        data(&w, at(5, 0)),
+        start,
+        "the onward notice goes from at(5, 1), not from the reference cell"
+    );
 }
 
 // spec: S-0511 claim 12, S-0212 claims 3 and 5 (a pier collapse with no bridge link within 3 cells: no link changes, but connectivity is brought up to date, so the running game's regions are those a save and load rebuild)

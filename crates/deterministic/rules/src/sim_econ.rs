@@ -308,7 +308,8 @@ pub struct EconFields {
     #[serde(default)]
     pub secret_building: Option<String>,
     /// Buildings: the rules `NumberOfDocks`, docks the building adds to the
-    /// house total (S-0407 claim 16); absent: 0.
+    /// house total (S-0407 claim 16); absent: 1 (S-0407 and S-0404 Import
+    /// mapping).
     #[serde(default)]
     pub number_of_docks: Option<i32>,
     /// Buildings: the art `NumberOfDocks`, dock slots (S-0402 Terms, claim

@@ -128,3 +128,90 @@ change.
 | #32 strike cell ignores allied objects | yes: a storm was aimed beside an ally's unit | the strike cell keeps every cell of the house's and its allies' objects out of the radius | `tests/ai_sw.rs`: `no_storm_beside_an_allys_unit` |
 | #33 dominator aim ignores damage to allies | yes: the dominator fired where its damage destroys an ally's units | the area damage to the house's and its allies' objects counts as loss; allied objects the sweep takes are counted whole, once | `tests/dominator.rs`: `holds_fire_where_the_damage_destroys_an_allys_units` |
 | #427 bunker exit and entry read any enemy near the base | yes: an enemy by another building far from the bunker let the vehicle out and held entries back; an enemy aiming at the bunker from beyond the reach did not let it out | the lead's decision: a bunker is under threat when a seen enemy stands within `ATTACK_REACH` of one of its cells or aims at it; exit and entry read that per bunker, and the retreat-health condition stays | `tests/bunker.rs`: `an_enemy_far_from_the_bunker_neither_lets_out_nor_holds_back`, `an_enemy_aiming_at_the_bunker_lets_the_vehicle_out` |
+
+## Batch 6
+
+The M6c fixture (batch 5's follow-up) and issues #42, #43, #44, #35, #46, #34, #41, #49, #50, #48 and
+#51 (claims, sight, the income watch, the end of a game). AI game format 112 (the income watch's two
+new fields; postcard is positional, so their serde defaults keep no older save readable). Each issue
+was confirmed on main 5dcbc5c with a test that failed there, committed before its fix; the radiation
+case of #48 has a test, and its chrono, drain and lifter cases are doc changes. #19's rest is left
+for a later batch. The lanes were run on main 5dcbc5c and on the batch. The quick lane (seeds 7 to
+14, sides 0,2 and 1,2, 48 games) keeps every Allied v Yuri winner; 7 of the 24 Soviet v Yuri games
+change: Soviet 11 (before 12), Yuri 12 (12), and one game (map 2, seed 8) has no winner at 120 000
+ticks, both houses with large armies and spent credits. In Soviet v Yuri, map 0, seed 7, the games
+part at tick 29 063: Yuri's lifter holds a Soviet vehicle over a water cell, nothing else on it; before,
+it dropped the vehicle there; now the cell is no killing cell for that vehicle (a bridge deck, or water
+its class may enter: #46), and the lifter keeps it. That game was Yuri's at 60 314 and is Soviet's at
+59 727. In the M6c sweep (seeds 1 to 16), infiltrations (S-0510) rise from 0/1/2 to 1/4/5, with none
+at zero; the same sweep with the batch's fixes but not the fixture gives the base's lines seed for
+seed. With spies that reach the enemy base, seeds 6, 8 and 14 end before 12 000 ticks (8 683, 5 942
+and 9 669), and seed 8's short game has no charger order and no support beam; seed 15, which ended at
+9 594 with zeros before, runs to 12 000 with every counter at 4 or more. The smallest counter over the
+sweep stays 0, now at seed 8; the m6c gate's seed 3 has every counter at 4 or more. In the M7b sweep,
+recycled units fall from 6/9/11 to 4/4/5 and absorbed infantry from 7/8/10 to 5/7/10, as dominated
+units now count as the house's own (#35); drain counters stay at 3 or more. The M7a sweep keeps its
+smallest counter (0, the bunker counters of seed 13, before and after).
+
+| issue | confirmed | change | test |
+|---|---|---|---|
+| M6c spies find no enemy building (from batch 5, #39) | yes: the sweep on main 5dcbc5c counted no infiltration at seeds 5, 7, 9, 10, 11, 13, 14 and 15 (min/median/max 0/1/2) | the fixture's spy type (SPYU) wears the HULK's armour class, which only the temporal, bomb-planting and disarming warheads affect (S-0304 claim 1), so the armies let the spies cross to the enemy player's base. A pre-placed enemy building near the spies was not an option: in a skirmish a pre-placed building goes to the first computer house only, and to no human house (S-0009 claim 27), so the two sides could not each get one | `sim-gate/tests/m6c.rs`: `a_spy_infiltrates_in_the_seeds_main_found_none`; the M6c sweep |
+| #42 controllers aimed at one enemy across thinks | yes: a second idle controller was sent at the enemy a first controller was already on its way to (sent the think before) | the aimed list starts with the targets of the house's controllers in *attack* | `tests/mind.rs`: `a_controller_on_its_way_holds_its_enemy_across_thinks` |
+| #43 drain claims keyed by building only | yes: another house's drainer on the way to a building hid the house's own claim, and a second own drainer was sent there | the claims are keyed by house and building (`drain::claims`) | `drain.rs`: `filter_tests::another_houses_claim_does_not_hide_an_own_claim` |
+| #44 absorber pick and stalled entrants | yes: a switched-off nearest absorber kept the unit from the next one; a stalled entrant sent again was not counted, and one more entrant than the room was sent | the unit goes to the nearest absorber that takes the *enter* click; an entrant sent again takes its building's room | `tests/absorber.rs`: `a_refusing_nearest_absorber_does_not_block_the_others`, `a_resent_stalled_entrant_takes_its_room` |
+| #35 dominated units treated as controlled enemies | yes: a permanently controlled infantry unit was sent into the absorber with power to spare and no surplus, and a dominated vehicle was recycled | only a unit a controller holds (`mind::controlled_by`) counts as a controlled enemy in the absorber and grinder steps (`absorber::held_by_controller`); a dominated one is the house's own (S-0601 claim 13) | `tests/absorber.rs`: `a_dominated_infantry_unit_counts_as_own`; `tests/grinder.rs`: `a_dominated_vehicle_is_not_recycled` |
+| #46 lifter drops over water any unit, and over hidden enemies | yes: a hovercraft over water and a tank over a bridge deck were dropped; a cloaked enemy below made a killing cell | water kills only a unit whose class cannot enter it, away from a bridge deck (S-0607 claim 17); the enemy below must be in view (`in_view`) | `lifter.rs`: `drop_tests::water_kills_only_what_cannot_stand_on_it`, `drop_tests::a_hidden_enemy_does_not_make_a_killing_cell` |
+| #34 mutator blast estimate on a bridge deck | yes: on a high-bridge cell the estimate counted the vehicles beneath the deck and not the ones on it | the blast estimate takes a point and a layer (`dominator::Blast`); the mutator passes its mutation point, lifted onto the deck, and the deck layer on a high-bridge cell (S-0611 F1, S-0303 claim 4) | `tests/mutator.rs`: `the_blast_estimate_on_a_bridge_deck_counts_the_deck_only` |
+| #41 expansion spot beyond the field's reach | yes: the yard vehicle was sent to (43,9), 242 squared cells from the field, beyond the 196 it deploys within | the spiral centred on the far field keeps to cells within `FIELD_REACH` of it; with none there, the spot by the unit is taken as before | `tests/expansion.rs`: `the_cell_by_the_far_field_is_within_its_reach` |
+| #49 unblocker for a type nothing can unblock | yes: a type with a blocker no building clears got a building to climb for its other blocker | the search returns none when any blocker has no building that clears it | `scripted.rs`: `unblocker_tests::a_type_with_a_blocker_nothing_clears_has_no_unblocker` |
+| #50 income watch misses quick items and counts refunds | yes: an item made between two thinks counted as a loss of its price (earned 0, 300 expected), and a sale refund as income (750) | an own object made since the last think, with a start price and off the lines, paid its price; the refund of a building seen in its sale and gone since is taken off. Upgrades sold off and stored resources paid at a sale still count | `scripted.rs`: `income_tests::an_item_made_between_two_thinks_is_no_lost_income`, `income_tests::a_sale_refund_is_no_income` |
+| #48 doc and code disagree | yes, by reading; the radiation case by a test: a walker hovering 400 leptons above a field got a move order | radiation: the code follows the doc and S-0525 claim 8 (aircraft hurt too; nothing airborne moved). Chrono, drain and lifter: the doc follows the code | `tests/radiation.rs`: `a_unit_in_the_air_above_a_field_stays` |
+| #51 step after game over; clones in save and diagnose | yes: a step after the outcome applied a pending order and changed the hash | `Game::step` does nothing once the game has an outcome; `save` writes from borrows (same bytes); `diagnose` reads the world unless its regions are out of date | `tests/game.rs`: `a_step_after_the_game_is_over_changes_nothing`; `save_load_and_replay_keep_the_state` |
+| #19 (rest) counters count offered orders | left untouched in this batch | — | — |
+
+## Batch AP1 (AI perf)
+
+Issues #52, #58, #60, #56, #55, #61, #62, #54 and #64 (time the AI spends thinking), with #57 and
+#63 looked at and left without new code. The batch changes no behaviour, so no format changes (AI game
+112, save 137, wire 12) and the goldens stay as they are. Each change gives the same answers as the
+code it replaces. A test checks this against a copy of the old code, or the old map scan, on the M6c,
+M7a and M7b duels.
+
+**Results against base c0d6f52.** The install bench (map 9, 8 houses, seed 7, 9 000 ticks) writes
+the same state hash every 500 ticks; the end hash is `02388e7c…0fb71824`. Each other check prints the
+same lines as base, timing lines apart:
+
+- the quick lane: seeds 7 to 14, maps 0, 2 and 8, sides 0,2 and 1,2, 48 games;
+- the M6c, M7a and M7b sweeps: seeds 1 to 16.
+
+**No state carried across ticks.** Nothing is cached from one tick to the next. Every kept answer
+lasts one think, or one call, and none is saved.
+
+**Final bench, run base, after, base, after back to back:**
+
+- AI time a tick, every house: 2256.5 / 1277.8 / 2090.6 / 1243.2 µs.
+- Think-tick AI per house: 3615.7 / 2082.4 / 3392.2 / 2026.5 µs.
+- A whole period of thinks summed: 27 137.5 → 16 211.8 µs (the second pair).
+- `tick::step` (the simulation, not changed): 2284.9 / 2102.7 / 2128.2 / 2053.7 µs.
+
+The rows below give that second pair, in ms over the run.
+
+**Where the time moved.** army_types (1401 → 2587) and build_superweapon (944 → 1300) grew. The
+think keeps its answers on whether each type can be built. The climb, which runs earlier in the
+think, used to work those answers out first. Now that the climb is skipped while its line is busy,
+these later steps work them out instead. The bench at the #52 commit shows the shift: climb
+3253 → 375 ms, army_types 1414 → 2924 and build_superweapon 950 → 1769.
+
+| issue | confirmed | change | test |
+|---|---|---|---|
+| #52 base walk and tech climb on a busy line | yes: both searches ran while every line their building could go on was busy, and their answers were thrown away | neither search runs while those lines are busy (`order_build` orders only on a free line). Bench: climb 3204.7 → 338.7 ms, walk 942.0 → 28.8. The net saving is smaller, because the climb's kept answers are now worked out by later steps: think-tick AI per house 3443.8 → 3221.5 µs at the #52 commit | `scripted.rs`: `every_climb_answer_is_a_climbable_building` |
+| #58 field questions scan the map | yes: field_cell, field_refinery, ore_goal, harvesters_wanted and fields() each scanned the map, and the ferry's land cell scanned the whole map | the think keeps one list of explored resource cells, and the field questions read it. fields() floods a dense box. The expansion tests ask the cheap questions first. The ferry scans only the square around its centre. Bench: expand:tests 1375.6 → 28.9 ms (with #64), plant_first 859.9 → 320.4 | `scripted.rs`: `the_field_answers_match_the_map_scans`; `brain.rs`: `the_land_cell_of_the_square_is_the_land_cell_of_the_map` |
+| #60 special builders ask buildable and startable afresh | yes: each startable answer scanned the objects, for every builder that asked | the special builders, the yard vehicle and the special infantry ask `Script::buildable` and a new kept `Script::startable`, which are worked out once a think. sell_when_broke tests the price first. Bench: special:jumpjets 258.8 → 59.5 ms | `scripted.rs`: `the_kept_startable_answer_is_the_plain_one` |
+| #56 defence views every enemy between thinks | yes: on a tick between thinks, building the list of seen enemies viewed every enemy object on the map | `Script::seen_enemies_where` reads the kept list during a think. Outside one, it views only the enemies near the base (a bounding box, then the distance to each building) or raiding it, in the same order. Enemies are tried nearest first, and the threats are a set. Bench, between thinks: defend 1944.5 → 927.0 ms | `brain.rs`: `the_nearest_first_defence_is_the_defence_of_every_enemy`, `the_threats_of_the_one_pass_are_the_threats_of_every_seen_enemy` |
+| #55 dominator aim scans the objects for each cell | yes: three scans of the objects for each cell weighed, and the spread radius found again for each object | the radius is found once a search, and the objects the blast can hurt are listed once. M7b bench: fire_superweapons between thinks 30.4 → 25.1 ms, then 19.5 with #54 | `dominator.rs`: `the_aim_read_once_is_the_aim_of_every_object` |
+| #61 gunner plan counts healers it may not want | yes: for every own vehicle, a pass over all objects ran before it knew whether a healer was wanted | the plan stops early when no healer is wanted or the house has no switching gunner vehicle. One pass finds the awaited vehicles as a set. Bench: special:gunners 140.0 → 21.4 ms | `gunner.rs`: `the_awaited_set_and_the_early_plan_are_as_before` |
+| #62 garrison, engineers and spies count en route per building | yes: a pass over every object for each building, and garrison summed it again for every own object | one pass counts the infantry bound for each building. The engineers' rank drops a component that is always false. Each step reads its seen and ranked buildings once, for the first idle unit. Bench: special:engineers 637.4 → 378.8 ms, special:spies 63.1 → 21.7 | `special.rs`: `the_counts_of_one_pass_are_the_counts_of_a_pass_for_each_building` |
+| #54 curtain reads every vehicle block | partly: a block with no seen enemy near was listed and filtered before the test that rules it out | the enemy test now runs first. Caching "no target" across ticks is not done, because the answer would not be exact | `brain.rs`: `the_curtain_cell_asking_for_enemies_first_is_the_cell_as_before` |
+| #64 smaller scans (field known, absorbers, sensor, berserk) | partly: the scan of the whole map for a known field ran once each in many steps of a think; the absorber room ran a pass over the objects for each absorber; the sensor searched a cell before asking its line; berserk counted each target's group again for every unit | the think keeps whether the house knows a field. One pass counts the units bound for every absorber. The sensor asks its line first. Berserk counts each group once a call. Bench: build_specials 1127.9 → 219.7 ms, build_lifter 342.4 → 30.3, build_drainer 381.3 → 52.0, ferry 498.8 → 213.2. Left: anti-air slots, bunker exit reasons, jumpjets, grinder contains, crates and memory lookups, all small rows | `scripted.rs`: `the_kept_field_answer_is_the_scan_of_the_map`; `absorber.rs`: `the_counts_of_one_pass_are_the_counts_of_a_pass_for_each_object`; `psychic.rs`: `the_sensor_and_the_berserk_targets_are_as_before` |
+| #57 deploy spot spiral | partly, in batch 2; find_deploy_spot is about 39 to 41 ms between thinks, before and after this batch (2.7 % of that AI time) | no new code. Keeping a failed spiral across ticks would not be exact | — |
+| #63 refused or redundant orders | yes, as counted | won't fix. Skipping the think while orders are blocked moves the M7b game by tick 500, because the first think also sets the brain's state. Thinking but returning no orders keeps the hashes on the M7b bench, but the think still runs, so it saves nothing. The harvest re-issue goes only to resting, idle or stalled harvesters, which the sim accepts and acts on. Batching waves changes when orders are sent; the wave bookkeeping belongs to #19. The grinder Build refusals are #8 | — |

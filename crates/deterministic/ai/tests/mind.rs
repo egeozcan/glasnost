@@ -259,3 +259,39 @@ fn two_controllers_pick_two_enemies() {
     assert_ne!(a, c);
     assert!(ids.contains(&a.unwrap()) && ids.contains(&c.unwrap()));
 }
+
+// PLAN §4.7, design: own AI (#42): a controller sent in an earlier think and still on its way holds its enemy; a controller that is free in a later think is sent at another one.
+#[test]
+fn a_controller_on_its_way_holds_its_enemy_across_thinks() {
+    let g = game();
+    let (mut w, u, ids) = scene(
+        &g,
+        &[(Kind::Infantry, "CLONE"), (Kind::Infantry, "CLONE")],
+        &[("RICH", 8, 0), ("GUNR", 7, 2)],
+    );
+    // An earlier think's order, as a person gave it: the first controller
+    // walks toward the costly vehicle.
+    glasnost_sim::orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: u[0],
+            behaviour: Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(ids[0])),
+            dest: None,
+        },
+    );
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let first = w.obj(u[0]).expect("the first controller");
+    assert_eq!(first.beh.current, Some(Behaviour::Attack));
+    assert_eq!(first.target, Some(Target::Object(ids[0])));
+    assert_eq!(mind::controlled_by(&w, ids[0]), None, "still on its way");
+    let mut b = brain(&w);
+    let orders = b.think(&w);
+    assert_eq!(attack_of(&orders, u[0]), None, "{orders:?}");
+    assert_eq!(attack_of(&orders, u[1]), Some(ids[1]), "{orders:?}");
+}

@@ -29,7 +29,9 @@
 //! - Buildings: PRSM (the prism type, also overpowerable, built by the AI),
 //!   HUT (a civilian garrison building), DERR (a tech building that pays,
 //!   held by the neutral house), SPYB (a spyable neutral power building);
-//!   the fixture's POWR, PILL, FACT and PROC are spyable.
+//!   the fixture's POWR, PILL, FACT and PROC are spyable. A spy enters only
+//!   an enemy player's building (#39), so SPYU wears the HULK's armour
+//!   class: the armies cannot shoot it on its way to the enemy base.
 //! - Map: [`fixture::map`]'s flat ground with the starts at ±[`START_DX`], an
 //!   islet of three by three land cells ringed by water two cells wide
 //!   north of each start (a walking unit cannot reach it), holding the other
@@ -219,6 +221,10 @@ pub fn ruleset() -> Ruleset {
         t.agent = Some(true);
         t.infiltrate = Some(true);
         t.primary = None;
+        // The hulk's armour class (below): no army weapon may fire at it
+        // (S-0304 claim 1), so that a spy crosses the field to the enemy
+        // player's base (its only targets since batch 5, #39) alive.
+        t.combat.armor = Some(glasnost_rules::sim::ArmourClass::Special2);
     });
     infantry(&mut r, "JETI", |t| {
         t.locomotion_class = Some(glasnost_rules::sim::LocomotionClass::Foot);

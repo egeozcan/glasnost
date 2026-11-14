@@ -79,9 +79,10 @@ pub(crate) fn build_sensor(script: &Script, w: &World) -> Option<TypeRef> {
     all_types(w)
         .into_iter()
         .filter(|&t| sensor_type(w, t))
-        .filter(|&t| crate::startable(w, house, t))
-        .filter(|&t| script.place_cell(w, t).is_some())
+        .filter(|&t| script.startable(w, t))
+        // The line before the placement search, whose answer a busy line throws away (design: own AI, #64).
         .filter(|&t| !script.busy(w, t))
+        .filter(|&t| script.place_cell(w, t).is_some())
         .min_by_key(|&t| (production::cost_field(w, t), t.index))
 }
 
@@ -117,6 +118,15 @@ pub(crate) fn reveal_cell(script: &Script, w: &World) -> Option<CellXY> {
         .min_by_key(|&c| (near(c), c.y, c.x))
 }
 
+/// The seen enemy units within [`GROUP`] cells of enemy `e` at `c`, of
+/// `enemies`: its group, which a berserk weapon is aimed at.
+fn group_of(enemies: &[(ObjectId, CellXY)], e: ObjectId, c: CellXY) -> usize {
+    enemies
+        .iter()
+        .filter(|&&(o, oc)| o != e && dist2(oc, c) <= GROUP * GROUP)
+        .count()
+}
+
 /// The spacing of the cells the psychic reveal's scouting looks at.
 const LATTICE: i32 = 4; // nocite: tuning of our own opponent
 
@@ -140,9 +150,103 @@ impl Special {
         if enemies.is_empty() {
             return;
         }
+        // Each enemy's group, counted once for the call when first asked: it
+        // does not hang on the unit (design: own AI, #64: it was counted
+        // again for every unit and enemy).
+        let mut groups: Vec<Option<usize>> = vec![None; enemies.len()];
         for &id in own {
             // An idle unit, or one in guard that took the target nearest it
             // by itself: a person re-aims it at the group.
+            let guarding = w.obj(id).is_some_and(|o| {
+                o.dest.is_none()
+                    && matches!(o.beh.current, Some(Behaviour::Guard | Behaviour::AreaGuard))
+            });
+            if !berserk_weapon(w, id)
+                || psychic::berserk(w, id)
+                || !(scripted::idle(w, id) || guarding)
+                || !targeting::selectable(w, id)
+            {
+                continue;
+            }
+            let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
+                continue;
+            };
+            let best = enemies
+                .iter()
+                .enumerate()
+                .filter(|&(_, &(e, c))| {
+                    dist2(c, at) <= REACH * REACH
+                        && !psychic::berserk(w, e)
+                        && scripted::can_attack(w, id, e)
+                        && self.memory.ok(w, id, Target::Object(e))
+                })
+                .map(|(i, &(e, c))| {
+                    let group = *groups[i].get_or_insert_with(|| group_of(&enemies, e, c));
+                    (std::cmp::Reverse(group), dist2(c, at), e)
+                })
+                .min();
+            let Some((_, _, e)) = best else { continue };
+            if w.obj(id)
+                .is_some_and(|o| o.target == Some(Target::Object(e)))
+            {
+                continue;
+            }
+            out.push(Order::Behaviour {
+                actor: id,
+                behaviour: Behaviour::Attack,
+                attack_move: false,
+                target: Some(Target::Object(e)),
+                dest: None,
+            });
+            self.count_berserk();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// [`build_sensor`] as before #64: the placement searched before the
+    /// line is asked.
+    fn build_sensor_as_before(script: &Script, w: &World) -> Option<TypeRef> {
+        let house = script.house;
+        if !psychic::sensors(w, house).is_empty()
+            || script
+                .own(w)
+                .iter()
+                .any(|&id| w.obj(id).is_some_and(|o| sensor_type(w, tech::type_of(o))))
+        {
+            return None;
+        }
+        all_types(w)
+            .into_iter()
+            .filter(|&t| sensor_type(w, t))
+            .filter(|&t| script.startable(w, t))
+            .filter(|&t| script.place_cell(w, t).is_some())
+            .filter(|&t| !script.busy(w, t))
+            .min_by_key(|&t| (production::cost_field(w, t), t.index))
+    }
+
+    /// The berserk targets as before #64: each enemy's group counted again
+    /// for every unit and enemy.
+    fn berserk_as_before(
+        s: &mut Special,
+        script: &Script,
+        own: &[ObjectId],
+        w: &World,
+        out: &mut Vec<Order>,
+    ) {
+        let enemies: Vec<(ObjectId, CellXY)> = script
+            .seen_enemies(w)
+            .into_iter()
+            .filter(|&(e, _)| w.obj(e).is_some_and(|o| o.kind != Kind::Building))
+            .collect();
+        if enemies.is_empty() {
+            return;
+        }
+        for &id in own {
             let guarding = w.obj(id).is_some_and(|o| {
                 o.dest.is_none()
                     && matches!(o.beh.current, Some(Behaviour::Guard | Behaviour::AreaGuard))
@@ -163,7 +267,7 @@ impl Special {
                     dist2(c, at) <= REACH * REACH
                         && !psychic::berserk(w, e)
                         && scripted::can_attack(w, id, e)
-                        && self.memory.ok(w, id, Target::Object(e))
+                        && s.memory.ok(w, id, Target::Object(e))
                 })
                 .map(|&(e, c)| {
                     let group = enemies
@@ -186,7 +290,64 @@ impl Special {
                 target: Some(Target::Object(e)),
                 dest: None,
             });
-            self.count_berserk();
+            s.count_berserk();
         }
+    }
+
+    /// Our tooling for speed (design: own AI, #64): the sensor with the
+    /// line asked first is the sensor as before, and the berserk orders
+    /// with each group counted once are the orders as before, for every
+    /// house at many points of the M6c, M7a and M7b duels.
+    #[test]
+    fn the_sensor_and_the_berserk_targets_are_as_before() {
+        let games = [
+            (
+                crate::fixture_m6c::rules(),
+                crate::fixture_m6c::map(),
+                crate::fixture_m6c::MAP_NAME,
+                crate::fixture_m6c::setup(2),
+            ),
+            (
+                crate::fixture_m7a::rules(),
+                crate::fixture_m7a::map(),
+                crate::fixture_m7a::MAP_NAME,
+                crate::fixture_m7a::setup(17),
+            ),
+            (
+                crate::fixture_m7b::rules(),
+                crate::fixture_m7b::map(),
+                crate::fixture_m7b::MAP_NAME,
+                crate::fixture_m7b::setup(11),
+            ),
+        ];
+        let (mut sensors, mut sent) = (0, 0);
+        for (rules, map, map_name, setup) in games {
+            let mut g = Game::new(rules, &map, map_name, fixture::catalogue(), setup)
+                .expect("the duel loads");
+            // At every tick: a berserk weapon is idle, or in guard on its own, only until the next think.
+            for step in 0..9000 {
+                g.step();
+                let w = &g.world;
+                for h in 0..w.houses.len() {
+                    let house = glasnost_sim::world::HouseId(h as u8);
+                    let script = Script::new(house, crate::brain::default_plan());
+                    let at = format!("{map_name}, tick {}, {house:?}", w.tick);
+                    if step % 25 == 0 {
+                        let want = build_sensor_as_before(&script, w);
+                        assert_eq!(build_sensor(&script, w), want, "{at}");
+                        sensors += usize::from(want.is_some());
+                    }
+                    let own = script.own(w);
+                    let (mut now, mut before) = (Special::default(), Special::default());
+                    let (mut now_out, mut before_out) = (Vec::new(), Vec::new());
+                    now.berserk(&script, &own, w, &mut now_out);
+                    berserk_as_before(&mut before, &script, &own, w, &mut before_out);
+                    assert_eq!(now_out, before_out, "{at}");
+                    assert_eq!(format!("{now:?}"), format!("{before:?}"), "{at}");
+                    sent += now_out.len();
+                }
+            }
+        }
+        assert!(sensors > 0 && sent > 0, "{sensors} sensors, {sent} sent");
     }
 }

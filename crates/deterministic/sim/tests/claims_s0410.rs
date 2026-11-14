@@ -235,7 +235,11 @@ fn claim_6_surface_height_at_the_centre() {
         let at_surface =
             shroud::point_shrouded(&w, A, glasnost_sim::world::Pos::new(centre.x, centre.y, z));
         assert_eq!(minimap::cell_shrouded(&w, A, c), at_surface, "{c:?}");
-        let floor = w.cells.cell(c).unwrap().floor_height();
+        let floor = w
+            .cells
+            .cell(c)
+            .unwrap()
+            .floor_height(w.rules().quirks.negative_level_floor_raised);
         let at_floor = shroud::point_shrouded(
             &w,
             A,
