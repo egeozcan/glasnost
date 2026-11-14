@@ -3,7 +3,7 @@ id: Q-3066
 title: A rocket aimed at a settled hovering vehicle's heading point misses it
 status: open
 related: [S-0506, S-0503, S-0303, S-0405, M-0003, M-0016]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need
