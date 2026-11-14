@@ -8683,3 +8683,77 @@ fn status_extras_follow_a_redraw() {
 fn status_extras_follow_a_resume() {
     new_cart_status_follows(|live, _, _| live.resume());
 }
+
+/// design: render (#139): the status extras are drawn between ticks (a
+/// selection change) while a tower is off the map (an object of no list:
+/// last in the status order), the tower comes onto it at the same tick
+/// (the game's object count and next object ID stay the same, so only
+/// `change` brings the status order up to it), and the selected tower's
+/// status extras are drawn at the next status redraw before those of the
+/// cart behind it (S-0111 claims 8 and 17, S-0102 claim 6).
+fn entering_tower_status_follows(change: impl Fn(&mut Live, &Inputs, &mut Scene)) {
+    use glasnost_render::scene::Group;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, earlier, _) = two_carts(&assets);
+    let tower = testkit::spawn(
+        &mut live.world,
+        SimKind::Building,
+        "TOWER",
+        0,
+        testkit::mid(24, -4, -4),
+        0,
+    );
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let first_status = |scene: &Scene, id: ObjectId| {
+        scene
+            .items
+            .iter()
+            .position(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
+    };
+    live.world.obj_mut(tower).unwrap().on_map = false;
+    live.redraw(&inputs, &mut scene);
+    live.set_marks(&[earlier], None);
+    live.redraw_status(&inputs, &mut scene);
+    assert!(
+        first_status(&scene, earlier).is_some(),
+        "the selected cart's bar"
+    );
+    live.world.obj_mut(tower).unwrap().on_map = true;
+    change(&mut live, &inputs, &mut scene);
+    live.set_marks(&[earlier, tower], None);
+    live.redraw_status(&inputs, &mut scene);
+    let (Some(t), Some(c)) = (first_status(&scene, tower), first_status(&scene, earlier)) else {
+        panic!("both selected objects' status extras");
+    };
+    assert!(t < c, "the tower in front of the cart first");
+}
+
+/// design: render (#139): an entering tower, brought up to by the tick's update.
+#[test]
+fn status_extras_follow_a_tower_entering_at_a_tick() {
+    entering_tower_status_follows(|live, _, _| live.after_tick());
+}
+
+/// design: render (#139): an entering tower, brought up to by a redraw.
+#[test]
+fn status_extras_follow_a_tower_entering_at_a_redraw() {
+    entering_tower_status_follows(|live, inputs, scene| live.redraw(inputs, scene));
+}
+
+/// design: render (#139): an entering tower, in a game put in place (#98).
+#[test]
+fn status_extras_follow_a_tower_entering_at_a_resume() {
+    entering_tower_status_follows(|live, _, _| live.resume());
+}
