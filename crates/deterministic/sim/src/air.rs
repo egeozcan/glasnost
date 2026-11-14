@@ -120,8 +120,11 @@ fn ty(w: &World, id: ObjectId) -> Option<Ty> {
         fighter: e.fighter.unwrap_or(false),
         fly_by: e.fly_by.unwrap_or(false),
         fly_back: e.fly_back.unwrap_or(false),
-        // spec: S-0501 Import mapping (a type's FlightLevel absent: the game-wide value)
-        cruise: e.flight_level.unwrap_or(r.air.flight_level),
+        // spec: S-0501 Import mapping (a type's FlightLevel absent: the game-wide value; absent stays unset, −1, which means "use the game-wide value", not a height of −1) (#227)
+        cruise: e
+            .flight_level
+            .filter(|&v| v != -1)
+            .unwrap_or(r.air.flight_level),
         // spec: S-0501 Import mapping (SlowdownDistance absent: 500, S-0207)
         slowdown: u.slowdown_distance,
         // spec: S-0501 claim 4 (V: the imported type speed, without bonuses); F6 (Vₜ: the same converted speed of S-0207 claim 1, not the raw field)
