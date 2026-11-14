@@ -3,12 +3,16 @@
 //! and what stops, the power switch, and the units that depend on a control
 //! centre.
 //!
-//! Seams (states that belong to topics not written yet, each a small
-//! function below that answers "no" or 0 until its topic arrives): pulses and
-//! electromagnetic locks, being erased, being drained, chargers, absorbed
-//! passengers, engineers inside a building, occupants of a garrisonable
-//! building, controlled and held units, superweapon charge (claim 15) and the
-//! super-gap's deploy behaviour (claim 16).
+//! The states other topics own are read through small functions below:
+//! being erased, being drained, chargers, absorbed passengers, the manned
+//! flag and the occupants of a garrisonable building each ask their owning
+//! module. Controlled and held units are released by `mind` and `lift` from
+//! [`building_turn`]. The charge hold of superweapons that depend on power
+//! (claim 15) is S-0512's, in `superweapons::charge`.
+//!
+//! Seams: pulses and electromagnetic locks ([`under_pulse`] answers "no"),
+//! and the super-gap's deploy behaviour (claim 16): nothing sets the
+//! super-gap state, which is only ever cleared here.
 
 use std::collections::BTreeMap;
 
@@ -239,7 +243,8 @@ pub struct BuildingSwitches {
 }
 
 // ---------------------------------------------------------------------------
-// Seams: states other topics own (each answers "no" or 0 until it exists).
+// States other topics own, read from their modules; `under_pulse` alone is
+// still a seam that answers "no".
 
 /// Under a pulse (S-0405 Terms; the combat and superweapon specs start and
 /// end it). Seam: no pulse exists yet.
@@ -546,7 +551,7 @@ pub fn house_update(w: &mut World, h: HouseId) -> bool {
     let changed = before != (o, d);
     // spec: S-0405 claim 11 (the step period of each production line is worked out again at once, S-0403 claim 8)
     crate::econ::production::power_changed(w, h);
-    // S-0405 claim 15 (the charge hold of superweapons that depend on power) is a seam: superweapons are not written yet.
+    // S-0405 claim 15 (the charge hold of superweapons that depend on power) is S-0512's: `superweapons::charge::availability` suspends and resumes on the low-power state, and `charge::house_update` runs it when that state changed (S-0512 claims 2, 4 and 6).
     changed
 }
 
