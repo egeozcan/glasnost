@@ -261,3 +261,46 @@ impl Replay {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testkit;
+
+    /// The save and the state hash are those of the owned bytes: a save is
+    /// the postcard bytes of [`Save`] holding a copy of the world, and the
+    /// hash is SHA-256 of the world's postcard bytes (#410). Checked on a
+    /// game mid-fight, shots in flight, and after a save/load round trip.
+    #[test]
+    fn save_and_hash_are_those_of_the_owned_bytes() {
+        let mut w = testkit::combat_replay(17, 140)
+            .run(
+                testkit::combat_rules(),
+                &testkit::map(),
+                testkit::catalogue(),
+                |_| {},
+            )
+            .unwrap();
+        let mut extra = 0;
+        while w.projectiles.is_empty() && extra < 200 {
+            crate::tick::step(&mut w);
+            extra += 1;
+        }
+        assert!(!w.projectiles.is_empty(), "no shot in flight");
+        let owned = |w: &World| {
+            postcard::to_allocvec(&Save {
+                version: FORMAT_VERSION,
+                rules_hash: w.rules().hash.clone(),
+                world: w.clone(),
+            })
+            .unwrap()
+        };
+        let digest = |w: &World| hex(&Sha256::digest(postcard::to_allocvec(w).unwrap()));
+        let bytes = save(&w);
+        assert_eq!(bytes, owned(&w));
+        assert_eq!(state_hash(&w), digest(&w));
+        let l = load(&bytes, testkit::combat_rules(), testkit::catalogue()).unwrap();
+        assert_eq!(save(&l), bytes);
+        assert_eq!(state_hash(&l), digest(&w));
+    }
+}
