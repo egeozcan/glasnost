@@ -33,6 +33,37 @@ const BLOCKED_FOR: i32 = 4500; // nocite: tuning of our own opponent
 /// The most notes of either kind the memory keeps (the oldest go first).
 const LIMIT: usize = 256; // nocite: tuning of our own opponent
 
+/// The index in `out` of each actor's last behaviour order, the one the
+/// brain counts as given to it (design: own AI, #19, as
+/// [`Memory::note_given`] has judged since batch 3).
+pub(crate) fn last_behaviours(out: &[Order]) -> std::collections::BTreeMap<ObjectId, usize> {
+    let mut last = std::collections::BTreeMap::new();
+    for (i, o) in out.iter().enumerate() {
+        if let Order::Behaviour { actor, .. } = o {
+            last.insert(*actor, i);
+        }
+    }
+    last
+}
+
+/// Whether the behaviour order `o` is given with `out` (design: own AI,
+/// #19): it is its actor's last behaviour order there (`last`, from
+/// [`last_behaviours`]), within the `room` the house's pending list has
+/// left (S-0213 claim 2: an order issued while the list is full is
+/// dropped). An order that is no behaviour order is never given here.
+pub(crate) fn behaviour_given(
+    last: &std::collections::BTreeMap<ObjectId, usize>,
+    out: &[Order],
+    room: usize,
+    o: &Order,
+) -> bool {
+    let Order::Behaviour { actor, .. } = o else {
+        return false;
+    };
+    last.get(actor)
+        .is_some_and(|&i| i < room && out.get(i) == Some(o))
+}
+
 /// An order given at some tick, to be judged at the next think.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Given {
@@ -160,22 +191,10 @@ impl Memory {
         if offered.is_empty() {
             return;
         }
-        let mut last: std::collections::BTreeMap<ObjectId, usize> =
-            std::collections::BTreeMap::new();
-        for (i, o) in out.iter().enumerate() {
-            if let Order::Behaviour { actor, .. } = o {
-                last.insert(*actor, i);
-            }
-        }
+        let last = last_behaviours(out);
         let given: Vec<Order> = offered
             .into_iter()
-            .filter(|o| {
-                let Order::Behaviour { actor, .. } = o else {
-                    return false;
-                };
-                last.get(actor)
-                    .is_some_and(|&i| i < room && out.get(i) == Some(o))
-            })
+            .filter(|o| behaviour_given(&last, out, room, o))
             .collect();
         self.note(w, &given, &asked);
     }

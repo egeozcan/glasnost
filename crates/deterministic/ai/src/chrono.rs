@@ -77,7 +77,7 @@ impl Special {
                 target: Some(Target::Object(e)),
                 dest: None,
             });
-            self.count_erasure();
+            self.offer_use(crate::special::Use::Erasure, out);
         }
     }
 }

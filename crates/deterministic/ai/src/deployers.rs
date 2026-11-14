@@ -209,7 +209,7 @@ impl Special {
             };
             if order {
                 out.push(Order::Deploy { actor: id });
-                self.count_deploy();
+                self.offer_use(crate::special::Use::Deploy, out);
             } else if firing_infantry(w, id)
                 && !own_cell_firer(w, id)
                 && let Some(e) = self.retarget(id, &enemies, w)

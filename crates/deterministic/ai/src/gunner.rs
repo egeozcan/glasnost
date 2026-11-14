@@ -310,7 +310,7 @@ impl Special {
                 *start -= before;
                 out.retain(|o| o.actor() != Some(id));
                 out.extend(orders);
-                self.count_gunner_load();
+                self.offer_use(crate::special::Use::GunnerLoad, out);
             }
         }
         if let Some(t) = plan.build {

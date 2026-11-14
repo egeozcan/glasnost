@@ -204,6 +204,115 @@ pub struct Uses {
     pub escorts: u32,
 }
 
+/// What an order the brain gives is for: the counter of [`Uses`] it adds
+/// one to ([`Special::offer_use`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Use {
+    Garrison,
+    Engineer,
+    Spy,
+    Tech,
+    Jump,
+    Deploy,
+    Radiation,
+    Erasure,
+    Prism,
+    Charge,
+    Overpowerable,
+    Bomb,
+    Disarm,
+    Suicide,
+    Sabotage,
+    Strike,
+    Crate,
+    Berserk,
+    Sensor,
+    Reveal,
+    Takeover,
+    GattlingDefence,
+    Absorb,
+    Grind,
+    BunkerBuild,
+    BunkerEntry,
+    BunkerExit,
+    LifterBuild,
+    LiftOrder,
+    LiftDrop,
+    DrainerBuild,
+    DrainOrder,
+    MutatorLaunch,
+    DominatorLaunch,
+    EconomyHold,
+    Resume,
+    GunnerLoad,
+    EconomyDefence,
+    CurtainedBuilding,
+    SuperweaponHold,
+    ExpansionBuild,
+    ExpansionMove,
+    ExpansionUnblock,
+    ExpansionCancel,
+    AntiAirBuild,
+    NonFighterCancel,
+    Escort,
+}
+
+impl Uses {
+    /// Counts one order given for `u`.
+    fn add(&mut self, u: Use) {
+        let c = match u {
+            Use::Garrison => &mut self.garrisons,
+            Use::Engineer => &mut self.engineers,
+            Use::Spy => &mut self.spies,
+            Use::Tech => &mut self.tech,
+            Use::Jump => &mut self.jumps,
+            Use::Deploy => &mut self.deploys,
+            Use::Radiation => &mut self.radiation,
+            Use::Erasure => &mut self.erasures,
+            Use::Prism => &mut self.prisms,
+            Use::Charge => &mut self.charges,
+            Use::Overpowerable => &mut self.overpowerables,
+            Use::Bomb => &mut self.bombs,
+            Use::Disarm => &mut self.disarms,
+            Use::Suicide => &mut self.suicides,
+            Use::Sabotage => &mut self.sabotages,
+            Use::Strike => &mut self.strikes,
+            Use::Crate => &mut self.crates,
+            Use::Berserk => &mut self.berserks,
+            Use::Sensor => &mut self.sensors,
+            Use::Reveal => &mut self.reveals,
+            Use::Takeover => &mut self.takeovers,
+            Use::GattlingDefence => &mut self.gattling_defences,
+            Use::Absorb => &mut self.absorbs,
+            Use::Grind => &mut self.grinds,
+            Use::BunkerBuild => &mut self.bunker_builds,
+            Use::BunkerEntry => &mut self.bunker_entries,
+            Use::BunkerExit => &mut self.bunker_exits,
+            Use::LifterBuild => &mut self.lifter_builds,
+            Use::LiftOrder => &mut self.lift_orders,
+            Use::LiftDrop => &mut self.lift_drops,
+            Use::DrainerBuild => &mut self.drainer_builds,
+            Use::DrainOrder => &mut self.drain_orders,
+            Use::MutatorLaunch => &mut self.mutator_launches,
+            Use::DominatorLaunch => &mut self.dominator_launches,
+            Use::EconomyHold => &mut self.economy_holds,
+            Use::Resume => &mut self.resumes,
+            Use::GunnerLoad => &mut self.gunner_loads,
+            Use::EconomyDefence => &mut self.economy_defence,
+            Use::CurtainedBuilding => &mut self.curtained_buildings,
+            Use::SuperweaponHold => &mut self.superweapon_holds,
+            Use::ExpansionBuild => &mut self.expansion_builds,
+            Use::ExpansionMove => &mut self.expansion_moves,
+            Use::ExpansionUnblock => &mut self.expansion_unblocks,
+            Use::ExpansionCancel => &mut self.expansion_cancels,
+            Use::AntiAirBuild => &mut self.anti_air_builds,
+            Use::NonFighterCancel => &mut self.non_fighter_cancels,
+            Use::Escort => &mut self.escorts,
+        };
+        *c = c.saturating_add(1);
+    }
+}
+
 /// The special-ability part of one AI house's brain.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Special {
@@ -353,52 +462,12 @@ impl Special {
         self.memory.blocked()
     }
 
-    /// Counts one hold order given while the house pays for its economy
-    /// (S-0404 claim 5, `Brain::economy_first`).
-    pub(crate) fn count_economy_hold(&mut self) {
-        self.uses.economy_holds += 1;
-    }
-
-    /// Counts one hold order given while the house saves for a
-    /// superweapon building (`Brain::economy_first`).
-    pub(crate) fn count_superweapon_hold(&mut self) {
-        self.uses.superweapon_holds += 1;
-    }
-
-    /// Counts one cancel order for a non-fighter on its line while the
-    /// house is short for a superweapon building (`Brain::economy_first`).
-    pub(crate) fn count_non_fighter_cancel(&mut self) {
-        self.uses.non_fighter_cancels += 1;
-    }
-
-    /// Counts one construction-yard vehicle ordered to expand the base.
-    pub(crate) fn count_expansion_build(&mut self) {
-        self.uses.expansion_builds += 1;
-    }
-
-    /// Counts one move of a construction-yard vehicle toward a far field.
-    pub(crate) fn count_expansion_move(&mut self) {
-        self.uses.expansion_moves += 1;
-    }
-
-    pub(crate) fn count_expansion_unblock(&mut self) {
-        self.uses.expansion_unblocks += 1;
-    }
-
-    /// Counts one cancel order for a yard vehicle bought to expand.
-    pub(crate) fn count_expansion_cancel(&mut self) {
-        self.uses.expansion_cancels += 1;
-    }
-
-    /// Counts one anti-air unit or defence ordered against drainers.
-    pub(crate) fn count_anti_air_build(&mut self) {
-        self.uses.anti_air_builds += 1;
-    }
-
-    /// Counts one build order that resumed a held line (S-0404 claims 3
-    /// and 5, `Brain::economy_first`).
-    pub(crate) fn count_resume(&mut self) {
-        self.uses.resumes += 1;
+    /// Offers the order just given, the last of `out`, as a use of `u`
+    /// ([`Uses`]): one order for each ability use, the click's last order
+    /// when a click gives several.
+    pub(crate) fn offer_use(&mut self, u: Use, out: &[Order]) {
+        debug_assert!(!out.is_empty(), "an order is given before it is offered");
+        self.uses.add(u);
     }
 
     /// Counts building orders turned into power plant orders.
@@ -406,177 +475,10 @@ impl Special {
         self.uses.plants_first += n as u32;
     }
 
-    /// Counts one army unit sent at a drainer or a raider of the economy.
-    pub(crate) fn count_economy_defence(&mut self) {
-        self.uses.economy_defence += 1;
-    }
-
-    /// Counts one iron curtain fired on a building.
-    pub(crate) fn count_curtained_building(&mut self) {
-        self.uses.curtained_buildings += 1;
-    }
-
-    /// Counts one infantry unit sent into a gunner vehicle (`gunner`).
-    pub(crate) fn count_gunner_load(&mut self) {
-        self.uses.gunner_loads += 1;
-    }
-
-    /// Counts one deploy order given to a deployable unit (S-0517,
-    /// `deployers`).
-    pub(crate) fn count_deploy(&mut self) {
-        self.uses.deploys += 1;
-    }
-
-    /// Counts one prism building ordered (S-0518, `linked`).
-    pub(crate) fn count_prism(&mut self) {
-        self.uses.prisms += 1;
-    }
-
-    /// Counts one overpowerable building ordered (S-0518, `linked`).
-    pub(crate) fn count_overpowerable(&mut self) {
-        self.uses.overpowerables += 1;
-    }
-
-    /// Counts one charger sent at a building (S-0518, `linked`).
-    pub(crate) fn count_charge(&mut self) {
-        self.uses.charges += 1;
-    }
-
-    /// Counts one berserk-weapon unit sent at an enemy (S-0610, `psychic`).
-    pub(crate) fn count_berserk(&mut self) {
-        self.uses.berserks += 1;
-    }
-
-    /// Counts one controller sent to take over an enemy (S-0601, `mind`).
-    pub(crate) fn count_takeover(&mut self) {
-        self.uses.takeovers += 1;
-    }
-
-    /// Counts one infantry unit sent into an absorbing building (S-0605,
-    /// `absorber`).
-    pub(crate) fn count_absorb(&mut self) {
-        self.uses.absorbs += 1;
-    }
-
-    /// Counts one unit sent into a recycling building (S-0603, `grinder`).
-    pub(crate) fn count_grind(&mut self) {
-        self.uses.grinds += 1;
-    }
-
-    /// Counts one tank bunker ordered (S-0606, `bunker`).
-    pub(crate) fn count_bunker_build(&mut self) {
-        self.uses.bunker_builds += 1;
-    }
-
-    /// Counts one vehicle sent into a tank bunker (S-0606, `bunker`).
-    pub(crate) fn count_bunker_entry(&mut self) {
-        self.uses.bunker_entries += 1;
-    }
-
-    /// Counts one bunkered vehicle let out (S-0606, `bunker`).
-    pub(crate) fn count_bunker_exit(&mut self) {
-        self.uses.bunker_exits += 1;
-    }
-
-    /// Counts one lifter ordered (S-0607, `lifter`).
-    pub(crate) fn count_lifter_build(&mut self) {
-        self.uses.lifter_builds += 1;
-    }
-
-    /// Counts one lifter sent at an enemy vehicle (S-0607, `lifter`).
-    pub(crate) fn count_lift_order(&mut self) {
-        self.uses.lift_orders += 1;
-    }
-
-    /// Counts one drop order given to a holding lifter (S-0607, `lifter`).
-    pub(crate) fn count_lift_drop(&mut self) {
-        self.uses.lift_drops += 1;
-    }
-
-    /// Counts one drainer ordered (S-0608, `drain`).
-    pub(crate) fn count_drainer_build(&mut self) {
-        self.uses.drainer_builds += 1;
-    }
-
-    /// Counts one drainer sent at an enemy building (S-0608, `drain`).
-    pub(crate) fn count_drain_order(&mut self) {
-        self.uses.drain_orders += 1;
-    }
-
-    /// Counts one genetic mutator launch ordered (S-0611, `mutator`).
-    pub(crate) fn count_mutator_launch(&mut self) {
-        self.uses.mutator_launches += 1;
-    }
-
-    /// Counts one psychic dominator launch ordered (S-0612, `dominator`).
-    pub(crate) fn count_dominator_launch(&mut self) {
-        self.uses.dominator_launches += 1;
-    }
-
-    /// Counts one gattling defence building ordered (S-0609, `gattling`).
-    pub(crate) fn count_gattling_defence(&mut self) {
-        self.uses.gattling_defences += 1;
-    }
-
     /// Counts attack orders dropped for gattling units that keep firing
     /// at their targets (S-0609, `gattling`).
     pub(crate) fn count_spins_kept(&mut self, n: usize) {
         self.uses.spins_kept = self.uses.spins_kept.saturating_add(n as u32);
-    }
-
-    /// Counts one psychic sensor ordered (S-0610, `psychic`).
-    pub(crate) fn count_sensor(&mut self) {
-        self.uses.sensors += 1;
-    }
-
-    /// Counts one psychic reveal fired (S-0610, `psychic`).
-    pub(crate) fn count_reveal(&mut self) {
-        self.uses.reveals += 1;
-    }
-
-    /// Counts one unit sent to a crate (S-0520, `crates`).
-    pub(crate) fn count_crate(&mut self) {
-        self.uses.crates += 1;
-    }
-
-    /// Counts one bomb planter sent at an enemy (S-0519, `terror`).
-    pub(crate) fn count_bomb(&mut self) {
-        self.uses.bombs += 1;
-    }
-
-    /// Counts one disarmer sent at a bombed object (S-0519, `terror`).
-    pub(crate) fn count_disarm(&mut self) {
-        self.uses.disarms += 1;
-    }
-
-    /// Counts one suicide unit sent at an enemy (S-0519, `terror`).
-    pub(crate) fn count_suicide(&mut self) {
-        self.uses.suicides += 1;
-    }
-
-    /// Counts one unit with charges sent at a building (S-0519, `terror`).
-    pub(crate) fn count_sabotage(&mut self) {
-        self.uses.sabotages += 1;
-    }
-
-    /// Counts one designator sent at a building (S-0519, `terror`).
-    pub(crate) fn count_strike(&mut self) {
-        self.uses.strikes += 1;
-    }
-
-    /// Counts one erasing unit sent against an enemy (S-0514, `chrono`).
-    pub(crate) fn count_erasure(&mut self) {
-        self.uses.erasures += 1;
-    }
-
-    /// Counts one unit sent out of a radiation field (S-0525, `radiation`).
-    pub(crate) fn count_radiation(&mut self) {
-        self.uses.radiation += 1;
-    }
-
-    /// Counts one order given to a jumpjet unit (S-0502, `jumpjets`).
-    pub(crate) fn count_jump(&mut self) {
-        self.uses.jumps += 1;
     }
 
     /// Whether the house sees object `b` ([`crate::in_view`]: an explored
@@ -692,7 +594,7 @@ impl Special {
             if let Some(orders) = click_if(w, house, id, b, &[Action::Capture]) {
                 out.extend(orders);
                 sent.push((b, 1));
-                self.uses.garrisons += 1;
+                self.offer_use(Use::Garrison, out);
             }
         }
     }
@@ -859,12 +761,12 @@ impl Special {
             if let Some(orders) = click_if(w, house, id, b, &[a]) {
                 out.extend(orders);
                 taken.push(b);
-                self.uses.engineers += 1;
+                self.offer_use(Use::Engineer, out);
                 if tech_buildings::passive_tech(w, b) {
-                    self.uses.tech += 1;
+                    self.offer_use(Use::Tech, out);
                     if let Some(order) = Self::escort(script, w, id, b, out) {
                         out.push(order);
-                        self.uses.escorts += 1;
+                        self.offer_use(Use::Escort, out);
                     }
                 }
             }
@@ -1063,7 +965,7 @@ impl Special {
             if let Some(orders) = click_if(w, house, id, b, &[Action::Capture]) {
                 out.extend(orders);
                 taken.push(b);
-                self.uses.spies += 1;
+                self.offer_use(Use::Spy, out);
             }
         }
         if !any
@@ -1214,12 +1116,12 @@ mod en_route_tests {
             if let Some(orders) = click_if(w, house, id, b, &[a]) {
                 out.extend(orders);
                 taken.push(b);
-                s.uses.engineers += 1;
+                s.offer_use(Use::Engineer, out);
                 if tech_buildings::passive_tech(w, b) {
-                    s.uses.tech += 1;
+                    s.offer_use(Use::Tech, out);
                     if let Some(order) = Special::escort(script, w, id, b, out) {
                         out.push(order);
-                        s.uses.escorts += 1;
+                        s.offer_use(Use::Escort, out);
                     }
                 }
             }

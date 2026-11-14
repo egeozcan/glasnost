@@ -118,7 +118,7 @@ impl Special {
                     if let Some(c) = best {
                         out.push(attack(id, c));
                         taken.push((Role::Disarm, c));
-                        self.count_disarm();
+                        self.offer_use(crate::special::Use::Disarm, out);
                     }
                 }
                 Role::Plant | Role::Designate => {
@@ -135,10 +135,10 @@ impl Special {
                     if let Some(&(e, _)) = best {
                         out.push(attack(id, e));
                         if building_only {
-                            self.count_strike();
+                            self.offer_use(crate::special::Use::Strike, out);
                         } else {
                             taken.push((Role::Plant, e));
-                            self.count_bomb();
+                            self.offer_use(crate::special::Use::Bomb, out);
                         }
                     }
                 }
@@ -152,7 +152,7 @@ impl Special {
                         .min_by_key(|&&(e, c)| (dist2(c, at), e));
                     if let Some(&(e, _)) = best {
                         out.push(attack(id, e));
-                        self.count_suicide();
+                        self.offer_use(crate::special::Use::Suicide, out);
                     }
                 }
                 Role::Charge => {
@@ -169,7 +169,7 @@ impl Special {
                     for (_, b) in buildings {
                         if let Some(orders) = click_if(w, house, id, b, &[Action::Sabotage]) {
                             out.extend(orders);
-                            self.count_sabotage();
+                            self.offer_use(crate::special::Use::Sabotage, out);
                             break;
                         }
                     }

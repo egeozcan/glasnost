@@ -313,7 +313,7 @@ impl Special {
             if let Some(orders) = click_if(w, house, id, b, &[Action::Recycle]) {
                 out.extend(orders);
                 sent += 1;
-                self.count_grind();
+                self.offer_use(crate::special::Use::Grind, out);
             }
         }
     }

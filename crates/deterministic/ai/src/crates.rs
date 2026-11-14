@@ -160,7 +160,7 @@ impl Special {
                 target: None,
                 dest: Some(Target::Cell(p.cell)),
             });
-            self.count_crate();
+            self.offer_use(crate::special::Use::Crate, out);
         }
     }
 }

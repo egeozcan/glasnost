@@ -221,7 +221,7 @@ impl Special {
                         target: None,
                         dest: Some(Target::Cell(at)),
                     });
-                    self.count_lift_drop();
+                    self.offer_use(crate::special::Use::LiftDrop, out);
                 }
                 continue;
             }
@@ -252,7 +252,7 @@ impl Special {
             {
                 out.extend(orders);
                 chosen.push(e);
-                self.count_lift_order();
+                self.offer_use(crate::special::Use::LiftOrder, out);
                 continue;
             }
             // Nothing to lift: back towards home, by its own defences.
