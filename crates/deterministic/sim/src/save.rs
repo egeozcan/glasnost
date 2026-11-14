@@ -64,16 +64,45 @@ impl std::fmt::Display for SaveError {
 
 impl std::error::Error for SaveError {}
 
-/// The bytes of a world's state. Serialization of plain data cannot fail;
-/// if it ever did, hashing nothing would hide every difference, so it
-/// panics instead.
-fn state_bytes(w: &World) -> Vec<u8> {
-    postcard::to_allocvec(w).expect("the game state serializes")
+/// [`Save`] with the world borrowed: the same fields in the same order, so
+/// the same bytes, written without a copy of the world (#410).
+#[derive(Serialize)]
+struct SaveRef<'a> {
+    version: u32,
+    rules_hash: &'a str,
+    world: &'a World,
 }
 
-/// The state hash: SHA-256 of the state's bytes, hexadecimal.
+/// A postcard output that hashes the bytes as they are written instead of
+/// keeping them (#410).
+struct Hashing(Sha256);
+
+impl postcard::ser_flavors::Flavor for Hashing {
+    type Output = Sha256;
+
+    fn try_push(&mut self, data: u8) -> postcard::Result<()> {
+        self.0.update([data]);
+        Ok(())
+    }
+
+    fn try_extend(&mut self, data: &[u8]) -> postcard::Result<()> {
+        self.0.update(data);
+        Ok(())
+    }
+
+    fn finalize(self) -> postcard::Result<Sha256> {
+        Ok(self.0)
+    }
+}
+
+/// The state hash: SHA-256 of the state's bytes, hexadecimal. The bytes
+/// are hashed as they are written, never held whole (#410). Serialization
+/// of plain data cannot fail; if it ever did, hashing nothing would hide
+/// every difference, so it panics instead.
 pub fn state_hash(w: &World) -> String {
-    hex(&Sha256::digest(state_bytes(w)))
+    let h = postcard::serialize_with_flavor(w, Hashing(Sha256::new()))
+        .expect("the game state serializes");
+    hex(&h.finalize())
 }
 
 // nocite: hexadecimal text encoding of a digest
@@ -89,10 +118,10 @@ fn hex(b: &[u8]) -> String {
 
 /// Saves a game.
 pub fn save(w: &World) -> Vec<u8> {
-    let s = Save {
+    let s = SaveRef {
         version: FORMAT_VERSION,
-        rules_hash: w.rules().hash.clone(),
-        world: w.clone(),
+        rules_hash: &w.rules().hash,
+        world: w,
     };
     postcard::to_allocvec(&s).expect("the game state serializes")
 }
