@@ -234,6 +234,18 @@ pub(crate) fn click_if(
         .filter(|o| !o.is_empty())
 }
 
+/// The house's infantry en route to enter each building, by building
+/// ([`Special::en_route`]).
+#[derive(Debug, PartialEq, Eq)]
+struct EnRoute(std::collections::BTreeMap<ObjectId, i32>);
+
+impl EnRoute {
+    /// The infantry en route to enter building `b`.
+    fn get(&self, b: ObjectId) -> i32 {
+        self.0.get(&b).copied().unwrap_or(0)
+    }
+}
+
 impl Special {
     /// The orders given so far.
     pub fn uses(&self) -> Uses {
@@ -573,20 +585,24 @@ impl Special {
         crate::in_view(w, house, b)
     }
 
-    /// Infantry en route to enter building `b`: own units in *capture* with
-    /// the building as destination.
-    fn en_route(w: &World, house: HouseId, b: ObjectId) -> i32 {
-        let n = w
-            .objects
-            .values()
-            .filter(|o| {
-                o.owner == Some(house)
-                    && o.on_map
-                    && o.beh.current == Some(glasnost_sim::rules::Behaviour::Capture)
-                    && o.dest == Some(Target::Object(b))
-            })
-            .count();
-        i32::try_from(n).unwrap_or(i32::MAX)
+    /// Infantry en route to enter each building: own units in *capture*
+    /// with the building as destination, counted by building from one pass
+    /// over the objects (design: own AI, #62: one pass for every building
+    /// asked, in garrison once for every own object, was quadratic). The
+    /// world does not change during a think, so the counts hold for it.
+    fn en_route(w: &World, house: HouseId) -> EnRoute {
+        let mut m = std::collections::BTreeMap::new();
+        for o in w.objects.values().filter(|o| {
+            o.owner == Some(house)
+                && o.on_map
+                && o.beh.current == Some(glasnost_sim::rules::Behaviour::Capture)
+        }) {
+            if let Some(Target::Object(b)) = o.dest {
+                let n: &mut i32 = m.entry(b).or_insert(0);
+                *n = n.saturating_add(1);
+            }
+        }
+        EnRoute(m)
     }
 
     /// Garrisoning (S-0508): every idle infantry unit of an occupier type
@@ -627,15 +643,13 @@ impl Special {
             .count()
             .try_into()
             .unwrap_or(i32::MAX);
+        let en_route = Self::en_route(w, house);
+        // The occupants bound for the buildings do not change during the think.
+        let bound: i32 = buildings.iter().map(|&b| en_route.get(b)).sum();
         let mut sent: Vec<(ObjectId, i32)> = Vec::new();
         for &id in own {
             let Some(o) = w.obj(id) else { continue };
-            let total = inside
-                + i32::try_from(sent.len()).unwrap_or(i32::MAX)
-                + buildings
-                    .iter()
-                    .map(|&b| Self::en_route(w, house, b))
-                    .sum::<i32>();
+            let total = inside + i32::try_from(sent.len()).unwrap_or(i32::MAX) + bound;
             if total >= GARRISON_LIMIT {
                 break;
             }
@@ -650,7 +664,7 @@ impl Special {
             let free = |b: ObjectId, sent: &[(ObjectId, i32)]| {
                 let cap = garrison::capacity(w, b);
                 let placed = garrison::count(w, b)
-                    + Self::en_route(w, house, b)
+                    + en_route.get(b)
                     + sent
                         .iter()
                         .filter(|&&(x, _)| x == b)
@@ -741,19 +755,35 @@ impl Special {
     /// The enemy buildings an engineer may enter, as the cursor shows: the
     /// house's seen enemy buildings of capturable types, and its own
     /// damaged ones to repair (S-0214 rows I4 to I7).
-    fn engineer_targets(w: &World, house: HouseId, unit: ObjectId) -> Vec<(ObjectId, Action)> {
+    /// `seen` is [`Special::seen_buildings`], which does not hang on the
+    /// unit and is read once for every engineer of the think (design: own
+    /// AI, #62: it was read again for each idle engineer).
+    fn engineer_targets(
+        w: &World,
+        house: HouseId,
+        unit: ObjectId,
+        seen: &[ObjectId],
+    ) -> Vec<(ObjectId, Action)> {
         let mods = Modifiers::default();
-        w.objects
-            .values()
-            .filter(|o| o.kind == Kind::Building && o.on_map && o.health > 0)
-            .map(|o| o.id)
-            .filter(|&b| Self::seen(w, house, b))
+        seen.iter()
+            .copied()
             .filter_map(|b| {
                 let a = targeting::cursor(w, house, &[unit], ClickOn::Object(b), mods);
                 (matches!(a, Action::Capture | Action::DamagingEntry)
                     || (a == Action::RepairBuilding && Self::worth_repair(w, house, b)))
                 .then_some((b, a))
             })
+            .collect()
+    }
+
+    /// The live buildings on the map the house sees, by id: the ones the
+    /// cursor of an engineer is asked over ([`Special::engineer_targets`]).
+    fn seen_buildings(w: &World, house: HouseId) -> Vec<ObjectId> {
+        w.objects
+            .values()
+            .filter(|o| o.kind == Kind::Building && o.on_map && o.health > 0)
+            .map(|o| o.id)
+            .filter(|&b| Self::seen(w, house, b))
             .collect()
     }
 
@@ -789,6 +819,8 @@ impl Special {
         let mut any = false;
         // An engineer the gunner step loads into a gunner vehicle stays.
         let kept = self.gunner_reserved(script, own, w, out);
+        let en_route = Self::en_route(w, house);
+        let mut seen: Option<Vec<ObjectId>> = None;
         for &id in own {
             if !engineer::is_engineer(w, id) {
                 continue;
@@ -801,13 +833,14 @@ impl Special {
                 continue;
             }
             let at = w.obj(id).map_or(CellXY::new(0, 0), |o| o.pos.cell());
-            let targets = Self::engineer_targets(w, house, id);
+            // Read once, for the first idle engineer: a house with none skips the pass.
+            let seen = seen.get_or_insert_with(|| Self::seen_buildings(w, house));
+            let targets = Self::engineer_targets(w, house, id, seen);
             let rank = |&(b, a): &(ObjectId, Action)| {
                 (
-                    // Capturing before repairing, a tech building that pays before the rest (S-0515), then the nearest, never a building another engineer is bound for.
+                    // Capturing before repairing, a tech building that pays before the rest (S-0515), then the nearest; the filter below already leaves out a building another engineer is bound for.
                     a == Action::RepairBuilding,
                     tech_buildings::rank(w, b),
-                    taken.contains(&b) || Self::en_route(w, house, b) > 0,
                     w.obj(b).map_or(i64::MAX, |o| dist2(o.pos.cell(), at)),
                     b,
                 )
@@ -816,7 +849,7 @@ impl Special {
                 .iter()
                 .filter(|&&(b, _)| {
                     !taken.contains(&b)
-                        && Self::en_route(w, house, b) == 0
+                        && en_route.get(b) == 0
                         && self.memory.ok(w, id, Target::Object(b))
                 })
                 .min_by_key(|t| rank(t))
@@ -848,7 +881,7 @@ impl Special {
         // when the house had none)
         let open = tech_buildings::paying_in_sight(w, house)
             .into_iter()
-            .filter(|&b| Self::en_route(w, house, b) == 0)
+            .filter(|&b| en_route.get(b) == 0)
             .count();
         let have = Self::count_of(w, house, |id| engineer::is_engineer(w, id));
         if open > 0 && have < open.min(TECH_ENGINEERS) {
@@ -954,8 +987,29 @@ impl Special {
 
     /// The enemy buildings a spy may enter, as the cursor shows (S-0214 row
     /// I24: capture) with the rank of what its entry would do.
-    fn spy_targets(w: &World, house: HouseId, unit: ObjectId) -> Vec<(ObjectId, u8)> {
+    /// `ranked` is [`Special::spy_buildings`], which does not hang on the
+    /// unit and is read once for every spy of the think (design: own AI,
+    /// #62: it was read again for each idle spy).
+    fn spy_targets(
+        w: &World,
+        house: HouseId,
+        unit: ObjectId,
+        ranked: &[(ObjectId, u8)],
+    ) -> Vec<(ObjectId, u8)> {
         let mods = Modifiers::default();
+        ranked
+            .iter()
+            .copied()
+            .filter(|&(b, _)| {
+                targeting::cursor(w, house, &[unit], ClickOn::Object(b), mods) == Action::Capture
+            })
+            .collect()
+    }
+
+    /// The live enemy player buildings on the map the house sees and would
+    /// infiltrate, by id, with the rank of what an entry would do: the ones
+    /// the cursor of a spy is asked over ([`Special::spy_targets`]).
+    fn spy_buildings(w: &World, house: HouseId) -> Vec<(ObjectId, u8)> {
         w.objects
             .values()
             .filter(|o| o.kind == Kind::Building && o.on_map && o.health > 0)
@@ -963,11 +1017,7 @@ impl Special {
             .filter(|o| Self::enemy_player(w, house, o.owner))
             .map(|o| o.id)
             .filter(|&b| Self::seen(w, house, b))
-            .filter_map(|b| {
-                let rank = Self::infiltration_rank(w, house, b)?;
-                (targeting::cursor(w, house, &[unit], ClickOn::Object(b), mods) == Action::Capture)
-                    .then_some((b, rank))
-            })
+            .filter_map(|b| Some((b, Self::infiltration_rank(w, house, b)?)))
             .collect()
     }
 
@@ -979,6 +1029,8 @@ impl Special {
         let house = script.house;
         let mut taken: Vec<ObjectId> = Vec::new();
         let mut any = false;
+        let mut en_route: Option<EnRoute> = None;
+        let mut ranked: Option<Vec<(ObjectId, u8)>> = None;
         for &id in own {
             if !spy::is_spy(w, id) || engineer::is_engineer(w, id) {
                 continue;
@@ -988,11 +1040,14 @@ impl Special {
                 continue;
             }
             let at = w.obj(id).map_or(CellXY::new(0, 0), |o| o.pos.cell());
-            let Some((b, _)) = Self::spy_targets(w, house, id)
+            // Counted and read once, for the first idle spy: a house with none skips the passes.
+            let en_route = en_route.get_or_insert_with(|| Self::en_route(w, house));
+            let ranked = ranked.get_or_insert_with(|| Self::spy_buildings(w, house));
+            let Some((b, _)) = Self::spy_targets(w, house, id, ranked)
                 .into_iter()
                 .filter(|&(b, _)| {
                     !taken.contains(&b)
-                        && Self::en_route(w, house, b) == 0
+                        && en_route.get(b) == 0
                         && self.memory.ok(w, id, Target::Object(b))
                 })
                 .min_by_key(|&(b, rank)| {
@@ -1045,5 +1100,231 @@ impl Special {
                     .get(usize::from(h.0))
                     .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
         })
+    }
+}
+
+#[cfg(test)]
+mod en_route_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// The infantry en route to enter building `b`, as before #62: one pass
+    /// over the objects for each building asked.
+    fn en_route_as_before(w: &World, house: HouseId, b: ObjectId) -> i32 {
+        let n = w
+            .objects
+            .values()
+            .filter(|o| {
+                o.owner == Some(house)
+                    && o.on_map
+                    && o.beh.current == Some(glasnost_sim::rules::Behaviour::Capture)
+                    && o.dest == Some(Target::Object(b))
+            })
+            .count();
+        i32::try_from(n).unwrap_or(i32::MAX)
+    }
+
+    /// The buildings an engineer may enter, as before #62: the seen
+    /// buildings read again for each engineer asked.
+    fn engineer_targets_as_before(
+        w: &World,
+        house: HouseId,
+        unit: ObjectId,
+    ) -> Vec<(ObjectId, Action)> {
+        let mods = Modifiers::default();
+        w.objects
+            .values()
+            .filter(|o| o.kind == Kind::Building && o.on_map && o.health > 0)
+            .map(|o| o.id)
+            .filter(|&b| Special::seen(w, house, b))
+            .filter_map(|b| {
+                let a = targeting::cursor(w, house, &[unit], ClickOn::Object(b), mods);
+                (matches!(a, Action::Capture | Action::DamagingEntry)
+                    || (a == Action::RepairBuilding && Special::worth_repair(w, house, b)))
+                .then_some((b, a))
+            })
+            .collect()
+    }
+
+    /// The buildings a spy may enter, as before #62: the seen enemy
+    /// buildings and their ranks read again for each spy asked.
+    fn spy_targets_as_before(w: &World, house: HouseId, unit: ObjectId) -> Vec<(ObjectId, u8)> {
+        let mods = Modifiers::default();
+        w.objects
+            .values()
+            .filter(|o| o.kind == Kind::Building && o.on_map && o.health > 0)
+            .filter(|o| Special::enemy_player(w, house, o.owner))
+            .map(|o| o.id)
+            .filter(|&b| Special::seen(w, house, b))
+            .filter_map(|b| {
+                let rank = Special::infiltration_rank(w, house, b)?;
+                (targeting::cursor(w, house, &[unit], ClickOn::Object(b), mods) == Action::Capture)
+                    .then_some((b, rank))
+            })
+            .collect()
+    }
+
+    /// [`Special::engineers`] as before #62: the infantry en route counted
+    /// for each building asked, and the rank still holding the component
+    /// the filter makes always false.
+    fn engineers_as_before(
+        s: &mut Special,
+        script: &Script,
+        own: &[ObjectId],
+        w: &World,
+        out: &mut Vec<Order>,
+    ) {
+        let house = script.house;
+        let mut taken: Vec<ObjectId> = Vec::new();
+        let mut any = false;
+        let kept = s.gunner_reserved(script, own, w, out);
+        for &id in own {
+            if !engineer::is_engineer(w, id) {
+                continue;
+            }
+            any = true;
+            if kept.contains(&id) {
+                continue;
+            }
+            if !scripted::idle(w, id) || !targeting::selectable(w, id) {
+                continue;
+            }
+            let at = w.obj(id).map_or(CellXY::new(0, 0), |o| o.pos.cell());
+            let targets = engineer_targets_as_before(w, house, id);
+            let rank = |&(b, a): &(ObjectId, Action)| {
+                (
+                    a == Action::RepairBuilding,
+                    tech_buildings::rank(w, b),
+                    taken.contains(&b) || en_route_as_before(w, house, b) > 0,
+                    w.obj(b).map_or(i64::MAX, |o| dist2(o.pos.cell(), at)),
+                    b,
+                )
+            };
+            let Some(&(b, a)) = targets
+                .iter()
+                .filter(|&&(b, _)| {
+                    !taken.contains(&b)
+                        && en_route_as_before(w, house, b) == 0
+                        && s.memory.ok(w, id, Target::Object(b))
+                })
+                .min_by_key(|t| rank(t))
+            else {
+                continue;
+            };
+            if let Some(orders) = click_if(w, house, id, b, &[a]) {
+                out.extend(orders);
+                taken.push(b);
+                s.uses.engineers += 1;
+                if tech_buildings::passive_tech(w, b) {
+                    s.uses.tech += 1;
+                    if let Some(order) = Special::escort(script, w, id, b, out) {
+                        out.push(order);
+                        s.uses.escorts += 1;
+                    }
+                }
+            }
+        }
+        let Some(t) = Special::buildable_infantry(script, w, |u| u.engineer) else {
+            return;
+        };
+        let open = tech_buildings::paying_in_sight(w, house)
+            .into_iter()
+            .filter(|&b| en_route_as_before(w, house, b) == 0)
+            .count();
+        let have = Special::count_of(w, house, |id| engineer::is_engineer(w, id));
+        if open > 0 && have < open.min(TECH_ENGINEERS) {
+            s.queue_unit(script, w, t, out);
+        } else if !any
+            && have == 0
+            && (Special::captureable_in_sight(w, house) || tech_buildings::in_sight(w, house))
+        {
+            s.order_unit(script, w, t, out);
+        }
+    }
+
+    /// Our tooling for speed (design: own AI, #62): the counts from one
+    /// pass are the counts of a pass for each building, for every object
+    /// and every house; the engineer and spy targets from the buildings
+    /// read once are the targets read for each unit, for every own
+    /// infantry unit; and the engineers step with them and without the
+    /// always-false rank component gives the orders and counts as before,
+    /// at many points of the M6c, M7a and M7b duels.
+    #[test]
+    fn the_counts_of_one_pass_are_the_counts_of_a_pass_for_each_building() {
+        let games = [
+            (
+                crate::fixture_m6c::rules(),
+                crate::fixture_m6c::map(),
+                crate::fixture_m6c::MAP_NAME,
+                crate::fixture_m6c::setup(2),
+            ),
+            (
+                crate::fixture_m7a::rules(),
+                crate::fixture_m7a::map(),
+                crate::fixture_m7a::MAP_NAME,
+                crate::fixture_m7a::setup(17),
+            ),
+            (
+                crate::fixture_m7b::rules(),
+                crate::fixture_m7b::map(),
+                crate::fixture_m7b::MAP_NAME,
+                crate::fixture_m7b::setup(11),
+            ),
+        ];
+        let (mut bound, mut targets, mut ordered) = (0, 0, 0);
+        for (rules, map, map_name, setup) in games {
+            let mut g = Game::new(rules, &map, map_name, fixture::catalogue(), setup)
+                .expect("the duel loads");
+            // The engineers step at every tick (an engineer is idle only
+            // until the next think), the counts at every 25th.
+            for step in 0..3000 {
+                g.step();
+                let w = &g.world;
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    if step % 25 == 0 {
+                        let counts = Special::en_route(w, house);
+                        for &b in w.objects.keys() {
+                            let want = en_route_as_before(w, house, b);
+                            assert_eq!(counts.get(b), want, "{map_name}, tick {}, {b:?}", w.tick);
+                            bound += want;
+                        }
+                        let seen = Special::seen_buildings(w, house);
+                        let ranked = Special::spy_buildings(w, house);
+                        for o in w.objects.values() {
+                            if o.owner != Some(house) || o.kind != Kind::Infantry {
+                                continue;
+                            }
+                            let now = Special::engineer_targets(w, house, o.id, &seen);
+                            let before = engineer_targets_as_before(w, house, o.id);
+                            assert_eq!(now, before, "{map_name}, tick {}, {:?}", w.tick, o.id);
+                            targets += now.len();
+                            let now = Special::spy_targets(w, house, o.id, &ranked);
+                            let before = spy_targets_as_before(w, house, o.id);
+                            assert_eq!(now, before, "{map_name}, tick {}, {:?}", w.tick, o.id);
+                            targets += now.len();
+                        }
+                    }
+                    let script = Script::new(house, crate::brain::default_plan());
+                    let own = script.own(w);
+                    let (mut now, mut before) = (Special::default(), Special::default());
+                    let (mut now_out, mut before_out) = (Vec::new(), Vec::new());
+                    now.engineers(&script, &own, w, &mut now_out);
+                    engineers_as_before(&mut before, &script, &own, w, &mut before_out);
+                    assert_eq!(now_out, before_out, "{map_name}, tick {}", w.tick);
+                    assert_eq!(
+                        format!("{now:?}"),
+                        format!("{before:?}"),
+                        "{map_name}, tick {}",
+                        w.tick
+                    );
+                    ordered += usize::from(!now_out.is_empty());
+                }
+            }
+        }
+        assert!(
+            bound > 0 && targets > 0 && ordered > 0,
+            "{bound} bound, {targets} targets, {ordered} ordered"
+        );
     }
 }
