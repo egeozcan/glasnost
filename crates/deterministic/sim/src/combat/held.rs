@@ -123,15 +123,28 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
             crate::econ::assign_destination(w, x, None);
         }
     }
-    // spec: S-0309 claim 27a (r140, Q-3061: then every holder whose override goes on loses the object from its put-aside target and destination; no exception)
-    aside_lost(w, gone, |_, _| false);
+    // One pass makes both changes that follow (#402): each changes only the
+    // object it visits and reads nothing the other writes, so the result is
+    // that of the two walks one after the other.
+    let it = Some(Target::Object(gone));
     // spec: S-0309 claim 23 (d) and claim 27a (r140, Q-3061: the loss of a remembered target, at the killing hit, going off the map or removal, turns the memory in the same action into a remembered destination at the cell of the target's position then; the engaged mark is kept)
-    if let Some(cell) = w.obj(gone).map(|o| o.pos.cell()) {
-        let remembered = crate::world::AttackMoveMemory::Target(Target::Object(gone));
-        for ob in w.objects.values_mut() {
-            if ob.attack_move == Some(remembered) {
-                ob.attack_move = Some(crate::world::AttackMoveMemory::Dest(Target::Cell(cell)));
-            }
+    let memory = w.obj(gone).map(|o| {
+        (
+            crate::world::AttackMoveMemory::Target(Target::Object(gone)),
+            crate::world::AttackMoveMemory::Dest(Target::Cell(o.pos.cell())),
+        )
+    });
+    for ob in w.objects.values_mut() {
+        // spec: S-0309 claim 27a (r140, Q-3061: then every holder whose override goes on loses the object from its put-aside target and destination; no exception)
+        if let Some((t, d)) = ob.beh.aside
+            && (t == it || d == it)
+        {
+            ob.beh.aside = Some((t.filter(|_| t != it), d.filter(|_| d != it)));
+        }
+        if let Some((remembered, at)) = memory
+            && ob.attack_move == Some(remembered)
+        {
+            ob.attack_move = Some(at);
         }
     }
 }
