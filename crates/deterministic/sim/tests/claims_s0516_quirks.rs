@@ -187,6 +187,55 @@ fn quirk_cloak_field_overlap_loss() {
     }
 }
 
+// spec: S-0516 claim 20 and Edge cases (quirks.cloak_field_overlap_loss: on, a collapse clears its whole circle, shared cells included; off, exactly the cells another generator of the house covers stay; #389: the other generators taken once per collapse)
+#[test]
+fn quirk_cloak_field_overlap_loss_collapse() {
+    use glasnost_map::CellXY;
+    use std::collections::BTreeSet;
+    for on in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.cloak_field_overlap_loss = on;
+        // Every growth update covers its whole circle.
+        r.globals.quirks.cloak_field_building_interrupt = false;
+        let mut w = game(&r);
+        let a = spawn(&mut w, "GENNY", ALPHA, 0, 0);
+        let b = spawn(&mut w, "GENNY", ALPHA, 3, 0);
+        let c = spawn(&mut w, "GENNY", ALPHA, -2, 3);
+        run(&mut w, GEN_RADIUS + 3);
+        let circle = |w: &World, id| -> BTreeSet<CellXY> {
+            let g = w.obj(id).unwrap().cloak.field.unwrap();
+            assert_eq!(g.radius, GEN_RADIUS);
+            glasnost_sim::cloak::field_circle(g.radius)
+                .into_iter()
+                .map(|(dx, dy)| CellXY::new(g.centre.x + dx, g.centre.y + dy))
+                .collect()
+        };
+        let (ca, cb, cc) = (circle(&w, a), circle(&w, b), circle(&w, c));
+        let field = |w: &World| -> BTreeSet<CellXY> {
+            w.cloak
+                .fields
+                .iter()
+                .filter(|(h, _)| *h == ALPHA.0)
+                .map(|&(_, x)| x)
+                .collect()
+        };
+        let all: BTreeSet<CellXY> = ca.iter().chain(&cb).chain(&cc).copied().collect();
+        assert_eq!(field(&w), all, "on = {on}");
+        assert!(
+            ca.iter().any(|x| cb.contains(x))
+                && ca.iter().any(|x| !cb.contains(x) && !cc.contains(x))
+        );
+        kill(&mut w, a);
+        let others: BTreeSet<CellXY> = cb.union(&cc).copied().collect();
+        let want: BTreeSet<CellXY> = if on {
+            others.difference(&ca).copied().collect()
+        } else {
+            others
+        };
+        assert_eq!(field(&w), want, "on = {on}");
+    }
+}
+
 // spec: S-0516 claim 18 and Edge cases (quirks.building_sensor_ring_owner_only: on, an ally's sensor unit stops a building cloaking and a sensors ability does not; off, only non-allied sensor units count, the ability included)
 #[test]
 fn quirk_building_sensor_ring_owner_only() {
