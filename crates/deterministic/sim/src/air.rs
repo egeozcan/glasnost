@@ -757,6 +757,22 @@ pub fn placed(w: &mut World, id: ObjectId) {
     a.kept_filed = ground && !t.landable;
     // spec: S-0501 claim 1 (a type placed carrying passengers is a passenger carrier for life)
     a.passenger_carrier |= passengers(w, id) > 0;
+    if !warped {
+        // spec: S-0501 claim 1 (a placement puts the aircraft on the ground or at cruise height, at rest) and claim 40 (a freshly placed aircraft has no unfinished flight); claim 8 (an aircraft on the ground and not landing takes off whatever the cell): the flight it was in when it left the map is not its flight (#226)
+        a.taking_off = false;
+        a.landing = false;
+        a.sliding = false;
+        a.stranded = false;
+        a.origin = false;
+        a.flying_to = None;
+        a.handed = None;
+        a.lost = false;
+        a.raised = false;
+        a.own_point = false;
+        a.ignored = None;
+        a.unfinished = false;
+        a.released = false;
+    }
     a.entered = usable;
     // spec: S-0513 r115 claim 36 (a member that does not move from one bridge deck to another appears on the deck when it lands on a high-bridge cell from the ground; on a high-bridge cell the bridge lift is added) and S-0501 claim 43 (the deck mark is the aircraft's own standing-on-deck state)
     let on_deck = warped && w.high_bridge(cell) && o.pos.z - surface >= DECK_ALLOWANCE;
