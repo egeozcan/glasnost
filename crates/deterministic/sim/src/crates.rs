@@ -508,8 +508,12 @@ pub fn pickup(w: &mut World, collector: ObjectId, cell: CellXY) -> bool {
         place_random(w);
     }
     let (shown, blocked) = effect(w, p, forced, collector, house, cell);
-    if let Some(name) = r.crates.anim[shown].clone() {
-        // spec: S-0520 claim 11 (the animation appears 200 leptons above the crate point's floor height; a successful unit has none, and its creation draws follow every effect draw)
+    // spec: S-0520 claims 11 and 13 (a successfully placed unit has no animation, even when the unit power-up names one; `effect` gives the unit power-up only for a placed unit)
+    let anim = (shown != UNIT)
+        .then(|| r.crates.anim[shown].clone())
+        .flatten();
+    if let Some(name) = anim {
+        // spec: S-0520 claim 11 (the animation appears 200 leptons above the crate point's floor height; its creation draws follow every effect draw)
         let mut at = point(w, cell);
         at.z += 200; // spec: S-0520 Constants (animation height 200 leptons)
         crate::combat::effects::anim(w, &name, at);
@@ -671,8 +675,9 @@ fn convert(w: &World, p: usize, collector: ObjectId, house: HouseId, cell: CellX
 // ---------------------------------------------------------------------------
 // Effects (claims 12 to 25)
 
-/// Plays a power-up: returns the power-up whose animation shows and whether
-/// a ground collector's step is blocked.
+/// Plays a power-up: returns the power-up whose animation shows (the unit
+/// power-up only for a placed unit, which shows none) and whether a ground
+/// collector's step is blocked.
 fn effect(
     w: &mut World,
     p: usize,
