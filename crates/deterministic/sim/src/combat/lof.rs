@@ -24,10 +24,9 @@ fn height_level(w: &World, c: CellXY) -> i32 {
 /// Whether the cell holds a wall overlay, and the overlay's registration
 /// index.
 pub fn wall_overlay(w: &World, c: CellXY) -> Option<u8> {
-    let cell = w.cells.cell(c)?;
-    let o = cell.overlay;
-    let r = w.rules();
-    r.overlays.get(usize::from(o)).filter(|t| t.wall).map(|_| o)
+    let o = w.cells.cell(c)?.overlay;
+    // spec: S-0009 claim 12 (the value 255 means no overlay, not an index into the overlay type list)
+    crate::walls::is_wall(w, o).then_some(o)
 }
 
 /// Whether one sample cell blocks (S-0306 claim 22), with `prev` the

@@ -2,8 +2,8 @@
 //! place of S-0206 claim 12, a driving unit's blocked steps (S-0212 claims
 //! 20 and 22) and crushing at cell centres (S-0210 claims 3, 7 to 9).
 
-use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
+use glasnost_map::{CellXY, NO_OVERLAY};
 use glasnost_num::F64;
 use glasnost_num::geom::root_floor;
 use glasnost_rules::sim::{LocomotionClass, MovementZone};
@@ -1338,14 +1338,11 @@ pub(crate) fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
             (!allied).then_some(Target::Object(f))
         }
         // spec: S-0207 table T4 (no object listed: the cell's wall, whatever its owner)
+        // spec: S-0009 claim 12 (the value 255 means no overlay: walls::is_wall tests it first)
         None => w
             .cells
             .cell(c)
-            .filter(|cell| {
-                r.overlays
-                    .get(usize::from(cell.overlay))
-                    .is_some_and(|ov| ov.wall)
-            })
+            .filter(|cell| crate::walls::is_wall(w, cell.overlay))
             .map(|_| Target::Cell(c)),
     };
     let Some(target) = target else { return };
@@ -1400,9 +1397,11 @@ fn crush_mode(w: &World, id: ObjectId, u: &UnitRules, first: CellXY, second: Cel
     let all = u.zone == MovementZone::CrusherAll;
     let overlay_crush = |c: CellXY, walls: bool| -> bool {
         w.cells.cell(c).is_some_and(|cell| {
-            r.overlays
-                .get(usize::from(cell.overlay))
-                .is_some_and(|o| o.crushable || (walls && all && o.wall))
+            // spec: S-0009 claim 12 (the value 255 means no overlay, not an index into the overlay type list)
+            cell.overlay != NO_OVERLAY
+                && r.overlays
+                    .get(usize::from(cell.overlay))
+                    .is_some_and(|o| o.crushable || (walls && all && o.wall))
         })
     };
     // spec: S-0607 claims 22 and 23 (a seized unit's stand-in, not its own type's locomotor, is the one that moves it)
