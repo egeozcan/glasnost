@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 87
+revision: 89
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-12
+approved-on: 2026-11-14
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526, Q-2998]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526, Q-2998, Q-3054]
 supersedes: []
 ---
 
@@ -31,7 +31,10 @@ cases that state our engine's own choice (the object numbering, the failed compa
 the airburst loop of claim 21a) are design, which is why `design` is among this spec's
 sources. Claim 17's two rules for a
 superweapon warp member (its deck count after a refused placement, and no locomotor seizing of
-it from departure until its arrival hold ends) are design as well. This spec covers skirmish.
+it from departure until its arrival hold ends) are design as well. A cell target that is a
+high-bridge cell has its target point at the deck height (Terms, *points of a cell target*), and the
+deck crossing of T1's first row puts a straight or arcing projectile at the deck height going down
+and 20 leptons below it going up. This spec covers skirmish.
 Network games and campaigns are out of scope.
 
 This revision changes claim 23 of the committed text in two places. It states the rank of a
@@ -124,6 +127,15 @@ has the trigger action that raises one). From S-0307: *airborne*, *floor-bound*,
 - **Target point** *P*_T. The target's reference point (S-0204), except that a building's target
   point is its reference point plus its art *aim shift* (Import mapping). It never includes lead.
   (S-0307 measures to a different point, its *measured point*.)
+- **Points of a cell target.** For a cell that is a shot's target, its *reference point* is its
+  centre at the terrain height there, and its target point *P*_T is that centre raised by the
+  deck height of 416 leptons (S-0511) when it is a high-bridge cell, and its reference point
+  otherwise. Neither depends on the layer that the firer or any object stands on. For a cell
+  target, the aim point (claim 3), the stored target point *K* and its flak scatter (claim 9),
+  *P*_R of F9 and the reference height of T1's flak row take the cell's target point where those
+  rules say "reference point", and the first row of claim 20 (c) moves the point to it. Claim 20 (b), the distances *D*_R and *D*_S and the second row of
+  claim 20 (c), and the voxel pitch of claim 6 (b) take its reference point. Which of the two the
+  lob test of claim 6 (a) takes is not established (Open questions).
 - **Shot target, firer's target.** The *shot target* is the object or cell a shot is fired at and
   that its projectile carries. The *firer's target* is the target the firer is currently attacking
   (S-0309, S-0214). They are the same except when the shot target is redirected (claim 3).
@@ -145,8 +157,9 @@ has the trigger action that raises one). From S-0307: *airborne*, *floor-bound*,
 - **Aim point.** The reference point of the firer's target (no aim shift), moved ahead of a moving
   vehicle by the lead of claim 3.
 - **Impact point** *Q*. The aim point after scatter (claim 4); without scatter, the aim point.
-- **Stored target point** *K*. The target's reference point taken when the projectile is placed
-  (claim 9). It does not move with the target during the flight.
+- **Stored target point** *K*. The target's reference point (for a cell target, its target
+  point) taken when the projectile is placed (claim 9). It does not move with the target during
+  the flight.
 - **Arm time, past its arm time.** The *arm time* of a projectile is a number of ticks fixed at
   placement (claim 9). The projectile is *past its arm time* in a turn when the number of ticks
   from the tick of its placement to the tick of that turn is at least its arm time; with an arm
@@ -321,12 +334,27 @@ S-0501 claim 20.
      from rest or after a stop that zeroes it). For a vehicle on another locomotor the speed fraction
      and the moving test are those of the spec that owns that locomotor.
    - (a) **Redirected shot targets.** A weapon with the area-fire flag makes the shot target the
-     cell the firer stands in (its centre, at the terrain height there); a spray-attack firer
+     cell the firer stands in (Terms: *points of a cell target*); a spray-attack firer
      makes it the cell of S-0313 claim 9. The shot speed (claim 1), the stored target point and the
      projectile's target follow the redirected cell, but the aim point stays on the firer's own
      target, so the launch still points at that target (quirk `quirks.redirected_shot_aim`). Off:
-     the aim point is the reference point of the redirected cell, so the launch direction,
+     the aim point is the target point of the redirected cell, so the launch direction,
      elevation, scatter and lead of claims 3 to 7 all work towards that cell.
+
+     *Area fire on a high bridge.* For a firer in a high-bridge cell, on the deck or under it,
+     *K* is the centre of that cell at the deck height. Take a straight or arcing projectile that
+     is invisible and neither ranged nor flak-scattering, under a gravity above 0, which the
+     table of claim 9 places at *K* (as it does when the fire point lies in the firer's own cell,
+     where the walk of claim 22 samples nothing, and no firestorm wall stands in the way). Its
+     first turn starts at the deck height and ends below it, a downward deck crossing of T1's
+     first row: it detonates in that turn at the centre of the firer's cell at the deck height,
+     416 leptons above the terrain, unless T1's proximity row also applies (T2). No "reached" row
+     applies, since its height at the start of the turn is 416, and claim 20 leaves the point
+     where it is. The test of claim 22 in flight does not block it, since its new position and
+     its previous sample both lie in the cell of *K*. So the detonation looks at the bridge-deck
+     layer (S-0303 claim 4), and an animation that S-0303 creates for it is made at that height
+     (S-0303 claim 21). How that animation is drawn against the deck is S-0102's (claims 13 and 15)
+     and S-0109's.
    - (b) **A switched-off hovering vehicle.** A hovering vehicle is moving while it has a
      destination or a heading point (S-0503, Terms). The stop request of a switch-off clears its
      destination and stored path only when destination and heading point differ as full
@@ -374,7 +402,8 @@ S-0501 claim 20.
    - Backing: `measurable` (scenario P2, run c for an aircraft target, run d for *w* = 0, run e for
      a lead weapon other than the weapon fired, run f for a switching type, run g for a gattling
      type, runs h and i for the speed estimate at two speed fractions; S-0207 scenario D20 for the
-     estimate itself; P17 for case a, spray attack and area fire; P44 part a for case b, including
+     estimate itself; P17 for case a, spray attack and area fire, and its run c for *K* on a
+     high-bridge cell and the area-fire detonation there; P44 part a for case b, including
      the stored point of a led shot, and part b for a shot that passes below the ground
      unexploded; P45 part a for the group of switched-off vehicles, which of them are led and
      where the shots at them land, and part b for the flak row's detonation of a shot with
@@ -390,8 +419,11 @@ S-0501 claim 20.
      `unmeasured`: under S-0309 claim 27 a target destroyed earlier in the tick is dropped before
      the firer's firing step, which then fires nothing, so scenario P27 gives no shot with an empty
      current target, and no scenario here sets up a shot that leaves while the firer holds no
-     current target.
-   - Confidence: medium (the lead weapon; the redirected case (a); the aim without a target, and
+     current target. The points of a high-bridge cell target (Terms) are `unmeasured` here apart
+     from *K*: no scenario here records an aim point, a snap or a flak-row detonation at such a
+     cell, and P17 run c ends at the deck height whichever of the two points claim 20 measures to.
+   - Confidence: medium (the lead weapon; the redirected case (a), the area fire on a high bridge
+     included; the points of a high-bridge cell target (Terms); the aim without a target, and
      that no skirmish case reaches it; the switched-off case (b), which applies the ordinary lead to
      a vehicle that S-0503 counts as moving, at S-0503's medium for its moving test and for claims
      10, 16 and 19; the unled stored point of a led shot; which vehicles of a switched-off group
@@ -567,7 +599,8 @@ S-0501 claim 20.
      a fragment's placement, which rests on S-0318 claim 5
 
 9. **Stored target point, arming and invisible projectiles.** At placement the projectile stores
-   *K*, the target's reference point at that moment (quirk `quirks.stored_target_point`), and an
+   *K*, the target's reference point at that moment (for a cell target, its target point of
+   Terms) (quirk `quirks.stored_target_point`), and an
    arm time: the projectile type's arm field in ticks, or 0 when the target is an aircraft. An
    invisible projectile is moved at once to the point that the table below gives, and its velocity
    becomes 0. When it is both invisible and flak-scattering, *K* is a scattered point: the
@@ -1048,7 +1081,8 @@ S-0501 claim 20.
       point from which its fragments burst (S-0318 claim 1).
     - Backing: `measurable` (scenario P13; P24 for the raise of (a)). The note on (c) is
       not backed here, since neither P13 nor P24 tells the burst point from the detonation point:
-      it rests on S-0318 claim 1 and S-0318 scenario SH1 part r
+      it rests on S-0318 claim 1 and S-0318 scenario SH1 part r. This claim may not hold for some
+      projectiles that are neither arcing nor steering (Open questions)
     - Confidence: medium, the note on (c) included until S-0318 scenario SH1 part r runs
 
 21. **Several detonations.** Ordinary detonation damage is S-0303's area damage at the detonation
@@ -1152,24 +1186,27 @@ S-0501 claim 20.
     it, which would cost the child aimed at the burst's own cell its turn, is not established.
     - (a) Straight or arcing, invisible ones included where the table of claim 9 places them at
       *K* (above). The child aimed at the burst's own cell is in its target cell from its start
-      (an invisible one at that cell's reference point), so the "reached" row of T1 for the cell
+      (an invisible one at that cell's target point, Terms), so the "reached" row of T1 for the cell
       of *K* detonates it in the first turn that it takes from under 208 leptons above the
       surface. Its own children start at its detonation point, raised as claim 8 says, in the
-      same cell and no higher than its own start, and the same then holds for their child aimed
-      at that cell. So once a child of the loop aimed at its burst's own cell takes its turn from
+      same cell and no higher than its own start, and, in a cell without a high bridge, the same
+      then holds for their child aimed at that cell. So, while the bursts lie in cells without a
+      high bridge, once a child of the loop aimed at its burst's own cell takes its turn from
       under 208 leptons above the surface, the chain can go on within that same pass without end,
       every burst in it adding nine projectiles, and the game then stops responding. Whether it
       does depends on whether each such child gets its turn in that pass, that is on whether the
       neighbouring child made just before it leaves play in its own first turn (above), which is
-      not established. For an invisible type the child aimed at the burst's own cell starts at
-      the surface, so this applies from the first burst of the loop. For a type that is not
+      not established. For an invisible type on a cell without a high bridge, the child aimed at the
+      burst's own cell starts at the surface, so this applies from the first burst of the loop. For a type that is not
       invisible, a burst at 208 leptons or higher gives a child aimed at the burst's own cell
       that falls straight down there, by its launch speed (claim 21) and by gravity, which claim
       10 adds in every turn. With a gravity above 0 it therefore bursts in a later turn, by a row
       of T1, at the latest in the turn it takes from under 208 leptons above the surface, a child
-      whose launch speed truncates to 0 included, and the chain then goes on as above. With a
+      whose launch speed truncates to 0 included, and in a cell without a high bridge the chain
+      then goes on as above. With a
       gravity of 0 (bad data, which the importer warns about), when such a child whose launch
-      speed truncates to 0 detonates is not established.
+      speed truncates to 0 detonates is not established. What such a loop does when its bursts
+      lie in a high-bridge cell is not established (Open questions).
     - (b) Vertical, not invisible, with an acceleration of 0 or more. A vertical child has no
       gravity and keeps the direction it is launched with (claim 11). A child launched at a speed
       of 1 or more moves straight down, its speed growing by its acceleration in each turn while
@@ -1204,8 +1241,8 @@ S-0501 claim 20.
     - In a ring of several types each generation follows (a) or (b) by the kind of its own
       projectile type. For a ring whose types are neither steering nor of the nuclear warhead,
       whose invisible children are not vertical and are placed at *K* by the table of claim 9,
-      and whose vertical children are launched at a speed of 1 or more, the child aimed at a
-      burst's own cell stays in the legal map, and the chain is expected to go on from burst to
+      and whose vertical children are launched at a speed of 1 or more, while the bursts lie in
+      cells without a high bridge, the child aimed at a burst's own cell stays in the legal map, and the chain is expected to go on from burst to
       burst with no limit known on the number of projectiles it makes, unless, with a gravity of
       0, a straight or arcing child whose launch speed truncates to 0 stays in the air without
       detonating, which is not established.
@@ -1238,7 +1275,7 @@ S-0501 claim 20.
       in which the nine children are made (claim 21) and that nothing else checks such data at
       load; medium that the child aimed at the burst's own cell detonates in its first turn taken
       from under 208 leptons above the surface, and that with a gravity above 0 such a child that
-      starts at 208 leptons or higher bursts in a later turn (bullet (a)); low for the
+      is not invisible and starts at 208 leptons or higher bursts in a later turn (bullet (a)); low for the
       never-ending pass of bullet (a) and for the ring, which depend on the open removal case,
       low for bullet (b) and high for the departure, a design rule
 
@@ -2032,7 +2069,7 @@ scaling. Since the vectors have unit length, the shade lies from 0 to 16.
 | Anti-air proximity | 128 | leptons | T1 |
 | Ground contact | 208 | leptons above the surface | T1 |
 | Arcing building-hit band | 150 | leptons above the terrain | T1 |
-| Drop below a deck going down | 20 | leptons | T1 |
+| Drop below a deck going up | 20 | leptons | T1 |
 | Deep fall | 416 | leptons below the surface | T1 |
 | Water tiles of the level-projectile test | 14 | tiles from the theater's water set | T1 |
 | Stopped | speed 10, height 10 | leptons per tick, leptons | T1 |
@@ -2065,7 +2102,7 @@ what happens when several rows apply. Straight and arcing projectiles share ever
 
 | Kind | Condition | Result | Confidence |
 |---|---|---|---|
-| straight, arcing | *P*′ crosses the bridge deck height of a high-bridge cell (old or new cell) going up or down; or, only for a projectile that has no firer (Terms; quirk `quirks.owned_shell_ground_pass`), *P*′ is below the terrain of its cell, or *P*′ is 0 to 149 leptons above the terrain and its cell holds either an eligible building (not an inactive laser-fence section, not a vehicle-like building; any house's) or, with no building present, one of the three wall overlays of S-0307 claim 11 | detonate (z at the deck height going up, 20 below it going down; otherwise the point ends at the terrain height of the cell of *P*′, lowered to it from above or raised to it by claim 20 a) | medium; high that only the deck crossings detonate a projectile whose firer is still in play outside any transport and has not been killed or started to cloak since the shot, and that the whole row applies to one whose firer is a vehicle destroyed while it flies (P32 runs a and g, P44 parts b and c); medium, `unmeasured`, for another firer killed but kept in play (a death sequence, a delayed kill) or removed by other means: no scenario here has such a firer; low, `unmeasured`, that the whole row applies when the firer started to cloak since the shot and only the deck crossings when it was loaded into a closed transport since the shot, as S-0302 claim 1 rates those two cases (Terms): no scenario here has such a firer |
+| straight, arcing | *P*′ crosses the bridge deck height of a high-bridge cell (old or new cell) going up or down; or, only for a projectile that has no firer (Terms; quirk `quirks.owned_shell_ground_pass`), *P*′ is below the terrain of its cell, or *P*′ is 0 to 149 leptons above the terrain and its cell holds either an eligible building (not an inactive laser-fence section, not a vehicle-like building; any house's) or, with no building present, one of the three wall overlays of S-0307 claim 11 | detonate (z at the deck height going down, from *P* at or above it to *P*′ below it, and 20 below it going up, from *P* below it to *P*′ at or above it, the deck height being the terrain height of the cell of *P*′ + 416; otherwise the point ends at the terrain height of the cell of *P*′, lowered to it from above or raised to it by claim 20 a) | medium; high that only the deck crossings detonate a projectile whose firer is still in play outside any transport and has not been killed or started to cloak since the shot, and that the whole row applies to one whose firer is a vehicle destroyed while it flies (P32 runs a and g, P44 parts b and c); medium, `unmeasured`, for another firer killed but kept in play (a death sequence, a delayed kill) or removed by other means: no scenario here has such a firer; low, `unmeasured`, that the whole row applies when the firer started to cloak since the shot and only the deck crossings when it was loaded into a closed transport since the shot, as S-0302 claim 1 rates those two cases (Terms): no scenario here has such a firer |
 | straight, arcing | the cell of *P*′ is the cell of *K* and *h* < 208 | detonate; "reached" for claim 20 | high |
 | straight, arcing | the cells of *P*′ and *K* hold the same building and *h* < 208 | detonate; "reached" | medium |
 | not steering | the infantry, vehicle, aircraft or building nearest to *P*′ in its cell is at *d*₃ < 128 leptons from *P*′ and is neither the firer nor allied with the firer's house (with no firer, any object counts) | detonate; the position moves onto that object unless inaccurate | medium for a projectile made without a firer, a living firer in play outside any transport and a vehicle firer destroyed while it flies (P30); for another lost firer, or a firer loaded into a closed transport, as Terms rates it (medium or low, `unmeasured`) |
@@ -2212,7 +2249,7 @@ that no fix would change.
   weapon has a speed field of 0.
 - **`quirks.redirected_shot_aim`** (default on). A spray-attack or area-fire shot is launched
   towards the firer's own target, while its stored target point and its speed come from the
-  redirected cell (claim 3 a). Off: the aim point is the reference point of the redirected cell, so
+  redirected cell (claim 3 a). Off: the aim point is the target point of the redirected cell, so
   the whole launch of claims 3 to 7 works towards that cell.
 - **Object number of the steering oscillation (departure, accepted by the project lead on
   2026-10-10).** In the
@@ -2289,7 +2326,8 @@ that no fix would change.
 - **An airburst weapon on a loop (departure, bad data).** Claim 21a: with a projectile type whose
   airburst weapon leads back to it through airburst links, the original, for types that are
   neither steering nor of the nuclear warhead, can keep a turn pass going without end or go on
-  making projectiles with no known limit (steering and nuclear-warhead loops are open, and claim
+  making projectiles with no known limit (steering and nuclear-warhead loops are open, and so is a
+  straight or arcing loop whose bursts lie in a high-bridge cell, and claim
   21a rates the never-ending pass low because it depends on the open removal case there), and our
   engine lets a projectile launched through such a link launch no children through one; the
   importer warns once for each loop. No switch.
@@ -3233,6 +3271,21 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   distance *d* to the firer's own cell (capped by claim 2), not of the distance to the target.
 - Falsified if: the launch direction points at the spray cell or the firer's cell, or in run b the
   first step is that of the distance to the target.
+- Run c (area fire on a high bridge, claim 3 a):
+  - Setup: the vehicle of run b with a test weapon that has the area-fire flag and an invisible
+    straight or arcing projectile that is neither ranged nor flak-scattering and is subject to cliffs and walls,
+    under a gravity above 0; a high bridge over flat ground, with no wall overlay on the map. In c1 the firer stands still on the deck at
+    the centre of a cell in the middle of the bridge; in c2 it stands still on the ground under
+    the deck at the centre of such a cell. No other object stands in the firer's cell, on the
+    deck or under it, and no object enters or leaves play in the tick of the shot. The enemy
+    target is in range, outside the firer's cell.
+  - Observable: the tick of the shot, the fire point, the detonation tick and point, and the
+    terrain height of the firer's cell.
+  - Runs: 1 each. A run counts only when the recorded fire point lies in the firer's cell.
+  - Expected: in c1 and c2 alike, detonation in the tick of the shot at the centre of the
+    firer's cell, 416 leptons above its terrain height (the deck height).
+  - Falsified if: the detonation is at the terrain height or 20 leptons below the deck height,
+    lies more than 1 lepton from the expected point otherwise, or comes in a later tick.
 
 **P18. Level projectiles and pre-move heights (T1).**
 - Setup: run a: a test weapon with a level, straight projectile fired from a stock naval
@@ -3562,9 +3615,9 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Observable: the position per tick, the detonation point.
 - Runs: 1 each.
 - Expected: detonation in the turn in which the new position first lies on the other side of the
-  deck height than the old one; the detonation height is the deck height for the upward crossing of
-  the straight projectile (b) and for the steering projectile (d), and 20 leptons below it for the
-  downward crossing (a). For the vertical projectile (c, e) the detonation height is its own new
+  deck height than the old one; the detonation height is the deck height for the downward
+  crossing (a) and for the steering projectile (d), and 20 leptons below it for the upward
+  crossing of the straight projectile (b). For the vertical projectile (c, e) the detonation height is its own new
   height in that turn (claim 11, T1), at least 30 leptons above the deck height in run c and at
   least 30 below it in run e.
 - Falsified if: it passes through the deck, or the height differs from these by more than 1 lepton,
@@ -4097,7 +4150,8 @@ b and 6 a, T1's first row).**
   pass (for invisible children, whether the eighth child takes its first turn in that pass), nor
   where an invisible child that is flak-scattering, or that the table of claim 9 places at a
   firestorm wall or a blocking cell, ends up and what its loop then does, nor when, with a
-  gravity of 0, a straight or arcing child whose launch speed truncates to 0 detonates. For
+  gravity of 0, a straight or arcing child whose launch speed truncates to 0 detonates, nor
+  what a loop of straight or arcing children does when its bursts lie in a high-bridge cell. For
   vertical children, what a loop does with a negative acceleration is not established, nor how
   many projectiles a level chain makes before a child leaves the legal map, nor when a child
   below the detonation altitude that moves level detonates, nor when one that does not move
@@ -4188,6 +4242,16 @@ b and 6 a, T1's first row).**
   S-0514 claim 20 do to a departed member, which claim 17 does not list. Nor is the moment at which
   a warp member that moves from one bridge deck to another leaves the ground render layer, for a
   unit with jumpjet movement or an aircraft whose type can land (S-0102 claim 3).
+
+- Claim 20 may not hold for every projectile that is neither arcing nor steering, is neither
+  inaccurate nor airburst, has a target and has a warhead without the electromagnetic flag. When
+  such a projectile detonates by a row of T1 other than a deck crossing and the first row of
+  claim 20 (c)'s table does not apply, its detonation point may be the stored target point *K* rather than the point claim 20
+  leaves. Which rows of T1 lead to this is not established. The area fire on a high bridge of
+  claim 3 (a) does not depend on it: its detonation comes from a deck crossing of T1's first row.
+- For a cell target on a high-bridge cell, whether the lob test of claim 6 (a) compares the
+  firer's position with the cell's reference point or with its target point (Terms, *points of a
+  cell target*) is not established.
 
 ## Changes for other specs
 
@@ -4362,6 +4426,26 @@ b and 6 a, T1's first row).**
   destination. Medium, as S-0503 rates claim 10's exceptions, `measurable` by scenario P45
   part a here, which records the heading point, speed fraction and moving state of each vehicle
   of such a group.
+
+- S-0613 claim 20 says that where an area-fire weapon's animations appear when the firer
+  stands on a high bridge's deck or under it "depends on where its shot detonates, which is
+  S-0306's (Open questions)", and S-0613's open question *An area-fire animation on a high
+  bridge* leaves it open. Claim 3 (a) here (*Area fire on a high bridge*) now gives it, under
+  the conditions it states: such a shot detonates in its first turn at the centre of the firer's cell
+  at the deck height, for a firer on the deck or under it alike, so its area damage looks at the
+  bridge-deck layer and its animation is made at the deck height (S-0303 claims 4 and 21).
+  S-0613 claim 20 can point to S-0306 claim 3 (a) and drop the open question. Medium,
+  `measurable` by scenario P17 run c here.
+
+- S-0316 claim 3 says that "the bolt of an area-fire shot runs down from the fire point to the
+  centre of the firer's own cell, at the terrain height there". For a cell that carries a high
+  bridge the bolt end is the cell's target point (Terms here, *points of a cell target*), at the
+  deck height, whichever layer the firer stands on. S-0316 claim 3 could read "to the target
+  point of the firer's own cell (S-0306 Terms): its centre at the terrain height there, or at the
+  deck height when the cell carries a high bridge". The cell end that S-0316 Terms (*bolt end*)
+  and S-0518 claim 20 give as "the target cell's centre at its height" is the same target point,
+  and those two specs could say so. Medium, `unmeasured`: no scenario here or there ends a bolt or
+  a beam at a high-bridge cell.
 
 ## Questions for the project lead
 
