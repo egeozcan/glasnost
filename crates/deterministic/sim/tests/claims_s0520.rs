@@ -325,6 +325,47 @@ fn an_exploding_buildings_crate_beneath_lands_on_its_top_left_cell() {
     assert_eq!(cells, vec![top_left]);
 }
 
+// spec: S-0312 claim 20 (r78, Q-3086: the crate beneath goes to the cell of a single-cell nearby search centred on the top-left cell; a selected cell holding any overlay gives no crate and no draw, so a crate beneath never replaces an overlay; quirks.crate_beneath_overlay_refusal off: the search asks for the no-overlay condition and selects a nearby cell without one)
+#[test]
+fn claim_20_a_crate_beneath_never_replaces_an_overlay() {
+    for (overlay, refusal) in [(PLAIN, true), (WOOD, true), (PLAIN, false)] {
+        let mut w = world_with(true, |r| {
+            r.globals.quirks.crate_beneath_overlay_refusal = refusal;
+        });
+        let c = at(6, 0);
+        crate_at(&mut w, c, overlay, 7);
+        let places = w.crates.places.clone();
+        let before = w.rng.clone();
+        let placed = crates::place_beneath(&mut w, c, true);
+        assert_eq!(placed, !refusal, "overlay {overlay}, refusal {refusal}");
+        assert_eq!(w.cells.cell(c).unwrap().overlay, overlay, "kept");
+        assert_eq!(w.cells.cell(c).unwrap().overlay_data, 7, "kept");
+        if refusal {
+            assert!(w.crates.places == places, "no crate");
+            assert!(w.rng == before, "no draw");
+        } else {
+            let cells = crate_cells(&w);
+            assert_eq!(cells.len(), 1);
+            let n = cells[0];
+            assert!(n != c && (n.x - c.x).abs() <= 1 && (n.y - c.y).abs() <= 1);
+            assert_eq!(w.cells.cell(n).unwrap().overlay_data, 0, "money");
+        }
+    }
+}
+
+// spec: S-0312 claim 20 (r78, Q-3086: a top-left cell an object stands on does not qualify for the search, so the crate beneath appears on a nearby cell the search selects)
+#[test]
+fn claim_20_a_crate_beneath_moves_off_an_occupied_top_left_cell() {
+    let mut w = world_with(true, |_| {});
+    let c = at(6, 0);
+    spawn(&mut w, Kind::Vehicle, "ARMED", 0, c);
+    assert!(crates::place_beneath(&mut w, c, false));
+    let cells = crate_cells(&w);
+    assert_eq!(cells.len(), 1);
+    assert!(cells[0] != c, "not under the vehicle");
+    assert_eq!(w.cells.cell(cells[0]).unwrap().overlay_data, 255, "random");
+}
+
 // spec: S-0520 Determinism: crate places, lifetimes and the mark survive a save and load
 #[test]
 fn crate_state_survives_a_save_and_load() {
