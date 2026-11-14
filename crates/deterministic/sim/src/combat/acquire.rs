@@ -547,7 +547,8 @@ fn radius(w: &World, a: ObjectId, kind: SearchKind) -> (i32, i32) {
     let Some(o) = w.obj(a) else { return (0, 0) };
     let r = w.rules();
     let u = r.unit(o.kind, o.type_index);
-    let g = u.map_or(0, |u| u.guard_range);
+    // spec: S-0309 claim 8 and Import mapping (g: the type's guard range, a building's included)
+    let g = r.guard_range(o.kind, o.type_index);
     let engineer = u.is_some_and(|u| u.engineer);
     let w0 = crate::combat::range::firer_weapon_range(w, a, 0);
     let w1 = crate::combat::range::firer_weapon_range(w, a, 1);
@@ -818,7 +819,8 @@ fn candidate(
         } else if weapon.is_some() {
             crate::combat::range::in_range(w, a, weapon, Some(tt), None)
         } else {
-            delta <= i64::from(r.unit(ao.kind, ao.type_index).map_or(0, |u| u.guard_range))
+            // spec: S-0309 F3 (unarmed: δ ≤ g, a building's guard range included)
+            delta <= i64::from(r.guard_range(ao.kind, ao.type_index))
         };
         if !pass {
             return Verdict::Reject;
@@ -1047,7 +1049,7 @@ fn threat_sum(w: &World, a: ObjectId, t: ObjectId, ground_pass: bool) -> Option<
     let s = crate::combat::damage::strength(w, t);
     let ht = F64::from_i64(i64::from(to.health), mode).div(F64::from_i64(i64::from(s), mode), mode);
     let (_, wp) = would_use(w, a, Some(Target::Object(t)));
-    let g = r.unit(ao.kind, ao.type_index).map_or(0, |u| u.guard_range);
+    let g = r.guard_range(ao.kind, ao.type_index); // spec: S-0309 Import mapping (g of F4, a building's included)
     // spec: S-0309 F4 (k = trunc(range / 256), or trunc(g / 256) without a weapon)
     let k = wp.map_or(g / 256, |x| r.combat.weapon(x).range / 256);
     let rh = rho3(w, a, t);
