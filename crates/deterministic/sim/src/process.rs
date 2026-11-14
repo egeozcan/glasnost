@@ -1728,12 +1728,8 @@ pub(crate) fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
             if found.is_some() {
                 return 1;
             }
-            // spec: S-0518 claim 14 (area guard: after the guard spot and automatic search steps, a charger still without a target looks for a building to charge; when it takes one its idle action does not run and the area guard delay follows: the rate delay plus a draw over 1 to 5, divided by 6 under the close-range condition on the new building; Q-0985 answered by revision 3)
-            if !(w.obj(id).is_some_and(|x| x.target.is_none())
-                && crate::linked::start_charging(w, id))
-            {
-                idle(w);
-            }
+            // spec: S-0215 claim 26 (a search that finds nothing is followed by an attempt at the idle action)
+            idle(w);
         } else if holds || o.target.is_none() {
             // spec: S-0215 claim 26 (may not search: attempts its idle action)
             idle(w);
@@ -1744,6 +1740,10 @@ pub(crate) fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     }
     if w.obj(id).is_none() {
         return NO_RULE_DELAY;
+    }
+    if w.obj(id).is_some_and(|x| x.target.is_none()) {
+        // spec: S-0215 claim 26 (in a processing none of rows 1 to 5 ends, any actor, with or without a guard spot, that has no target once the leash and the search have taken effect runs S-0518 claim 14's automatic charging scan; it does not undo an idle action already attempted, and the area-guard delay below stays in effect, its close-range test on the resulting target) and S-0518 claim 14 (#231)
+        crate::linked::start_charging(w, id);
     }
     let dr = rate_delay(w, id);
     // spec: S-0215 claim 26 and F0 (D = k × D_r + U(1, 5), k = 2 for aircraft and 1 for every other kind)
