@@ -210,6 +210,49 @@ fn the_unit_crate_type_takes_precedence() {
     assert_eq!(count(&w, Kind::Vehicle, "UNARMED"), 1);
 }
 
+/// The animations among the effects: (name, position).
+fn anims(w: &World) -> Vec<(String, glasnost_sim::world::Pos)> {
+    w.effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Anim { name, pos, .. } => Some((name.clone(), *pos)),
+            _ => None,
+        })
+        .collect()
+}
+
+// spec: S-0520 claim 11 (a successfully placed unit has no such animation, even when the unit power-up names one) and claim 13; scenario CR9 (a unit animation on success falsifies claim 13)
+#[test]
+fn a_placed_unit_shows_no_animation() {
+    let mut w = world_with(false, |r| {
+        let t = r.sim.general.economy.powerups.as_mut().unwrap();
+        t[1].animation = Some("MONEYA".into());
+    });
+    let v = armed(&mut w);
+    let before = credits(&w, 0);
+    assert!(pick(&mut w, v, 1), "the unit is placed, the step is blocked");
+    assert_eq!(credits(&w, 0), before, "no money fallback");
+    assert_eq!(count(&w, Kind::Vehicle, "GOODIE"), 1);
+    assert_eq!(anims(&w), vec![], "no animation after a placed unit");
+}
+
+// spec: S-0520 claim 11 (a power-up turned into money shows the money animation) and claim 13 (no unit could be placed: money with the money animation)
+#[test]
+fn a_unit_crate_that_places_no_unit_shows_the_money_animation() {
+    let mut w = world_with(false, |r| {
+        let t = r.sim.general.economy.powerups.as_mut().unwrap();
+        t[1].animation = Some("MONEYA".into());
+        // No vehicle type is a crate goodie: no unit can be awarded.
+        r.sim.vehicles.get_mut("GOODIE").unwrap().crate_goodie = Some(false);
+    });
+    let v = armed(&mut w);
+    let before = credits(&w, 0);
+    assert!(!pick(&mut w, v, 1), "no unit, the step goes on");
+    assert!(credits(&w, 0) > before, "the money fallback");
+    let names: Vec<String> = anims(&w).into_iter().map(|a| a.0).collect();
+    assert_eq!(names, vec!["MONEYA".to_string()], "the money animation");
+}
+
 // spec: S-0520 claim 10 (conversions to money: a unit crate on water, more than 50 vehicles, an own cloak flag already set, a multiplier that is not 1.0, no primary weapon, an elite collector)
 #[test]
 fn power_ups_that_cannot_apply_give_money() {
