@@ -547,13 +547,16 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - Cloak events take objects out of the selection (claim 26).
   - Audio plays the game-wide cloak sound (claim 15).
   - The own AI does not see a cloaked enemy it does not sense.
-- **Seams.** These are named functions with doc comments in `cloak/mod.rs`:
-  - C4 planting (S-0519) and the special-weapon causes call `machine::uncloak`;
-  - cloaking crates (S-0520, built) call `machine::grant_own_flag`;
-  - undeploying (S-0517) calls `disguise::clear`;
-  - a house leaving (S-0414) calls `disguise::house_left`;
-  - the crush response to a hit (S-0210 claim 11, S-0215 claim 39; `crush::respond_to_hit`) reads `appears_disguised`;
-  - seizing (S-0607), paralysis (S-0214), the chrono warp (S-0514), infiltration (S-0510), mind control (S-0515), and bunkers and occupied buildings (S-0508, S-0509).
+- **Hooks and seams.** The module header of `cloak/mod.rs` lists both. The machine's turn (`cloak::turn`) is called from `tick::object_turn` for a mobile object, before its locomotion, and from `econ::events::turn` for a building. Hooks with callers:
+  - C4 planting (S-0519): `bomb::charge_arrival` calls `machine::uncloak`;
+  - cloaking crates (S-0520): `crates::effect` calls `machine::grant_own_flag`;
+  - undeploying (S-0517 claim 6): `econ::inplace::undeploy_step` calls `disguise::clear`;
+  - infiltration (S-0510 claim 2): `structures::spy::infiltrate` uses the spy up;
+  - the crush response to a hit (S-0210 claim 11, S-0215 claim 39): `crush::respond_to_hit` reads `appears_disguised`;
+  - jumpjets (S-0502): `jump::fly::touchdown` calls `machine::cell_movement_completed`;
+  - mind control (S-0515): `mind::set_owner_by` reaches `owner_changed` through `econ::events::owner_changed`.
+
+  Still open: a house leaving (S-0414; `disguise::house_left` has no caller outside the tests), paralysis (S-0214) and EMP (`econ::power::under_pulse` answers no), psychic detection and the special-weapon causes (S-0518, S-0525, S-06xx), and bunkers and occupied buildings (S-0508, S-0509).
 - **Quirks.** All fourteen are implemented, each on by default:
   - `quirks.building_sensor_ring_owner_only`;
   - `quirks.cloak_field_building_interrupt`;
@@ -1716,3 +1719,39 @@ The ninth batch of the game-logic audit (#420) makes the code follow the lead's 
 **Formats.** The save format goes to 138 and the AI game format to 113, the numbers the main session gave this batch (112 is the AI batch's): no saved field changes, but what a saved game replays to does (the smoke's place among the creation draws, the shovel requests, the sensor disc at an owner change, the put-aside losses, the bridge notices). Wire version 12: no valid order's encoding changes.
 
 **Seams.** S-0108 claim 13's power freeze (#430: the reaction to an in-operation change, the disablings and re-enablings, the start frozen) is part of #430 but is not built in this batch: it is handed back for a batch of its own. S-0516's trigger-created array and S-0309's going underground are not modelled. S-0212 claim 3's connectivity update for the named cells is S-0212's.
+
+## Simulation (sim issues S12: S10's answered requests, bridges, cloak and target acquisition)
+
+The twelfth batch of the game-logic audit (#420) applies the lead's answers to S10's three requests (Q-3085 by S-0516 r25, Q-3086 by S-0312 r78, Q-3087 by S-0406 r13) and works through issues #238 to #247. Each change of behaviour has a test on synthetic data committed before it; where the code already matched, a test shows it. One issue needs a decision the specs do not give and is filed as a request: Q-3109 (#245). The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S12*.
+
+**Disguise (S-0516 r25, Q-3085).**
+
+- *#169, a permanently disguising unit keeps its disguise through a hit (claim 34 (a)).* `disguise::hit_taken` already returns before any loss for a permanently disguising type, so a copied disguise, its lockout and the default disguise all survive a surviving hit. A test shows it; the code does not change.
+
+**Crates (S-0312 r78, Q-3086).**
+
+- *#193, a building's crate beneath (claim 20).* Q-3086's interim goes. `crates::place_beneath` runs S-0212 claim 25's single-cell nearby search centred on the top-left foundation cell (the crate search of S-0520 claim 3), so an occupied top-left cell sends the crate to a nearby cell, and then `crates::finish`'s tests: no crate and no draw when the search finds no cell, or the selected cell lies outside the usable area or holds any overlay. A crate already on the cell is no longer taken away. The refusal on an overlay is S-0312's quirk `quirks.crate_beneath_overlay_refusal` (on by default, a new switch in `rules::Quirks`); with it off the search itself asks for a cell without an overlay (`crates::search`'s `no_overlay`). The random, trigger and death placements pass `false` as before.
+
+**Building placement (S-0406 r13, Q-3087).**
+
+- *#200, the water-bound flag is decided per layer (claim 21).* The converter no longer folds `WaterBound` as a plain boolean. `Builder::water_bound` walks the layers that read the type's section, in order: a layer whose last stored `WaterBound` value is a recognised boolean sets the flag to it; otherwise a layer that gives `SpeedType` sets it on for *float* (case ignored) and off for any other text, a class name or not; a layer that gives neither keeps it. No layer giving either leaves the field out, and `place_type` reads that as no. Empty entries are not stored values (S-0006 claim 3). `SpeedType` of a building section gains a coverage row for S-0406.
+
+**Bridges (S-0511, S-0301, S-0107).**
+
+- *#238, a pier lowered once (claim 6).* `high::attempt_pier` and `high::pier_notice` read the reference level of the collapsing component before the blow-ups and pass it to `lower_pier`, which lowers the component to that level − 4. A death weapon in the column that re-attempts the pier during the blow-ups no longer lowers it a second time from the already lowered level.
+- *#239, forgetting the hut as a target (claim 17).* `hut::forget_and_scatter` clears an infantry unit's hut target as other target clears do: the burst counter goes to 0 (S-0301 claim 4) and, as a change of target, `infantry::watch_test` ends the attack state at once (S-0107 claim 11).
+
+**Cloak (S-0516).**
+
+- *#240, a mobile sensor's removal (claim 22, CS18 part B).* `sensor::change` with the floor skips a decrement on a count that is already 0 or below instead of raising it to 0 afterwards; an increment still floors at 0.
+- *#241, the largest stage count (claim 7).* `cloaked_stage` computes (*n* + 1) / 2 in 64 bits, and `cloak_time` and `uncloak_time` return 64-bit tick counts, so `CloakingStages = 2147483647` neither overflows nor cloaks at once.
+- *#242 and #243, the module comments.* `cloak/field.rs`'s header states claim 20's phase model (a change of operation seen at the generator's turn makes growth or shrinking pending; pending steps run one radius per tick without a power test). `cloak/mod.rs`'s header names both callers of `turn` (`tick::object_turn` for a mobile object, `econ::events::turn` for a building) and splits its list into the hooks that have callers and the seams still open; the cloak section's list above follows it.
+
+**Target acquisition (S-0309, S-0517).** These touch S11's search code; the functions changed are named.
+
+- *#244, a harvesting slave does not search passively (claim 2).* `acquire::may_search_passively` answers no for a harvesting slave (`seams::is_harvesting_slave`).
+- *#245, an area search skips a visited cell by its deck read (claim 11).* `acquire::search`'s ring loop, for an area search by a mobile searcher other than an aircraft, reads the searcher's own cell for its deck when it is a bridge cell and skips each visited cell whose read (for its deck, likewise) lies in another region, compared as claim 7 does (`acquire::reach_match`, shared with `same_zone`); claim 7's no-link deck case omits the skip. Table C's row *zone* keeps claim 7's read of the object's own cell in both the map-wide and the area search; which read the row uses in an area search is Q-3109.
+- *#246, the deployed-firing search marks no opportunity target (claims 1 and 24, S-0517 claim 16).* `SearchContext::DeployedFiring` is the fifth row's own context: it restarts the targeting timer as claim 4 gives and treats a held target as the per-tick search does, but `set_target_from_search` does not mark its pick. `process::deployed_firing` passes it.
+- *#247, a building's guard range (claim 8, F1, F3, F4).* `BuildingRules::guard_range` holds a building type's `GuardRange` in S-0309's lepton form (`combat::data::leptons`), and `SimRules::guard_range` answers *g* for a mobile type or a building type. `acquire::radius`, the unarmed case of `candidate` (F3) and `threat_sum`'s *k* (F4) read it.
+
+**Seams.** Q-3109 (#245: the read of table C's row *zone* in an area search) is open. A unit type's guard range is still read in double precision (`d.value`), not in S-0309's single-precision lepton form; the unit read is not changed here. Rubble (S-0312 claim 20) is still not modelled, so the crate beneath reads the cell's own land.
