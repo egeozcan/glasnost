@@ -822,7 +822,8 @@ fn shade_channel(u: u8, factor: i64) -> u8 {
 ///
 /// With tint-exempt indices and a shade count from 2 to 13, for which
 /// *L* = 0 and the tint-exempt factor is undefined (S-0104 Formulas; only
-/// 1, 27 and 53 are used).
+/// 1, 27 and 53 are used). Without tint-exempt indices every count gives a
+/// table.
 pub fn shade_table(
     palette: &Palette,
     tint: [i32; 3],
@@ -848,8 +849,10 @@ pub fn shade_table(
                 let (j64, span) = (j as i64, rows as i64 - 1);
                 // spec: S-0104 claim 6, Formulas "Shade table" (T_c(j) = ⌊2j·M_c / (N − 1)⌋)
                 let t = m.map(|mc| 2 * j64 * mc / span);
-                // spec: S-0104 Formulas, "Shade table" (W(j) = ⌊65536·j / L⌋ for j ≤ L, 65536 above)
-                let w = if j <= l {
+                // spec: S-0104 Formulas, "Shade table" (W(j) = ⌊65536·j / L⌋ for j ≤ L, 65536 above; W is read only for tint-exempt indices, so it is not formed without them)
+                let w = if exempt.is_none() {
+                    0
+                } else if j <= l {
                     ONE_16_16 * j64 / l as i64
                 } else {
                     ONE_16_16
