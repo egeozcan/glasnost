@@ -764,6 +764,13 @@ struct Kept {
     roles: BTreeMap<Role, Arc<[ObjectId]>>,
     /// [`Script::candidates`] by role (design: own AI, #59 and #60).
     candidates: BTreeMap<Role, Arc<[TypeRef]>>,
+    /// [`Script::explored_ore`] (design: own AI, #58: one scan of the map
+    /// a think instead of one per question).
+    ore: Option<Arc<[(CellXY, bool)]>>,
+    /// [`Script::ore_goal`] (design: own AI, #58).
+    ore_goal: Option<Option<CellXY>>,
+    /// [`Script::harvesters_wanted`] (design: own AI, #58).
+    wanted: Option<usize>,
 }
 
 impl PlaceMemo {
@@ -1115,16 +1122,32 @@ impl Script {
     /// The nearest explored cell to `from` that holds a resource, the first
     /// in cell order on equal distance: where a person sends a slave miner.
     fn field_cell(&self, w: &World, from: CellXY) -> Option<CellXY> {
-        w.cells
-            .grid
+        self.explored_ore(w)
             .iter()
-            .map(|(c, _)| c)
-            .filter(|&c| {
-                w.cells.usable(c)
-                    && shroud::explored(w, self.house, c)
-                    && resource::resource_at(w, c).is_some()
-            })
+            .filter(|&&(_, usable)| usable)
+            .map(|&(c, _)| c)
             .min_by_key(|&c| (dist2(c, from), c.y, c.x))
+    }
+
+    /// The explored cells of the map that hold a resource, in cell order,
+    /// each with whether it is usable ([`World`]'s `cells.usable`); one scan
+    /// a think, the list kept for the rest of it (design: own AI, #58: the
+    /// field questions of a think each scanned the whole map).
+    fn explored_ore(&self, w: &World) -> Arc<[(CellXY, bool)]> {
+        self.placed.keep(
+            |m| &mut m.ore,
+            || {
+                w.cells
+                    .grid
+                    .iter()
+                    .map(|(c, _)| c)
+                    .filter(|&c| {
+                        resource::resource_at(w, c).is_some() && shroud::explored(w, self.house, c)
+                    })
+                    .map(|c| (c, w.cells.usable(c)))
+                    .collect()
+            },
+        )
     }
 
     /// The house's objects on the map that play `role`. A slave with a
@@ -1738,7 +1761,14 @@ impl Script {
     /// (M7b AI audit: two slave miners earned about a third of what two
     /// harvesters of the other sides earned on the same stock maps, and the
     /// house starved).
+    /// The answer is kept for the rest of a think (design: own AI, #58).
     pub(crate) fn harvesters_wanted(&self, w: &World) -> usize {
+        self.placed
+            .keep(|m| &mut m.wanted, || self.find_harvesters_wanted(w))
+    }
+
+    /// [`Script::harvesters_wanted`]'s count.
+    fn find_harvesters_wanted(&self, w: &World) -> usize {
         let mut centres = self.field_centres(w);
         centres.extend(self.home(w));
         let mut cells = std::collections::BTreeSet::new();
@@ -1810,47 +1840,61 @@ impl Script {
         };
         let centres = self.field_centres(w);
         let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
-        let ore: std::collections::BTreeSet<(i32, i32)> = w
-            .cells
-            .grid
+        // The usable explored resource cells, in cell order.
+        let ore: Vec<CellXY> = self
+            .explored_ore(w)
             .iter()
-            .map(|(c, _)| c)
-            .filter(|&c| {
-                w.cells.usable(c)
-                    && resource::resource_at(w, c).is_some()
-                    && shroud::explored(w, self.house, c)
-            })
-            .map(|c| (c.y, c.x))
+            .filter(|&&(_, usable)| usable)
+            .map(|&(c, _)| c)
             .collect();
-        let mut worked: std::collections::BTreeSet<(i32, i32)> = ore
-            .iter()
-            .copied()
-            .filter(|&(y, x)| {
-                centres
-                    .iter()
-                    .any(|&m| dist2(m, CellXY::new(x, y)) <= reach)
-            })
-            .collect();
-        let mut todo: Vec<(i32, i32)> = worked.iter().copied().collect();
-        while let Some((y, x)) = todo.pop() {
+        // design: own AI (#58): the fields are joined on a dense map of the
+        // resource cells' bounding box (0 none, 1 a resource cell, 2 one of
+        // a worked field) instead of ordered sets; the same cells join
+        let x0 = ore.iter().map(|c| c.x).min().unwrap_or(0);
+        let x1 = ore.iter().map(|c| c.x).max().unwrap_or(-1);
+        let y0 = ore.iter().map(|c| c.y).min().unwrap_or(0);
+        let y1 = ore.iter().map(|c| c.y).max().unwrap_or(-1);
+        let wide = usize::try_from(x1 - x0 + 1).unwrap_or(0);
+        let high = usize::try_from(y1 - y0 + 1).unwrap_or(0);
+        let index = |c: CellXY| {
+            ((x0..=x1).contains(&c.x) && (y0..=y1).contains(&c.y))
+                .then(|| (c.y - y0) as usize * wide + (c.x - x0) as usize)
+        };
+        let mut state = vec![0u8; wide * high];
+        let mut todo: Vec<CellXY> = Vec::new();
+        for &c in &ore {
+            let Some(i) = index(c) else { continue };
+            if centres.iter().any(|&m| dist2(m, c) <= reach) {
+                state[i] = 2;
+                todo.push(c);
+            } else {
+                state[i] = 1;
+            }
+        }
+        while let Some(c) = todo.pop() {
             for dy in -FIELD_GAP - 1..=FIELD_GAP + 1 {
                 for dx in -FIELD_GAP - 1..=FIELD_GAP + 1 {
-                    let n = (y + dy, x + dx);
-                    if ore.contains(&n) && worked.insert(n) {
+                    let n = CellXY::new(c.x + dx, c.y + dy);
+                    if let Some(i) = index(n)
+                        && state[i] == 1
+                    {
+                        state[i] = 2;
                         todo.push(n);
                     }
                 }
             }
         }
+        let worked = state.iter().filter(|&&s| s == 2).count();
         let enemy_starts = self.enemy_starts(w);
         let own_half: Vec<CellXY> = ore
-            .difference(&worked)
-            .map(|&(y, x)| CellXY::new(x, y))
+            .iter()
+            .copied()
+            .filter(|&c| index(c).is_some_and(|i| state[i] == 1))
             .filter(|&c| enemy_starts.iter().all(|&t| dist2(c, home) < dist2(c, t)))
             .collect();
         Fields {
             explored: ore.len(),
-            worked: worked.len(),
+            worked,
             own_half: own_half.len(),
             far: own_half
                 .into_iter()
@@ -2043,17 +2087,10 @@ impl Script {
             return false;
         }
         let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
-        let near = w
-            .cells
-            .grid
+        let near = self
+            .explored_ore(w)
             .iter()
-            .map(|(c, _)| c)
-            .filter(|&c| {
-                refineries.iter().any(|&r| dist2(r, c) <= reach)
-                    && w.cells.usable(c)
-                    && resource::resource_at(w, c).is_some()
-                    && shroud::explored(w, self.house, c)
-            })
+            .filter(|&&(c, usable)| usable && refineries.iter().any(|&r| dist2(r, c) <= reach))
             .count();
         if near >= CELLS_PER_HARVESTER {
             return false;
@@ -3115,22 +3152,26 @@ impl Script {
     /// [`CELLS_PER_HARVESTER`] explored resource cells within
     /// [`FIELD_REACH`] cells, a field that keeps a harvester at work; with
     /// none, the explored resource cell nearest home.
+    /// The answer is kept for the rest of a think (design: own AI, #58).
     fn ore_goal(&self, w: &World) -> Option<CellXY> {
+        self.placed
+            .keep(|m| &mut m.ore_goal, || self.find_ore_goal(w))
+    }
+
+    /// [`Script::ore_goal`]'s search.
+    fn find_ore_goal(&self, w: &World) -> Option<CellXY> {
         let home = self.home(w)?;
         let reach = self.harvester_reach(w, home);
-        let mut ore: Vec<CellXY> = w
-            .cells
-            .grid
+        let mut ore: Vec<CellXY> = self
+            .explored_ore(w)
             .iter()
-            .map(|(c, _)| c)
+            .filter(|&&(_, usable)| usable)
+            .map(|&(c, _)| c)
             .filter(|&c| {
-                w.cells.usable(c)
-                    && resource::resource_at(w, c).is_some()
-                    && shroud::explored(w, self.house, c)
-                    && (reach.is_empty()
-                        || reach
-                            .iter()
-                            .any(|&(z, r)| regions::reach_in(w, c, z) == Reach::Region(r)))
+                reach.is_empty()
+                    || reach
+                        .iter()
+                        .any(|&(z, r)| regions::reach_in(w, c, z) == Reach::Region(r))
             })
             .collect();
         ore.sort_by_key(|&c| (dist2(c, home), c.y, c.x));
@@ -3845,6 +3886,168 @@ mod place_cell_tests {
         assert!(seen > 0, "no enemy seen");
         assert!(free > 0 && free < tested, "{free} of {tested}");
         assert!(roles_found > 0 && candidates_found > 0);
+    }
+
+    /// [`Script::fields`] as before #58: the explored resource cells and the
+    /// worked ones in ordered sets.
+    fn fields_as_before(s: &Script, w: &World) -> Fields {
+        let Some(home) = s.home(w) else {
+            return Fields::default();
+        };
+        let centres = s.field_centres(w);
+        let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
+        let ore: BTreeSet<(i32, i32)> = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                w.cells.usable(c)
+                    && resource::resource_at(w, c).is_some()
+                    && shroud::explored(w, s.house, c)
+            })
+            .map(|c| (c.y, c.x))
+            .collect();
+        let mut worked: BTreeSet<(i32, i32)> = ore
+            .iter()
+            .copied()
+            .filter(|&(y, x)| {
+                centres
+                    .iter()
+                    .any(|&m| dist2(m, CellXY::new(x, y)) <= reach)
+            })
+            .collect();
+        let mut todo: Vec<(i32, i32)> = worked.iter().copied().collect();
+        while let Some((y, x)) = todo.pop() {
+            for dy in -FIELD_GAP - 1..=FIELD_GAP + 1 {
+                for dx in -FIELD_GAP - 1..=FIELD_GAP + 1 {
+                    let n = (y + dy, x + dx);
+                    if ore.contains(&n) && worked.insert(n) {
+                        todo.push(n);
+                    }
+                }
+            }
+        }
+        let enemy_starts = s.enemy_starts(w);
+        let own_half: Vec<CellXY> = ore
+            .difference(&worked)
+            .map(|&(y, x)| CellXY::new(x, y))
+            .filter(|&c| enemy_starts.iter().all(|&t| dist2(c, home) < dist2(c, t)))
+            .collect();
+        Fields {
+            explored: ore.len(),
+            worked: worked.len(),
+            own_half: own_half.len(),
+            far: own_half
+                .into_iter()
+                .min_by_key(|&c| (dist2(c, home), c.y, c.x)),
+        }
+    }
+
+    /// [`Script::field_cell`] as before #58: every cell of the map read.
+    fn field_cell_as_before(s: &Script, w: &World, from: CellXY) -> Option<CellXY> {
+        w.cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                w.cells.usable(c)
+                    && shroud::explored(w, s.house, c)
+                    && resource::resource_at(w, c).is_some()
+            })
+            .min_by_key(|&c| (dist2(c, from), c.y, c.x))
+    }
+
+    /// [`Script::ore_goal`] as before #58: every cell of the map read, the
+    /// goal searched at each call.
+    fn ore_goal_as_before(s: &Script, w: &World) -> Option<CellXY> {
+        let home = s.home(w)?;
+        let reach = s.harvester_reach(w, home);
+        let mut ore: Vec<CellXY> = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                w.cells.usable(c)
+                    && resource::resource_at(w, c).is_some()
+                    && shroud::explored(w, s.house, c)
+                    && (reach.is_empty()
+                        || reach
+                            .iter()
+                            .any(|&(z, r)| regions::reach_in(w, c, z) == Reach::Region(r)))
+            })
+            .collect();
+        ore.sort_by_key(|&c| (dist2(c, home), c.y, c.x));
+        let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
+        let rich = |c: CellXY| {
+            ore.iter().filter(|&&o| dist2(o, c) <= reach).count() >= CELLS_PER_HARVESTER
+        };
+        ore.iter()
+            .copied()
+            .find(|&c| rich(c))
+            .or_else(|| ore.first().copied())
+    }
+
+    /// Our tooling for speed (design: own AI, #58): the field answers read
+    /// off the explored resource cells listed once a think (the far field
+    /// joined on a dense map, the nearest field cell, the refinery's goal,
+    /// the harvesters wanted and the field refinery's want) answer as the
+    /// scans of the whole map did, at several points of each fixture game,
+    /// for every house, during a think and outside one.
+    #[test]
+    fn the_field_answers_match_the_map_scans() {
+        let mut explored = 0;
+        let mut far = 0;
+        let mut goals = 0;
+        for mut g in kept_games() {
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                let froms: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).step_by(211).collect();
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    let s = Script::new(house, Plan::default());
+                    for thinking in [true, false] {
+                        if thinking {
+                            s.begin_think();
+                        }
+                        let plain = Script::new(house, Plan::default());
+                        for _ in 0..2 {
+                            let want = fields_as_before(&s, w);
+                            assert_eq!(s.fields(w), want, "house {h}");
+                            explored += want.explored;
+                            far += usize::from(want.far.is_some());
+                            for &from in &froms {
+                                assert_eq!(
+                                    s.field_cell(w, from),
+                                    field_cell_as_before(&s, w, from),
+                                    "house {h}, {from:?}"
+                                );
+                            }
+                            let goal = ore_goal_as_before(&s, w);
+                            assert_eq!(s.ore_goal(w), goal, "house {h}");
+                            goals += usize::from(goal.is_some());
+                            assert_eq!(
+                                s.harvesters_wanted(w),
+                                plain.harvesters_wanted(w),
+                                "house {h}"
+                            );
+                            assert_eq!(s.field_refinery(w), plain.field_refinery(w), "house {h}");
+                        }
+                        if thinking {
+                            s.end_think();
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            explored > 0 && far > 0 && goals > 0,
+            "{explored}, {far}, {goals}"
+        );
     }
 
     /// Our tooling for speed (design: own AI, #52): every building the

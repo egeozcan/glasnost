@@ -1709,13 +1709,16 @@ impl Brain {
         }
         // A person keeps at most one yard beyond the first: a third adds
         // little speed for its price and leaves the army short.
+        // design: own AI (#58): the tests only read the world and the plan,
+        // so their order does not change the answer; the far field (a
+        // scan and flood of the whole map) is asked last
         if yards + units.len() + usize::from(lined) >= EXPANSION_YARDS
-            || !self.rich(w, credits, cost)
-            || far.get_or_init(|| self.script.far_field(w)).is_none()
-            || !self.script.harvesters_kept(w)
             || !self.intruders(w).is_empty()
             || self.outnumbered(w)
             || self.losing(w)
+            || !self.script.harvesters_kept(w)
+            || !self.rich(w, credits, cost)
+            || far.get_or_init(|| self.script.far_field(w)).is_none()
         {
             return;
         }
@@ -2051,9 +2054,15 @@ impl Brain {
         let goal = zone.map(|z| (z, regions::reach_in(w, center, z)));
         // design: own AI (#38): free of every object the house sees standing there
         let taken = self.seen_taken(w);
-        w.cells
-            .grid
-            .iter()
+        // design: own AI (#58): only the square around `center` that holds
+        // the ring is read, not the whole map (the answer is the nearest by
+        // a key no two cells share, so the order the cells are read in does
+        // not matter)
+        let r = i32::try_from(far.max(0)).unwrap_or(i32::MAX);
+        let square = (-r..=r)
+            .flat_map(move |dy| (-r..=r).map(move |dx| CellXY::new(center.x + dx, center.y + dy)));
+        square
+            .filter_map(|c| w.cells.grid.get(c).map(|cell| (c, cell)))
             .filter(|(c, cell)| {
                 let d = dist2(*c, center);
                 d >= near * near
@@ -3072,5 +3081,128 @@ impl Brain {
             superweapon_wanted: self.superweapon_wanted(w),
             income: self.script.income(),
         }
+    }
+}
+
+#[cfg(test)]
+mod land_cell_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// [`Brain::land_cell`] as before #58: every cell of the map read.
+    fn land_cell_as_before(
+        b: &Brain,
+        w: &World,
+        f: ObjectId,
+        center: CellXY,
+        (near, far): (i64, i64),
+        from: CellXY,
+        zone: Option<glasnost_rules::sim::MovementZone>,
+    ) -> Option<CellXY> {
+        let fz = w
+            .obj(f)
+            .and_then(|o| w.rules().unit(o.kind, o.type_index))?
+            .zone;
+        let mine = regions::reach_in(w, from, fz);
+        let goal = zone.map(|z| (z, regions::reach_in(w, center, z)));
+        let taken = b.seen_taken(w);
+        w.cells
+            .grid
+            .iter()
+            .filter(|(c, cell)| {
+                let d = dist2(*c, center);
+                d >= near * near
+                    && d <= far * far
+                    && cell.land != land::WATER
+                    && w.cells.usable(*c)
+                    && !taken.contains(c)
+            })
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                let r = regions::reach_in(w, c, fz);
+                r == mine
+                    || (!matches!(mine, regions::Reach::Region(_))
+                        && matches!(r, regions::Reach::Region(_)))
+            })
+            .filter(|&c| goal.is_none_or(|(z, r)| regions::reach_in(w, c, z) == r))
+            .min_by_key(|&c| (dist2(c, from), c.y, c.x))
+    }
+
+    /// Our tooling for speed (design: own AI, #58): the ferry's land cell
+    /// read off the square around the centre is the one the whole map
+    /// gives, for every ring the ferry asks, with and without a zone to
+    /// reach the centre, around cells across the map (its edges too), for
+    /// every house's units, at several points of the M6c, M7a and M7b
+    /// duels.
+    #[test]
+    fn the_land_cell_of_the_square_is_the_land_cell_of_the_map() {
+        let games = [
+            (
+                "m6c",
+                crate::fixture_m6c::rules(),
+                crate::fixture_m6c::map(),
+                crate::fixture_m6c::MAP_NAME,
+                crate::fixture_m6c::setup(2),
+            ),
+            (
+                "m7a",
+                crate::fixture_m7a::rules(),
+                crate::fixture_m7a::map(),
+                crate::fixture_m7a::MAP_NAME,
+                crate::fixture_m7a::setup(17),
+            ),
+            (
+                "m7b",
+                crate::fixture_m7b::rules(),
+                crate::fixture_m7b::map(),
+                crate::fixture_m7b::MAP_NAME,
+                crate::fixture_m7b::setup(11),
+            ),
+        ];
+        let mut compared = 0;
+        let mut found = 0;
+        for (name, rules, map, map_name, setup) in games {
+            let mut g = Game::new(rules, &map, map_name, fixture::catalogue(), setup)
+                .expect("the duel loads");
+            for _ in 0..3 {
+                for _ in 0..700 {
+                    g.step();
+                }
+                let w = &g.world;
+                let cells: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).step_by(97).collect();
+                for h in 0..w.houses.len() {
+                    let b = Brain::new(w, &map, HouseId(h as u8));
+                    let units: Vec<ObjectId> = w
+                        .objects
+                        .values()
+                        .filter(|o| o.owner == Some(HouseId(h as u8)) && o.on_map)
+                        .filter(|o| w.rules().unit(o.kind, o.type_index).is_some())
+                        .map(|o| o.id)
+                        .take(3)
+                        .collect();
+                    for &f in &units {
+                        let Some(o) = w.obj(f) else { continue };
+                        let from = o.pos.cell();
+                        let zone = w.rules().unit(o.kind, o.type_index).map(|u| u.zone);
+                        for &center in cells.iter().chain([&from]) {
+                            for ring in [(1, ASHORE), (DROP_NEAR, DROP_FAR), (WAIT_NEAR, WAIT_FAR)]
+                            {
+                                for z in [None, zone] {
+                                    let want = land_cell_as_before(&b, w, f, center, ring, from, z);
+                                    assert_eq!(
+                                        b.land_cell(w, f, center, ring, from, z),
+                                        want,
+                                        "{name}, house {h}, {f:?}, {center:?}, {ring:?}, {z:?}"
+                                    );
+                                    compared += 1;
+                                    found += usize::from(want.is_some());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(found > 0 && found < compared, "{found} of {compared}");
     }
 }
