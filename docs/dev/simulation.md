@@ -1644,3 +1644,36 @@ The eighth batch of the game-logic audit (#420) makes the code follow the lead's
 **Formats.** The save format goes to 137 and the AI game format to 111, the numbers the main session gave this batch after batch S6's 136 and 109 and AI batch 5's 110: `AirState` gains `handed` and `lost`, `JumpState` loses `filtered`, and the rules gain a quirk. Wire version 12: no valid order's encoding changes.
 
 **Seams.** Claim 53's other ways of leaving play, its revert paragraph and the earlier hand-over kept through claim 8's exception are `unmeasured` in the spec and have engine tests only. Claim 18's open question (a rule that gives a dead crashing unit a new destination) stays open. `rocket::heading_point_with` has no arm for an aircraft or a jumpjet unit, so their heading point is their position, not the point their locomotor moves them to (S-0506 claim 14 for a unit); AC37 part b's *Q* as *V*'s heading point needs that arm, and our part b test runs with the point in the air instead. With #191's answer the oracle arena's M-0003 row ROBO against V3 no longer reproduces (0/12/0 in stock, 0/0/12 here). The switched-off robot tanks hold *P* one cell toward the launchers. Each rocket detonates at its nose point below the surface (claim 19), and that point is beyond the spread radius from the tank, so no tank is ever hit. Q-3066 asks which of these differs from the game: the tanks holding *P*, the aim at it, the nose point's depth, or S-0303's distance.
+
+## Simulation (sim issues S10: the nose-point test, owner changes, crates and sight)
+
+The tenth batch of the game-logic audit (#420) applies the lead's answer to Q-3066 (S-0506 r43) and works through issues #215, #169, #206, #216, #192, #193, #200 and #205. Each change of behaviour has a test on synthetic data committed before it. Three issues need a decision the specs do not give and are filed as requests: Q-3085 (#169), Q-3086 (#193, with an interim) and Q-3087 (#200). The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S10*.
+
+**Rockets (S-0506 r43, Q-3066).**
+
+- *Claim 19's test reads the nose point.* In lazy cruise and in descent, the rocket detonates when the world height of its nose point is at or below the aim point's height, or, over a high bridge with the aim at the cell's terrain height, at or below the 416-lepton deck. The nose height is F9's trunc(*z* + *L* × sin *p*) from the position and pitch before the move, with *L* the set's body length. `rocket::nose_height` is the one helper that `nose_b` and `contact` share, so the test and the detonation point cannot drift apart. The height the move would reach is no longer read. The rocket's own height above the terrain is unchanged.
+
+**Update order (S-0203).**
+
+- *#215, the follower of a departed current object (claim 10).* Once the current object has left play in its own turn, `UpdateOrder::cur` holds the index of the object that stood after it. A later removal at that index is that object's, which still gets its turn, so it no longer counts. Only a removal before `cur`, or the current object's own removal while it is still there, moves `cur` back or counts a skip.
+
+**Owner change (S-0506 claim 13, S-0509 claim 14, S-0309 claims 30 and 31).**
+
+- *#206, a spawner clears its slots.* Mind control and building capture already called `spawn::owner_changed`. Two callers are new: `structures::ownership::contacts`, for each object with a spawner that follows a captured building, and trigger action 14, for a spawner that is not a building. Both call it after the owner is written and the orders are reset.
+
+**Triggers (S-0011, S-0312 claim 29).**
+
+- *#216, a carrier whose destruction has begun (S-0011 claim 24).* Trigger action 14 changes the owner of *present objects* only (S-0011 Terms). `triggers::present_object` leaves out an object off the map, a killed object with no health left (inside its own killing hit, infantry showing its death, a crashing object, a building awaiting removal) and a sinking vessel (S-0312 claim 10). A building in a delayed-kill countdown is still present: it does not die yet (S-0302 claim 16).
+
+**Crates (S-0520, S-0312).**
+
+- *#192, a placed unit shows no animation (S-0520 claims 11 and 13).* `crates::pickup` starts the crate animation for every result but a placed unit. A unit crate that places no unit falls back to the money result and shows the money animation, as before.
+- *#193, a building's crate beneath (S-0312 claims 20 and 21).* The crate goes on the building's top-left foundation cell (`pos.cell()`) once the building has left its cells. `combat::death::leave_play_before_crate` takes the crate plan before the building is removed and returns it. `leave_play` then calls `crates::place_beneath`, and `removal_turn` calls it after the second round of the removal turn. `place_beneath` keeps only S-0520 claim 1's crate-place limit and the rule that crate overlays are named. It takes away a crate already on the cell, and its overlay is a water crate on *water* and a wooden crate otherwise. This is Q-3086's interim: claim 20 states no cell condition, so the usable-area and overlay tests of a random placement are not applied. A vehicle's death crate keeps its random placement (`crates::death_crate`). `crates::finish` is split so that the overlay placement (`put`) serves both.
+
+**Sight (S-0409 r9, S-0207 claim 12).**
+
+- *#205, sight moves at the movement arrival.* A walking or driving unit's sight is re-applied at its movement arrival update: `walk` and `drive` call `econ::shroud::refresh_sight` right after `cloak::machine::cell_movement_completed`. A drive update can reach the cell centre partway through a tick and go on into the next track. `shroud::object_turn` no longer compares cells: it re-applies sight on the 15-tick refresh and on an owner change only. `econ.sight.cell` is still written by `add_sight_with`.
+
+**Formats.** No new state is saved or hashed, so the save format (137), the AI game format (111) and the wire version (12) stay.
+
+**Seams.** Q-3085 (#169: S-0302 claim 12 and D23 (e) against S-0516 claims 32 and 34 and CS13 (c), for a permanently disguising unit's copied disguise) is open; the code follows S-0302. Q-3087 (#200: which key and layers give a building type's water-bound default) is open; a building type with no `WaterBound` key is not water-bound. Q-3086's interim stands until it is answered, and rubble (S-0312 claim 20) is still not modelled. Hover and ship units have no arrival hook yet, so their sight moves only on the 15-tick refresh. A tunnel exit as a rocket's aim point stays a seam (no tunnelling locomotor is built).
