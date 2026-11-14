@@ -666,6 +666,16 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             {
                 return;
             }
+            if w.obj(actor).is_some_and(|ob| {
+                ob.econ.construction.building_up
+                    || matches!(
+                        crate::econ::placement::seen_behaviour(ob),
+                        Some(Behaviour::Construction | Behaviour::Selling)
+                    )
+            }) {
+                // spec: S-0213 claim 10 (not under construction or being sold) and S-0406 claim 17 (the construction state: construction queued or current until the build-up's handover)
+                return;
+            }
             if on_vehicle_factory(w, actor) {
                 // spec: S-0213 claim 10 (an actor on a vehicle-factory cell ignores the order)
                 return;
