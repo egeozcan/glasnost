@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 137
+revision: 139
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-08
+approved-on: 2026-11-14
 measurements: [M-0023, M-0024, M-0025]
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171, Q-2566, Q-2586, Q-2656, Q-2782]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166, Q-2005, Q-2113, Q-2171, Q-2566, Q-2586, Q-2656, Q-2782, Q-3100, Q-3101]
 supersedes: []
 ---
 
@@ -448,6 +448,8 @@ Terms used by this spec:
   *stupid-guard-mode*, *stupid-hunt*, *close-range*, *distributed-fire* and *opportunity-fire*
   flags, each mean the imported type field of that role in the Import mapping. What those fields
   do outside this spec belongs to the specs that own them.
+- **Named area-fire deployer:** an infantry type with the named area-fire deployer flag of our
+  format (Import mapping): the type singled out by name in claim 30.
 - **Fraidycat:** an infantry type whose type has the fraidycat flag, as S-0107 (Terms) defines
   it; S-0208 (claim 11) uses the same word in its acceptance rule for scatter requests. This spec
   uses the word only in scenario B29, to keep such types out of that test.
@@ -2114,7 +2116,7 @@ apply in our engine to the actors of every player house.
 
     | Rule | Applies when | Effect |
     |---|---|---|
-    | hover-attack cell | the actor's type is a hover-attack type and its height above the surface is 0, with or without a target | it takes a nearby cell as its destination |
+    | hover-attack cell | the actor's type is a hover-attack type and its height above the surface is 0, with or without a target | it takes a nearby cell as its destination (below) |
     | charging break-off search | the actor is infantry with its charging mark set, and processing reaches these general rules | it runs S-0518 claim 15's automatic range search; any nonempty result becomes its target and clears the mark, even if equal to the held target; an empty result leaves target and mark unchanged |
     | approach | the actor has a target | it takes the approach step of claim 37 (engaging the target is the combat specs') |
     | fall-back | the actor has no target | it falls back to rest |
@@ -2126,6 +2128,27 @@ apply in our engine to the actors of every player house.
     passive-acquisition and opportunity gates, and the absence of a targeting-timer gate or
     reset draw. A nonempty result is accepted without another held-target ownership,
     firing-legality or identity check. Vehicles do not run this break-off search.
+
+    **The hover-attack cell** is taken first in the processing, before the break-off search,
+    the approach and the fall-back. It is the result of S-0212 claim 25's nearby-cell search with
+    these settings. The centre is the actor's own cell. The locomotion class is the actor's, with
+    *winged* counted as *track*, and the movement zone is the actor's own. The reach region is
+    that of the centre cell for that zone, read for its deck in deck mode, and the search is in
+    deck mode when the actor is on a bridge deck. There is no height condition, further test,
+    reference cell or no-overlay condition, and bridge cells are allowed. *N* is the processing
+    tick, and the search takes no random draw. No test involves the target or the weapon's range,
+    and the actor's own cell does not qualify while that cell's occupancy record holds the actor. The
+    rule applies at every processing whose condition holds, also while the actor holds a
+    destination, which the result then replaces. The assignment is the one an order makes (for a
+    vehicle, S-0207 claim 27's unchanged-destination rejection applies), and the rule queues no
+    behaviour. With no qualifying cell the original still assigns the placeholder at map cell
+    (0, 0). With a target, the approach step (claim 37) then runs; unless one of the special
+    approaches of claim 37 (h) replaces the destination with the target object, it finds this
+    destination held, and claim 37 (e) decides whether it is kept (it can be cleared only while
+    the target is out of range). With no
+    target, the fall-back does not remove it by itself: claims 13 to 15 judge an actor that holds
+    it (for a vehicle, claim 15's row 3 queues *move* unless its row 1 applies). What the
+    locomotor then does belongs to the movement specs.
 
     The delay of these general rules is the standard delay, *D* = *D*<sub>r</sub> + *U*(0, 2),
     with the draw taken whether or not the halving below applies. It is halved, trunc(*D* / 2),
@@ -2149,15 +2172,26 @@ apply in our engine to the actors of every player house.
       computer player that is attacking a building it may take goes straight for it, in *capture*; our
       AI can get the same result with a capture or occupy order (S-0213, S-0214).
     - Backing: `measurable` (scenario B9; cases c and d for the second and third infantry
-      rows; scenario B24, case d for the hover-attack cell and case c, with S-0518 scenarios
+      rows; scenario B24, case d for the hover-attack cell's centre and that it queues no *move*
+      while the actor has its target, and case c, with S-0518 scenarios
       TC3 and TC4, for the mark-gated charging break-off search and replacement).
+      These parts of the hover-attack cell are `unmeasured`. Its search settings other than the
+      centre, the absence of a draw and of a target or range test are not distinguished by B24
+      (d)'s open flat ground. Its replacement of a held destination, the vehicle's
+      unchanged-destination rejection and its place before the fall-back need a held destination
+      at a processing or a processing without a target, which B24 (d) does not set up. The
+      placeholder with no qualifying cell needs a fixture that leaves no qualifying cell within
+      the search radius, and none here does. The rule for an infantry type with the hover-attack
+      flag has no scenario here that gives one the flag.
       The explosive-charges row is `unmeasured`: S-0214 translates a player's attack order on
       a building that accepts charges into *sabotage*, and S-0309 claim 18 prevents such a
       human-controlled unit from retaliating against a building. B9 (b)'s former retaliation
       setup therefore cannot reach *attack* with that target. No replacement input that isolates
       this row is established here.
     - Confidence: high (the delay rule, mark-gated break-off search and replacement, and that
-      the 1-tick rows replace the general rules and take no draw); medium (the conditions of the infantry rows)
+      the 1-tick rows replace the general rules and take no draw); medium (the conditions of the
+      infantry rows, and every part of the hover-attack cell as the paragraph after the table
+      states it, its search included, which S-0212 claim 25 rates medium)
 
 24. **Guard.** The actor stays where it is. The kind-specific rules at the end of this claim
     (deploying infantry, vehicles) take precedence over the general rules below.
@@ -2190,7 +2224,7 @@ apply in our engine to the actors of every player house.
     | Target when the processing began | Effect |
     |---|---|
     | none | an infantry unit or vehicle with an electric-charge secondary weapon runs S-0518 claim 14's automatic charging scan; a found building becomes its target, its charging mark is set and *attack* is queued without an immediate start; otherwise ordinary guard processing runs, including the infantry idle action of S-0107 claim 14 |
-    | present | a hover-attack type whose height above the surface is 0 takes a nearby cell as its destination; firing at a target in range is done by the firing rules, not by the processing |
+    | present | a hover-attack type whose height above the surface is 0 takes the hover-attack cell of claim 23 as its destination, by the same search and assignment; firing at a target in range is done by the firing rules, not by the processing |
 
     A successful charge scan replaces ordinary guard processing in that processing, not the
     delay selection below. S-0518 claim 14 owns the eight-neighbour scan in step-direction order
@@ -2240,7 +2274,8 @@ apply in our engine to the actors of every player house.
     - Backing: `measurable` (scenario B10, scenario B21 parts a and b for the occupy instructions,
       scenario B24, case a for the distributed-fire row and case b for the charge target,
       supplemented by S-0518 claim 14's scenarios TC2 and TC4; scenario
-      B26, case a for the original-only sabotage rule).
+      B26, case a for the original-only sabotage rule; B24 (d)'s *guard* run for the hover-attack
+      cell's centre and that it queues no *move*, its other parts having claim 23's backing).
       The absorbing-building instruction's repeat search, lapse, queue-only outcome and
       already-bound exceptions are `unmeasured` here: B21 c leaves the instruction's input
       path conditional, and B21 d supplies no established way to retain the required
@@ -2258,7 +2293,8 @@ apply in our engine to the actors of every player house.
       (claim 14).
     - Confidence: high (the delay rule, no target search in the processing); medium (the special
       cases, the enter-nearest search and its delay, and the distributed-fire case, whose list the
-      target-acquisition specs own); low (the "already bound" exceptions of the enter-nearest rule)
+      target-acquisition specs own; the hover-attack cell, every part of which claim 23 rates
+      medium); low (the "already bound" exceptions of the enter-nearest rule)
 
 25. **Sticky.** *Sticky* is processed as *guard* (claim 5), with the properties of *sticky*. It
     differs from *guard* in ways that follow from other claims, whatever the data says:
@@ -2694,9 +2730,11 @@ apply in our engine to the actors of every player house.
     - Backing: `measurable` (scenario B12; case b for the rows of an undeploy delay of 0 or more
       and of a deploy weapon without the area-fire flag, case c for the type singled out by name,
       case f for the slot that gives the deploy weapon and for the 450 ticks of an area-fire deploy
-      weapon of any other type)
-    - Confidence: high (the delay table and the forced *guard*); medium (the area-fire target rule
-      and the choice of the deploy weapon)
+      weapon of any other type). That the name is compared without regard to case is
+      `unmeasured`: case c uses the identifier as the data spells it, and no scenario here spells
+      it differently.
+    - Confidence: high (the delay table and the forced *guard*); medium (the area-fire target rule,
+      the choice of the deploy weapon and the case-blind comparison of the name)
 
 31. **Deploying infantry in guard and area guard.** For an infantry unit of a type that deploys (the
     deployer flag), these rules take precedence over the rest of its *guard* or *area guard*
@@ -4146,7 +4184,8 @@ orders).
   type is singled out by name: a unit of that type is treated like any other type in claim 30, so
   when it deploys with an area-fire deploy weapon it takes its own cell as its target, and its
   delay is the one claim 30's table gives for "any other type" (450 ticks when its undeploy delay
-  is negative, else the undeploy delay). The switch changes nothing else.
+  is negative, else the undeploy delay). Off, the named area-fire deployer flag (Terms) is ignored,
+  whether the importer or a ruleset of ours set it. The switch changes nothing else.
 - **A reopening gate door snaps open** (claim 35). A gate door that reverses from closing to
   opening reaches rest open at the gate's next update (claim 35 d), however far it had closed. Proposed
   switch `quirks.gate_reverse_snaps` (default on = original). With it off, the reopening takes as
@@ -4306,6 +4345,7 @@ absent key keeps the value the earlier layers left).
 | No data key | not applicable | claim 31's immediate secondary shot and same-processing own-cell target removal (Q-0983) | fixed behaviour, no absent-key default; no fire-frame field controls this shot |
 | `DeployedFire` | art sequence section | claim 31's post-shot sequence and its frame-count processing delay | sequence entry, parsing and absent-entry behaviour owned by S-0107 claim 1 and its Import mapping; does not schedule this shot |
 | `AreaFire` | weapon section | claim 30 (of the deploy weapon, Terms) | boolean |
+| none (a name fixed by the original): `DESO` | the identifiers of infantry type sections (no key is read) | the infantry type singled out by name in claim 30, carried as the named area-fire deployer flag (below) | hard-coded type name, matched without regard to case against the identifiers of the infantry types of the user's data; no match: no type has the flag |
 | `Burst` | weapon section | upgrade weapon gate's burst-count comparisons (claim 32) | integer shots; engine default 1, owned by S-0301 claim 4 |
 | `IsAnimDelayedFire`, `DelayedFireDelay` | art, building image section | ordinary animation-delayed firing, bypassed by an active passing upgrade gate (claim 32; S-0301 claim 14) | boolean, default no; integer ticks, default 0 |
 | `Upgrades`, `PowersUpToLevel`, `PowersUpBuilding` | building type section | upgrade count, occupied positions and host eligibility, not installation-history precedence (claim 32) | integer, default 0; integer, default −1; building type, absent none (S-0406 claim 12). No new ordering key. |
@@ -4327,7 +4367,13 @@ Any other value *c* gives *w*(trunc(*c* × 256)) leptons, with *w* of F1, or 0 w
 two), and it is converted to a signed 32-bit integer as F1 converts *p*.
 For example 4.5 cells give 1152 leptons and 0.3 cells (held as 0.300000011920929) give 76.
 
-The infantry type singled out by name in claim 30 is identified by a type name fixed in the original's program and compared without regard to case. The literal name is omitted here: a mod that renames that type loses the rule, and a mod that gives another type the hard-coded name gains it (`quirks.named_deploy_area_fire`, Edge cases and quirks).
+Our format marks the infantry type singled out by name in claim 30 with the named area-fire
+deployer flag (Terms), a boolean of an infantry type, absent no. It is not a key of the original's
+data: the importer sets it on the infantry type whose identifier (the name under which the rules
+list the type) matches the fixed name in the table above without regard to case, and on no other
+type. So a mod that renames that type loses the rule, and a mod that gives another infantry type
+that name gains it. A ruleset of our own may set the flag on any infantry type.
+`quirks.named_deploy_area_fire` off ignores the flag (Edge cases and quirks).
 
 The guard-area veterancy ability and the explosive-charges veterancy ability are entries of the
 veterancy ability lists (veterancy specs).
@@ -5337,10 +5383,20 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   stays the target. Falsified by the building staying the target with an enemy in weapon range.
   Runs: three. (d) Hover-attack cell: a named test file sets the hover-attack flag on an armed
   ground vehicle type (its height above the surface is 0). The vehicle of the human-controlled
-  house is ordered to attack a stationary enemy building in its range, and, in another run, stands
-  in *guard* while an enemy building is in range (target present). Expected: at the processing, the
-  recorder shows a destination on a cell other than the vehicle's own cell; the cell itself belongs
-  to the movement specs. Falsified by an empty destination at 20 processings in a row. Runs: three.
+  house stands at rest on open flat ground, with no other object within two cells of it and a
+  stationary enemy building 3 or more cells away within its weapon range. It is ordered to attack
+  the building, and, in another run, stands in *guard* while the building is in range (target
+  present). The recorder logs each destination assignment with its tick and the vehicle's cell.
+  A *counted processing* begins with the building as its target and in the vehicle's weapon range,
+  with the vehicle standing still on a cell centre. Expected: at the first counted processing, an
+  assignment at that tick to a cell at Chebyshev distance 1 from the vehicle's cell; at each later
+  counted processing at which an assignment is logged, its cell is at that distance; at every
+  counted processing *move* is not queued.
+  Which of those cells is chosen is S-0212 claim 25's; what the vehicle then does is the movement
+  specs'. Falsified by no assignment at the first counted processing, by an assigned cell at
+  distance 0, or 2 or more, from the vehicle's cell at a counted processing, or by *move* queued
+  at a counted processing. A run with no counted processing leaves (d) untested.
+  Runs: three.
 - **B25 (claim 22, deployed infantry).** (a) Human-controlled owner: a deployer infantry type that
   deploys to fire, deployed, is given a move order. Expected: *move* becomes current, at its first
   processing the destination is cleared and the unit stays deployed, and the next processing comes
@@ -6578,6 +6634,16 @@ checks, not additional rules of this spec.
   there. The gate row should point to S-0215 claim 22 for this, and scenario P7 run 7b, whose
   Expected gives "no behaviour is queued" for a team member after the gate failure, should record
   its current behaviour and point to S-0215's Open question on team members.
+- **S-0212, claim 25 (table T5, the tick list *N* and the Backing) (Q-3101).** S-0215 revision 139
+  uses the nearby-cell search for the hover-attack cell of its claims 23 and 24. T5 should have
+  a row "Hover-attack cell (S-0215 claims 23 and 24)" with the settings that S-0215 claim 23
+  (revision 139) gives: the waiting absorber approach row's settings, with the actor's own cell
+  as centre. The list of tick numbers should add "*attack* or *guard* processing tick for the
+  hover-attack cell (S-0215 claims 23 and 24)". S-0215 claim 23 owns the caller's unchecked
+  use of the placeholder at map cell (0, 0) when there is no result. Backing to add:
+  `measurable` for this row's centre (S-0215 scenario B24 (d)); `unmeasured` for its other
+  settings, which B24 (d)'s open flat ground does not distinguish. Confidence: medium, as for
+  the other parameters of T5.
 - **S-0417, claim 17 (*No path*).** For an infantry unit in *move* whose search fails at the gate,
   the same holds: what claims 13 and 14 queue, usually its rest behaviour, is queued at the end of
   that turn and is current and processed at the first start of the next tick if it is ready there

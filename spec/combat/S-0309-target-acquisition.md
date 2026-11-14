@@ -2,15 +2,15 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 140
+revision: 142
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-13
+approved-on: 2026-11-14
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
 Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712, Q-2747, Q-2801, Q-2841, Q-2987,
-Q-2988, Q-3061]
+Q-2988, Q-3061, Q-3102]
 supersedes: []
 ---
 
@@ -41,8 +41,9 @@ specs: *behaviour* names, *targeting timer*, *opportunity target*, *processing*,
 (S-0214); *veterancy rank* and *veterancy ability* (S-0311, claims 1 and 3); *versus value*, τ<sub>r</sub> and τ<sub>a</sub> (S-0304); *weapon
 slot*, *weapon number*, *weapon it would use*, *mean weapon damage*, *healer for acquisition*,
 *multi-weapon type*, *gattling type*, *switching type* and *airborne* (S-0308); *floor-bound* (S-0307, Terms); *expected damage* (S-0302, claim 18); *reference point* and *table square
-root* (S-0204); *movement zone* (S-0211); *firing check* and its answers *illegal*, *impossible*, *busy*,
-*rearming* and *out of range* (S-0301, claim 9); *tracked flying object*, *sector* and the flying-object search
+root* (S-0204); *movement zone* (S-0211); *firing check* and its answers *can fire*, *illegal*, *impossible*, *busy*,
+*rearming*, *moving* and *out of range* (S-0301, claim 9); *heading point* and *movement step* (S-0207, Terms
+and claim 2); *turret flag* (S-0310, claim 1); *tracked flying object*, *sector* and the flying-object search
 (S-0303, Terms and F7); *land-targeting mode* (S-0308, table P and Import mapping); *naval-targeting
 mode* (S-0308, table N); *spray-attack
 type* (S-0313, Terms); *spawner weapon*, *spawned aircraft* and *launching* (S-0301, Terms),
@@ -1081,6 +1082,26 @@ index 1. This is a design rule, not an additional claim about the original.
     leaves the object targetless or restores the memory's target. Subsequent shots, target-loss
     notifications and controller resets remain governed by S-0506 claims 3, 11 and 25.
 
+    A search of this table changes neither the object's destination nor its movement: it leaves the
+    locomotor's destination and route as they were, and it does not stop the object. When
+    *attack* is not already current, the *attack* it queues becomes current only at a start at which
+    S-0215 claim 11 finds the object ready (the immediate start of S-0215 claim 7, at the search or
+    at a later start). So a vehicle in *move* that S-0215 claim 11 finds moving when the search
+    finds a target goes on towards its destination with *move* current and *attack* queued until
+    such a start, which can come on the way (for example while it waits, blocked, with no heading
+    point and no body turn) or once it has stopped. Its shots at the target meanwhile come from its
+    own firing step (S-0310 claim 9), subject to the *moving* answer of S-0310 claim 7.
+
+    For an infantry unit and for a vehicle of any locomotor, the queue and its start are those
+    above; what differs between them is S-0215 claim 11's readiness, which depends on the kind and,
+    for a vehicle, on its current locomotor, and which decides when the queued *attack* becomes
+    current. An infantry unit walking in *move* is not ready (S-0215 claim 11's infantry rule), so
+    *attack* waits in the same way. From a walking step until it next stops walking, its infantry
+    speed fraction is 1 (S-0310 Terms), above the limit of S-0310 claim 8, so its firing check does
+    not answer *can fire* and it fires no shot at the target while it walks. A jumpjet infantry unit is
+    left to S-0310 claim 8's jumpjet rule. The attack-move gesture and mode never give an aircraft
+    an attack-move memory, because aircraft are never eligible for them (S-0214 claim 5).
+
     *(b) On a fall-back to rest*, among the common effects of S-0215 claim 13, the memory is
     refreshed at most once per actor per tick. If the object is engaged, or its current behaviour
     is *guard*, the attack move is resumed as the table below gives. Otherwise the memory is
@@ -1096,6 +1117,9 @@ index 1. This is a design rule, not an additional claim about the original.
     | a destination | *move* is queued with an immediate start, and the memory's destination becomes the object's destination |
     | only a target | *attack* is queued with an immediate start, and the memory's target becomes the object's target |
     | neither | the memory is removed; nothing else happens |
+
+    "With an immediate start" in this table is S-0215 claim 7's readiness-dependent start, as at the
+    searches of part (a).
 
     *(c) The engaged mark ends* when the attack move is resumed (part b), a new attack-move
     order is applied (S-0213, claim 6), or the memory is removed. A search that finds nothing
@@ -1133,7 +1157,9 @@ index 1. This is a design rule, not an additional claim about the original.
     timeout or search-radius extension exists in these cases: an enemy beyond the later resting
     object's search area does not by itself cause a new advance.
     - Backing: `measurable` (scenario A6: part d for the not-engaged destination search,
-      part g for engaged searches and resumption, including its run 2 with a remembered target,
+      part g for engaged searches and resumption, with its run 1 for a driving vehicle's
+      unchanged destination and movement, its queued *attack* and its shots meanwhile, and its
+      run 2 for a remembered target,
       part k for F1's engineer exception, part l for targets not being opportunity targets,
       part n for arrival, memory removal, a vehicle's 1-tick delay and an infantry unit's
       fall-back at the end of its arrival update, with S-0215 scenario B49 part b for that
@@ -1143,10 +1169,21 @@ index 1. This is a design rule, not an additional claim about the original.
       `measurable` by scenario A6 part i and S-0506 scenario R19. `unmeasured`: the loss at the
       killing hit of a target that stays in play after it, and the loss when it goes off the map,
       because part o uses a type removed at once on destruction and no part sends the remembered
-      target off the map.
+      target off the map. Also `unmeasured`: a start of the queued *attack* on the way, the
+      unchanged route, a vehicle with a locomotor other than the driving one, and an infantry
+      unit, its wait and its lack of shots included, because run 1 of part g drives an ordinary
+      vehicle over open ground with nothing in its way, on a straight route that a changed route
+      would not show, and no part has an infantry unit walk past a target under an attack move.
+      That the attack-move gesture and mode give an aircraft no attack-move memory rests on S-0214
+      claim 5's eligibility rule, `measurable` by S-0214 scenario T3 (an aircraft in the
+      selection).
     - Confidence: high for the refresh context and removal when neither engaged nor in *guard*,
       medium for the searches, resumption, arrival consequences (an infantry unit's end-of-update
-      fall-back as S-0215 claim 22 rates it) and the conversion at each of the three losses
+      fall-back as S-0215 claim 22 rates it) and the conversion at each of the three losses, and
+      medium for the unchanged destination, route and movement after a search, the start of the
+      queued *attack*, the shots from the firing step meanwhile, the same queue and start for an
+      infantry unit and for a vehicle of another locomotor, a walking infantry unit's wait and its
+      lack of shots, and an aircraft's lack of an attack-move memory from the gesture or mode
 
 24. **Redirected targets.** Setting a target redirects it in three cases:
 
@@ -3173,21 +3210,45 @@ set in the test map's override sections.
   launching, or in a deciding run the firer switches to *Y*, or the recorder shows no target at the
   end of the search tick in the hidden span. (A spawner's keep on *impossible* and its controller
   reset have no case here: claim 4's Backing.)
-- *Part g (attack-move, claim 23):* an attack-move order on a cell 20 cells away, through an enemy
-  standing 6 cells from the route and within weapon range. Record position, target, current and
-  queued behaviour, memory, engaged mark and targeting timer every tick. *Expected:* after the
-  first successful search the unit stays engaged across tick starts and attacks the stationary
-  enemy; timer expiries while it is within reach take no search draw. When the enemy is removed
-  and attack processing falls back, it resumes the remembered destination and ends the engaged
-  mark, rather than resuming on the tick immediately after acquisition. Run 2, with a memory
-  holding only a target: order an attack move on enemy *X* 20 cells away, with a second enemy
-  *Y* 6 cells from the route and within weapon range, where *X* is beyond the search radius and
-  reach. *Expected:* a search picks *Y* and the engagement survives tick starts; on the later
-  fall-back it resumes *X*, provided *X* has not been destroyed. A run without *Y* keeps *X* while it lives:
-  an unsuccessful search restores *X* within the same tick. A third run moves the engaged target
-  beyond reach and leaves another candidate within the search: the next expiry searches again
-  and picks that candidate. *Falsified if:* an ordinary next-tick start ends the engagement,
-  in-range expiries take search draws, or a qualifying fall-back fails to resume the memory.
+- *Part g (attack-move, claim 23):* run 1: a vehicle whose locomotor is the driving one, of a type
+  with the turret flag, without the deploy-to-fire and hover-attack flags and with guard range 0,
+  armed with an ordinary weapon, one that is neither a spark-particle nor a fire-particle weapon and
+  whose warhead is not temporal (named test file), on open level ground, is given an attack-move
+  order on a cell 20 cells away on its own row. A weaponless enemy vehicle with no orders stands
+  still 6 cells from that row beside its midpoint. The named test file sets the vehicle's weapon
+  range so that the enemy is within its reach from at least 6 cells of the row around the midpoint
+  but not from the start or destination cell. Run 1a gives the vehicle's type the mobile-fire flag
+  and its weapon the fire-while-moving flag; run 1b clears both (named test file). Record position,
+  destination, heading point, movement step, body turning, target, firing-check answer, shots,
+  current and queued behaviour, memory, engaged mark and targeting timer, before and after the
+  vehicle's update, every tick. *Expected:* the first successful search falls on a tick on which the
+  vehicle is moving in the sense of S-0215 claim 11. From that tick it holds the enemy, is engaged
+  and has *attack* queued, and its destination is the ordered cell; *move* stays current on every
+  tick on which the recorder shows it moving in that sense. Timer expiries while the enemy is within
+  reach take no search draw; on the first tick, at or after the first expiry after the acquisition,
+  on which the enemy is not within reach, a search runs and leaves the vehicle with no target and
+  engaged. In run 1a the vehicle fires on each tick on which it holds the enemy and its firing check
+  answers *can fire*, and a run 1a with no such tick decides nothing about shots; run 1b fires no
+  shot while it has a destination. *Attack* becomes current at the first start at which the vehicle
+  is ready. Having no target, it falls back at its first processing, which resumes *move* to the
+  remembered destination and ends the engaged mark; a later fall-back in *move* while not engaged
+  removes the memory (claim 23 (d)). A run with no expiry of the targeting timer while the enemy is
+  within reach decides nothing. A run in which the vehicle stops before that search, or in which the
+  recorder shows it ready on the way, decides only the ticks before that stop or start; a run 1a in
+  which the enemy is destroyed decides only its shots.
+  Run 2, with a memory holding only a target:
+  order an attack move on enemy *X* 20 cells away, with a second enemy *Y* 6 cells from the route
+  and within weapon range, where *X* is beyond the search radius and reach. *Expected:* a search
+  picks *Y* and the engagement survives tick starts; on the later fall-back it resumes *X*, provided
+  *X* has not been destroyed. A run without *Y* keeps *X* while it lives: an unsuccessful search
+  restores *X* within the same tick. A third run moves the engaged target beyond reach and leaves
+  another candidate within the search: the next expiry searches again and picks that candidate.
+  *Falsified if:* in run 1 *attack* becomes current on a tick on which the recorder shows the
+  vehicle moving in the sense of S-0215 claim 11 both before and after its update, the search
+  changes its destination, run 1a fires no shot on a tick on which it holds the enemy with a *can
+  fire* answer, or run 1b fires while it has a destination; in any run an ordinary next-tick start
+  ends the engagement, in-range expiries take search draws, or a qualifying fall-back fails to
+  resume the memory.
 - *Part h (redirects, claim 24):* order a unit to attack itself (its target becomes its own cell),
   order a unit to attack a target that dies in the same tick (the unit ends with no target); order
   an infantry unit to attack another that is in a death sequence (no target). Sinking target: an
@@ -4639,21 +4700,28 @@ Each part runs 5 times from a fresh game.
   the takeover. *Falsified if:* *B* holds *U* or a destination at the end of that tick, keeps a
   behaviour other than *guard* with nothing queued, or fires at *U* after the takeover.
 - *Part h (attack move resumed at the change, claim 31):* part b, with *V* of a type eligible for
-  attack moves and the player's attack order replaced by an attack-move order (S-0213 claim 6) to
-  a free cell *C* several cells beyond *W*, so that *V*'s memory holds *C*.
-  *V* drives towards *C*, its attack-move search finds *W*, and it stops and fires at *W*. The
-  trigger, its timing and part b's targeting-timer condition are unchanged. Record also *V*'s
-  current and queued behaviours and its destination. Part b itself is the control. *Expected:* at
-  the end of the tick of the change, *V* holds no target, has *C* as its destination with *move*
-  current or queued, and then drives towards *C* before any order; in part b, *V* has no destination
-  and stays where it is. *Falsified if:* in this part *V* has no destination at the end of the tick
-  of the change, or does not drive towards *C* before its next search or an order.
+  attack moves, with the turret flag and the mobile-fire flag and armed with an ordinary weapon that
+  has the fire-while-moving flag (as in scenario A6 part g, run 1a; named test file), and the
+  player's attack order replaced by an attack-move order (S-0213 claim 6) to a free cell *C* several
+  cells beyond *W*, on a route that passes within *V*'s weapon reach of *W* without *W* in its way,
+  so that *V*'s memory holds *C*. *V*'s attack-move search finds *W* while *V* drives towards *C*,
+  and *V* keeps *C* as its destination and drives on with *attack* queued, and its firing step fires
+  at *W* on the way (claim 23 (a)). The trigger, its timing and part b's targeting-timer condition
+  are unchanged, and a run decides something only if, at the change, *V* holds *W*, is engaged and
+  still has *C* as its destination. Record also *V*'s current and queued behaviours, its destination
+  and its engaged mark. Part b itself is the control. *Expected:* at the end of the tick of the
+  change, *V* holds no target and is not engaged, has *C* as its destination with *move* current or
+  queued, and then drives on towards *C* before any order; in part b, *V* has no destination and
+  stays where it is. *Falsified if:* in this part *V* has no destination at the end of the tick of
+  the change, is still engaged then, or does not drive towards *C* before its next search or an
+  order.
 - *Part i (a resumed target that the change makes one of the holder's own house, claim 31):*
   part h, with the attack-move order given on *W* itself, so that *V*'s memory holds only *W*
   (S-0213 claim 6, a target only), *W* of a type with no weapon and carrying *V*'s tag, and a
   second map trigger on that tag, set off by elapsed time a few ticks after the first, whose
   change-owner action gives its carriers back to *H*. Both changes then move *V* and *W* together.
-  Part h's targeting-timer condition must hold at both changes, and a run decides something only
+  Part h's conditions on *C* do not apply. Part h's targeting-timer condition must hold at both
+  changes, and a run decides something only
   if *V* holds *W*, or has its memory of *W*, at the second change. Nothing is expected between
   the two changes, where the original's rule for a computer-controlled owner (claim 25 part k)
   can drop *W*. *Expected:* at the end of the tick of the second change *V* and *W* belong to *H*,
