@@ -1810,3 +1810,45 @@ The twelfth batch of the game-logic audit (#420) applies the lead's answers to S
 - *#247, a building's guard range (claim 8, F1, F3, F4).* `BuildingRules::guard_range` holds a building type's `GuardRange` in S-0309's lepton form (`combat::data::leptons`), and `SimRules::guard_range` answers *g* for a mobile type or a building type. `acquire::radius`, the unarmed case of `candidate` (F3) and `threat_sum`'s *k* (F4) read it.
 
 **Seams.** Q-3109 (#245: the read of table C's row *zone* in an area search) is open. A unit type's guard range is still read in double precision (`d.value`), not in S-0309's single-precision lepton form; the unit read is not changed here. Rubble (S-0312 claim 20) is still not modelled, so the crate beneath reads the cell's own land.
+
+## Simulation (sim issues S16: domination, infantry-making animations, particle systems and re-paths)
+
+The sixteenth batch of the game-logic audit works through issues #290 to #307 (those assigned to it: #290, #291, #292, #298 to #307). Each change of behaviour has a test on synthetic data committed before it. Two issues need decisions the specs do not give; they are filed as requests and built with an interim: Q-3121 (#291) and Q-3122 (#305). The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S16*.
+
+**Superweapons (S-0612, S-0512).**
+
+- *#290, a drain-mode domination launch while one is in force (S-0612 claims 3 and 7, S-0512 claims 8 and 19).* `launch::drain`, in the *ready* state, refuses a psychic-domination type while a domination is in force, as `fire` refuses the ordinary type: a refusal event for the ordering house, the record keeps its charge, its ready state and its drain state. The *active* to *ready* order launches nothing and is not affected.
+
+**Infantry-making animations (S-0611 claims 8 to 11, S-0109 claims 16 and 29).**
+
+- *#291, every creator's infantry-making animation makes its infantry.* `anims::spawn_index` gives an animation of an infantry-making type (S-0611 Terms, the follow-up chain included, `mutation::makes_infantry`) a making state (`anims::Anim::making`, a `mutation::Making`: its surface, its owner, none, and the standing position of its creation point) when it is neither attached to an owner nor of a bouncing type at its creation. Such an animation plays as any ordinary animation (its creator's loop delay, repeat factor and reverse request, its trailer and its damage over time are kept) and in addition marks its standing position in each update while its current type has a make-infantry index, and at the end of its last pass frees it, makes its creation attempt and, when the placement is refused, steps one frame back and stays (`mutation::mark`, `mutation::free`, `mutation::try_make`, shared with the conversion model). A removal by another rule (`anims::remove`, a removal during its own turn) frees the position and makes nothing. This covers projectile and debris trailers, tile and overlay animations, the teleport source marker, shot animations and a reverse request through `combat::effects::anim_reversible`. `combat::effects::anim` keeps handing an infantry-making type to `mutation::start` (the conversion model, drawn in its owner's colour). Q-3121 asks where an attached or bouncing one marks and makes; until it is answered those (a parachute, a drain animation, a bouncing debris type) are still played with none of claims 8 to 11.
+
+**Mind control (S-0601 claim 11).**
+
+- *#292, the switch-off release comes first.* `mind::owner_changing`, called before the owner is written by `mind::set_owner_by`, `structures::ownership::change_by` (after its same-owner test), the contact hand-over of `ownership` and the slave hand-over of `econ::slaves`, releases every victim of a controller when `quirks.mind_control_owner_change_keeps_victims` is off, as claim 10's trigger path (`mind::trigger_owner_change`) does. `mind::owner_changed` and its call in `econ::events::owner_changed` go. The fate decision of each release therefore reads the house the controller had while it held the victims, and the release comes before every other owner-change consumer.
+
+**Reach regions (S-0212 claim 6).**
+
+- *#298, the regions are brought up to date before a rally or approach read.* `approach::per_tick` and the three rally-cell reads of `econ::release` (ground, naval and infantry exits) call `regions::ensure` before `approach::reaches` and `orders::rally_cell`, as every other region read does, so a cell change earlier in the tick is seen and the debug build's stale-region assertion holds.
+
+**Orders (S-0213 claim 10, S-0406 claim 17; design C7-P5 yield).**
+
+- *#299, a deploy order to a building in construction or selling.* `orders::apply_other`'s deploy arm ignores an actor whose building is still being built up or whose seen behaviour is construction or selling, as the stop arm does after its movement steps.
+- *#300, only an order that takes effect ends a unit's giving way.* `orders::apply_pending` no longer ends the giving way of every named actor up front. `path::order_given` is called by the stop and scatter arms after their checks, by the deploy arm after its checks, and by `apply_behaviour` after claim 4's checks and table T3 part (a), so a failed order, a route-point add or join, a guard-spot order and a detonate order leave a unit giving way its saved move. The C7 ledger's *Resume* sentence follows.
+
+**Particle systems (S-0616, S-0205).**
+
+- *#301, a trigger-made system aims at its own point (claim 1).* `emitters::trigger_create` sets the system's target to its creation point, the waypoint cell's centre at ground surface height, so a railgun or other aimed system made by a trigger action has a line of length 0 rather than one to the map's origin.
+- *#302, a weapon's emitter keeps its offset from its owner (claims 1 and 5).* `emitters::effect_weapon_emitter` sets the system's owner offset to its creation point less the owner's position (wrapping on three axes, as `voxel_animation_system` does), so a smoke system that follows its owner (`particles::smoke_turn`) stays at the emitter's point.
+- *#303, a fire spawn interval of 0 (claim 20).* `particles::fire_turn` no longer skips the interval test for an interval of 0: the test takes S-0205 claim 3's division (quotient 0, remainder the dividend) and passes at tick 0 only; a turn with a sweep still emits on every third tick.
+- *#304, a heading and a split offset at the integer limits (claim 20, S-0205 claim 1).* `particles::heading` subtracts with wrapping and `split_and_remove` multiplies the sign with wrapping, so a negative spawn radius of −1 (F4) or a point near the integer limits no longer overflows.
+
+**Re-paths and straightening (S-0212 claims 7, 17, 18 and 19).**
+
+- *#305, congestion marks on a bridge deck (claim 19).* `path::congestion` reads the cell ahead, for the qualifying units of (i) and for (ii), on the layer of the blocked unit's step into it (claim 7's candidate layer from the unit's search pair), and each other cell of the 5 × 5 block on the layer a step from that pair would reach in it. A unit blocked on a deck therefore sees the unit ahead of it on the deck. Whether units on the other layer count as well is Q-3122; until it is answered they do not, as before for the ground.
+- *#306, a mode-1 search runs as mode 0 only when (i) counts no cell (claim 19).* `path::compute_once` downgrades a mode-1 request to mode 0 only when `congestion` answers none (no cell from (i)), not when the mark set is empty; an empty set of an even-counted mode-1 search stays mode 1. Mode 2 is unchanged. The doc of `trace::What::Search::mode` follows.
+- *#307, the start level of a straightening shape (claims 7, 17 and 18).* The start level of a shape that does not start at the unit's own cell is found by walking the path as it then stands from the start pair with claim 7's candidate layer, not looked up in a table of the found path's cells. `flatten`'s acceptance test already walks the current path to its start cell and now follows the layer as it goes; `shorten` keeps its public form and hands its internal acceptance test the current path before the stretch (`shorten_at`). A tunnel step leaves the walk on the ground, as the old lookup answered for every cell it did not hold.
+
+**State.** `anims::Anim::making` is saved and hashed; save format 148, AI game format 124.
+
+**Seams.** Q-3121 (#291: an attached or bouncing infantry-making animation) and Q-3122 (#305: the other cell layer in the congestion marks) are open. An ordinary infantry-making animation is drawn as an ordinary animation, not in its owner's colour (it has none until claim 9's fallback), and makes no maker presentation events. The stop arm's construction and tunnel checks of S-0213 claim 8 are still only the construction and selling return after its movement steps (its comment); not in this batch.
