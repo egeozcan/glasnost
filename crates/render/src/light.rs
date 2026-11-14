@@ -1987,6 +1987,28 @@ mod tests {
         assert_eq!(t[0][0], Rgb8::default());
     }
 
+    /// #152: spec: S-0104 claim 6, Formulas "Shade table" (without tint-exempt indices only
+    /// T_c(j) = ⌊2j·M_c / (N − 1)⌋ is used, so every shade count from 2 to 13, where L = 0,
+    /// gives a table; W is undefined only for tint-exempt indices)
+    #[test]
+    fn small_shade_counts_without_exempt_indices() {
+        let p = synthetic();
+        for rows in 2..=13 {
+            let t = shade_table(&p, [1000; 3], rows, None);
+            assert_eq!(t.len(), rows);
+            let u = p.colors[100];
+            let m = tint_factor(1000);
+            let span = rows as i64 - 1;
+            assert_eq!(t[0][100], Rgb8::default(), "row 0 is black");
+            let f = 2 * span * m / span / 16 * 16;
+            assert_eq!(
+                t[rows - 1][100].r,
+                (i64::from(u.r) * f / 65536).min(255) as u8,
+                "{rows} rows"
+            );
+        }
+    }
+
     /// spec: S-0104 Formulas, "Shade table" (the full-factor form differs in one 5-bit channel)
     #[test]
     fn full_factor_form_differs_once() {
