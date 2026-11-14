@@ -8476,3 +8476,49 @@ fn voxel_types_drawn_together_draw_as_each_alone() {
         }
     });
 }
+
+// ---------------------------------------------------------------------------
+// An owner's colour follows the person's options (#135)
+
+/// design: render (#135): a vehicle drawn again after the person switched
+/// the colour-blind house colours on (M8 step C3) takes its owner's new
+/// colour definition, as a painter that only saw the new options draws it;
+/// so does one drawn after its house's lobby slot changed (S-0103 claim
+/// 10).
+#[test]
+fn a_mobile_drawn_again_follows_the_owner_colour_options() {
+    with_voxel_types(|inputs| {
+        let mut car = voxel_mobile(Kind::Vehicles, 0, 0);
+        car.owner = b"Americans".to_vec();
+        let car = std::slice::from_ref(&car);
+        let slot = |s: u8, colour_blind: bool| Options {
+            slots: vec![(b"Americans".to_vec(), s)],
+            colour_blind,
+            ..inputs.options.clone()
+        };
+        let plain = slot(1, false);
+        let changes = [slot(1, true), slot(5, true)];
+        let (built, mut painter) = build_parts(inputs, true);
+        let mut scene = built.scene;
+        let at = |o| Inputs {
+            options: o,
+            ..*inputs
+        };
+        let (drawn, _) = painter.mobiles(&at(&plain), &mut scene, car);
+        let mut before = drawn_look(&scene, &drawn[0].items);
+        for changed in &changes {
+            let (now, _) = painter.mobiles(&at(changed), &mut scene, car);
+            let now = drawn_look(&scene, &now[0].items);
+            let (built, mut fresh) = build_parts(inputs, true);
+            let mut fresh_scene = built.scene;
+            let (expect, _) = fresh.mobiles(&at(changed), &mut fresh_scene, car);
+            assert_eq!(
+                now,
+                drawn_look(&fresh_scene, &expect[0].items),
+                "as drawn afresh"
+            );
+            assert_ne!(now, before, "the change shows");
+            before = now;
+        }
+    });
+}
