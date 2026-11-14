@@ -206,12 +206,20 @@ pub fn decimal(stored: &[u8], field: DecimalField) -> Decimal {
 /// `quirks.chop_rounding`, which rounds a percentage's product and its
 /// narrowing (S-0003 Formulas, Q₅₃ and Q₂₄).
 pub fn decimal_rounded(stored: &[u8], field: DecimalField, chop: bool) -> Decimal {
+    decimal_converted(stored, field, chop, true)
+}
+
+/// [`decimal_rounded`] with `quirks.decimal_conversion_rounding` given as
+/// `rule`: on, the single of claim 6's rule; off, the correctly rounded
+/// single (S-0003 Edge cases). The warning flag is the same in both.
+pub fn decimal_converted(stored: &[u8], field: DecimalField, chop: bool, rule: bool) -> Decimal {
     let Some(text) = decimal_prefix(stored) else {
         // spec: S-0003 claim 8 (our engine: keep the value in force)
         return Decimal::NoNumber;
     };
-    // spec: S-0003 claim 6 (single precision)
-    let Conversion { value, uncovered } = binfloat::decimal_to_binary(&text, Format::Single);
+    // spec: S-0003 claim 6 (single precision), Edge cases (quirks.decimal_conversion_rounding)
+    let Conversion { value, uncovered } =
+        binfloat::decimal_to_binary_rounded(&text, Format::Single, rule);
     // spec: S-0003 claim 7 and Formulas (a `%` anywhere multiplies by c: Q₅₃, RZ₅₃ with quirks.chop_rounding on, RN₅₃ off)
     let percent = stored.contains(&b'%');
     let value = if percent {
@@ -441,6 +449,19 @@ pub fn percent_list(
     integer_prefix: bool,
     chop: bool,
 ) -> (Vec<Binary>, PercentListNotes) {
+    percent_list_rounded(stored, k, integer_prefix, chop, true)
+}
+
+/// [`percent_list`] with `quirks.decimal_conversion_rounding` given as
+/// `rule`: off, each item's decimal at 53 bits is correctly rounded (S-0003
+/// Edge cases). The uncovered-case warning is the same in both settings.
+pub fn percent_list_rounded(
+    stored: &[u8],
+    k: usize,
+    integer_prefix: bool,
+    chop: bool,
+    rule: bool,
+) -> (Vec<Binary>, PercentListNotes) {
     let c = binfloat::percent_factor();
     let items = list(stored, COMMON_TEXT_LIMIT);
     let mut notes = PercentListNotes {
@@ -452,9 +473,9 @@ pub fn percent_list(
         .iter()
         .take(k)
         .map(|item| {
-            // spec: S-0003 claim 13 (the decimal of an item at 53 bits, claim 6's rule)
+            // spec: S-0003 claim 13 (the decimal of an item at 53 bits, claim 6's rule), Edge cases (quirks.decimal_conversion_rounding off: correctly rounded)
             let full = decimal_prefix(item).map(|text| {
-                let conv = binfloat::decimal_to_binary(&text, Format::Double);
+                let conv = binfloat::decimal_to_binary_rounded(&text, Format::Double, rule);
                 notes.uncovered |= conv.uncovered;
                 conv.value
             });
@@ -723,6 +744,37 @@ mod tests {
             assert_eq!(off[0].bits, 0x3FB9_9999_9999_999A);
             assert_eq!(on[1], off[1], "an item without `%` is unaffected");
         }
+    }
+
+    /// spec: S-0003 Edge cases (quirks.decimal_conversion_rounding off: every decimal the importer converts is correctly rounded, claims 6 and 13; warnings unchanged)
+    #[test]
+    fn decimal_conversion_rounding_switch() {
+        let conv = |s: &[u8], rule| match decimal_converted(s, DecimalField::Single, true, rule) {
+            Decimal::Value {
+                value, uncovered, ..
+            } => (value.to_exact_decimal(), uncovered),
+            Decimal::NoNumber => panic!(),
+        };
+        // An exact half of the last kept place: dropped on, to even off.
+        assert_eq!(conv(b"8388609.5", true), ("8388609".into(), true));
+        assert_eq!(conv(b"8388609.5", false), ("8388610".into(), true));
+        // The `%` product starts from the converted single.
+        assert_eq!(conv(b"8388609.5%", true).0, conv(b"8388609%", true).0);
+        assert_ne!(conv(b"8388609.5%", false).0, conv(b"8388609%", false).0);
+        assert_eq!(conv(b"0.1", true), conv(b"0.1", false));
+        let none = decimal_converted(b"x", DecimalField::Single, true, false);
+        assert_eq!(none, Decimal::NoNumber);
+        // A list item at 53 bits: 2^53 + 3 is a tie.
+        let (on, n_on) = percent_list_rounded(b"9007199254740995,0.1", 2, true, true, true);
+        let (off, n_off) = percent_list_rounded(b"9007199254740995,0.1", 2, true, true, false);
+        assert_eq!(on[0].to_exact_decimal(), "9007199254740994");
+        assert_eq!(off[0].to_exact_decimal(), "9007199254740996");
+        assert_eq!(on[1], off[1]);
+        assert_eq!(n_on, n_off);
+        assert_eq!(
+            percent_list(b"9007199254740995,0.1", 2, true, true),
+            (on, n_on)
+        );
     }
 
     /// spec: S-0003 claim 9 (scenario V5)

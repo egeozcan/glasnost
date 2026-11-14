@@ -515,6 +515,116 @@ fn verses_percent_rounding_follows_chop() {
     assert_eq!(q.get("chop_rounding"), Some(&false));
 }
 
+/// spec: S-0003 claim 13 and Edge cases (quirks.decimal_conversion_rounding: on, a Verses item's decimal at 53 bits drops an exact half; off, ties to even; the switch is recorded)
+#[test]
+fn verses_items_follow_decimal_conversion_rounding() {
+    // 2^53 + 3: an exact half of the last kept place, after an odd one.
+    let base = "[Warheads]\n1=Pow\n[Pow]\nVerses=9007199254740995,0.5\n";
+    let (s, _) = direct(&[base], "", &[], &[], IniQuirks::default());
+    let on = s.warheads["Pow"].verses.clone().unwrap();
+    assert_eq!(on[0].0, "9007199254740994");
+    let off = IniQuirks {
+        decimal_conversion_rounding: false,
+        ..IniQuirks::default()
+    };
+    let (s, _) = direct(&[base], "", &[], &[], off);
+    let rounded = s.warheads["Pow"].verses.clone().unwrap();
+    assert_eq!(rounded[0].0, "9007199254740996");
+    assert_eq!(rounded[1], on[1]);
+    let (_, _, q) = import(base, "", "", "", &ImportOptions::default());
+    assert_eq!(q.get("decimal_conversion_rounding"), Some(&true));
+    let options = ImportOptions {
+        ini: off,
+        ..ImportOptions::default()
+    };
+    let (_, _, q) = import(base, "", "", "", &options);
+    assert_eq!(q.get("decimal_conversion_rounding"), Some(&false));
+}
+
+/// The weapons' attached particle systems after a base layer that gives
+/// each `Plume` and a mode layer that writes `later` for Torch, an empty
+/// value for Wick and `none` for Fuse.
+fn attached_after(later: &str, options: &ImportOptions) -> [Option<String>; 3] {
+    let base = "[ParticleSystems]\n0=Plume\n[Plume]\nBehavesLike=Smoke\n\
+                [VehicleTypes]\n1=Tank\n[Tank]\nPrimary=Torch\nSecondary=Wick\nElitePrimary=Fuse\n\
+                [Torch]\nAttachedParticleSystem=Plume\n[Wick]\nAttachedParticleSystem=Plume\n\
+                [Fuse]\nAttachedParticleSystem=Plume\n";
+    let mode = format!(
+        "[Torch]\nAttachedParticleSystem={later}\n[Wick]\nAttachedParticleSystem=\n\
+         [Fuse]\nAttachedParticleSystem=none\n"
+    );
+    let (s, _, _) = import(base, &mode, "", "", options);
+    ["Torch", "Wick", "Fuse"].map(|w| s.weapons[w].attached_particle_system.clone())
+}
+
+/// spec: S-0004 claim 2 (a weapon's attached particle system: `<none>` and an empty value keep the field's value; `none` names a particle system called none) and Edge cases (quirks.attached_system_none_keeps and quirks.particle_none_is_a_name, both on by default)
+#[test]
+fn attached_particle_system_keeps_on_none_and_empty() {
+    let plume = Some("Plume".to_owned());
+    let [torch, wick, fuse] = attached_after("<NONE>", &ImportOptions::default());
+    assert_eq!(torch, plume, "<none> keeps the value in force");
+    assert_eq!(wick, plume, "an empty value keeps the value in force");
+    assert_eq!(fuse.as_deref(), Some("none"), "none names a type");
+}
+
+/// spec: S-0004 Edge cases (quirks.attached_system_none_keeps off: `<none>` clears the attached particle system, an empty value still keeps it; quirks.particle_none_is_a_name off: `none` acts as `<none>`)
+#[test]
+fn attached_particle_system_switches_off() {
+    use crate::layers::LayerQuirks;
+    let plume = Some("Plume".to_owned());
+    let with = |quirks| ImportOptions {
+        quirks,
+        ..ImportOptions::default()
+    };
+    let clears = LayerQuirks {
+        attached_system_none_keeps: false,
+        ..LayerQuirks::default()
+    };
+    let [torch, wick, fuse] = attached_after("<none>", &with(clears));
+    assert_eq!(torch, None, "<none> clears the field");
+    assert_eq!(wick, plume, "an empty value still keeps the value");
+    assert_eq!(fuse.as_deref(), Some("none"));
+    let no_name = LayerQuirks {
+        particle_none_is_a_name: false,
+        ..LayerQuirks::default()
+    };
+    let [torch, _, fuse] = attached_after("<none>", &with(no_name));
+    assert_eq!(torch, plume);
+    assert_eq!(fuse, plume, "none acts as <none>, which keeps the value");
+    let neither = LayerQuirks {
+        particle_none_is_a_name: false,
+        ..clears
+    };
+    let [_, _, fuse] = attached_after("<none>", &with(neither));
+    assert_eq!(fuse, None, "none acts as <none>, which clears the field");
+}
+
+/// spec: S-0006 claim 3 (a "not given" value is compared on the converted number), S-0003 Edge cases (quirks.decimal_conversion_rounding decides that number)
+#[test]
+fn not_given_values_follow_decimal_conversion_rounding() {
+    use crate::layers::{global_value_not_given_with, is_zero_with, type_value_not_given_with};
+    // 1 − 2^-25 lies halfway between 1 − 2^-24 (odd) and 1: −1 only when correctly rounded.
+    let range = |v: &[u8], rule| type_value_not_given_with(Kind::Weapons, b"Range", v, rule);
+    let crush = |v: &[u8], rule| global_value_not_given_with(COMBAT_DAMAGE, b"Crush", v, rule);
+    let recharge =
+        |v: &[u8], rule| type_value_not_given_with(Kind::Superweapons, b"RechargeTime", v, rule);
+    let tie = b"-0.9999999701976776123046875";
+    assert!(!range(tie, true));
+    assert!(range(tie, false));
+    assert!(!crush(tie, true));
+    assert!(crush(tie, false));
+    // 1e-45 is below the smallest subnormal single: 0 by claim 6's rule, that subnormal off.
+    assert!(is_zero_with(b"1e-45", true));
+    assert!(!is_zero_with(b"1e-45", false));
+    assert!(recharge(b"1e-45", true));
+    assert!(!recharge(b"1e-45", false));
+    // Plain spellings do not depend on the switch.
+    for rule in [true, false] {
+        assert!(range(b"-1.0", rule));
+        assert!(is_zero_with(b"-0", rule));
+    }
+}
+
 /// spec: S-0302 Import mapping, S-0303 Import mapping, S-0308 Import mapping (warhead fields), S-0303 and S-0312 Edge cases (warhead warnings)
 #[test]
 fn warhead_fields_and_warnings() {

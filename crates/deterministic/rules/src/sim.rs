@@ -24,11 +24,50 @@ use serde::Deserialize;
 pub struct Decimal(pub String);
 
 impl<'de> Deserialize<'de> for Decimal {
+    /// Asks for the text under [`crate::de::DECIMAL_MARKER`], so the rules
+    /// deserializer can give the correctly rounded reading's text with
+    /// `quirks.decimal_conversion_rounding` off ([`crate::de::from_node_with`]).
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(d)?;
-        glasnost_num::decimal::parse_text(&s).map_err(serde::de::Error::custom)?;
-        Ok(Decimal(s))
+        struct Text;
+        impl<'de> serde::de::Visitor<'de> for Text {
+            type Value = Decimal;
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("decimal text")
+            }
+            fn visit_newtype_struct<D: serde::Deserializer<'de>>(
+                self,
+                d: D,
+            ) -> Result<Decimal, D::Error> {
+                plain_decimal(d)
+            }
+            fn visit_str<E: serde::de::Error>(self, s: &str) -> Result<Decimal, E> {
+                glasnost_num::decimal::parse_text(s).map_err(E::custom)?;
+                Ok(Decimal(s.to_owned()))
+            }
+        }
+        d.deserialize_newtype_struct(crate::de::DECIMAL_MARKER, Text)
     }
+}
+
+/// A [`Decimal`] read as its text, whatever `quirks.decimal_conversion_rounding`
+/// says.
+fn plain_decimal<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Decimal, D::Error> {
+    let s = String::deserialize(d)?;
+    glasnost_num::decimal::parse_text(&s).map_err(serde::de::Error::custom)?;
+    Ok(Decimal(s))
+}
+
+/// Versus items read as written (S-0003 claim 13): they are the exact
+/// decimals of the importer's doubles, read with `nearest_double`, not
+/// singles, so `quirks.decimal_conversion_rounding` leaves their text alone.
+fn plain_decimals<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<Vec<Decimal>>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(transparent)]
+    struct Plain(#[serde(deserialize_with = "plain_decimal")] Decimal);
+    let v: Option<Vec<Plain>> = Option::deserialize(d)?;
+    Ok(v.map(|v| v.into_iter().map(|p| p.0).collect()))
 }
 
 impl Decimal {
@@ -3237,8 +3276,9 @@ pub struct WarheadType {
     /// `Verses`: the eleven versus values in class-index order (S-0003
     /// claim 13, S-0305), each written as the exact decimal of its double,
     /// without `%` (the importer has applied claim 13's `%` readings);
-    /// validation refuses an item with `%`.
-    #[serde(default)]
+    /// validation refuses an item with `%`. Read as written whatever
+    /// `quirks.decimal_conversion_rounding` says.
+    #[serde(default, deserialize_with = "plain_decimals")]
     pub verses: Option<Vec<Decimal>>,
     /// `CellSpread` S, cells (S-0303), a single.
     #[serde(default)]

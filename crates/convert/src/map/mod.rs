@@ -868,8 +868,11 @@ impl Decoder<'_> {
         let Some(stored) = self.doc.value(b"Lighting", key) else {
             return default;
         };
-        // spec: S-0104 claim 1 (v is the single-precision decimal of S-0003 claim 6)
-        let Decimal::Value { value: v, .. } = value::decimal(stored, DecimalField::Single) else {
+        // spec: S-0104 claim 1 (v is the single-precision decimal of S-0003 claim 6), S-0003 Edge cases (converted as the map document's quirks.decimal_conversion_rounding says)
+        let rule = self.doc.quirks().decimal_conversion_rounding;
+        let Decimal::Value { value: v, .. } =
+            value::decimal_converted(stored, DecimalField::Single, true, rule)
+        else {
             // spec: S-0003 claim 8 (no number: our engine keeps the value in force, and warns)
             self.warn(
                 self.line_of(b"Lighting", key),

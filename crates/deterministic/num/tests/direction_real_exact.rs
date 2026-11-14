@@ -58,3 +58,34 @@ fn on_keeps_the_table_path() {
     assert_eq!(direction_real_b(num(1), num(1), true, RZ), 8315);
     assert_eq!(direction_real_b(num(1), num(0), true, RZ), 16383);
 }
+
+// spec: S-0306 Formulas (revision 90: the direction of a zero displacement, both arguments zero of either sign after the narrowing to single precision, is 16383 with quirks.table_direction on and 16384 with it off)
+#[test]
+fn zero_displacement_faces_map_east() {
+    let zero = F64::ZERO;
+    let minus_zero = F64::ZERO.negated();
+    // The smallest positive double: zero once narrowed to single precision.
+    let tiny = F64(1);
+    let cases = [
+        (zero, zero),
+        (minus_zero, zero),
+        (zero, minus_zero),
+        (minus_zero, minus_zero),
+        (tiny, tiny.negated()),
+        (tiny.negated(), zero),
+    ];
+    for (x, y) in cases {
+        for mode in [RZ, Rounding::Nearest] {
+            assert_eq!(
+                direction_real_b(x, y, false, mode),
+                16384,
+                "off: X = {x:?}, Y = {y:?}"
+            );
+            assert_eq!(
+                direction_real_b(x, y, true, mode),
+                16383,
+                "on: X = {x:?}, Y = {y:?}"
+            );
+        }
+    }
+}

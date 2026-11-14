@@ -23,7 +23,7 @@ use crate::emit::type_keys;
 use crate::kinds::Kind;
 use crate::layers::{
     COLOUR_ADD_LEN, COMBAT_DAMAGE, Event, KeyState, LayerQuirks, Outcome, TypeRec, Warning, What,
-    is_zero,
+    is_zero_with,
 };
 use crate::names::{encode, show};
 
@@ -1493,7 +1493,13 @@ impl Builder<'_> {
                 }
                 if PERCENTAGE_KEYS.contains(&key)
                     && !v.contains(&b'%')
-                    && let IniDecimal::Value { value, .. } = value::decimal(v, DecimalField::Double)
+                    // spec: S-0003 Edge cases (quirks.decimal_conversion_rounding decides the decimal)
+                    && let IniDecimal::Value { value, .. } = value::decimal_converted(
+                        v,
+                        DecimalField::Double,
+                        true,
+                        self.i.ini_quirks.decimal_conversion_rounding,
+                    )
                     && magnitude_above_one(&value.to_exact_decimal())
                 {
                     // spec: S-0003 claim 18 (a percentage field without `%` above 1 in magnitude)
@@ -1618,7 +1624,8 @@ impl Builder<'_> {
                 // spec: S-0211 claim 2 (a) (the text; the cap at 1.0 is the simulation's)
                 if let Some(text) = self.decimal(state, None, &what) {
                     rec.put(field, jsonc::string(text.clone()));
-                    if text.starts_with('-') && !is_zero(text.as_bytes()) {
+                    let rule = self.i.ini_quirks.decimal_conversion_rounding;
+                    if text.starts_with('-') && !is_zero_with(text.as_bytes(), rule) {
                         // spec: S-0211 Edge cases (the importer warns for any negative land multiplier)
                         let (layer, line) = state
                             .and_then(|s| {
@@ -1681,6 +1688,8 @@ impl Builder<'_> {
         layers.sort_unstable();
         layers.dedup();
         let what = format!("[{section}] AARate");
+        // spec: S-0003 Edge cases (quirks.decimal_conversion_rounding decides whether the text reads as zero)
+        let rule = self.i.ini_quirks.decimal_conversion_rounding;
         let mut held: Option<String> = None;
         for l in layers {
             let given = aa_state.and_then(|s| {
@@ -1690,7 +1699,7 @@ impl Builder<'_> {
                 })
             });
             match given {
-                Some((v, line)) if !is_zero(&v) => match decimal_text(&v) {
+                Some((v, line)) if !is_zero_with(&v, rule) => match decimal_text(&v) {
                     Some(t) => held = Some(t),
                     None => {
                         // spec: S-0003 claim 8 (no number: our engine keeps the value in force, with a warning)
@@ -2787,6 +2796,37 @@ impl Builder<'_> {
             self.type_key(Kind::Particles, name)
                 .unwrap_or_else(|| encode(name))
         })
+    }
+
+    /// A weapon's attached particle system in force (S-0004 claim 2 and
+    /// Edge cases): a particle-system name as [`Form::Ref`] reads it, except
+    /// that an empty value keeps the value in force, `<none>` keeps it while
+    /// `quirks.attached_system_none_keeps` is on and clears it while off,
+    /// and `none` names a type called none while
+    /// `quirks.particle_none_is_a_name` is on and acts as `<none>` while
+    /// off.
+    pub(super) fn attached_system(&self, state: Option<&KeyState>) -> Option<Node> {
+        let keeps = self.i.quirks.attached_system_none_keeps;
+        let none_is_a_name = self.i.quirks.particle_none_is_a_name;
+        fold(state, None, |v, _| {
+            let name = value::text(v, value::COMMON_TEXT_LIMIT);
+            // spec: S-0004 claim 2 (the attached particle system: an empty value keeps the value; <none> means no type; none names a type while quirks.particle_none_is_a_name is on)
+            let no_type = name.eq_ignore_ascii_case(b"<none>")
+                || (!none_is_a_name && value::is_no_type(name));
+            if name.is_empty() {
+                None
+            } else if no_type {
+                // spec: S-0004 Edge cases (quirks.attached_system_none_keeps on: <none> keeps the value; off: it clears the field)
+                (!keeps).then_some(None)
+            } else {
+                Some(Some(
+                    self.type_key(Kind::ParticleSystems, name)
+                        .unwrap_or_else(|| encode(name)),
+                ))
+            }
+        })
+        .flatten()
+        .map(jsonc::string)
     }
 
     /// The image name after each type read (S-0007 claim 1: the image key

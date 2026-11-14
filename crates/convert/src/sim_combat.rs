@@ -318,6 +318,10 @@ const TREE_STRENGTH_DEFAULT: i32 = 25; // spec: S-0102 Constants (game-wide tree
 const UNSET_STRENGTH: i32 = -1; // spec: S-0102 claim 23 (writing −1 unsets the strength)
 
 /// Combat fields of weapons.
+/// A weapon's attached particle system, which S-0004 claim 2 gives a
+/// reading of its own.
+const ATTACHED_SYSTEM_KEY: &str = "AttachedParticleSystem"; // spec: S-0004 Import mapping (a weapon; AttachedParticleSystem, claim 2)
+
 const WEAPON_COMBAT: &[Row] = &[
     (
         "infinite_mind_control",
@@ -343,9 +347,10 @@ const WEAPON_COMBAT: &[Row] = &[
     ),
     ("is_railgun", "IsRailgun", Bool, "S-0301"),
     // spec: S-0616 Import mapping (weapon AttachedParticleSystem: the effect weapon's emitter type, a particle-system name; absent none)
+    // spec: S-0004 claim 2 (read by `attached_system`, not by its form)
     (
         "attached_particle_system",
-        "AttachedParticleSystem",
+        ATTACHED_SYSTEM_KEY,
         Ref(Kind::ParticleSystems),
         "S-0616",
     ),
@@ -1810,9 +1815,11 @@ impl Exact {
 }
 
 /// The double S-0003 gives a stored decimal (claims 6 to 8), or `None`
-/// without a number.
-fn decimal_of(v: &[u8]) -> Option<Binary> {
-    match value::decimal(v, DecimalField::Double) {
+/// without a number; `rule` is `quirks.decimal_conversion_rounding` (S-0003
+/// Edge cases).
+fn decimal_of(v: &[u8], rule: bool) -> Option<Binary> {
+    // spec: S-0003 claims 6 to 8, Edge cases (quirks.decimal_conversion_rounding)
+    match value::decimal_converted(v, DecimalField::Double, true, rule) {
         IniDecimal::Value { value, .. } => Some(value.convert_rz(Format::Double)),
         IniDecimal::NoNumber => None,
     }
@@ -1873,8 +1880,8 @@ pub(super) fn bool_of(state: Option<&KeyState>) -> Option<bool> {
     fold(state, None, |v, _| value::boolean(v))
 }
 
-fn dec_of(state: Option<&KeyState>) -> Option<Exact> {
-    fold(state, None, |v, _| decimal_of(v)).map(|b| Exact::of(&b))
+fn dec_of(state: Option<&KeyState>, rule: bool) -> Option<Exact> {
+    fold(state, None, |v, _| decimal_of(v, rule)).map(|b| Exact::of(&b))
 }
 
 fn text_of(state: Option<&KeyState>) -> Option<Vec<u8>> {
@@ -2173,7 +2180,13 @@ impl Builder<'_> {
     fn cfields(&mut self, rec: &mut Rec, t: &TypeRec, kind: Kind, table: &[Row]) {
         for &(field, k, form, _) in table {
             let what = format!("{} {} {k}", kind.key(), show(&t.name));
-            if let Some(n) = self.field(key(t, k), form, &what) {
+            let n = if kind == Kind::Weapons && k == ATTACHED_SYSTEM_KEY {
+                // spec: S-0004 claim 2 (the attached particle system keeps its value on <none> and on an empty value)
+                self.attached_system(key(t, k))
+            } else {
+                self.field(key(t, k), form, &what)
+            };
+            if let Some(n) = n {
                 rec.put(field, n);
             }
         }
@@ -2210,11 +2223,19 @@ impl Builder<'_> {
         bad: impl Fn(Exact) -> bool,
         message: impl Fn(&str) -> String,
     ) {
+        let rule = self.rule();
         self.each(
             state,
-            |v| decimal_of(v).is_some_and(|b| bad(Exact::of(&b))),
+            |v| decimal_of(v, rule).is_some_and(|b| bad(Exact::of(&b))),
             message,
         );
+    }
+
+    /// `quirks.decimal_conversion_rounding` (S-0003 Edge cases), from the
+    /// importer's ini switches: on, decimal text converts by claim 6's rule;
+    /// off, correctly rounded.
+    fn rule(&self) -> bool {
+        self.i.ini_quirks.decimal_conversion_rounding
     }
 
     pub(super) fn warn_at(&mut self, state: Option<&KeyState>, message: String) {
@@ -2573,6 +2594,9 @@ impl Builder<'_> {
         let name = format!("{} {}", kind.key(), show(&t.name));
         let mut out = Vec::new();
         let mut differs = false;
+        // spec: S-0003 Edge cases (quirks.decimal_conversion_rounding decides whether a text reads as zero)
+        let rule = self.i.ini_quirks.decimal_conversion_rounding;
+        let is_zero = |v: &[u8]| is_zero_with(v, rule);
         for (k, default_key) in COEFFICIENTS {
             let state = key(t, k);
             // spec: S-0309 Edge cases (the importer warns for a type coefficient written as 0, in either setting)
@@ -3354,13 +3378,14 @@ impl Builder<'_> {
         self.each_int(key(t, "Damage"), |d| d.unsigned_abs() > DAMAGE_WARN.unsigned_abs(), |v| {
             format!("{name} Damage {v} is above 2^24 in magnitude: single precision changes it (S-0302 Edge cases)")
         });
+        let rule = self.rule();
         for k in ["Range", "MinimumRange"] {
             // spec: S-0307 Edge cases (negative range fields other than −1 and the unlimited −2: reproduced, the importer warns)
             self.each(
                 key(t, k),
                 // −1 is a "not given" value and never reaches here (S-0307 claim 1).
                 |v| {
-                    decimal_of(v).is_some_and(|x| {
+                    decimal_of(v, rule).is_some_and(|x| {
                         let r = leptons(&x);
                         r.negative() && r.int != UNLIMITED
                     })
@@ -3514,7 +3539,7 @@ impl Builder<'_> {
             |v| format!("{name} CellSpread {v} is outside 0 to 11 cells: our engine clamps the scan radius (S-0303 Edge cases, a departure)"),
         );
         if bool_of(key(t, "CausesDelayKill")) == Some(true)
-            && dec_of(key(t, "CellSpread")).is_none_or(|s| s.lt(1))
+            && dec_of(key(t, "CellSpread"), self.rule()).is_none_or(|s| s.lt(1))
         {
             // spec: S-0312 Edge cases (a delay-kill warhead with a spread below 1, while quirks.delay_kill_whole_cell_spread is on)
             self.warn_at(key(t, "CausesDelayKill"), format!(
@@ -3531,9 +3556,11 @@ impl Builder<'_> {
         let integer_prefix = self.i.ini_quirks.percent_list_integer_prefix;
         // spec: S-0003 Formulas (Q₅₃ follows quirks.chop_rounding)
         let chop = self.i.sim_quirks.chop_rounding;
+        // spec: S-0003 claim 13, Edge cases (each item's decimal follows quirks.decimal_conversion_rounding)
+        let rule = self.rule();
         let mut notes = Vec::new();
         let list = fold(key(t, "Verses"), None, |v, e| {
-            let (vals, n) = value::percent_list(v, VERSES, integer_prefix, chop);
+            let (vals, n) = value::percent_list_rounded(v, VERSES, integer_prefix, chop, rule);
             notes.push((e.layer, e.line, show(v), n));
             Some(vals)
         })?;
@@ -3893,6 +3920,7 @@ impl Builder<'_> {
             // spec: S-0312 Edge cases, S-0317 claim 11 and S-0319 claim 8 (an empty splash list: no splash, a departure; the importer warns)
             self.warn_at(splash.as_ref(), "[CombatDamage] SplashList is empty: a vehicle dropped into water shows no splash (S-0312 claim 11, a departure), and neither does a debris piece or a bouncing animation that ends in water (S-0317 claim 11, S-0319 claim 8, departures)".to_owned());
         }
+        let rule = self.rule();
         let gravity = self.global(AUDIO_VISUAL, "Gravity");
         // spec: S-0306 Edge cases (the importer warns about a gravity of 0)
         self.each_int(gravity.as_ref(), |g| g == 0, |_| {
@@ -3903,7 +3931,7 @@ impl Builder<'_> {
         self.each(
             bob.as_ref(),
             |v| {
-                decimal_of(v).is_some_and(|q| {
+                decimal_of(v, rule).is_some_and(|q| {
                     // spec: S-0503 F6 (900 ticks per game minute)
                     let p = q.mul_rz(&Binary::from_i64(Format::Double, 900), Format::Double);
                     Exact::of(&p).int == 0
@@ -3936,7 +3964,7 @@ impl Builder<'_> {
         self.each(
             rate.as_ref(),
             |v| {
-                decimal_of(v).is_some_and(|r| {
+                decimal_of(v, rule).is_some_and(|r| {
                     let p = Exact::of(&r.mul_rz(&ticks, Format::Double));
                     p.int == 0 || p.negative()
                 })
@@ -3995,7 +4023,7 @@ impl Builder<'_> {
             // spec: S-0003 claim 18, Import mapping row C9 (a percentage field without `%` above 1 in magnitude)
             self.each(
                 state.as_ref(),
-                |v| !v.contains(&b'%') && decimal_of(v).is_some_and(|b| { let x = Exact::of(&b); x.gt(1) || x.lt(-1) }),
+                |v| !v.contains(&b'%') && decimal_of(v, rule).is_some_and(|b| { let x = Exact::of(&b); x.gt(1) || x.lt(-1) }),
                 |v| format!("[General] {k} {v:?} has no `%`: it is taken as a fraction, not a percentage (S-0003 claim 18)"),
             );
         }
@@ -4278,7 +4306,7 @@ impl Builder<'_> {
                 }
                 if matches!(kind, Kind::Infantry | Kind::Vehicles) {
                     // spec: S-0111 claim 12 (the importer warns about a passenger-capable type with a size below 1)
-                    if dec_of(key(t, "Size")).is_some_and(|z| z.lt(1)) {
+                    if dec_of(key(t, "Size"), self.rule()).is_some_and(|z| z.lt(1)) {
                         out.push((
                             key(t, "Size").cloned(),
                             format!("{name} has a passenger size below 1: as a passenger its pips can reach below pip 0, which our engine does not draw (S-0111 claim 12)"),
@@ -4449,7 +4477,9 @@ impl Builder<'_> {
                 let flak = ["FlakScatter", "Inaccurate", "Arcing"]
                     .iter()
                     .all(|k| bool_of(key(p, k)) == Some(true));
-                let range = fold(key(w, "Range"), None, |v, _| decimal_of(v)).map(|x| leptons(&x));
+                let rule = self.rule();
+                let range =
+                    fold(key(w, "Range"), None, |v, _| decimal_of(v, rule)).map(|x| leptons(&x));
                 if flak && range.is_none_or(Exact::is_zero) {
                     // spec: S-0306 Edge cases (flak range 0: a scatter radius of 0, a departure; the importer warns)
                     self.warn_at(key(w, "Range"), format!(
@@ -4472,7 +4502,7 @@ impl Builder<'_> {
                 ));
             }
             let cap = self.global(ELEVATION_MODEL, "ElevationBonusCap");
-            if let Some(c) = dec_of(cap.as_ref()) {
+            if let Some(c) = dec_of(cap.as_ref(), self.rule()) {
                 if c.negative() {
                     // spec: S-0307 Edge cases (a negative elevation cap: reproduced, the importer warns)
                     self.warn_at(cap.as_ref(), "[ElevationModel] ElevationBonusCap is negative: every floor-bound pair gets a negative bonus (S-0307 Edge cases)".to_owned());

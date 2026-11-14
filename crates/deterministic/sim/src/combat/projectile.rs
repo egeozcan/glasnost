@@ -36,6 +36,22 @@ pub fn theta(f: i32, mode: Rounding) -> F64 {
     F64::from_i64(signed - 16383, mode).mul(kappa(), mode)
 }
 
+/// θ(f) of a facing in the map plane (θ(y) and θ(b) in F1, θ(f_ξ) in F5,
+/// θ(b) in F6, θ(y′) in F11): [`theta`] with S-0204's
+/// `quirks.table_direction` at `table`; off, (f − 16384) × (the double
+/// nearest −2π/65536), f the same signed 16-bit value and f − 16384 exact
+/// (S-0306 Formulas). Pitch facings stay on [`theta`].
+pub fn theta_plane(f: i32, table: bool, mode: Rounding) -> F64 {
+    if table {
+        return theta(f, mode);
+    }
+    let signed = i64::from(f as i16);
+    // spec: S-0306 Formulas (revision 90: with quirks.table_direction off, θ(f) = (f − 16384) × (−2π / 65536) for a map-plane facing, the constant the double nearest −2π/65536)
+    let scale = crate::rules::nearest_double("-0.00009587379924285257");
+    // spec: S-0306 Formulas (revision 90: f − 16384 in exact integer arithmetic)
+    F64::from_i64(signed - 16384, mode).mul(scale, mode)
+}
+
 /// The facing of an angle, trunc((θ − π/2) × c₂) (S-0306 Terms), as a
 /// signed 16-bit value.
 pub fn angle_facing(t: F64, mode: Rounding) -> i32 {
@@ -122,7 +138,8 @@ pub(crate) fn initial_velocity(w: &World, yaw: i32, pitch: i32, s: i32) -> [F64;
     };
     // spec: S-0306 F1 (L = r(s₀²))
     let l = table_root((i64::from(s0) * i64::from(s0)) as u64, mode).to_f64();
-    let ty = theta(yaw, mode);
+    // spec: S-0306 Formulas (revision 90: θ(y) in F1 is a map-plane facing's θ, under quirks.table_direction)
+    let ty = theta_plane(yaw, r.quirks.table_direction, mode);
     let chx = cos_q(w, ty, mode).mul(l, mode);
     let chy = sin_q(w, ty, mode).mul(l, mode).negated();
     // spec: S-0306 F1 (M = r(RZ₅₃(χₓ² + χ_y²)))
@@ -272,7 +289,8 @@ fn scatter(w: &World, p: (i32, i32), sigma: i32, xi: i32) -> (i32, i32) {
         .mul(c2, mode)
         .trunc_i128()
         .unwrap_or(0) as i64 as i16;
-    let th = theta(i32::from(fx), mode);
+    // spec: S-0306 Formulas (revision 90: θ(f_ξ) in F5 is a map-plane facing's θ, under quirks.table_direction)
+    let th = theta_plane(i32::from(fx), r.quirks.table_direction, mode);
     let s = f(i64::from(sigma), mode);
     // spec: S-0306 F5 (Qₓ = trunc(RZ₅₃(Pₓ + RZ₅₃(cos_t θ × σ))), Q_y = trunc(RZ₅₃(P_y − RZ₅₃(sin_t θ × σ))))
     let qx = f(i64::from(p.0), mode)
@@ -407,11 +425,13 @@ pub fn launch(
         };
     // spec: S-0306 claim 5 (ρ = 0 and not dropping: the direction towards the impact point; else the aiming facing)
     let mut yaw = if p.rot == 0 && !p.dropping {
-        i32::from(direction(
-            i64::from(impact.x - fire_point.x),
-            i64::from(impact.y - fire_point.y),
-            q.table_direction,
-        ))
+        let (dx, dy) = (impact.x - fire_point.x, impact.y - fire_point.y);
+        if dx == 0 && dy == 0 && !q.table_direction {
+            // spec: S-0306 Formulas (revision 90: the direction of a zero displacement, claim 5 at a planar distance of 0, is 16384, map east on the exact scale, with quirks.table_direction off)
+            16384
+        } else {
+            i32::from(direction(i64::from(dx), i64::from(dy), q.table_direction))
+        }
     } else {
         i32::from(aiming(w, firer))
     };
@@ -580,7 +600,8 @@ fn radial_yaw(w: &World, id: ObjectId, n: i32, k: i32) -> i32 {
         .div(f(i64::from(n), mode), mode)
         .mul(f(i64::from(k), mode), mode)
         .sub(c1, mode);
-    let v = theta(body, mode)
+    // spec: S-0306 Formulas (revision 90: θ(b) in F1 is a map-plane facing's θ, under quirks.table_direction; the conversion back with c₂ keeps its scale)
+    let v = theta_plane(body, r.quirks.table_direction, mode)
         .add(phi, mode)
         .sub(c1, mode)
         .mul(c2, mode)
@@ -631,7 +652,7 @@ pub fn drawn_facings(
     v: [F64; 3], // nocite: three components x, y, z
 ) -> (u8, u8) {
     let mode = w.rules().mode;
-    // spec: S-0306 F14 (φ: S-0204 F3 with X = Vₓ and Y = −V_y in single precision; both 0 give 16383), S-0306 Formulas (S-0204's quirks.table_direction)
+    // spec: S-0306 F14 (φ: S-0204 F3 with X = Vₓ and Y = −V_y in single precision; both 0 give 16383), S-0306 Formulas (S-0204's quirks.table_direction; revision 90: both 0 give 16384 with it off)
     let phi = glasnost_num::geom::direction_real_b(
         v[0],
         v[1].negated(),
@@ -677,7 +698,8 @@ fn lead(w: &World, firer: ObjectId, target: ObjectId, aim: Pos) -> Pos {
         .div(f(i64::from(ws), mode).mul(point9, mode), mode)
         .mul(f(i64::from(u), mode), mode)
         .to_i32_common();
-    let th = theta(b, mode);
+    // spec: S-0306 Formulas (revision 90: θ(b) in F6 is a map-plane facing's θ, under quirks.table_direction)
+    let th = theta_plane(b, r.quirks.table_direction, mode);
     let lf = f(i64::from(l), mode);
     // spec: S-0306 F6 (aim = (trunc(RZ₅₃(x + RZ₅₃(cos_t θ(b) × ℓ))), trunc(RZ₅₃(y − RZ₅₃(sin_t θ(b) × ℓ))), z))
     Pos::new(
@@ -842,7 +864,8 @@ fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64
         } else {
             hlen(w, v)
         };
-        let th = theta(yn, mode);
+        // spec: S-0306 Formulas (revision 90: θ(y′) in F11 is a map-plane facing's θ, under quirks.table_direction)
+        let th = theta_plane(yn, q.table_direction, mode);
         v = [
             cos_q(w, th, mode).mul(h, mode),
             sin_q(w, th, mode).mul(h, mode).negated(),

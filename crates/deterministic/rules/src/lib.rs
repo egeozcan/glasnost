@@ -101,7 +101,13 @@ pub fn resolve_ruleset(
         resolver.apply(layer).map_err(|e| Error::Resolve(vec![e]))?;
     }
     let (tree, provenance) = resolver.finish().map_err(Error::Resolve)?;
-    let ruleset: Ruleset = de::from_node(&tree).map_err(Error::Schema)?;
+    // spec: S-0003 Edge cases (quirks.decimal_conversion_rounding, default on; off: every decimal correctly rounded)
+    let nearest = tree
+        .get("globals")
+        .and_then(|g| g.get("quirks"))
+        .and_then(|q| q.get("decimal_conversion_rounding"))
+        .is_some_and(|s| matches!(s.value, jsonc::Value::Bool(false)));
+    let ruleset: Ruleset = de::from_node_with(&tree, nearest).map_err(Error::Schema)?;
     let problems = validate::validate(&ruleset);
     if !problems.is_empty() {
         return Err(Error::Invalid(problems));

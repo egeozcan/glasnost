@@ -21,6 +21,10 @@ pub struct Quirks {
     // spec: S-0205 claim 5
     #[serde(default = "on")]
     pub chop_rounding: bool,
+    /// Decimal text converts by claim 6's rule, which drops an exact half (and, for a whole number below 2^64, an exact three quarters) of the last kept place, so `16777219` reads 16777218; off: every decimal is correctly rounded to the nearest single, ties to even, subnormals included. Read when a ruleset is resolved from data.
+    // spec: S-0003 claim 6 and Edge cases
+    #[serde(default = "on")]
+    pub decimal_conversion_rounding: bool,
     /// Game speed reaches game state through speed-normalised delays and a chrono flash stepping in frozen cycles.
     // spec: S-0201 claim 11; glossary G3
     #[serde(default = "on")]
@@ -2342,6 +2346,7 @@ impl Default for Quirks {
     fn default() -> Self {
         Self {
             chop_rounding: true,
+            decimal_conversion_rounding: true,
             speed_normalised_delays: true,
             building_wrap_normalisation: true,
             chrono_flash_keeps_order_block: true,
@@ -2907,6 +2912,10 @@ impl Quirks {
     pub fn named(&self) -> Vec<(&'static str, bool)> {
         vec![
             ("chop_rounding", self.chop_rounding),
+            (
+                "decimal_conversion_rounding",
+                self.decimal_conversion_rounding,
+            ),
             ("speed_normalised_delays", self.speed_normalised_delays),
             (
                 "building_wrap_normalisation",
@@ -4383,7 +4392,7 @@ impl Quirks {
 
 /// Quirk switches named in the specs that are owned by the importer or the
 /// renderer rather than the simulation, with their owner.
-// spec: S-0215 claim 21, S-0104, S-0107 claim 22, S-0009 Edge cases, S-0006 Edge cases, S-0010 Edge cases, S-0308 claim 1, S-0309 Edge cases, S-0003 claim 13, S-0202 claim 17 (the owning specs of these switches)
+// spec: S-0215 claim 21, S-0104, S-0107 claim 22, S-0009 Edge cases, S-0006 Edge cases, S-0010 Edge cases, S-0308 claim 1, S-0309 Edge cases, S-0003 claim 13, S-0202 claim 17, S-0001 claim 10, S-0004 claims 2 and 8 (the owning specs of these switches)
 pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "override_resets_keys",
@@ -4525,6 +4534,22 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
         "importer (convert::sim::SimQuirks), S-0202 claim 17 and Edge cases",
     ),
     (
+        "ini_trim_defect",
+        "importer (ini::Quirks), S-0001 claim 10; S-0003 claim 5 names it",
+    ),
+    (
+        "long_name_duplicates",
+        "importer (convert::layers::LayerQuirks), S-0004 claim 8; S-0003 claim 15 names it",
+    ),
+    (
+        "particle_none_is_a_name",
+        "importer (convert::layers::LayerQuirks), S-0004 claim 2 and Edge cases; S-0003 claim 14 names it",
+    ),
+    (
+        "attached_system_none_keeps",
+        "importer (convert::layers::LayerQuirks), S-0004 claim 2 and Edge cases; S-0003 claim 14 names it",
+    ),
+    (
         "voxel_light_first_section_mode",
         "renderer (render::voxel::VoxelQuirks), S-0105 claim 18; S-0317 claim 24 names it for debris pieces (S-0317 r57)",
     ),
@@ -4539,8 +4564,8 @@ mod tests {
     use super::*;
 
     /// Every `quirks.name` in the simulation specs (S-0201 to S-0215), in
-    /// S-0006, S-0009, S-0010 and in S-0107 is a field here or listed as
-    /// owned elsewhere.
+    /// S-0003, S-0006, S-0009, S-0010 and in S-0107 is a field here or
+    /// listed as owned elsewhere.
     #[allow(clippy::disallowed_methods)]
     #[test]
     fn every_spec_quirk_has_a_switch() {
@@ -4581,7 +4606,9 @@ mod tests {
         for (dir, prefixes) in [
             ("formats", &["S-0009", "S-0010", "S-0012"][..]),
             ("triggers", &["S-0011", "S-0524"][..]),
-            ("rules-import", &["S-0006"][..]),
+            // S-0003's switches: decimal_conversion_rounding is a field here, the rest are
+            // the importer's and are listed below.
+            ("rules-import", &["S-0003", "S-0006"][..]),
             ("rendering", &["S-0107"][..]),
             // The M7b superweapons built: S-0612 (S-0611 names no switch of its own here).
             ("superweapons", &["S-0512", "S-0513", "S-0612"][..]),
