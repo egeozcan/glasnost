@@ -625,7 +625,12 @@ pub fn trigger_create(w: &mut World, ti: i32, c: CellXY) {
     };
     // spec: S-0616 claim 1 (at the centre of the cell of the action's waypoint, at the ground surface height of that cell, not raised on a bridge)
     let p = crate::superweapons::cell_point(w, c, false);
-    crate::particles::create(w, i, p, None);
+    if let Some(s) = crate::particles::create(w, i, p, None)
+        && let Some(x) = w.gas.systems.get_mut(&s)
+    {
+        // spec: S-0616 claim 1 (a trigger-made system's target point is its creation point)
+        x.target = p;
+    }
 }
 
 /// S-0011 code 89 and S-0616 claim 1: marks every particle system in play
