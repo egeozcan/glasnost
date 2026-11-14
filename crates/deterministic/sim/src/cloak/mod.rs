@@ -236,22 +236,22 @@ pub fn fade_fraction(k: i32, n: i32) -> i32 {
 }
 
 /// *c* = ⌈*N* / 2⌉, the stage at which cloaking completes (S-0516 claim 7,
-/// F1).
+/// F1). Computed in `i64`, so the largest *N* does not overflow (#241).
 pub fn cloaked_stage(n: i32) -> i32 {
     // spec: S-0516 claim 7 and F1 (c = ⌈N / 2⌉)
-    (n + 1) / 2
+    ((i64::from(n) + 1) / 2) as i32
 }
 
-/// F1: the cloaking time *c* · *S*.
-pub fn cloak_time(n: i32, s: i32) -> i32 {
+/// F1: the cloaking time *c* · *S*, in `i64` (no overflow for any *N*, *S*).
+pub fn cloak_time(n: i32, s: i32) -> i64 {
     // spec: S-0516 F1 (T_cloak = c × S)
-    cloaked_stage(n) * s
+    i64::from(cloaked_stage(n)) * i64::from(s)
 }
 
-/// F2: the uncloaking time (*N* − 1) · *S*.
-pub fn uncloak_time(n: i32, s: i32) -> i32 {
+/// F2: the uncloaking time (*N* − 1) · *S*, in `i64`.
+pub fn uncloak_time(n: i32, s: i32) -> i64 {
     // spec: S-0516 F2 (T_uncloak = (N − 1) × S)
-    (n - 1) * s
+    (i64::from(n) - 1) * i64::from(s)
 }
 
 /// The displacements of the sensor disc of radius `r` (S-0516 Terms):
