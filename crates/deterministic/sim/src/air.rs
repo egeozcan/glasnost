@@ -2378,6 +2378,10 @@ fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
 /// its point as one held with no destination object and its unfinished
 /// flight; [`AirState::lost`] records the loss for *move*.
 pub(crate) fn destination_lost(w: &mut World, gone: ObjectId) {
+    // No aircraft anywhere: the walk below would find none (#402).
+    if crate::census::none(w, crate::census::Held::Aircraft) {
+        return;
+    }
     let lost = Target::Object(gone);
     // spec: S-0501 claim 53 (every aircraft that holds the object as its destination, whatever its behaviour and however the object left play; in key order, which is creation order)
     let ids: Vec<ObjectId> = w
@@ -3399,6 +3403,10 @@ pub(crate) fn record_heading(w: &mut World, id: ObjectId, k: Option<ObjectId>) {
 /// aircraft that recorded it as the pad it was last heading for is left
 /// with no pad recorded.
 pub(crate) fn heading_pad_gone(w: &mut World, k: ObjectId) {
+    // No aircraft state anywhere: the walk below would find none (#402).
+    if crate::census::none(w, crate::census::Held::Aircraft) {
+        return;
+    }
     for o in w.objects.values_mut() {
         if let Some(a) = o.air.as_mut()
             && a.heading_pad == Some(k)

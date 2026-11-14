@@ -57,12 +57,17 @@ pub(crate) fn timer_draw(w: &mut World, id: ObjectId) {
 /// [`firing_target`] are our engine's rule for it.
 pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
     // spec: S-0309 claim 27 (no exception for the holder's owner or for what covers the cell); claim 27 and Terms (several holders draw in creation order, whatever their update order or distances: object keys are given out in creation order and never reused, so key order is creation order)
-    let ids: Vec<ObjectId> = w
-        .objects
-        .values()
-        .filter(|o| o.target == Some(Target::Object(gone)))
-        .map(|o| o.id)
-        .collect();
+    let mut census = crate::census::Census::default();
+    let mut ids: Vec<ObjectId> = Vec::new();
+    for o in w.objects.values() {
+        census.add(o);
+        if o.target == Some(Target::Object(gone)) {
+            ids.push(o.id);
+        }
+    }
+    // The census serves this drop and, for a removal, the rest of it
+    // (`objects::remove_with` forgets it at its end).
+    w.census = Some(census);
     let mut reverted_holders = Vec::new();
     for x in ids {
         // spec: S-0309 claim 27 (the drop resets the targeting timer: the draw first, S-0501 claim 37)
@@ -146,6 +151,9 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
         {
             ob.attack_move = Some(at);
         }
+    }
+    if how != Leaving::Removed {
+        crate::census::forget(w);
     }
 }
 
