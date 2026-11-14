@@ -356,6 +356,12 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
     };
     let top_quirk = w.rules().quirks.top_position_counts_as_centre;
     let keeps = w.rules().quirks.set_facing_keeps_target;
+    if o.kind != Kind::Building
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0105 r50 claim 6 (When the turn starts: a non-building object's turn begins each time it is placed on the map, at the tick number current then)
+        ob.placed_tick = tick;
+    }
     let cell = pos.cell();
     let mut touched = vec![cell];
     match o.kind {

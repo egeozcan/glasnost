@@ -303,6 +303,8 @@ pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: u16, spawner: Object
     let Some(o) = w.obj_mut(id) else { return };
     o.pos = pos;
     o.on_map = true;
+    // spec: S-0105 r50 claim 6 (When the turn starts: an object's turn begins when it is placed on the map, at the tick number current then)
+    o.placed_tick = t;
     // spec: S-0206 claim 5 (placing sets body and turret facings at once to the placement facing)
     o.body.set(facing, t, keeps);
     o.turret.set(facing, t, keeps);

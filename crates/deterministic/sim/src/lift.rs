@@ -592,6 +592,11 @@ fn drop_pod_ends(w: &mut World, lifter: ObjectId, x: ObjectId) {
     }
     upd(w, x, |s| s.lifter = None);
     set_down_here(w, x);
+    let t = w.tick;
+    if let Some(o) = w.obj_mut(x) {
+        // spec: S-0105 r50 claim 6 (When the turn starts: our engine ends a drop-pod stand-in at once at the seize, leaving the unit on the map, and that end sets the elevation level and starts its turn at the tick number current then, design)
+        o.placed_tick = t;
+    }
 }
 
 /// The lifter's point at the seize (S-0607 claim 7): a mobile lifter's
