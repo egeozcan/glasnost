@@ -1044,6 +1044,10 @@ pub struct Quirks {
     // spec: S-0312 claim 20
     #[serde(default = "on")]
     pub rubble_overlay_by_index: bool,
+    /// A crate beneath whose selected cell holds an overlay is refused, so a building that leaves rubble loses its crate when its top-left cell is selected; off: the crate's search also asks for the no-overlay condition and selects a nearby cell without an overlay.
+    // spec: S-0312 claim 20 and Edge cases
+    #[serde(default = "on")]
+    pub crate_beneath_overlay_refusal: bool,
     /// An exploding building probes for barrels from its top-left cell only.
     // spec: S-0312 claim 23
     #[serde(default = "on")]
@@ -2573,6 +2577,7 @@ impl Default for Quirks {
             death_weapon_unplaced_projectile: true,
             bomb_mark_water_death_on_deck: true,
             rubble_overlay_by_index: true,
+            crate_beneath_overlay_refusal: true,
             barrel_probe_top_left_only: true,
             smudge_footprints_beyond_map_edge: true,
             destruction_smudge_zero_anchor: true,
@@ -3487,6 +3492,10 @@ impl Quirks {
                 self.bomb_mark_water_death_on_deck,
             ),
             ("rubble_overlay_by_index", self.rubble_overlay_by_index),
+            (
+                "crate_beneath_overlay_refusal",
+                self.crate_beneath_overlay_refusal,
+            ),
             (
                 "barrel_probe_top_left_only",
                 self.barrel_probe_top_left_only,
