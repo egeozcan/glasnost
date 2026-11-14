@@ -6712,7 +6712,10 @@ impl Painter {
     /// [`Painter::set_effect_tint`], and the drawings kept from frame to
     /// frame are shaded again by [`Painter::retint_houses`]); claim 10's
     /// and claim 16's height terms and the cell light of the static objects
-    /// of the cell pass are not followed. The named palettes' tables take
+    /// of the cell pass are not followed. The building light sources are
+    /// those of the map's placed structures, collected when the view is
+    /// built: a lit building built or lost in play adds or removes no
+    /// source, though claim 12 relights on both (#152). The named palettes' tables take
     /// the effect tint with the house-colour tables (S-0103 claim 17). The
     /// house tables are all built when the game starts (S-0104 Open questions),
     /// so claim 2's third column, the tint of a table built while an effect
