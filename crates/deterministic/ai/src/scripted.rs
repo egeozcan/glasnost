@@ -685,8 +685,6 @@ pub struct Script {
     plan: Plan,
     /// Enemy start cells, in visiting order.
     targets: Vec<CellXY>,
-    /// The next target's index.
-    next_target: usize,
     /// Where the next tie among army types starts, one counter per kind of
     /// army (vehicle, infantry, aircraft): a counter shared by the kinds
     /// would step past the same types every round and leave some never
@@ -930,7 +928,6 @@ impl Script {
             house,
             plan,
             targets: Vec::new(),
-            next_target: 0,
             next_army: [0; ARMY_KINDS.len()],
             waiting_since: None,
             waves: 0,
@@ -1287,18 +1284,16 @@ impl Script {
     /// The enemy start cell waves go to while they see no enemy: the
     /// nearest start that may still hold an enemy base, one the house has
     /// not explored or where it sees an enemy building within
-    /// [`ALLY_BASE`] cells; with none, the start of the visiting order.
-    /// A person takes on one enemy base at a time, the nearest, and moves
-    /// on once it is gone (M8 step A4 round 8, the lead's note 52: each
-    /// wave went to the next start in turn, so in a game of three or more
-    /// the waves were spread over every enemy).
+    /// [`ALLY_BASE`] cells; with none, `None`: the house knows of no enemy
+    /// base. A person takes on one enemy base at a time, the nearest, and
+    /// moves on once it is gone (M8 step A4 round 8, the lead's note 52:
+    /// each wave went to the next start in turn, so in a game of three or
+    /// more the waves were spread over every enemy).
     fn next_start(&self, w: &World, seen: &[(ObjectId, CellXY)]) -> Option<CellXY> {
-        let targets = self.enemy_starts(w);
-        targets
-            .iter()
-            .copied()
+        // design: own AI (#27): a start seen empty (explored, S-0409 claims 9 and 19, with no enemy building seen by it) is no goal; with every start so, the ferry, the rally points and the teleport's landing aim at none, where they aimed at the starts in turn
+        self.enemy_starts(w)
+            .into_iter()
             .find(|&c| !self.cleared(w, c, seen))
-            .or_else(|| (!targets.is_empty()).then(|| targets[self.next_target % targets.len()]))
     }
 
     /// Whether start cell `c` holds no enemy base the house knows of: it has
@@ -1313,7 +1308,8 @@ impl Script {
     }
 
     /// Where a ferry would go, without choosing it: the seen enemy
-    /// building nearest home, else the next enemy start cell. A person
+    /// building nearest home, else the next enemy start cell, else the
+    /// seen enemy of any kind nearest home. A person
     /// ferries infantry to the enemy's base, not to a unit that flies or
     /// stands where no one walks.
     pub(crate) fn base_goal(&self, w: &World) -> Option<CellXY> {
@@ -1327,16 +1323,21 @@ impl Script {
     pub(crate) fn base_goal_for(&self, w: &World, zone: Option<MovementZone>) -> Option<CellXY> {
         let home = self.home(w)?;
         let seen = self.seen_enemies(w);
-        seen.iter()
-            .copied()
-            .filter(|&(e, _)| w.obj(e).is_some_and(|o| o.kind == Kind::Building))
-            // design: own AI (#9): the goal is a building the zone's units can stand by
-            .filter(|&(_, c)| {
-                zone.is_none_or(|z| matches!(regions::reach_in(w, c, z), Reach::Region(_)))
-            })
-            .min_by_key(|&(e, c)| (dist2(c, home), e))
-            .map(|(_, c)| c)
+        let nearest = |buildings: bool| {
+            seen.iter()
+                .copied()
+                .filter(|&(e, _)| !buildings || w.obj(e).is_some_and(|o| o.kind == Kind::Building))
+                // design: own AI (#9): the goal is a building the zone's units can stand by
+                .filter(|&(_, c)| {
+                    zone.is_none_or(|z| matches!(regions::reach_in(w, c, z), Reach::Region(_)))
+                })
+                .min_by_key(|&(e, c)| (dist2(c, home), e))
+                .map(|(_, c)| c)
+        };
+        // design: own AI (#27): with every start seen empty of buildings, the seen enemy nearest home that the zone's units can stand by (an enemy base vehicle not yet deployed), and with none, no goal
+        nearest(true)
             .or_else(|| self.next_start(w, &seen))
+            .or_else(|| nearest(false))
     }
 
     /// Whether the line of `t` holds an item or a queue.
@@ -2602,8 +2603,6 @@ impl Script {
             }
             let mut picks: BTreeMap<(Kind, u32, Option<u32>), Option<CellXY>> = BTreeMap::new();
             let mut fallback: Option<Option<CellXY>> = None;
-            // Whether the fallback took the next start in turn.
-            let mut rotated = false;
             // The nearest region cells, kept per goal (`reachable`).
             let mut near: BTreeMap<CellXY, BTreeMap<(u8, u32), CellXY>> = BTreeMap::new();
             // The units the wave would send, with their destinations.
@@ -2621,19 +2620,10 @@ impl Script {
                 });
                 let goal = pick.or_else(|| {
                     *fallback.get_or_insert_with(|| {
-                        let targets = self.enemy_starts(w);
                         // design: the nearest start that may still hold an enemy base (`next_start`), M8 step A4 round 8
-                        targets
-                            .iter()
-                            .copied()
-                            .find(|&c| !self.cleared(w, c, &enemies))
+                        // design: own AI (#27): else the nearest cell the house does not see; with none, no goal: the house has seen every start empty and every cell the wave could search, and the wave went to the starts in turn
+                        self.next_start(w, &enemies)
                             .or_else(|| from.and_then(|f| self.unseen_cell(w, f, id)))
-                            .or_else(|| {
-                                (!targets.is_empty()).then(|| {
-                                    rotated = true;
-                                    targets[self.next_target % targets.len()]
-                                })
-                            })
                     })
                 });
                 if let Some(c) = goal {
@@ -2649,9 +2639,6 @@ impl Script {
                 // design: the end-game's waves do not make the next battle's wave larger
                 if winning.is_none() {
                     self.waves += 1;
-                }
-                if rotated {
-                    self.next_target += 1;
                 }
                 for (id, dest) in sends {
                     out.push(Order::Behaviour {
