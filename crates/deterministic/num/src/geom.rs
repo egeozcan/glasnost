@@ -36,37 +36,39 @@ pub fn table_root_parts(n: u64, mode: Rounding) -> Option<(u32, u32)> {
     if n == 0 {
         return None;
     }
-    // spec: S-0204 F1 (n is converted to single precision: 24 significant bits)
+    // spec: S-0204 F1 (n is converted to single precision: 24 significant bits; to nearest, n may round up to 2^64)
     let n = single_of_integer(n, mode);
-    let len = 64 - n.leading_zeros();
+    let len = 128 - n.leading_zeros();
     let z = (len - 1) / 2;
     // spec: S-0204 F1 (n / 4^z truncated toward zero to 14 significant binary digits)
     let r = if len > 14 {
-        let top = u128::from(n >> (len - 14));
+        let top = n >> (len - 14);
         isqrt(top << (len - 14 + 46 - 2 * z))
     } else {
         // spec: S-0204 F1 (root truncated to 24 significant digits: 2^46 scale for 2^23 ≤ R < 2^24)
-        isqrt(u128::from(n) << (46 - 2 * z))
+        isqrt(n << (46 - 2 * z))
     };
     Some((r as u32, z))
 }
 
 /// `n` (non-negative integer) as the integer value of the single nearest to
-/// it by `mode`.
+/// it by `mode`; 128 bits wide, since rounding to nearest carries the top of
+/// the 64-bit range to 2^64 (#295).
 // spec: S-0205 claim 4 (single precision keeps 24 significant bits)
-fn single_of_integer(n: u64, mode: Rounding) -> u64 {
-    let len = 64 - n.leading_zeros();
+fn single_of_integer(n: u64, mode: Rounding) -> u128 {
+    let n = u128::from(n);
+    let len = 128 - n.leading_zeros();
     // spec: S-0205 claim 4 (single precision has a 24-bit significand)
     if len <= 24 {
         return n;
     }
     let sh = len - 24;
     let t = n >> sh;
-    let rem = n & ((1u64 << sh) - 1);
+    let rem = n & ((1u128 << sh) - 1);
     let t = match mode {
         Rounding::TowardZero => t,
         Rounding::Nearest => {
-            let half = 1u64 << (sh - 1);
+            let half = 1u128 << (sh - 1);
             if rem > half || (rem == half && t & 1 == 1) {
                 t + 1
             } else {
@@ -361,6 +363,42 @@ pub fn direction_real(x: F64, y: F64, mode: Rounding) -> Facing {
     facing_of_angle(t, i, x.gt(F64::ZERO), mode).rem_euclid(65536) as Facing
 }
 
+/// [`direction_real`] with `quirks.table_direction` at `table`: off, the
+/// exact direction of S-0204 Edge cases for X and Y narrowed to single
+/// precision by `mode` (S-0306 Formulas). A zero displacement, or an
+/// argument that is not finite in single precision, keeps the table path:
+/// the specs give no off value for them (Q-3082).
+// spec: S-0204 Edge cases (quirks.table_direction off: the exact angle), S-0306 Formulas (both arguments narrowed to single precision)
+pub fn direction_real_b(x: F64, y: F64, table: bool, mode: Rounding) -> Facing {
+    if !table
+        && let (Some((nx, mx, kx)), Some((ny, my, ky))) =
+            (single_parts(x.to_f32(mode)), single_parts(y.to_f32(mode)))
+        && (mx != 0 || my != 0)
+    {
+        // Both magnitudes on the smaller of the two binary exponents.
+        let k = kx.min(ky);
+        let ax = BigUint::from(mx) << (kx - k) as u32;
+        let ay = BigUint::from(my) << (ky - k) as u32;
+        return exact_angle(nx && mx != 0, &ax, ny && my != 0, &ay);
+    }
+    direction_real(x, y, mode)
+}
+
+/// A finite single as (negative, M, k) with value ±M × 2^k; `None` for an
+/// infinity or NaN.
+// nocite: binary32 field layout (sign, exponent and fraction fields, bias and hidden bit)
+fn single_parts(s: F32) -> Option<(bool, u64, i32)> {
+    let bits = s.0;
+    let neg = bits >> 31 == 1;
+    let exp = (bits >> 23) & 0xff;
+    let frac = bits & 0x7f_ffff;
+    match exp {
+        0xff => None,
+        0 => Some((neg, u64::from(frac), -149)),
+        _ => Some((neg, u64::from(frac | 0x80_0000), exp as i32 - 150)),
+    }
+}
+
 /// The constants c₁ (π/2) and c₂ (−32767/π) of S-0204 F3, as doubles.
 pub fn direction_constants() -> (F64, F64) {
     let k = dir_const();
@@ -375,17 +413,27 @@ fn exact_direction(x: i64, y: i64) -> Facing {
     if x == 0 && y == 0 {
         return 0;
     }
+    exact_angle(
+        x < 0,
+        &BigUint::from(x.unsigned_abs()),
+        y < 0,
+        &BigUint::from(y.unsigned_abs()),
+    )
+}
+
+/// The exact direction of [`exact_direction`] for X = ±`ax` and Y = ±`ay`
+/// (signs by `neg_x` and `neg_y`, false for a zero), not both zero.
+// spec: S-0204 Edge cases (exact direction with `quirks.table_direction` off)
+fn exact_angle(neg_x: bool, ax: &BigUint, neg_y: bool, ay: &BigUint) -> Facing {
     let s = BigUint::from(1u32) << bigmath::FRAC;
     let pi = bigmath::pi();
-    let ax = BigUint::from(x.unsigned_abs());
-    let ay = BigUint::from(y.unsigned_abs());
     // β = arctan(|X| / |Y|), the angle from the Y axis.
-    let beta = if y == 0 {
+    let beta = if *ay == BigUint::from(0u32) {
         &pi >> 1u32
     } else {
-        bigmath::atan(&((&ax * &s) / &ay))
+        bigmath::atan(&((ax * &s) / ay))
     };
-    let alpha = match (x >= 0, y >= 0) {
+    let alpha = match (!neg_x, !neg_y) {
         (true, true) => beta,
         (true, false) => &pi - beta,
         (false, false) => &pi + beta,

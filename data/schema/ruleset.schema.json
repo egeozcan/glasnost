@@ -3329,7 +3329,7 @@
           "default": null
         },
         "number_of_docks": {
-          "description": "Buildings: the rules `NumberOfDocks`, docks the building adds to the\nhouse total (S-0407 claim 16); absent: 0.",
+          "description": "Buildings: the rules `NumberOfDocks`, docks the building adds to the\nhouse total (S-0407 claim 16); absent: 1 (S-0407 and S-0404 Import\nmapping).",
           "type": [
             "integer",
             "null"
@@ -10477,7 +10477,7 @@
           "default": true
         },
         "refused_death_keeps_unit": {
-          "description": "A death request turned down because the die-1 or die-2 entry has no image frames leaves the unit in play with its current sequence; off: the resulting death kind counts as completed on the death tick. Not consulted in M3, which has no death handling (combat, M4).",
+          "description": "A death request turned down because the die-1 or die-2 entry has no image frames leaves the unit in play with its current sequence; off: the resulting death kind counts as completed on the death tick.",
           "type": "boolean",
           "default": true
         },
@@ -11012,12 +11012,12 @@
           "default": true
         },
         "trigger_crate_expiry_while_disabled": {
-          "description": "Off (the original): an uncollected trigger crate never expires while crates are off; on: it expires after its assigned lifetime. Not consulted yet (crates, S-0520, are not built).",
+          "description": "Off (the original): an uncollected trigger crate never expires while crates are off; on: it expires after its assigned lifetime.",
           "type": "boolean",
           "default": false
         },
         "trigger_crate_respects_setting": {
-          "description": "Off (the original): the create-crate action ignores the crate setting; on: it has no effect while crates are off. Not consulted yet (crates, S-0520, are not built).",
+          "description": "Off (the original): the create-crate action ignores the crate setting; on: it has no effect while crates are off.",
           "type": "boolean",
           "default": false
         },
@@ -14240,7 +14240,7 @@
           "default": null
         },
         "verses": {
-          "description": "`Verses`: the eleven versus values in class-index order (S-0003\nclaim 13, S-0305), each written as the exact decimal of its double.",
+          "description": "`Verses`: the eleven versus values in class-index order (S-0003\nclaim 13, S-0305), each written as the exact decimal of its double,\nwithout `%` (the importer has applied claim 13's `%` readings);\nvalidation refuses an item with `%`.",
           "type": [
             "array",
             "null"

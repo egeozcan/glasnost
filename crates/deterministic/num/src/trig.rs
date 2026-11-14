@@ -44,11 +44,8 @@ pub fn table_index(x: F64, mode: Rounding) -> u32 {
 /// a negative angle to the nearest step, halves away from zero.
 // spec: S-0105 F1 and Quirks (quirks.table_trig_negative_bias; fixed: exact rounding)
 pub fn table_index_b(x: F64, mode: Rounding, bias: bool) -> u32 {
-    // spec: S-0105 F1 (I = trunc(x × 2607.594482421875), half table steps)
-    let i = x
-        .mul(half_steps_per_radian(), mode)
-        .trunc_i128()
-        .unwrap_or(0);
+    // spec: S-0105 F1 (I = trunc(x × 2607.594482421875), half table steps), S-0205 claim 7 (a conversion to an integer: common form, wrapped modulo 2^32, 0 from 2^63)
+    let i = i64::from(x.mul(half_steps_per_radian(), mode).to_i32_common());
     let s = if i >= 0 || bias {
         // spec: S-0105 F1 (σ = min((trunc(I / 2) mod 8192) + (|I| mod 2), 8191))
         let half = i / 2;

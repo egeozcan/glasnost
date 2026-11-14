@@ -577,6 +577,20 @@ impl Catalogue {
                 let show = String::from_utf8_lossy(name).into_owned();
                 match read(name).map(|b| tile_info(&b)) {
                     Some(Ok(mut i)) => {
+                        // spec: S-0106 Edge cases (a slope code outside 0 … 20: the cell is flat and the importer warns about the tile)
+                        let bad: Vec<String> = i
+                            .cells
+                            .iter()
+                            .flatten()
+                            .filter(|c| c.shape() != c.slope)
+                            .map(|c| c.slope.to_string())
+                            .collect();
+                        if !bad.is_empty() {
+                            warnings.push(format!(
+                                "tile {t}: {show} has slope codes outside 0 … 20 ({}); those cells are flat (S-0106 Edge cases)",
+                                bad.join(", ")
+                            ));
+                        }
                         i.variants = u8::try_from(img.variants.len()).unwrap_or(u8::MAX);
                         info = i;
                     }
@@ -1142,5 +1156,27 @@ mod tests {
         assert!(!cat.tiles[5].has_image);
         assert!(warnings.iter().any(|w| w.contains("big03.SNO")));
         assert_eq!(cat.roles.clear, 0);
+    }
+
+    /// spec: S-0106 Edge cases (a slope code outside 0 … 20: the importer warns about the tile)
+    #[test]
+    fn a_slope_code_above_20_is_warned_about() {
+        let d = doc("[General]\nClearTile=0\n[TileSet0000]\nTilesInSet=2\nFileName=gr\n");
+        let c = Catalogue::read(&d, Theater::Snow);
+        let files: BTreeMap<Vec<u8>, Vec<u8>> = [
+            ("gr01.sno", tmp(2, 1, &[Some((0, 20)), Some((0, 21))])),
+            ("gr02.sno", tmp(1, 1, &[Some((0, 4))])),
+        ]
+        .into_iter()
+        .map(|(n, b)| (n.as_bytes().to_vec(), b))
+        .collect();
+        let exists = |n: &[u8]| files.contains_key(&n.to_ascii_lowercase());
+        let images = c.images(&exists);
+        let read = |n: &[u8]| files.get(&n.to_ascii_lowercase()).cloned();
+        let (_, warnings) = c.tile_catalogue(&images, &read);
+        let slope: Vec<&String> = warnings.iter().filter(|w| w.contains("slope")).collect();
+        assert_eq!(slope.len(), 1, "{warnings:?}");
+        assert!(slope[0].starts_with("tile 0:"), "{}", slope[0]);
+        assert!(slope[0].contains("21"), "{}", slope[0]);
     }
 }

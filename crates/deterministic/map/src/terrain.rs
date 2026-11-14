@@ -47,8 +47,24 @@ pub mod land {
 pub struct TileCell {
     /// Terrain code, 0 … 15 in valid data.
     pub terrain_code: u8,
-    /// Slope shape (S-0106), 0 … 20 in valid data.
+    /// Slope shape (S-0106), 0 … 20 in valid data; see [`TileCell::shape`].
     pub slope: u8,
+}
+
+/// The highest slope shape (S-0106: shapes 0 … 20).
+const MAX_SHAPE: u8 = 20; // spec: S-0106 Edge cases (shape values 0 … 20)
+
+impl TileCell {
+    /// The slope shape this tile cell gives a cell: its slope code, or 0
+    /// (flat) for a code outside 0 … 20.
+    // spec: S-0106 Edge cases (a slope code outside 0 … 20: the cell is flat, shape 0)
+    pub fn shape(self) -> u8 {
+        if self.slope > MAX_SHAPE {
+            0
+        } else {
+            self.slope
+        }
+    }
 }
 
 /// One tile of the theater.
@@ -360,7 +376,7 @@ pub fn recalc(grid: &mut CellGrid, c: CellXY, rules: &RecalcRules<'_>) -> Recalc
                     .get(usize::from(cell.sub_tile) % n)
                     .copied()
                     .flatten()
-                    .map_or(0, |tc| tc.slope)
+                    .map_or(0, TileCell::shape)
             } else {
                 0
             };
@@ -369,8 +385,8 @@ pub fn recalc(grid: &mut CellGrid, c: CellXY, rules: &RecalcRules<'_>) -> Recalc
         land_type = o.land;
         smoothed = true;
     } else if let Some(tc) = usable.filter(|_| (0..count).contains(&cell.tile)) {
-        // spec: S-0010 claim 6 (tile case: the slope shape of the tile cell)
-        new.slope = tc.slope;
+        // spec: S-0010 claim 6 (tile case: the slope shape of the tile cell), S-0106 Edge cases (a code outside 0 … 20 is flat)
+        new.slope = tc.shape();
         let tib = overlay.filter(|o| o.tiberium);
         // spec: S-0211 claims 5 and 7 (row 4: ore on slope shapes 0 … 4; removed on 5 and above)
         land_type = match tib {
@@ -498,6 +514,10 @@ fn smooth_ground(grid: &CellGrid, c: CellXY, tile: i32, rules: &RecalcRules<'_>)
         if l < 0 && (which != 0 || !q.unset_role_range) {
             continue;
         }
+        // spec: S-0010 Edge cases (quirks.unset_role_range off: a pair with an unset ground role is skipped too)
+        if g < 0 && !q.unset_role_range {
+            continue;
+        }
         let belongs = |t: i32| {
             // spec: S-0010 claim 10 (belongs: the ground start, or the 16 transition tiles)
             (if g < 0 {
@@ -541,6 +561,10 @@ fn smooth_ground(grid: &CellGrid, c: CellXY, tile: i32, rules: &RecalcRules<'_>)
 fn smooth_ramp(grid: &CellGrid, c: CellXY, tile: i32, s: u8, rules: &RecalcRules<'_>) -> i32 {
     let r = rules.catalogue.roles;
     let q = rules.quirks;
+    // spec: S-0010 Edge cases (quirks.unset_role_range off: ramp smoothing is skipped when either ramp role is unset)
+    if !q.unset_role_range && (r.ramp < 0 || r.smooth_ramp < 0) {
+        return tile;
+    }
     // spec: S-0010 claim 11 (ramp range 20 tiles, smooth-ramp range 12 tiles)
     if !(in_range(tile, r.ramp, 20, q) || in_range(tile, r.smooth_ramp, 12, q)) {
         return tile;
