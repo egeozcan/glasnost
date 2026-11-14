@@ -4255,6 +4255,10 @@ fn guard_move(w: &mut World, id: ObjectId, t: &Ty) {
 /// aircraft on the ground by its height, or landing, takes off (claim 8).
 fn regive(w: &mut World, id: ObjectId) {
     let Some(t) = ty(w, id) else { return };
+    if w.obj(id).is_some_and(|o| o.dest.is_none()) && st(w, id).own_point {
+        // spec: S-0501 claim 6 (the new flight point is chosen at the moment the aircraft is given no destination, and it flies to that point) and claim 40 (the move's processing hands over its destination's flight point; with no destination there is none to hand over, and claim 8's exception makes a hand-over of the point it already flies to change nothing) (#225)
+        return;
+    }
     let dest = flight_target(w, id);
     if dest.is_some() {
         give_point(w, id, &t, dest);
