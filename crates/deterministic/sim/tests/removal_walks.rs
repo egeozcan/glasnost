@@ -200,6 +200,27 @@ fn a_drop_made_inside_the_removal_is_still_undone() {
     assert_eq!(w.obj(v).unwrap().lift.dropper, None);
 }
 
+// Our engine's bookkeeping, not game behaviour (#402): the census of the
+// rarer back-references lives only inside the action it was taken for,
+// so none is left to be saved, hashed or read by a later action.
+#[test]
+fn no_census_outlives_its_action() {
+    for how in [How::Removed, How::Killed] {
+        let mut w = testkit::game_with(&with_plane(), SIZE, 1);
+        let gone = walker(&mut w, 1, 6);
+        let other = walker(&mut w, 1, 8);
+        hold(&mut w, gone, other);
+        assert!(w.census.is_none(), "{how:?}: before");
+        match how {
+            How::Removed => glasnost_sim::objects::remove(&mut w, gone),
+            How::Killed => glasnost_sim::combat::death::kill(&mut w, gone, &killing_hit()),
+        }
+        assert!(w.census.is_none(), "{how:?}: after the action");
+        testkit::run(&mut w, 1);
+        assert!(w.census.is_none(), "{how:?}: after a tick");
+    }
+}
+
 // The census is neither saved nor hashed (#402): a game saved and loaded between two removals goes on exactly as the one never saved.
 // spec: S-0519 claim 8, S-0518 claim 12, S-0607 claim 14, S-0506 claims 11 and 25, S-0501 claim 53 (as above)
 #[test]
