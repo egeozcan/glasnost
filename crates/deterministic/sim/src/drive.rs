@@ -930,6 +930,10 @@ fn step_check_with(
                     if w.obj(id).is_none_or(|x| x.dest.is_none()) {
                         return false;
                     }
+                    // spec: S-0207 claim 15 (a vehicle whose next cell holds an allied closed gate waits without a track and without turning until the gate is open, whether or not it faces the step; the look at the first cell has told the gate to open)
+                    if process::closed_friendly_gate(w, id, neighbour(here, nd)).is_some() {
+                        return false;
+                    }
                     if w.obj(id).is_some_and(|x| x.body.value(t) != facing_of(nd)) {
                         turn_in_place(w, id, u, nd);
                         return false;
