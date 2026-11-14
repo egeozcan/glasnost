@@ -357,7 +357,8 @@ pub fn heading_point_with(w: &World, dest: Target, moving_point: bool) -> Option
             // spec: S-0506 claim 14 (a unit: the point its locomotor is moving it to, the end of its step; its position when not moving); the tunnel case is a seam
             if let Some(tr) = o.drive.as_ref().and_then(|d| d.track.as_ref()) {
                 let (x, y) = tr.target;
-                return Some(Pos::new(x, y, w.surface_at(x, y)));
+                // spec: S-0207 Terms (heading point: for the driving locomotor the track target, whose stored world height is the vehicle's world height when an ordinary track begins, not the terrain or deck height at the target) and claim 24 (#279)
+                return Some(Pos::new(x, y, tr.height));
             }
             if let Some(p) = o.walk.as_ref().and_then(|s| s.target) {
                 return Some(p);
