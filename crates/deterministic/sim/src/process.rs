@@ -10,6 +10,12 @@
 //! processed as a behaviour without a processing rule; that is recorded as
 //! a note on the world.
 //!
+//! Not built: the hover-attack cell of claim 23's general *attack* rules
+//! and claim 24's *guard* table, by which a hover-attack type at no height
+//! above its surface takes a nearby cell as its destination. No spec gives
+//! that cell (Q-3101, issue #234), so a hover-attack type is processed like
+//! any other type in *attack* and *guard*.
+//!
 //! Gates (claim 35): a gate's *open* runs its stages here, the door moves at
 //! every turn of the gate before its per-tick start and processing (claim
 //! 35 (d)), [`gate_open`] gives the passage state that S-0209's gate rows
