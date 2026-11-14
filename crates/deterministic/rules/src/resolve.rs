@@ -312,11 +312,21 @@ impl Default for Resolver {
 struct Ctx<'a> {
     src: &'a Source<'a>,
     provenance: &'a mut Provenance,
+    /// Byte offsets of the source's line feeds, in order, built once per
+    /// applied source: an origin's line is found by a binary search instead
+    /// of a scan of the text from its start.
+    line_feeds: Vec<usize>,
 }
 
 impl Ctx<'_> {
+    /// The line of `offset`, as [`jsonc::line_col`] gives it: one plus the
+    /// number of line feeds before it.
+    fn line(&self, offset: usize) -> usize {
+        self.line_feeds.partition_point(|&p| p < offset) + 1
+    }
+
     fn origin(&self, span: Span, event: Event, detail: String) -> Origin {
-        let (line, _) = jsonc::line_col(self.src.text, span.start);
+        let line = self.line(span.start);
         Origin {
             layer: self.src.layer.to_owned(),
             file: self.src.file.to_owned(),
@@ -406,6 +416,12 @@ impl Resolver {
         let mut ctx = Ctx {
             src,
             provenance: &mut self.provenance,
+            line_feeds: src
+                .text
+                .bytes()
+                .enumerate()
+                .filter_map(|(i, b)| (b == b'\n').then_some(i))
+                .collect(),
         };
         merge(&mut self.root, node, &mut Vec::new(), &mut ctx);
         Ok(())
