@@ -189,7 +189,11 @@ fn a_dominated_vehicle_is_not_recycled() {
     settle(&mut w);
     let mut br = brain(&w);
     let orders = br.think(&w);
-    assert_ne!(sent(&orders, taken, Behaviour::Eaten), Some(b), "{orders:?}");
+    assert_ne!(
+        sent(&orders, taken, Behaviour::Eaten),
+        Some(b),
+        "{orders:?}"
+    );
     assert_eq!(br.special_uses().grinds, 0);
 }
 

@@ -459,6 +459,10 @@ mod drop_tests {
         w.obj_mut(below).expect("the vehicle below").cloak.state =
             glasnost_sim::cloak::CloakState::Cloaked;
         assert!(glasnost_sim::cloak::hidden_from(&w, below, Some(H)));
-        assert!(!drop_here(&w, H, held), "{:?}", w.cells.list(at, glasnost_sim::world::Layer::Ground));
+        assert!(
+            !drop_here(&w, H, held),
+            "{:?}",
+            w.cells.list(at, glasnost_sim::world::Layer::Ground)
+        );
     }
 }
