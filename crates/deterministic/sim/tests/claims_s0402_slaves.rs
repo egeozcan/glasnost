@@ -2557,7 +2557,10 @@ fn s0107_claim_21a_harvest_processing_starts_shovel() {
     let (mut w, s, c) = harvesting_slave(&r);
     put(&mut w, c, ORE, 5);
     slaves::process_slave(&mut w, s);
-    assert_eq!(seq_state(&w, s).seq, Some(glasnost_sim::infantry::Seq::Shovel));
+    assert_eq!(
+        seq_state(&w, s).seq,
+        Some(glasnost_sim::infantry::Seq::Shovel)
+    );
 }
 
 // spec: S-0107 claim 21a (Start: the tests come before the load step, so a processing whose load step fills the unit still asks for shovel)
@@ -2576,7 +2579,10 @@ fn s0107_claim_21a_filling_step_still_asks_for_shovel() {
         slaves::slave_of(&w, s).unwrap().load.iter().sum::<i32>() >= STORE,
         "this step fills the slave"
     );
-    assert_eq!(seq_state(&w, s).seq, Some(glasnost_sim::infantry::Seq::Shovel));
+    assert_eq!(
+        seq_state(&w, s).seq,
+        Some(glasnost_sim::infantry::Seq::Shovel)
+    );
 }
 
 // spec: S-0107 claim 21a (No restart: while shovel is current, a processing that passes the three tests makes no request at all, so claim 7's water record is not updated and the stage is not set back) and scenario M21 part b
@@ -2607,10 +2613,16 @@ fn s0107_claim_21a_failing_processing_asks_for_stand() {
     let (mut w, s, c) = harvesting_slave(&r);
     put(&mut w, c, ORE, 5);
     slaves::process_slave(&mut w, s);
-    assert_eq!(seq_state(&w, s).seq, Some(glasnost_sim::infantry::Seq::Shovel));
+    assert_eq!(
+        seq_state(&w, s).seq,
+        Some(glasnost_sim::infantry::Seq::Shovel)
+    );
     put(&mut w, c, glasnost_map::NO_OVERLAY, 0);
     assert_eq!(slaves::process_slave(&mut w, s), 1);
-    assert_eq!(seq_state(&w, s).seq, Some(glasnost_sim::infantry::Seq::Stand));
+    assert_eq!(
+        seq_state(&w, s).seq,
+        Some(glasnost_sim::infantry::Seq::Stand)
+    );
     assert_eq!(w.obj(s).unwrap().beh.queued, Some(Behaviour::Guard));
 }
 

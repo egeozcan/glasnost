@@ -566,7 +566,10 @@ fn claims_23_40_r20_placed_by_order_never_covers() {
         assert!(glasnost_sim::econ::power::in_operation(&w, id));
     }
     assert!(!sensed_at(&w, ALPHA, 0, 0), "no sensor disc");
-    assert!(!cloak::detected(&w, Some(ALPHA), at(6, 6)), "no detector disc");
+    assert!(
+        !cloak::detected(&w, Some(ALPHA), at(6, 6)),
+        "no detector disc"
+    );
     objects::remove(&mut w, a);
     assert_eq!(count_at(&w, ALPHA, 0, 0), -1);
     assert_eq!(count_at(&w, ALPHA, -5, 0), -1, "the cloak-radius disc");
@@ -593,8 +596,15 @@ fn claims_23_40_r20_owner_change_in_build_up_opens_for_the_new_owner() {
     }
     assert!(sensed_at(&w, BETA, 0, 0), "the new owner senses");
     assert!(!sensed_at(&w, ALPHA, 0, 0));
-    assert!(cloak::detected(&w, Some(BETA), at(6, 6)), "the new owner detects");
+    assert!(
+        cloak::detected(&w, Some(BETA), at(6, 6)),
+        "the new owner detects"
+    );
     run(&mut w, 60);
     assert!(!w.obj(a).unwrap().econ.construction.building_up);
-    assert_eq!(count_at(&w, BETA, 0, 0), 1, "the handover adds no second disc");
+    assert_eq!(
+        count_at(&w, BETA, 0, 0),
+        1,
+        "the handover adds no second disc"
+    );
 }

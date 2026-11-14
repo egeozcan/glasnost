@@ -64,7 +64,11 @@ fn claim_27a_put_aside_target_lost_while_the_override_goes_on() {
         let o = w.obj(h).unwrap();
         assert_eq!(o.beh.aside, Some((None, Some(cell))), "{how:?}");
         assert_eq!(o.target, Some(Target::Object(y)), "{how:?}: still holds Y");
-        assert_eq!(o.beh.suspended, Some(Behaviour::Guard), "{how:?}: no revert");
+        assert_eq!(
+            o.beh.suspended,
+            Some(Behaviour::Guard),
+            "{how:?}: no revert"
+        );
         assert_eq!(o.targeting_timer, timer, "{how:?}: no timer draw");
         if matches!(how, Leave::OffMap) {
             assert_eq!(w.rng.taken(), taken, "no draw at all");
@@ -90,7 +94,11 @@ fn claim_27a_put_aside_destination_that_is_the_object() {
         );
         leave(&mut w, x, how);
         let o = w.obj(h).unwrap();
-        assert_eq!(o.beh.aside, Some((Some(Target::Object(z)), None)), "{how:?}");
+        assert_eq!(
+            o.beh.aside,
+            Some((Some(Target::Object(z)), None)),
+            "{how:?}"
+        );
     }
 }
 

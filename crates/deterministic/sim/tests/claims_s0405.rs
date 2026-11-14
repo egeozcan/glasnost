@@ -1440,11 +1440,17 @@ fn claim_8_r57_queued_behaviour_read_while_none_is_current() {
         o.beh.current = None;
         o.beh.queued = Some(Behaviour::Construction);
     }
-    assert!(!power::in_operation(&w, nd), "queued construction, none current");
+    assert!(
+        !power::in_operation(&w, nd),
+        "queued construction, none current"
+    );
     w.obj_mut(nd).unwrap().beh.queued = Some(Behaviour::Selling);
     assert!(!power::in_operation(&w, nd), "queued selling, none current");
     w.obj_mut(nd).unwrap().beh.current = Some(Behaviour::Guard);
-    assert!(power::in_operation(&w, nd), "a current guard hides the queue");
+    assert!(
+        power::in_operation(&w, nd),
+        "a current guard hides the queue"
+    );
 }
 
 // spec: S-0405 claim 8 and Transitions (r57, Q-3060: a sell order makes selling the building's current behaviour at once, whatever was current, so it is not in operation from the order on; S-0408 claim 4)
