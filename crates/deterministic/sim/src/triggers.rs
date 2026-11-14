@@ -838,6 +838,7 @@ fn var(w: &World, v: i32) -> bool {
 }
 
 /// The kinds a type event's name is looked up in, in turn (S-0011 claim 21).
+// spec: S-0011 claim 21 (the four kinds together; the order is not established, ours: buildings, vehicles, infantry, aircraft)
 const TYPE_EVENT_KINDS: [Kind; 4] = [
     Kind::Building,
     Kind::Vehicle,
