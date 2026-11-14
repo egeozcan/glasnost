@@ -630,8 +630,13 @@ pub fn drawn_facings(
     v: [F64; 3], // nocite: three components x, y, z
 ) -> (u8, u8) {
     let mode = w.rules().mode;
-    // spec: S-0306 F14 (φ: S-0204 F3 with X = Vₓ and Y = −V_y in single precision; both 0 give 16383)
-    let phi = glasnost_num::geom::direction_real(v[0], v[1].negated(), mode);
+    // spec: S-0306 F14 (φ: S-0204 F3 with X = Vₓ and Y = −V_y in single precision; both 0 give 16383), S-0306 Formulas (S-0204's quirks.table_direction)
+    let phi = glasnost_num::geom::direction_real_b(
+        v[0],
+        v[1].negated(),
+        w.rules().quirks.table_direction,
+        mode,
+    );
     // spec: S-0306 F14 (p: S-0204 F6's pitch with X = r(Vₓ² + V_y²) and Y = V_z, read modulo 65536)
     let p = pitch_of(w, v) as u16;
     // spec: S-0306 F14 and glossary (f₃₂(φ) = ⌊(⌊φ / 1024⌋ + 1) / 2⌋ mod 32)
@@ -814,14 +819,21 @@ fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64
         let disp = v;
         let pprime = add_trunc(pr.pos, disp);
         // F11: turn the horizontal direction towards the target point from P′.
-        let yc = i32::from(glasnost_num::geom::direction_real(
+        // spec: S-0306 Formulas (F11's directions are S-0204 F3's, under quirks.table_direction)
+        let yc = i32::from(glasnost_num::geom::direction_real_b(
             v[0],
             v[1].negated(),
+            q.table_direction,
             mode,
         ));
         let wdx = f(i64::from(tp.x - pprime.x), mode);
         let wdy = f(i64::from(tp.y - pprime.y), mode);
-        let yg = i32::from(glasnost_num::geom::direction_real(wdx, wdy.negated(), mode));
+        let yg = i32::from(glasnost_num::geom::direction_real_b(
+            wdx,
+            wdy.negated(),
+            q.table_direction,
+            mode,
+        ));
         let yn = turn_towards(yc, yg, t);
         let zero = F64::ZERO;
         // spec: S-0306 F11 (H = r(RZ₅₃(Vₓ² + V_y²)), r(10000) when both are 0)
