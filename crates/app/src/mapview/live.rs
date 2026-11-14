@@ -579,6 +579,40 @@ pub struct Live {
     /// Each vehicle type's walk and idle rates (S-0102 Import mapping), by
     /// the simulation's vehicle type index.
     walk_rates: Vec<super::walk::Rates>,
+    /// A host clock in milliseconds, set only by the performance benchmark:
+    /// [`Live::after_tick`] and [`Live::redraw`] then record their parts in
+    /// [`Live::laps`] (our own tooling, #145).
+    pub lap_clock: Option<fn() -> f64>,
+    /// The parts of the scene update since the last [`Live::after_tick`],
+    /// when [`Live::lap_clock`] is set.
+    pub laps: SceneLaps,
+}
+
+/// Host-clock times of the scene update's parts, in milliseconds, for the
+/// performance benchmark (our own tooling, never game state, #145): the
+/// tick's bookkeeping in [`Live::after_tick`], then each part of
+/// [`Live::redraw`], summed over the redraws since the tick.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SceneLaps {
+    /// The tick's presentation events (`take_effects`).
+    pub effects: f64,
+    /// The buildings' slot animations (`update_slots`).
+    pub slots: f64,
+    /// The layers' membership (`sync_layers`, after the tick and in each
+    /// redraw) and the ground layer's order (`sync_ground`).
+    pub layers: f64,
+    /// The mobile objects: their looks, their items and the target lines.
+    pub mobiles: f64,
+    /// The buildings' bookkeeping and their items.
+    pub buildings: f64,
+    /// The changed overlays, the relight and the cell pass.
+    pub overlays: f64,
+    /// The animations, particles, projectiles and debris pieces.
+    pub anims: f64,
+    /// The layers' items put in order.
+    pub order: f64,
+    /// The effects, lines and status extras.
+    pub status: f64,
 }
 
 /// A running slot animation of a building (S-0108 Terms), played by
@@ -1362,6 +1396,8 @@ impl Live {
             walk_rates,
             setup_charges: BTreeMap::new(),
             placed: BTreeMap::new(),
+            lap_clock: None,
+            laps: SceneLaps::default(),
         };
         // spec: S-0105 claim 6 (First appearance: an object that the map places before the first tick has t₀ = 0)
         // design: render (#81) a loaded or joined game's objects count from tick 0 too: claim 6 (Saved games) keeps every turn through a save, but the game state holds no placement tick to continue from, and joining a network game is outside the spec
@@ -1546,10 +1582,36 @@ impl Live {
                 _ => None,
             })
             .collect();
+        // design: render (#145) (the benchmark's parts of the scene update)
+        self.laps = SceneLaps::default();
+        let mut lap = self.lap_start();
         self.take_effects();
+        self.laps.effects += self.lap_end(&mut lap);
         self.update_slots();
+        self.laps.slots += self.lap_end(&mut lap);
         self.sync_layers(true);
         self.sync_ground();
+        self.laps.layers += self.lap_end(&mut lap);
+    }
+
+    /// The host clock now, when the benchmark set one (our own tooling,
+    /// #145).
+    fn lap_start(&self) -> f64 {
+        self.lap_clock.map_or(0.0, |now| now())
+    }
+
+    /// The time since `*lap`, which moves on to now (zero without a host
+    /// clock; our own tooling, #145).
+    fn lap_end(&self, lap: &mut f64) -> f64 {
+        match self.lap_clock {
+            Some(now) => {
+                let t = now();
+                let d = t - *lap;
+                *lap = t;
+                d
+            }
+            None => 0.0,
+        }
     }
 
     /// Brings the drawing up to a game that moved on without it: a game
@@ -3489,6 +3551,8 @@ impl Live {
     /// ground entries are reused and the mobile objects are drawn from the
     /// game, all in ground-layer order.
     pub fn redraw(&mut self, inputs: &Inputs, scene: &mut Scene) {
+        // design: render (#145) (the benchmark's parts of the scene update)
+        let mut lap = self.lap_start();
         self.learn_types(inputs);
         self.sync_layers(false);
         if !self.view_quirks.unsorted_upper_layers {
@@ -3497,6 +3561,7 @@ impl Live {
             self.layers
                 .sort_by_key(|e| keys.get(&e).copied().unwrap_or(i64::MIN));
         }
+        self.laps.layers += self.lap_end(&mut lap);
         let ids: Vec<ObjectId> = self.mobile_order();
         let mobiles: Vec<Mobile> = ids
             .iter()
@@ -3534,6 +3599,7 @@ impl Live {
             }
         }
         self.draw_target_lines(inputs, scene, &mut by_code);
+        self.laps.mobiles += self.lap_end(&mut lap);
         // Buildings the game removed leave the cell pass and the ground
         // layer; so do the map's gates, which are drawn live.
         let mut gone: BTreeSet<u32> = self
@@ -3611,6 +3677,7 @@ impl Live {
             .map(|(code, _)| *code)
             .collect();
         gone.extend(changed_map.iter().copied());
+        self.laps.buildings += self.lap_end(&mut lap);
         // Overlays that changed during play are drawn again from the game's
         // cells (S-0112 claims 1 to 9); their static items leave the cell pass.
         let grid = &self.world.cells.grid;
@@ -3716,6 +3783,7 @@ impl Live {
         // The changed overlays follow the cell pass (our placeholder place
         // for them: the depth test orders them against the rest).
         scene.items.extend_from_slice(&self.live_overlays);
+        self.laps.overlays += self.lap_end(&mut lap);
         // The game's own buildings (deployed or placed), the map's gates and
         // the map's buildings drawn live (protected, changed or animated)
         // follow, in object ID order (our placeholder order; the map's
@@ -3824,6 +3892,7 @@ impl Live {
         // equal keys they go before the layer's mobiles, and among themselves in object ID order
         // (a stable sort; our engine keeps no entering order for them)
         own_ground.sort_by_key(|(k, _)| *k);
+        self.laps.buildings += self.lap_end(&mut lap);
         // The playing animations with a sprite (S-0109), by serial number.
         let playing: Vec<(u32, super::slots::Layer, AnimDraw)> = self
             .anims
@@ -3865,6 +3934,7 @@ impl Live {
         let mut particle_items = self.particle_items(inputs, scene);
         particle_items.extend(self.projectile_items(inputs, scene));
         particle_items.extend(self.piece_items(inputs, scene));
+        self.laps.anims += self.lap_end(&mut lap);
         scene.spots.clear();
         let waves = self.lines.wave_spots(self.shown_tick(), self.rules.mode);
         // spec: S-0102 claims 1 and 7 (underground and surface before the ground layer, air and
@@ -3920,11 +3990,13 @@ impl Live {
             |l| l > super::slots::Layer::Ground,
         );
         self.objects_end = scene.items.len();
+        self.laps.order += self.lap_end(&mut lap);
         self.draw_effects(scene);
         self.draw_lines(inputs, scene);
         self.draw_status(inputs, scene);
         // design: render (#104): the transient voxel images no redraw has used for a while are released
         self.painter.end_redraw(scene);
+        self.laps.status += self.lap_end(&mut lap);
     }
 
     /// The beams and beam flashes of the shown tick (S-0518 claims 19 to
