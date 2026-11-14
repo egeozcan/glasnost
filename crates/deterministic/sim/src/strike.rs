@@ -99,13 +99,30 @@ pub fn turn(w: &mut World, id: ObjectId) {
 /// not at the strike's next look, the designator's next turn or the next
 /// designation impact.
 pub fn sweep(w: &mut World) {
-    if w.strike.strikes.is_empty() {
+    if !w
+        .strike
+        .strikes
+        .iter()
+        .any(|(&d, s)| changed(w, d, s.watched, s.watched_epoch))
+    {
+        // No designator's target differs from the one its entry watches:
+        // `sync` would write nothing for any of them (#409).
         return;
     }
     let ds: Vec<ObjectId> = w.strike.strikes.keys().copied().collect();
     for d in ds {
         sync(w, d);
     }
+}
+
+/// Whether designator `d`'s target or its count of target changes differs
+/// from what its strike entry watches (claim 19).
+fn changed(w: &World, d: ObjectId, watched: Option<Target>, watched_epoch: u32) -> bool {
+    let o = w.obj(d);
+    let now = o.and_then(|o| o.target);
+    let epoch = o.map_or(0, |o| o.combat.target_epoch);
+    // spec: S-0519 claim 19 (a change from A to B and back to A within one tick still cancels: the changes are counted; restoring A does not undo the retreat orders, ammunition loss or forgotten strike target)
+    watched != now || watched_epoch != epoch
 }
 
 /// Looks at the designator's target (claim 19): any change to anything
@@ -116,8 +133,7 @@ fn sync(w: &mut World, d: ObjectId) {
     let Some(s) = w.strike.strikes.get(&d) else {
         return;
     };
-    // spec: S-0519 claim 19 (a change from A to B and back to A within one tick still cancels: the changes are counted; restoring A does not undo the retreat orders, ammunition loss or forgotten strike target)
-    if s.watched == now && s.watched_epoch == epoch {
+    if !changed(w, d, s.watched, s.watched_epoch) {
         return;
     }
     cancel(w, d);
