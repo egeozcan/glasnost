@@ -1704,7 +1704,7 @@ impl SimRules {
                 .iter()
                 .filter(|((k, n), _)| *k == kind && n.as_bytes().eq_ignore_ascii_case(folded))
                 .map(|(_, &i)| i)
-                .last();
+                .next_back();
         }
         self.names_folded.get(&kind)?.get(folded).copied()
     }

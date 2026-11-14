@@ -864,7 +864,7 @@ fn named_type(r: &crate::rules::SimRules, name: &[u8], exact: bool) -> Option<(K
         TYPE_EVENT_KINDS
             .into_iter()
             .filter_map(|kind| r.index_of_folded(kind, &folded).map(|i| (kind, i)))
-            .last()
+            .next_back()
     }
 }
 
