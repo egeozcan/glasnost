@@ -1,9 +1,9 @@
 ---
 id: Q-3109
 title: Which cell and layer table C's zone row reads in an area search
-status: open
+status: answered
 related: [S-0309, S-0212]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need
