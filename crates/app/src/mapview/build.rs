@@ -1418,6 +1418,13 @@ pub struct Painter {
     /// and the typed rules, none of which changes during a game.
     // design: render (#133)
     voxel_types: BTreeMap<(Kind, usize), Rc<VoxelType>>,
+    /// Each owner's colour definition and whether it is ours
+    /// ([`owner_definition`]), by owner name, under the options they were
+    /// read with: an owner's colour depends on the import, which does not
+    /// change during a game, and on the person's options, which can.
+    // design: render (#135)
+    owners: BTreeMap<Vec<u8>, ([u8; 3], bool)>,
+    owner_options: Option<Options>,
 }
 
 /// What a voxel vehicle or aircraft type is drawn with whatever the object
@@ -1516,6 +1523,9 @@ struct Builder<'a> {
     /// The running slot animations of the live building being drawn
     /// (S-0108), in place of the set-up slots at their first image frame.
     live_slots: Option<Vec<LiveSlot>>,
+    /// Whether the painter's owner colours were checked against this
+    /// drawing's options (design: render (#135)).
+    owners_checked: bool,
 }
 
 /// A decoded tile cell: diamond image, its depth data and template
@@ -1745,6 +1755,7 @@ pub fn build_parts_with(
         p: Painter::new(art, canvas),
         built: Built::default(),
         live_slots: None,
+        owners_checked: false,
     };
     b.light_cells();
     b.tiles();
@@ -1917,7 +1928,22 @@ impl<'a> Builder<'a> {
     /// The colour definition an owner shows (S-0103 claim 10), and whether
     /// the choice is ours (an owner no skirmish house carries).
     fn owner_colour(&mut self, owner: &[u8]) -> ([u8; 3], bool) {
-        let (hsv, ours) = owner_definition(self.import, self.options, owner);
+        // design: render (#135) (kept by owner while the options stay as they were read with)
+        if !self.owners_checked {
+            self.owners_checked = true;
+            if self.p.owner_options.as_ref() != Some(self.options) {
+                self.p.owners.clear();
+                self.p.owner_options = Some(self.options.clone());
+            }
+        }
+        let (hsv, ours) = match self.p.owners.get(owner) {
+            Some(&kept) => kept,
+            None => {
+                let d = owner_definition(self.import, self.options, owner);
+                self.p.owners.insert(owner.to_vec(), d);
+                d
+            }
+        };
         if ours {
             self.note(notes::OWNER_COLOUR_OURS);
         }
@@ -6548,6 +6574,8 @@ impl Painter {
             building_context: None,
             relights: 0,
             voxel_types: BTreeMap::new(),
+            owners: BTreeMap::new(),
+            owner_options: None,
         }
     }
 
@@ -6951,6 +6979,7 @@ impl Painter {
                 ..Default::default()
             },
             live_slots: None,
+            owners_checked: false,
         };
         let entries = mobiles.iter().map(|m| b.mobile(m)).collect();
         *self = b.p;
@@ -6987,6 +7016,7 @@ impl Painter {
                 ..Default::default()
             },
             live_slots: None,
+            owners_checked: false,
         };
         let start = b.built.scene.items.len();
         b.overlays_in(cells, true);
@@ -7026,6 +7056,7 @@ impl Painter {
                 ..Default::default()
             },
             live_slots: None,
+            owners_checked: false,
         };
         let out = list.iter().map(|a| b.live_anim(a)).collect();
         *self = b.p;
@@ -7063,6 +7094,7 @@ impl Painter {
                 ..Default::default()
             },
             live_slots: None,
+            owners_checked: false,
         };
         let out = list.iter().map(|d| b.live_particle(d)).collect();
         *self = b.p;
@@ -7100,6 +7132,7 @@ impl Painter {
                 ..Default::default()
             },
             live_slots: None,
+            owners_checked: false,
         };
         let out = list.iter().map(|d| b.live_projectile(d)).collect();
         *self = b.p;
@@ -7137,6 +7170,7 @@ impl Painter {
                 ..Default::default()
             },
             live_slots: None,
+            owners_checked: false,
         };
         let out = list.iter().map(|d| b.live_piece(d)).collect();
         // Pieces no longer in play give their image slots back.
@@ -7242,6 +7276,7 @@ impl Painter {
                 ..Default::default()
             },
             live_slots: None,
+            owners_checked: false,
         };
         let out = b.target_line_items(start, end, phase);
         *self = b.p;
@@ -7360,6 +7395,7 @@ impl Painter {
                 ..Default::default()
             },
             live_slots: None,
+            owners_checked: false,
         };
         let mut out = Vec::new();
         for d in list {
