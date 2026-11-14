@@ -1,9 +1,9 @@
 ---
 id: Q-3101
 title: Which nearby cell a hover-attack type takes as its destination in attack and guard
-status: open
+status: answered
 related: [S-0215]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need
