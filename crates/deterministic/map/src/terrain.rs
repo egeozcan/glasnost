@@ -553,6 +553,10 @@ fn smooth_ground(grid: &CellGrid, c: CellXY, tile: i32, rules: &RecalcRules<'_>)
 fn smooth_ramp(grid: &CellGrid, c: CellXY, tile: i32, s: u8, rules: &RecalcRules<'_>) -> i32 {
     let r = rules.catalogue.roles;
     let q = rules.quirks;
+    // spec: S-0010 Edge cases (quirks.unset_role_range off: ramp smoothing is skipped when either ramp role is unset)
+    if !q.unset_role_range && (r.ramp < 0 || r.smooth_ramp < 0) {
+        return tile;
+    }
     // spec: S-0010 claim 11 (ramp range 20 tiles, smooth-ramp range 12 tiles)
     if !(in_range(tile, r.ramp, 20, q) || in_range(tile, r.smooth_ramp, 12, q)) {
         return tile;
