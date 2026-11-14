@@ -396,11 +396,30 @@ pub(crate) fn mark_killed(w: &mut World, id: ObjectId) {
 /// second row) and an aircraft killed on the ground (S-0312 claim 15)
 /// among others.
 pub fn leave_play(w: &mut World, id: ObjectId) {
-    // spec: S-0312 claims 14 and 20 and S-0520 claim 5 (a destroyed crate-carrying vehicle or a building with a crate beneath leaves a crate)
-    crate::crates::death_crate(w, id);
+    let beneath = leave_play_before_crate(w, id);
+    if let Some((at, money)) = beneath {
+        // spec: S-0312 claims 20 and 21 (a building that leaves play at the end of its death effects has its crate beneath placed in that same moment, on its top-left foundation cell, which it no longer occupies)
+        crate::crates::place_beneath(w, at, money);
+    }
+}
+
+/// [`leave_play`] up to a destroyed building's crate beneath, which it
+/// returns unplaced: the cell and whether it is a money crate (S-0312
+/// claim 20). A vehicle's death crate is placed near it before it leaves.
+fn leave_play_before_crate(w: &mut World, id: ObjectId) -> Option<(glasnost_map::CellXY, bool)> {
+    let building = w.obj(id).is_some_and(|o| o.kind == Kind::Building);
+    let beneath = if building {
+        // What claim 20 reads of the building, taken before it leaves play.
+        crate::crates::death_crate_plan(w, id)
+    } else {
+        // spec: S-0312 claim 14 and S-0520 claim 5 (a destroyed crate-carrying vehicle leaves a crate near its position)
+        crate::crates::death_crate(w, id);
+        None
+    };
     // spec: S-0312 claims 12 and 15 and S-0507 claim 16 (remaining passengers die at removal, without attacker credit)
     crate::transport::remove_passengers(w, id);
     crate::objects::remove(w, id);
+    beneath
 }
 
 /// The death of a passenger inside a transport (S-0312 claims 5, 12 and
@@ -1311,7 +1330,7 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
     if tc.explodes || selling {
         return;
     }
-    // spec: S-0312 claim 21 (any other destroyed building leaves play at the end of its death effects; rubble and crate, claim 20, are not modelled)
+    // spec: S-0312 claim 21 (any other destroyed building leaves play at the end of its death effects, its crate beneath placed in that same moment; rubble, claim 20, is not modelled)
     leave_play(w, id);
 }
 
@@ -1329,7 +1348,7 @@ pub fn removal_turn(w: &mut World, id: ObjectId) {
     let refund = crate::seams::building_refund(w, id);
     let src = crate::combat::survivors::source(w, id);
     // spec: S-0312 claim 21 (the building leaves play and ceases to occupy its foundation cells before any second-round survivor enters play; it has left the update order before the second round)
-    leave_play(w, id);
+    let beneath = leave_play_before_crate(w, id);
     if w.rules().quirks.building_removal_second_round {
         // spec: S-0312 claim 21 (a second round of claims 18 and 19 (g), C worked out afresh by F5; absorbed passengers are already out)
         if let Some(src) = src {
@@ -1338,7 +1357,11 @@ pub fn removal_turn(w: &mut World, id: ObjectId) {
         }
     }
     // Passengers still inside die (claim 21): claim 24 has already let every absorbed passenger out or killed it in claim 19 (g), so none is left here (`absorb::destroyed`).
-    // Rubble and crate of claim 20 are then placed: not modelled.
+    if let Some((at, money)) = beneath {
+        // spec: S-0312 claim 21 (claim 20's crate is placed in this same removal turn, after the second round, completing removal)
+        crate::crates::place_beneath(w, at, money);
+    }
+    // Rubble of claim 20 would then be placed: not modelled.
 }
 
 /// Survivors of a destroyed building (S-0312 claims 18 and 19 (g)), after
