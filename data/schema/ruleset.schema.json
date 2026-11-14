@@ -3329,7 +3329,7 @@
           "default": null
         },
         "number_of_docks": {
-          "description": "Buildings: the rules `NumberOfDocks`, docks the building adds to the\nhouse total (S-0407 claim 16); absent: 0.",
+          "description": "Buildings: the rules `NumberOfDocks`, docks the building adds to the\nhouse total (S-0407 claim 16); absent: 1 (S-0407 and S-0404 Import\nmapping).",
           "type": [
             "integer",
             "null"
