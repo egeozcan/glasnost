@@ -760,14 +760,18 @@ pub(crate) fn ring_search_with(
     if w.cells.cell(from).is_some_and(|c| c.land == land::TIBERIUM) {
         return Some(from);
     }
+    // Every caller's test rejects a cell that is not legal, with no effect,
+    // so the rings past the last that can hold a legal cell find nothing
+    // (#386).
+    let last = range.min(w.cells.ring_limit(from).saturating_add(1));
     // spec: S-0402 claim 4 (rings k = 1 … R − 1; nothing when R ≤ 1)
-    for k in 1..range {
+    for k in 1..last {
         let mut best: Option<(i64, (i32, i32), CellXY)> = None;
         for b in -k..=k {
-            for a in -k..=k {
-                if a.abs() != k && b.abs() != k {
-                    continue;
-                }
+            // The cells of ring k in row b, by increasing a: the whole row
+            // at |b| = k, else its two ends (#386).
+            let step = if b.abs() == k { 1 } else { 2 * k };
+            for a in (-k..=k).step_by(usize::try_from(step).unwrap_or(usize::MAX)) {
                 let c = CellXY::new(from.x + a, from.y + b);
                 if !accept(w, c) {
                     continue;
@@ -2094,4 +2098,39 @@ pub fn unload_is_harvesting(w: &World, id: ObjectId) -> bool {
     }
     // spec: S-0415 claim 1 rank 3 (the harvester flag: the harvesting rules of S-0402)
     is_harvester(w, id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // spec: S-0402 claim 4 (rings k = 1 … R − 1 around the cell; it stops at the first ring that holds an acceptable cell)
+    #[test]
+    fn ring_search_asks_about_the_legal_cells_in_square_order_up_to_the_map_edge() {
+        let mut w = crate::testkit::game_with(&crate::testkit::ruleset(), 30, 11);
+        // From (28, 30) the legal cell (59, 30) is 31 rings out, at the far
+        // edge of the coordinate square 0 … 59.
+        let from = CellXY::new(28, 30);
+        let target = CellXY::new(59, 30);
+        let mut want = Vec::new();
+        for k in 1..=31 {
+            for b in -k..=k {
+                for a in -k..=k {
+                    let c = CellXY::new(from.x + a, from.y + b);
+                    if (a.abs() == k || b.abs() == k) && w.cells.cell(c).is_some() {
+                        want.push(c);
+                    }
+                }
+            }
+        }
+        let mut asked = Vec::new();
+        let found = ring_search_with(&mut w, from, 100_000, &mut |w, c| {
+            if w.cells.cell(c).is_some() {
+                asked.push(c);
+            }
+            c == target
+        });
+        assert_eq!(found, Some(target));
+        assert_eq!(asked, want);
+    }
 }
