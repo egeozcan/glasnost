@@ -218,6 +218,7 @@ pub fn create_converted(
         // spec: S-0206 claim 9 (a vehicle that never fired counts as having last fired 100 ticks before tick 0)
         last_fired: -100,
         report_value,
+        placed_tick: 0,
         rotation_sample: false,
         beh: Behaviours::default(),
         target: None,

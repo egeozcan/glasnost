@@ -220,6 +220,13 @@ pub struct Object {
     /// draw. Presentation reads it; gameplay never does.
     #[serde(default)]
     pub report_value: u16,
+    /// The tick number current when this object, not a building, was last
+    /// placed on the map (S-0105 claim 6, *When the turn starts*): the start
+    /// of the barrel-elevation turn the renderer shows. 0 for an object the
+    /// map places before the first tick; saved with the game. Presentation
+    /// reads it; gameplay never does.
+    #[serde(default)]
+    pub placed_tick: i32,
     /// A turreted vehicle's latest turret rotation sample (S-0206 claim
     /// 17): whether its turret was turning, recorded after all the turret
     /// rows of the last tick that processed them.
