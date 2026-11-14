@@ -1,7 +1,13 @@
-//! Cloak fields (S-0516 claims 19 and 20): a generator's circle grows one
-//! radius per tick while it is in operation and shrinks one radius per tick
-//! while it is not; removal, sale, destruction and capture collapse it at
-//! once.
+//! Cloak fields (S-0516 claims 19 and 20). A field follows claim 20's phase
+//! model, not the generator's operation level: a change of operation seen
+//! at the generator's turn makes growth or shrinking pending, and a pending
+//! direction steps one radius per tick until it ends (growth at the full
+//! radius, shrinking at radius 0), with no further power test. Unchanged
+//! operation requests nothing, so an idle field below its full radius stays
+//! idle even in operation. An accepted manual power-off makes shrinking
+//! pending at once ([`switched_off`]). A neighbour's collapse can restart an
+//! idle generator in operation from radius 0. Removal, sale, destruction and capture collapse the
+//! field at once.
 
 use std::collections::{BTreeMap, BTreeSet};
 
