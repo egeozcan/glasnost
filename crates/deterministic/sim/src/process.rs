@@ -1290,8 +1290,8 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
             .as_ref()
             .and_then(|s| s.seq)
             .is_some_and(Seq::is_deploy);
-        if deployed && o.target.is_some() {
-            // spec: S-0215 claim 23 (deployed infantry: its deployed-firing rule, S-0517 claim 16, the standard delay not halved)
+        if deployed && crate::combat::acquire::player_owned(w, id) {
+            // spec: S-0215 claim 23 (third infantry row: a human-controlled owner, deployed, with or without a target, runs its deployed-firing rule, S-0517 claim 16, the standard delay not halved; in our engine every player house, while the neutral, special and test-only computer-controlled player houses keep the original's rule, which has no such row: Terms, houses in our engine) (#230)
             deployed_firing(w, id);
             return standard_delay(w, id);
         }
