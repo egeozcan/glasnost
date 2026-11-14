@@ -2,13 +2,13 @@
 id: S-0204
 title: Coordinates, distance and facing
 topic: simulation
-revision: 10
-sources-class: [decomp]
+revision: 14
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-14
 measurements: []
-requests: [Q-0077, Q-0610]
+requests: [Q-0077, Q-0610, Q-3103]
 supersedes: []
 ---
 
@@ -552,17 +552,44 @@ moment a rule asks for them; the order of the rules within a tick is S-0203's.
   the exact angle, φ = round(arctan2(*X*, *Y*) × 65536 / (2π)) mod 65536, with arctan2(*X*, *Y*) the angle
   clockwise from map north and halves rounded up, so the axis directions are 0, 16384, 32768 and
   49152 and the diagonals 8192, 24576, 40960 and 57344.
+  This Off form is a design decision of our engine; the original has no such form. The exact angle
+  is defined only for finite arguments that are not both zero; for the others the Off form gives a
+  direction as follows. Within F3's own bounded inputs (F3, number domain) an argument cannot be
+  infinite or not a number; such arguments arise where a rule supplies F3 with values narrowed to
+  single precision, as S-0306's Formulas preamble does for its claim 5, F11 and F14. An argument
+  that is not a number counts as zero. If an argument is then infinite, each infinite argument
+  counts as +1 or −1 by its sign and each finite one as 0, so that *X* = +∞ with *Y* finite gives
+  16384 and *X* = +∞ with *Y* = −∞ gives 24576. If both arguments are then zero, of either sign, the
+  direction is 16384, map east on the exact scale, the counterpart of the 16383 that F3 gives with
+  the switch on. These rules hold wherever a rule takes a direction by F3 with the switch off. With
+  the switch off, our engine also takes a fragment's launch direction (S-0318 claim 6), from its
+  burst point towards its aim point's reference point, by this Off form, so a burst point straight
+  above that reference point (a planar displacement of 0) gives 16384. With the switch on, that
+  direction is believed to be F3's, giving 16383, map east, for a planar displacement of 0
+  (Changes for other specs); S-0318 claim 6 rates its launch direction low.
   The switch also covers the reverse scale, from a facing back to an angle, wherever a rule uses
   the same short scale: the walking step of infantry (S-0208 F3), which turns a facing *f* into
   the angle θ = (*f̂* − 16383) × (−2π / 65534), with *f̂* = *δ*(0, *f*) (F5), the facing as a value
   from −32768 to 32767. Off, that angle is θ = (*f̂* − 16384) × (−2π / 65536), with the floating-point
   rules S-0208 F3 gives. One switch covers both directions of the scale, so that a facing made by
   F3 and turned back into an angle uses a matching scale convention with the switch on or off.
+  S-0306's angle of a facing in the map plane (its Formulas preamble) is such a use, with the same
+  Off form; S-0306's angle of a pitch facing keeps the short scale with the switch off.
   The original's table and integer truncation still prevent a generally exact round trip.
   This switch does not change projectile pitch conversions (claim 12, F6) or raw-angle
   uses (claim 13, F7). With it off, those uses retain the original table and their existing
   conversion rules, including F6's signed exception corrections. In particular, switching
   map-plane directions to exact angles does not switch projectile elevation to exact angles.
+  - Backing: `unmeasured` for the Off form's rules for arguments that are not a number, infinite
+    arguments and two zero arguments, and for its use for a fragment's launch direction: they define
+    our engine's Off form, which the original does not have, so no run of the original observes
+    them. `unmeasured` for the fragment's direction being F3's and its 16383 at a planar
+    displacement of 0: S-0318 scenario SH7 records only that a fragment's first move heads towards
+    its target's reference point, and no scenario bursts a fragment weapon straight above that
+    point.
+  - Confidence: medium (the Off form's rules for these arguments and its use for a fragment's
+    launch direction, design choices); low (the fragment's direction being F3's with the switch on,
+    and its 16383 at a planar displacement of 0, as S-0318 claim 6 rates its launch direction)
 - **`quirks.one_sided_building_distance`** (default: on, the original). The building reduction
   *β* applies only to the second object of *D*(*A*, *B*) (claim 7). Off: *β*(*A*) + *β*(*B*) is
   subtracted, so the distance between two objects is the same in both orders. The weapon range
@@ -824,6 +851,17 @@ arithmetic is S-0206's (F1 there).
 - *Falsified if:* any valid recorded pitch differs from the F7-based prediction. A run
   where both predictions coincide is inconclusive and is replaced, not counted as
   supporting the exact table.
+
+## Changes for other specs
+
+- **S-0318 (approved, revision 29), claim 6.** The launch direction can say that it is believed to
+  be S-0204 F3's facing from the burst point towards the aim point's reference point, under
+  `quirks.table_direction` (S-0204 Edge cases), so that a burst point straight above that reference
+  point (a planar displacement of 0) gives 16383, map east, with the switch on, and 16384 with it
+  off. Low, `unmeasured`, as claim 6 rates its launch direction: scenario SH7 records only that the
+  first move heads towards the reference point, and no scenario bursts a fragment weapon straight
+  above it. The value with the switch off is our engine's design choice (S-0204 Edge cases: medium,
+  `unmeasured`).
 
 ## Open questions
 
