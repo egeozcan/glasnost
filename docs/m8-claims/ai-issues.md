@@ -215,3 +215,47 @@ these later steps work them out instead. The bench at the #52 commit shows the s
 | #64 smaller scans (field known, absorbers, sensor, berserk) | partly: the scan of the whole map for a known field ran once each in many steps of a think; the absorber room ran a pass over the objects for each absorber; the sensor searched a cell before asking its line; berserk counted each target's group again for every unit | the think keeps whether the house knows a field. One pass counts the units bound for every absorber. The sensor asks its line first. Berserk counts each group once a call. Bench: build_specials 1127.9 → 219.7 ms, build_lifter 342.4 → 30.3, build_drainer 381.3 → 52.0, ferry 498.8 → 213.2. Left: anti-air slots, bunker exit reasons, jumpjets, grinder contains, crates and memory lookups, all small rows | `scripted.rs`: `the_kept_field_answer_is_the_scan_of_the_map`; `absorber.rs`: `the_counts_of_one_pass_are_the_counts_of_a_pass_for_each_object`; `psychic.rs`: `the_sensor_and_the_berserk_targets_are_as_before` |
 | #57 deploy spot spiral | partly, in batch 2; find_deploy_spot is about 39 to 41 ms between thinks, before and after this batch (2.7 % of that AI time) | no new code. Keeping a failed spiral across ticks would not be exact | — |
 | #63 refused or redundant orders | yes, as counted | won't fix. Skipping the think while orders are blocked moves the M7b game by tick 500, because the first think also sets the brain's state. Thinking but returning no orders keeps the hashes on the M7b bench, but the think still runs, so it saves nothing. The harvest re-issue goes only to resting, idle or stalled harvesters, which the sim accepts and acts on. Batching waves changes when orders are sent; the wave bookkeeping belongs to #19. The grinder Build refusals are #8 | — |
+
+## Batch 7
+
+Issues #19 (rest) and #27 (rest), the AP1 seam (`rebuild_yard` between thinks), and #54 and #64
+(rest) looked at and left. AI game format 115 (#19's counters count differently; #27 drops a field
+from the brain), save 138, wire 12. Base 0c8d9f9. #19 and #27 were each confirmed with tests
+committed before the fix that failed there: #19's on a refactor commit that keeps every answer
+(f006696, goldens byte-identical), #27's on their own commit (1c24f24). The AP1 seam was confirmed by
+the bench, and its equivalence test came with the change.
+
+**#19.** The fix changes no order: the counters only. In the sweeps (seeds 1 to 16) each seed's
+lines stay the same; the counter lines fall where an order was dropped or replaced. M6c: garrison
+median 15 → 14; jumpjets 1/40/70 → 1/38/64; radiation exits 5/22/52 → 5/21/50; chrono erasures
+23/30/40 → 22/29/37; prism buildings ordered 7/11/13 → 4/7/9; charger orders max 22 → 21; sabotage
+max 24 → 23; crate orders 32/67/106 → 32/65/105. M7a: berserk orders 11/31/88 → 9/31/86; lift orders
+18/33/73 → 13/31/68. M7b: berserk orders max 48 → 47. Every gate passes, no margin changed. Goldens
+moved: duel-m6c, duel-m7a, duel-m7b (the counters are hashed with the brain).
+
+**#27.** The six goldens moved (duel, duel-diagonal, duel-m6c, duel-m7a, duel-m7b, duel-naval):
+removing a field from the hashed brain moves every hash from tick 1, so the goldens alone do not
+show whether play changed. The sweeps print the same lines as with #19 alone. The quick lane (seeds 7
+to 14, maps 0, 2 and 8, sides 0,2 and 1,2, 48 games) keeps every winner: Allied 12, Yuri 12; Soviet
+8, Yuri 13, no winner 3, as before. 9 games end at another tick: Allied v Yuri map 0, seed 8 (49 977
+→ 50 033) and seed 10 (36 456 → 36 094); Soviet v Yuri map 8, seed 7 (118 787 → 118 784), map 2,
+seed 9 (49 074 → 49 088), seed 10 maps 0 and 2 (78 863 → 78 933, 65 002 → 64 993), map 2, seed 11
+(37 650 → 37 647), seed 12 maps 0 and 2 (59 085 → 59 086, 40 848 → 41 027).
+
+**AP1 seam.** No game moves: the goldens, the sweeps' lines, the quick lane's lines (timings apart)
+and the install bench's state hash every 500 ticks are those of the #27 tree; the end hash is
+`b1a15b9f…e31b1a4d4` (AP1's `02388e7c…` no longer applies: #27 changed the brain's layout). Bench
+(map 9, 8 houses, seed 7, 9 000 ticks), base, after, base, after, back to back on a shared machine:
+
+- AI time a tick, every house: 1411.7 / 1521.1 / 1417.7 / 1583.4 µs;
+- `tick::step` (not changed): 2613.0 / 2839.2 / 2624.5 / 2945.4 µs, so the after runs ran on a
+  machine 8 to 12 % slower; the AI's share of all step time 35.1 / 34.9 / 35.1 / 35.0 %;
+- between thinks, `rebuild_yard` with the pass: 452.8 → 257.7 ms (119.1 + 138.6) and 451.6 → 320.9
+  ms (166.6 + 154.3).
+
+| issue | confirmed | change | test |
+|---|---|---|---|
+| #19 (rest) counters count offered orders | yes: a use counted for an order the pending limit (S-0213 claim 2) dropped, and for an order a later part of the think replaced for the same unit | each use is offered with its order and counted at the end of the think only when that order is given: a behaviour order that is its actor's last one within the room left, any other matched once among the orders within the room (`memory::behaviour_given`, `Special::note_given`). The plant-first use is offered once, and only when the think had not ordered the plant already. The spin filter's count stays as it was (it counts drops). The sensor and gattling steps return whether they ordered, instead of reading a counter. `tests/bunker.rs`: an Enter the defence replaces is no entry | `tests/special.rs`: `an_order_dropped_by_the_pending_limit_is_not_counted`, `an_order_a_later_part_replaces_is_not_counted`; `tests/linked.rs`: `a_prism_order_dropped_by_the_pending_limit_is_not_counted` |
+| #27 (rest) waves to a start seen empty | yes: with every start explored and no enemy building seen there, the rotation sent waves (and the ferry, rally and landing goals) to those starts in turn | a start explored (S-0409 claims 9 and 19) with no enemy building seen by it is no goal. With none left a wave searches unseen cells, and waits when there are none. The ferry, rally and landing goal takes a seen enemy building, then a start not yet cleared, then any seen enemy (an enemy base vehicle not yet deployed). The rotation counter is gone | `scripted.rs`: `start_tests::a_start_seen_empty_is_no_goal`; `tests/ai.rs`: `no_wave_goes_to_a_start_seen_empty` |
+| AP1 seam: `rebuild_yard` between thinks | yes: between thinks it was the first part to ask `Script::own`, so it paid each house's scan of every object, 452.8 ms of the bench | `Game::step` lists every house's living objects on the map in one pass when the first brain thinks, and hands each brain its list. Issuing an order only adds it to the pending list, so each list is the house's own scan. `Brain::think` and the other drivers still scan | `scripted.rs`: `the_lists_of_one_pass_are_each_houses_own_scan`; the goldens and the bench's hashes |
+| #54, #64 (rest) | looked at: AP1's leftovers are small rows of the bench (7bde6d0, think ticks, of about 11.2 s of think-tick AI: special:bunkers 83.9 ms, special:jumpjets 65.9, special:grinders 36.0, build_anti_air 6.4, special:crates 5.0; together 1.8 %), and #54's "no target" cache would hold an answer across ticks | left untouched by choice: the AP1 seam (rebuild_yard, 452 ms between thinks) was the larger saving | — |
