@@ -350,7 +350,7 @@ Seams left: the carrier and attacks ring branch of #408's search has no test of 
 
 ## Batch S12: S10's answered requests, bridges, cloak and target acquisition
 
-Base main f99453e, not rebased. The lead's answers to S10's three requests come first: Q-3085 (S-0516 r25), Q-3086 (S-0312 r78) and Q-3087 (S-0406 r13). Ten issues, #238 to #247, follow. The save format, AI game format and wire version are unchanged (12 for the wire): nothing new is saved or hashed (the new fields are in the rules), and the sim-gate goldens do not move. Failing tests are committed first: d8c9b10, 95286cf, 37fea04, 9170982, eaa35ef, dbe6619, e27167f, 92262e6, 1e9c0b6 and 6a1ef47. Each fails on the commit before its fix, and no fix commit changes a test. #169's test is a guard test that passes on base (6f90891). #242 and #243 are documentation only. The quirk switch `crate_beneath_overlay_refusal`, which S-0312 r78 names, was added at the coordinator's request in a1d0b1b: field, schema default on and `named()` entry, with the simulation's off path in #193's fix. Request Q-3109 (12275fc) is filed. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S12: S10's answered requests, bridges, cloak and target acquisition)* (d535d41). The S-0309 claim ledger names the new tests (34865e0).
+Base main f99453e, not rebased. The lead's answers to S10's three requests come first: Q-3085 (S-0516 r25), Q-3086 (S-0312 r78) and Q-3087 (S-0406 r13). Ten issues, #238 to #247, follow. Save format 144 and AI game format 120 (0f80024): no saved field changes, but what a saved game replays to does. The wire version is unchanged (12). Failing tests are committed first: d8c9b10, 95286cf, 37fea04, 9170982, eaa35ef, dbe6619, e27167f, 92262e6, 1e9c0b6 and 6a1ef47. Each fails on the commit before its fix, and no fix commit changes a test. #169's test is a guard test that passes on base (6f90891). #242 and #243 are documentation only. The quirk switch `crate_beneath_overlay_refusal`, which S-0312 r78 names, was added at the coordinator's request in a1d0b1b: field, schema default on and `named()` entry, with the simulation's off path in #193's fix. Request Q-3109 (12275fc) is filed. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S12: S10's answered requests, bridges, cloak and target acquisition)* (d535d41). The S-0309 claim ledger names the new tests (34865e0).
 
 | Issue | Finding | Status | Fix | Tests |
 |---|---|---|---|---|
@@ -396,14 +396,14 @@ Every changed winner, and 9/8 (0,1), was traced with the state hash every tick (
 - 9/8 (0,1): 8280, house 0, slaves 638–640, master 702
 - 10/8 (0,2): 2079, house 1, slaves 180–182, master 194
 
-So every change traced comes from the rule S-0309 claim 2 requires, and none points to a fault. On base those slaves also held their own master as target (fire standing, attack set); that is base behaviour and is gone with the gate.
+So every change traced comes from the rule S-0309 claim 2 requires, and none points to a fault. At the first differing tick those slaves hold their own master as target, with the attack flag set, on base and in the batch alike. This was seen but not traced.
 
 The checks all ran on the final tree.
-- The sim gate with its ignored tests passes 17, and none of the goldens move.
+- The sim gate with its ignored tests passes 17. After the format bump the goldens were regenerated with the ignored tests, and none of the nine moved.
 - The AI suite with its ignored tests passes 356, as on main.
 - `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check` are clean.
 - The wasm32 build of `glasnost-app` succeeds.
 - `xtask check` passes. `xtask gate` passes, and on wasm32 it matches all nine goldens.
 - The workspace tests pass except main's `quirks::tests::every_spec_quirk_has_a_switch`, which fails on `gas_through_bridge_deck` only. The new switch `crate_beneath_overlay_refusal` is read.
 
-Seams left (also in the design section): Q-3109 (#245's zone row in an area search). A building's guard range is read as S-0309's Import mapping gives it (single-precision decimal × 256, truncated), while a mobile type's still reads S-0215's (the double × 256, truncated). The two can differ for a value that a single cannot hold exactly; whether they are one read is not settled here. Rubble beneath a building (S-0312 claim 20) is still not modelled.
+Seams left (also in the design section): Q-3109 (#245's zone row in an area search). A building's guard range is read as S-0309's Import mapping gives it (single-precision decimal × 256, truncated), while a mobile type's still reads S-0215's (the double × 256, truncated). The two can differ for a value that a single cannot hold exactly; whether they are one read is not settled here. Rubble beneath a building (S-0312 claim 20) is still not modelled. A seeking slave miner slave holds its own master as target with the attack flag set, on base and in the batch. Whether a spec gives that has not been checked.
