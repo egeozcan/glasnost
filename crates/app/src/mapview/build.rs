@@ -1393,6 +1393,38 @@ pub struct Painter {
     named_files: BTreeMap<Vec<u8>, Option<u16>>,
     /// The named palettes, loaded (S-0103 claim 17).
     named: Vec<Palette>,
+    /// Each live building's last drawing by object code, with what it was
+    /// drawn from (design: render (#145)): a building drawn again from the
+    /// same [`BuildingKey`] in the same [`BuildingContext`] takes it as it
+    /// is.
+    buildings: BTreeMap<u32, (BuildingKey, LiveDrawn)>,
+    /// The painter's state the kept building drawings were made in.
+    building_context: Option<BuildingContext>,
+    /// The relights so far ([`Painter::relight`]): a relight changes the
+    /// cell light every building drawing takes.
+    relights: u64,
+}
+
+/// What one live building's drawing is made from besides the painter's
+/// state and the game's fixed inputs (map, import, palettes, files, rules)
+/// (design: render (#145)): the building as the live game gives it and its
+/// cell's level.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BuildingKey {
+    building: LiveBuilding,
+    level: i8,
+}
+
+/// The painter's state a live building's drawing reads (design: render
+/// (#145)): when any of it changes, every kept building drawing is drawn
+/// afresh.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BuildingContext {
+    effect_tint: Option<[i32; 3]>,
+    view_quirks: ViewQuirks,
+    protected_cells: BTreeMap<CellXY, super::protection::SlotCell>,
+    options: Options,
+    relights: u64,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -6336,6 +6368,9 @@ impl Painter {
             named_of: BTreeMap::new(),
             named_files: BTreeMap::new(),
             named: Vec::new(),
+            buildings: BTreeMap::new(),
+            building_context: None,
+            relights: 0,
         }
     }
 
@@ -6592,6 +6627,8 @@ impl Painter {
             set,
             inputs.options.detail,
         );
+        // design: render (#145): the live buildings take the new cell light when next drawn
+        self.relights += 1;
         let tiles = std::mem::take(&mut self.tile_items);
         for &(i, c) in &tiles {
             let Some(item) = items.get_mut(i) else {
@@ -7092,12 +7129,39 @@ impl Painter {
     /// items (body, shadow, bib), its ground-layer entries (its object-pass
     /// parts and ground-layer slot animations, each with its sort key) and
     /// its slot animations of the other layers (S-0102 claims 5, 6 and 17).
+    ///
+    /// design: render (#145): a building drawn last time from the same
+    /// building and cell level, with the painter's tint, quirk
+    /// switches, protected cells, options and cell light unchanged, takes
+    /// its last drawing; its images and palette rows stay in the scene, as
+    /// none of them is released before the tint or the light changes. The
+    /// notes it met then are not met again (they are kept already). Only
+    /// the buildings of this call are kept.
     pub fn buildings_drawn(
         &mut self,
         inputs: &Inputs,
         scene: &mut Scene,
         list: &[LiveBuilding],
     ) -> (Vec<LiveDrawn>, BTreeSet<String>) {
+        let unchanged = self.building_context.as_ref().is_some_and(|c| {
+            c.effect_tint == self.effect_tint
+                && c.view_quirks == self.view_quirks
+                && c.relights == self.relights
+                && c.protected_cells == self.protected_cells
+                && c.options == *inputs.options
+        });
+        if !unchanged {
+            self.buildings.clear();
+            self.building_context = Some(BuildingContext {
+                effect_tint: self.effect_tint,
+                view_quirks: self.view_quirks,
+                protected_cells: self.protected_cells.clone(),
+                options: inputs.options.clone(),
+                relights: self.relights,
+            });
+        }
+        let mut cache = std::mem::take(&mut self.buildings);
+        let mut kept = BTreeMap::new();
         let mut b = Builder {
             map: inputs.map,
             rules: inputs.rules,
@@ -7122,15 +7186,30 @@ impl Painter {
         };
         let mut out = Vec::new();
         for d in list {
-            let Some(art) = b.type_art((Kind::Buildings, d.idx)) else {
-                out.push(LiveDrawn::default());
-                continue;
-            };
             let level = inputs
                 .cells
                 .and_then(|g| g.get(d.cell))
                 .or_else(|| inputs.map.cells.get(d.cell))
                 .map_or(0, |c| c.level);
+            // design: render (#145): the same building in the same state draws as last time
+            // (its condition follows from its health and the game's rules, fixed for the game)
+            if let Some((key, drawn)) = cache.remove(&d.object)
+                && key.building == *d
+                && key.level == level
+            {
+                out.push(drawn.clone());
+                kept.insert(d.object, (key, drawn));
+                continue;
+            }
+            let key = BuildingKey {
+                building: d.clone(),
+                level,
+            };
+            let Some(art) = b.type_art((Kind::Buildings, d.idx)) else {
+                out.push(LiveDrawn::default());
+                kept.insert(d.object, (key, LiveDrawn::default()));
+                continue;
+            };
             let condition = match inputs.rules {
                 Some(r) => condition_of(r, d.health.0, d.health.1),
                 None => (false, false),
@@ -7158,14 +7237,17 @@ impl Painter {
                 &mut ground,
             );
             // spec: S-0102 claims 5, 6 and 17 (the parts and slot animations keep their own sort keys and layers)
-            out.push(LiveDrawn {
+            let drawn = LiveDrawn {
                 items,
                 ground,
                 layered: std::mem::take(&mut b.built.layered),
-            });
+            };
+            out.push(drawn.clone());
+            kept.insert(d.object, (key, drawn));
         }
         *self = b.p;
         *scene = b.built.scene;
+        self.buildings = kept;
         (out, b.built.notes)
     }
 }
@@ -7202,7 +7284,7 @@ pub(super) fn condition_of(r: &SimRules, h: i32, strength: i32) -> (bool, bool) 
 
 /// A building the live game draws: one it put on the map (deployed or
 /// placed), or a gate of the map's own (whose door moves).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LiveBuilding {
     /// Import registration index of its type.
     pub idx: usize,
