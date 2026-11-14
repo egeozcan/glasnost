@@ -1406,7 +1406,8 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     };
     let Some(r) = refinery else {
         crate::process::fall_back(w, id, false);
-        return 1;
+        // spec: S-0402 claim 10 (every processing of enter is followed by the next after the standard delay of enter) and S-0215 claims 6 and 29 (the standard delay with its draw, also for the no-refinery outcome)
+        return standard(w, id);
     };
     // spec: S-0402 claim 10 row 1 (the refinery refuses, it does when switched off, and the harvester is not tethered: it breaks off contact and falls back to rest)
     if !tethered(w, id) && !accepts(w, r, id, false) {
