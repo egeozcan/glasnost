@@ -8346,3 +8346,134 @@ fn a_live_building_drawn_again_follows_its_cells_level() {
         assert_ne!(now, flat, "the change shows");
     });
 }
+
+// ---------------------------------------------------------------------------
+// Each voxel type's fixed drawing fields are read once (#133)
+
+/// Runs `f` with the inputs of a map with three voxel types: CARX, a
+/// vehicle with a turret drawn from the synthetic two-limb model; VANX, a
+/// vehicle without one drawn from its first limb alone; and JETX, an
+/// aircraft drawn from the one-limb model, whose registration index is
+/// CARX's. Every name and number is made up.
+fn with_voxel_types(f: impl FnOnce(&Inputs)) {
+    use glasnost_convert::art::TypeArt;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let rules = format!(
+        "{}[CARX]\nTurret=yes\n",
+        RULES.replace(
+            "[VehicleTypes]\n1=CARX\n",
+            "[VehicleTypes]\n1=CARX\n2=VANX\n[AircraftTypes]\n1=JETX\n",
+        )
+    );
+    let (mut import, catalogue, mut assets) = context_with(&rules);
+    let voxels = |parts: &[(&str, &[u8])]| TypeArt {
+        voxels: parts
+            .iter()
+            .map(|(role, file)| (role.to_string(), file.to_vec()))
+            .collect(),
+        ..Default::default()
+    };
+    import.arts.insert(
+        (Kind::Vehicles, 0),
+        voxels(&[("body", b"hull.vxl"), ("turret", b"hull.vxl")]),
+    );
+    import
+        .arts
+        .insert((Kind::Vehicles, 1), voxels(&[("body", b"lean.vxl")]));
+    import
+        .arts
+        .insert((Kind::Aircraft, 0), voxels(&[("body", b"lean.vxl")]));
+    let full = synthetic_model();
+    let mut lean = synthetic_model();
+    lean.limbs.truncate(1);
+    assets.insert(b"hull.vxl", VxlWriter { model: &full }.write());
+    assets.insert(b"lean.vxl", VxlWriter { model: &lean }.write());
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    f(&Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    });
+}
+
+/// Type `idx` of `kind` as object `n`, standing on the map.
+fn voxel_mobile(kind: Kind, idx: usize, n: u32) -> Mobile {
+    Mobile {
+        kind,
+        idx,
+        owner: b"Neutral".to_vec(),
+        pos: (3 * 256 + 128, (3 + n as i32) * 256 + 128, 0),
+        body: 8192,
+        turret: 24576,
+        elevation: 16384,
+        anim: 0,
+        infantry: None,
+        object: sim_code(ObjectId(5 + n)),
+        harvesting: None,
+        shadow: None,
+        alternative: false,
+        attitude: Attitude::None,
+        disabled: false,
+        above: 0,
+        protection: None,
+        generic_shadow: None,
+        berserk: None,
+        turret_index: None,
+        walk: Default::default(),
+        deck: false,
+    }
+}
+
+/// design: render (#133): voxel types that share a registration index (a
+/// vehicle and an aircraft) or a painter draw, in every drawing of the
+/// painter, as each type drawn alone by a fresh painter; and a drawing that
+/// takes every image from the painter's caches keeps its per-drawing note.
+#[test]
+fn voxel_types_drawn_together_draw_as_each_alone() {
+    with_voxel_types(|inputs| {
+        let all = [
+            voxel_mobile(Kind::Vehicles, 0, 0),
+            voxel_mobile(Kind::Vehicles, 1, 1),
+            voxel_mobile(Kind::Aircraft, 0, 2),
+        ];
+        let (built, mut painter) = build_parts(inputs, true);
+        let mut scene = built.scene;
+        for round in 0..2 {
+            let (entries, notes) = painter.mobiles(inputs, &mut scene, &all);
+            for (m, entry) in all.iter().zip(&entries) {
+                let (built, mut fresh) = build_parts(inputs, true);
+                let mut fresh_scene = built.scene;
+                let (expect, _) =
+                    fresh.mobiles(inputs, &mut fresh_scene, std::slice::from_ref(m));
+                let now = drawn_look(&scene, &entry.items);
+                assert!(!now.is_empty(), "round {round}: {:?} draws", m.kind);
+                assert_eq!(
+                    now,
+                    drawn_look(&fresh_scene, &expect[0].items),
+                    "round {round}: {:?} {} as drawn alone",
+                    m.kind,
+                    m.idx
+                );
+            }
+            assert!(
+                notes.iter().any(|n| n.contains("voxel shadow raised")),
+                "round {round}: {notes:?}"
+            );
+        }
+    });
+}
