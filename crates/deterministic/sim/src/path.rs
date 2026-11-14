@@ -1814,9 +1814,12 @@ fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
     let d = glasnost_num::geom::eight_direction(o.body.value(w.tick));
     let (dx, dy) = STEPS[usize::from(d)];
     let ahead = CellXY::new(here.x + dx, here.y + dy);
+    // spec: S-0212 claims 7 and 19 (the cell ahead is read on the layer of the blocked unit's step into it, from its search pair) and design: interim (Q-3122: units on the other layer of a bridge cell are not counted)
+    let (_, lvl) = start_pair(w, id, here);
+    let ahead_layer = candidate_layer(w, lvl, ahead);
     let mut counts: BTreeMap<CellXY, u32> = BTreeMap::new();
     let mut from_paths = 0;
-    for &oid in w.cells.list(ahead, Layer::Ground) {
+    for &oid in w.cells.list(ahead, ahead_layer) {
         let Some(u) = w.obj(oid) else { continue };
         if !matches!(u.kind, Kind::Vehicle | Kind::Infantry) {
             continue;
@@ -1862,7 +1865,8 @@ fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
             if c == here {
                 continue;
             }
-            if !w.cells.list(c, Layer::Ground).is_empty() {
+            // spec: S-0212 claims 7 and 19 (each cell of the block on the layer a step from the unit's search pair would reach in it) and design: interim (Q-3122)
+            if !w.cells.list(c, candidate_layer(w, lvl, c)).is_empty() {
                 *counts.entry(c).or_insert(0) += 1;
             }
         }
