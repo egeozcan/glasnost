@@ -1541,6 +1541,10 @@ pub fn may_search_passively(w: &World, a: ObjectId) -> bool {
     if !tc.passive_acquire || !armed(w, a) {
         return false;
     }
+    // spec: S-0309 claim 2 (it is not a harvesting slave, S-0215)
+    if crate::seams::is_harvesting_slave(w, a) {
+        return false;
+    }
     // spec: S-0309 claim 2 (no temporal weapon of its own is erasing a target) and S-0301 r73 claim 9 (a building that drops the target its beam holds keeps the beam attached, so while that target is being erased it takes none by a search; a departed warp member is no longer being erased, S-0513 claim 39a)
     if w.temporal
         .beams
