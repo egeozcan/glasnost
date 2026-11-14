@@ -3633,6 +3633,64 @@ impl Live {
         // spec: S-0104 claims 3 and 5 (the tintable tables show the tint of the last global choice)
         self.painter
             .set_effect_tint(glasnost_sim::lighting::tint(&self.world));
+        // The game's lighting changed (a fade step or a re-evaluation,
+        // S-0104 claims 4 and 5; the psychic domination's and the storm's
+        // lighting among them): the cells and the terrain are lit again,
+        // before this frame's drawings take their cells' light (#152).
+        let l = &self.world.lighting;
+        let key = (l.current, l.choice);
+        // spec: S-0525 claim 13 (each field is a light source; every change of it relights the cells it reaches)
+        let fields = glasnost_sim::radiation::lights(&self.world)
+            .iter()
+            .map(|l| {
+                glasnost_render::light::LightSource::field(
+                    (l.centre.x, l.centre.y),
+                    l.radius,
+                    l.intensity,
+                    l.tint,
+                )
+            })
+            .collect();
+        let fields_changed = self.painter.set_field_lights(fields);
+        let relit = key != self.lit || fields_changed;
+        if relit {
+            let set =
+                glasnost_sim::lighting::set_of(l, key.1).unwrap_or(inputs.map.lighting.normal);
+            self.painter
+                .relight(inputs, scene, &mut self.cell_pass, key.0, set);
+            self.lit = key;
+        }
+        // The effect tint changed: the drawings kept from frame to frame
+        // (the cell pass, the static objects' layer entries and the changed
+        // overlays) take the house-colour tables of the new tint, as the
+        // live objects do when they are next drawn (#75).
+        // spec: S-0104 claims 3 and 5 (an effect's set replaces the tint of the house-colour palettes)
+        let house_tint = glasnost_sim::lighting::tint(&self.world);
+        let retinted = house_tint != self.house_tint;
+        if retinted {
+            self.painter
+                .retint_houses(inputs, scene, &mut self.cell_pass);
+            for g in &mut self.static_ground {
+                self.painter.retint_houses(inputs, scene, &mut g.items);
+            }
+            for (_, g) in &mut self.static_layered {
+                self.painter.retint_houses(inputs, scene, &mut g.items);
+            }
+            self.painter
+                .retint_houses(inputs, scene, &mut self.live_overlays);
+            self.house_tint = house_tint;
+        }
+        if relit || retinted {
+            // design: render (#107): the tables no cell chooses and no kept drawing takes give
+            // their rows back; this frame's other drawings are made below from today's tables
+            self.painter.free_unused_rows(
+                self.cell_pass
+                    .iter()
+                    .chain(self.static_ground.iter().flat_map(|g| g.items.iter()))
+                    .chain(self.static_layered.iter().flat_map(|(_, g)| g.items.iter()))
+                    .chain(self.live_overlays.iter()),
+            );
+        }
         let (entries, notes) = self.painter.mobiles(inputs, scene, &mobiles);
         self.notes.extend(notes);
         let mut by_code: BTreeMap<u32, GroundEntry> = mobiles
@@ -3743,7 +3801,10 @@ impl Live {
                 changed.insert(c, now);
             }
         }
-        if changed != self.changed_overlays {
+        // A relight draws the changed overlays again too, so that they take
+        // their cells' new light (S-0104 claims 4, 5 and 9, S-0112 claim 1;
+        // #152).
+        if changed != self.changed_overlays || relit {
             let cells: Vec<(CellXY, glasnost_map::Cell)> = changed
                 .keys()
                 .filter_map(|&c| Some((c, *self.world.cells.grid.get(c)?)))
@@ -3757,63 +3818,6 @@ impl Live {
             if let Some(codes) = self.overlay_codes.get(c) {
                 gone.extend(codes.iter().copied());
             }
-        }
-        // The game's lighting changed (a fade step or a re-evaluation,
-        // S-0104 claims 4 and 5; the psychic domination's and the storm's
-        // lighting among them): the cells and the terrain are lit again.
-        let l = &self.world.lighting;
-        let key = (l.current, l.choice);
-        // spec: S-0525 claim 13 (each field is a light source; every change of it relights the cells it reaches)
-        let fields = glasnost_sim::radiation::lights(&self.world)
-            .iter()
-            .map(|l| {
-                glasnost_render::light::LightSource::field(
-                    (l.centre.x, l.centre.y),
-                    l.radius,
-                    l.intensity,
-                    l.tint,
-                )
-            })
-            .collect();
-        let fields_changed = self.painter.set_field_lights(fields);
-        let relit = key != self.lit || fields_changed;
-        if relit {
-            let set =
-                glasnost_sim::lighting::set_of(l, key.1).unwrap_or(inputs.map.lighting.normal);
-            self.painter
-                .relight(inputs, scene, &mut self.cell_pass, key.0, set);
-            self.lit = key;
-        }
-        // The effect tint changed: the drawings kept from frame to frame
-        // (the cell pass, the static objects' layer entries and the changed
-        // overlays) take the house-colour tables of the new tint, as the
-        // live objects do when they are next drawn (#75).
-        // spec: S-0104 claims 3 and 5 (an effect's set replaces the tint of the house-colour palettes)
-        let house_tint = glasnost_sim::lighting::tint(&self.world);
-        let retinted = house_tint != self.house_tint;
-        if retinted {
-            self.painter
-                .retint_houses(inputs, scene, &mut self.cell_pass);
-            for g in &mut self.static_ground {
-                self.painter.retint_houses(inputs, scene, &mut g.items);
-            }
-            for (_, g) in &mut self.static_layered {
-                self.painter.retint_houses(inputs, scene, &mut g.items);
-            }
-            self.painter
-                .retint_houses(inputs, scene, &mut self.live_overlays);
-            self.house_tint = house_tint;
-        }
-        if relit || retinted {
-            // design: render (#107): the tables no cell chooses and no kept drawing takes give
-            // their rows back; this frame's other drawings are made below from today's tables
-            self.painter.free_unused_rows(
-                self.cell_pass
-                    .iter()
-                    .chain(self.static_ground.iter().flat_map(|g| g.items.iter()))
-                    .chain(self.static_layered.iter().flat_map(|(_, g)| g.items.iter()))
-                    .chain(self.live_overlays.iter()),
-            );
         }
         if gone != self.gone || relit || retinted {
             scene.items.clear();
