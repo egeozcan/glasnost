@@ -1,9 +1,9 @@
 ---
 id: Q-3100
 title: How our engine identifies the infantry type singled out by name in claim 30's area-fire unload rule
-status: open
+status: answered
 related: [S-0215]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need
