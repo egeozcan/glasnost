@@ -783,6 +783,20 @@ fn turn_in_place(w: &mut World, id: ObjectId, u: &UnitRules, d: u8) {
 /// check cannot begin a two-cell curve (the step check after the search of
 /// T5's obstacle row).
 fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_curve: bool) -> bool {
+    step_check_with(w, id, u, repeated, no_curve, true)
+}
+
+/// [`step_check`]. `refresh`: whether the recomputation of S-0212 claim 20
+/// may still be made in this check; false for the check made on the new
+/// path after a recomputation with `quirks.path_refresh_keeps_old_step` off.
+fn step_check_with(
+    w: &mut World,
+    id: ObjectId,
+    u: &UnitRules,
+    repeated: bool,
+    no_curve: bool,
+    refresh: bool,
+) -> bool {
     let t = w.tick;
     let r = w.rules_arc();
     let Some(o) = w.obj(id) else {
@@ -974,6 +988,25 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
     // spec: S-0212 claim 20 (the drive locomotor recomputes as it begins the last stored step, heading point beyond 512)
     let used = if two { 2 } else { 1 };
     let last_step = steps_len <= used;
+    if refresh
+        && last_step
+        && !r.quirks.path_refresh_keeps_old_step
+        && refresh_due(w, id, target_cell)
+    {
+        // spec: S-0212 claim 20 and Edge cases (quirks.path_refresh_keeps_old_step off: the unit takes the new path's first step instead of the old one, so the recomputation comes before the old track begins; the new first step is checked once, without a recomputation of its own)
+        let Some((old, keep_pos)) = w.obj(id).map(|o| (o.path.steps.clone(), o.pos)) else {
+            return false;
+        };
+        let found = path::compute(w, id, Mode::Fresh) == Search::Found;
+        if let Some(ob) = w.obj_mut(id) {
+            ob.pos = keep_pos;
+            if !found {
+                // design: S-0212 claim 20 and Edge cases (switch off: a search that finds nothing gives no new first step, so the old step is taken, as with the switch on)
+                ob.path.steps = old;
+            }
+        }
+        return step_check_with(w, id, u, repeated, no_curve, false);
+    }
     let rho_t = target_fraction(w, id, u, first);
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.drain(..used.min(ob.path.steps.len()));
@@ -1003,25 +1036,36 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
     if occupancy::is_crusher(w, id) {
         crate::crush::warn_ahead(w, id, first);
     }
-    if last_step
-        && let Some(hp) = path::heading_point(w, id)
-        && let Some(pos) = w.obj(id).map(|o2| o2.pos)
+    // spec: S-0212 claim 20 (switch on: the old track is begun, then the path is recomputed)
+    if refresh
+        && last_step
+        && r.quirks.path_refresh_keeps_old_step
+        && refresh_due(w, id, target_cell)
     {
-        let dx = i64::from(hp.x - pos.x);
-        let dy = i64::from(hp.y - pos.y);
-        let dz = i64::from(hp.z - pos.z);
-        // spec: S-0212 F6c (the heading point more than 512 leptons away)
-        let dist = root_floor(
-            (dx * dx + dy * dy + dz * dz) as u64,
-            r.quirks.table_root_distance,
-            r.mode,
-        );
-        // spec: S-0212 claim 20 (the heading point more than 512 leptons away)
-        if dist > 512 && hp.cell() != target_cell {
-            refresh_from_target(w, id, target_cell);
-        }
+        refresh_from_target(w, id);
     }
     true
+}
+
+/// Whether the recomputation of S-0212 claim 20 is due as the track that
+/// ends in `target_cell` begins: the heading point is more than 512 leptons
+/// away and not in that cell.
+fn refresh_due(w: &World, id: ObjectId, target_cell: CellXY) -> bool {
+    let (Some(hp), Some(pos)) = (path::heading_point(w, id), w.obj(id).map(|o| o.pos)) else {
+        return false;
+    };
+    let r = w.rules();
+    let dx = i64::from(hp.x - pos.x);
+    let dy = i64::from(hp.y - pos.y);
+    let dz = i64::from(hp.z - pos.z);
+    // spec: S-0212 F6c (the heading point more than 512 leptons away)
+    let dist = root_floor(
+        (dx * dx + dy * dy + dz * dz) as u64,
+        r.quirks.table_root_distance,
+        r.mode,
+    );
+    // spec: S-0212 claim 20 (the heading point more than 512 leptons away)
+    dist > 512 && hp.cell() != target_cell
 }
 
 /// A vehicle that waits gets no track on this tick and its budget is
@@ -1327,26 +1371,27 @@ pub(crate) fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
     crate::emitters::retarget_let_go(w, id);
 }
 
-/// The immediate recomputation of S-0212 claim 20, taken from where the
-/// step in progress leads; with `quirks.path_refresh_keeps_old_step` the new
-/// path's first step is dropped.
-fn refresh_from_target(w: &mut World, id: ObjectId, from: CellXY) {
-    let Some(o) = w.obj(id).cloned() else { return };
-    // Search from the unit's cell (the original's rule), then align.
-    let keep_pos = o.pos;
+/// The immediate recomputation of S-0212 claim 20 with
+/// `quirks.path_refresh_keeps_old_step` on, made just after the old track
+/// has begun: the search starts from the unit's own cell, and the new
+/// path's first step is dropped. (Off, the step check recomputes before the
+/// track begins.)
+fn refresh_from_target(w: &mut World, id: ObjectId) {
+    let Some(keep_pos) = w.obj(id).map(|o| o.pos) else {
+        return;
+    };
     let res = path::compute(w, id, Mode::Fresh);
     if res != Search::Found {
         return;
     }
-    let q = w.rules().quirks;
     if let Some(ob) = w.obj_mut(id) {
         ob.pos = keep_pos;
-        if q.path_refresh_keeps_old_step && !ob.path.steps.is_empty() {
+        if !ob.path.steps.is_empty() {
             // spec: S-0212 claim 20 (the old step is still taken; the new path's first step is dropped)
+            // design: Q-3115 interim (one step is dropped also when the old track is a two-cell curve)
             ob.path.steps.remove(0);
         }
     }
-    let _ = from;
 }
 
 /// Crush mode (S-0207 claim 7).
