@@ -32,7 +32,7 @@ use crate::brain::Brain;
 /// Format version of a game save (the world's own save inside it carries
 /// the simulation's version).
 // nocite: version number of our own save format
-pub const GAME_FORMAT_VERSION: u32 = 115;
+pub const GAME_FORMAT_VERSION: u32 = 116;
 
 /// A running game.
 pub struct Game {
@@ -124,6 +124,11 @@ impl Game {
             return;
         }
         let on = p.on();
+        // design: own AI (AP1's seam): every house's own list from one pass
+        // over the objects, made when the first brain thinks; the brains'
+        // orders do not change the objects (`scripted::own_by_house`). The
+        // bench counts the pass in that first brain's AI time.
+        let mut own: Option<Vec<Vec<glasnost_sim::world::ObjectId>>> = None;
         for b in &mut self.brains {
             let h = b.house();
             if victory::defeated(&self.world, h) || self.world.houses[usize::from(h.0)].removed {
@@ -132,7 +137,17 @@ impl Game {
             if on {
                 p.mark(Phase::Think(h.0));
             }
-            let orders = b.think_with(&self.world, p);
+            let lists = own.get_or_insert_with(|| {
+                if on {
+                    p.mark(Phase::Part("ai:own_by_house"));
+                }
+                crate::scripted::own_by_house(&self.world)
+            });
+            let list = lists
+                .get_mut(usize::from(h.0))
+                .map(std::mem::take)
+                .unwrap_or_default();
+            let orders = b.think_with_own(&self.world, p, list.into());
             if on {
                 p.mark(Phase::Issue);
             }

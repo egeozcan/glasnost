@@ -430,6 +430,28 @@ pub fn is_yard(w: &World, o: &glasnost_sim::world::Object) -> bool {
             .is_some_and(|b| b.factory == Some(FactoryKind::Building))
 }
 
+/// Whether an object counts among its owner's living objects on the map
+/// ([`Script::own`]).
+fn counts_as_own(o: &Object) -> bool {
+    o.on_map && o.health > 0
+}
+
+/// Every house's [`Script::own`] list, indexed by house, from one pass over
+/// the objects, each in object order (design: own AI, AP1's seam: one pass
+/// a tick for every brain instead of one each). Issuing an order only adds
+/// it to the house's pending list (`orders::issue`), so the objects do not
+/// change while the brains of a tick think in turn, and each list is the
+/// one the house's own scan would make.
+pub(crate) fn own_by_house(w: &World) -> Vec<Vec<ObjectId>> {
+    let mut by: Vec<Vec<ObjectId>> = vec![Vec::new(); w.houses.len()];
+    for o in w.objects.values().filter(|o| counts_as_own(o)) {
+        if let Some(list) = o.owner.and_then(|h| by.get_mut(usize::from(h.0))) {
+            list.push(o.id);
+        }
+    }
+    by
+}
+
 /// Cells within which a unit moving to a cell counts as arrived, so that a
 /// crowd jammed around its goal is free for the next wave.
 const ARRIVED: i64 = 2; // nocite: tuning of our own opponent
@@ -685,8 +707,6 @@ pub struct Script {
     plan: Plan,
     /// Enemy start cells, in visiting order.
     targets: Vec<CellXY>,
-    /// The next target's index.
-    next_target: usize,
     /// Where the next tie among army types starts, one counter per kind of
     /// army (vehicle, infantry, aircraft): a counter shared by the kinds
     /// would step past the same types every round and leave some never
@@ -930,7 +950,6 @@ impl Script {
             house,
             plan,
             targets: Vec::new(),
-            next_target: 0,
             next_army: [0; ARMY_KINDS.len()],
             waiting_since: None,
             waves: 0,
@@ -945,6 +964,17 @@ impl Script {
     /// [`Script::buildable`] keep their answers until [`Script::end_think`].
     pub(crate) fn begin_think(&self) {
         *self.placed.0.borrow_mut() = Some(Kept::default());
+    }
+
+    /// [`Script::begin_think`] with the house's own list already made: the
+    /// list [`Script::own`] would scan for, from [`own_by_house`]'s one pass
+    /// (design: own AI, AP1's seam: on a tick between thinks that scan was
+    /// most of what `rebuild_yard`, which asks it first, cost).
+    pub(crate) fn begin_think_with_own(&self, own: Arc<[ObjectId]>) {
+        *self.placed.0.borrow_mut() = Some(Kept {
+            own: Some(own),
+            ..Kept::default()
+        });
     }
 
     /// The think is over: the kept answers go.
@@ -1095,7 +1125,7 @@ impl Script {
     fn scan_own(&self, w: &World) -> Vec<ObjectId> {
         w.objects
             .values()
-            .filter(|o| o.owner == Some(self.house) && o.on_map && o.health > 0)
+            .filter(|o| o.owner == Some(self.house) && counts_as_own(o))
             .map(|o| o.id)
             .collect()
     }
@@ -1287,18 +1317,16 @@ impl Script {
     /// The enemy start cell waves go to while they see no enemy: the
     /// nearest start that may still hold an enemy base, one the house has
     /// not explored or where it sees an enemy building within
-    /// [`ALLY_BASE`] cells; with none, the start of the visiting order.
-    /// A person takes on one enemy base at a time, the nearest, and moves
-    /// on once it is gone (M8 step A4 round 8, the lead's note 52: each
-    /// wave went to the next start in turn, so in a game of three or more
-    /// the waves were spread over every enemy).
+    /// [`ALLY_BASE`] cells; with none, `None`: the house knows of no enemy
+    /// base. A person takes on one enemy base at a time, the nearest, and
+    /// moves on once it is gone (M8 step A4 round 8, the lead's note 52:
+    /// each wave went to the next start in turn, so in a game of three or
+    /// more the waves were spread over every enemy).
     fn next_start(&self, w: &World, seen: &[(ObjectId, CellXY)]) -> Option<CellXY> {
-        let targets = self.enemy_starts(w);
-        targets
-            .iter()
-            .copied()
+        // design: own AI (#27): a start seen empty (explored, S-0409 claims 9 and 19, with no enemy building seen by it) is no goal; with every start so, the ferry, the rally points and the teleport's landing aim at none, where they aimed at the starts in turn
+        self.enemy_starts(w)
+            .into_iter()
             .find(|&c| !self.cleared(w, c, seen))
-            .or_else(|| (!targets.is_empty()).then(|| targets[self.next_target % targets.len()]))
     }
 
     /// Whether start cell `c` holds no enemy base the house knows of: it has
@@ -1313,7 +1341,8 @@ impl Script {
     }
 
     /// Where a ferry would go, without choosing it: the seen enemy
-    /// building nearest home, else the next enemy start cell. A person
+    /// building nearest home, else the next enemy start cell, else the
+    /// seen enemy of any kind nearest home. A person
     /// ferries infantry to the enemy's base, not to a unit that flies or
     /// stands where no one walks.
     pub(crate) fn base_goal(&self, w: &World) -> Option<CellXY> {
@@ -1327,16 +1356,21 @@ impl Script {
     pub(crate) fn base_goal_for(&self, w: &World, zone: Option<MovementZone>) -> Option<CellXY> {
         let home = self.home(w)?;
         let seen = self.seen_enemies(w);
-        seen.iter()
-            .copied()
-            .filter(|&(e, _)| w.obj(e).is_some_and(|o| o.kind == Kind::Building))
-            // design: own AI (#9): the goal is a building the zone's units can stand by
-            .filter(|&(_, c)| {
-                zone.is_none_or(|z| matches!(regions::reach_in(w, c, z), Reach::Region(_)))
-            })
-            .min_by_key(|&(e, c)| (dist2(c, home), e))
-            .map(|(_, c)| c)
+        let nearest = |buildings: bool| {
+            seen.iter()
+                .copied()
+                .filter(|&(e, _)| !buildings || w.obj(e).is_some_and(|o| o.kind == Kind::Building))
+                // design: own AI (#9): the goal is a building the zone's units can stand by
+                .filter(|&(_, c)| {
+                    zone.is_none_or(|z| matches!(regions::reach_in(w, c, z), Reach::Region(_)))
+                })
+                .min_by_key(|&(e, c)| (dist2(c, home), e))
+                .map(|(_, c)| c)
+        };
+        // design: own AI (#27): with every start seen empty of buildings, the seen enemy nearest home that the zone's units can stand by (an enemy base vehicle not yet deployed), and with none, no goal
+        nearest(true)
             .or_else(|| self.next_start(w, &seen))
+            .or_else(|| nearest(false))
     }
 
     /// Whether the line of `t` holds an item or a queue.
@@ -2602,8 +2636,6 @@ impl Script {
             }
             let mut picks: BTreeMap<(Kind, u32, Option<u32>), Option<CellXY>> = BTreeMap::new();
             let mut fallback: Option<Option<CellXY>> = None;
-            // Whether the fallback took the next start in turn.
-            let mut rotated = false;
             // The nearest region cells, kept per goal (`reachable`).
             let mut near: BTreeMap<CellXY, BTreeMap<(u8, u32), CellXY>> = BTreeMap::new();
             // The units the wave would send, with their destinations.
@@ -2621,19 +2653,10 @@ impl Script {
                 });
                 let goal = pick.or_else(|| {
                     *fallback.get_or_insert_with(|| {
-                        let targets = self.enemy_starts(w);
                         // design: the nearest start that may still hold an enemy base (`next_start`), M8 step A4 round 8
-                        targets
-                            .iter()
-                            .copied()
-                            .find(|&c| !self.cleared(w, c, &enemies))
+                        // design: own AI (#27): else the nearest cell the house does not see; with none, no goal: the house has seen every start empty and every cell the wave could search, and the wave went to the starts in turn
+                        self.next_start(w, &enemies)
                             .or_else(|| from.and_then(|f| self.unseen_cell(w, f, id)))
-                            .or_else(|| {
-                                (!targets.is_empty()).then(|| {
-                                    rotated = true;
-                                    targets[self.next_target % targets.len()]
-                                })
-                            })
                     })
                 });
                 if let Some(c) = goal {
@@ -2649,9 +2672,6 @@ impl Script {
                 // design: the end-game's waves do not make the next battle's wave larger
                 if winning.is_none() {
                     self.waves += 1;
-                }
-                if rotated {
-                    self.next_target += 1;
                 }
                 for (id, dest) in sends {
                     out.push(Order::Behaviour {
@@ -4226,6 +4246,45 @@ mod place_cell_tests {
         }
         assert!(known > 0, "{known} known");
     }
+
+    /// Our tooling for speed (design: own AI, AP1's seam): the one pass's
+    /// list for each house is the house's own scan, and a think given it
+    /// answers [`Script::own`] as a think that scans.
+    #[test]
+    fn the_lists_of_one_pass_are_each_houses_own_scan() {
+        let mut listed = 0;
+        let mut left_out = 0;
+        for mut g in kept_games() {
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                let by = own_by_house(w);
+                assert_eq!(by.len(), w.houses.len());
+                for (h, list) in by.iter().enumerate() {
+                    let house = HouseId(h as u8);
+                    let s = Script::new(house, Plan::default());
+                    let want = s.scan_own(w);
+                    assert_eq!(*list, want, "house {h}");
+                    s.begin_think_with_own(list.clone().into());
+                    assert_eq!(s.own(w), want, "given: house {h}");
+                    s.end_think();
+                    s.begin_think();
+                    assert_eq!(s.own(w), want, "scanned: house {h}");
+                    s.end_think();
+                    listed += want.len();
+                    left_out += w
+                        .objects
+                        .values()
+                        .filter(|o| o.owner == Some(house) && !counts_as_own(o))
+                        .count();
+                }
+            }
+        }
+        assert!(listed > 0, "{listed} listed");
+        assert!(left_out > 0, "{left_out} left out");
+    }
 }
 
 #[cfg(test)]
@@ -4321,6 +4380,45 @@ mod start_tests {
     use super::*;
     use crate::{fixture, game::Game};
     use glasnost_sim::testkit;
+
+    // design: own AI (#27): the goal of the ferry, the rally points and the teleport's landing is a start the house has not seen empty (explored, no enemy building by it: S-0409 claims 9 and 19); once it has seen every start empty it knows of no enemy base, and they aim at none. They aimed at the starts in turn, each one empty, while the waves searched the unseen cells.
+    #[test]
+    fn a_start_seen_empty_is_no_goal() {
+        let map = fixture::map();
+        let g = Game::new(
+            fixture::rules(),
+            &map,
+            "synthetic-skirmish",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the skirmish loads");
+        let mut w = g.world.clone();
+        let gone: Vec<ObjectId> = w
+            .objects
+            .values()
+            .filter(|o| o.owner.is_some_and(|h| h != HouseId(0)))
+            .map(|o| o.id)
+            .collect();
+        for id in gone {
+            glasnost_sim::objects::remove(&mut w, id);
+        }
+        let mut s = Script::new(HouseId(0), Plan::default());
+        s.set_starts(&w, &crate::skirmish::start_cells(&map));
+        let targets = s.enemy_starts(&w);
+        assert!(!targets.is_empty());
+        assert_eq!(s.attack_goal(&w), Some(targets[0]), "a start not explored");
+        for &c in &targets {
+            shroud::area_reveal(
+                &mut w,
+                HouseId(0),
+                glasnost_sim::world::Pos::centre(c, 0),
+                6,
+            );
+        }
+        assert_eq!(s.attack_goal(&w), None, "every start seen empty");
+        assert_eq!(s.base_goal(&w), None, "every start seen empty");
+    }
 
     // design: own AI (#27): the house's own start is no wave target when its base unit stands more than five cells off it (bases off, or the unit placed off its waypoint): it was the first target
     #[test]

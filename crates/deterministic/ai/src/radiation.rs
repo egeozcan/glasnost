@@ -89,7 +89,7 @@ impl Special {
                 target: None,
                 dest: Some(Target::Cell(dest)),
             });
-            self.count_radiation();
+            self.offer_use(crate::special::Use::Radiation, out);
         }
     }
 }

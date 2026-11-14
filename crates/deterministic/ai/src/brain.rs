@@ -51,6 +51,8 @@
 //!
 //! The numbers here are tuning of our own opponent, not game behaviour.
 
+use std::sync::Arc;
+
 use glasnost_map::terrain::land;
 use glasnost_map::{CellXY, Map};
 use glasnost_num::F64;
@@ -70,6 +72,7 @@ use crate::scripted::{
     dist2, idle, is_yard,
 };
 use crate::skirmish::start_cells;
+use crate::special::Use;
 
 /// Cells from one of the house's buildings within which a seen enemy counts
 /// as attacking the base.
@@ -293,6 +296,27 @@ impl Brain {
     /// tools' benchmark, `glasnost_sim::probe`); `p` reads nothing and
     /// changes nothing.
     pub fn think_with<P: Probe>(&mut self, w: &World, p: &mut P) -> Vec<Order> {
+        self.think_from(w, p, None)
+    }
+
+    /// [`Brain::think_with`], given the house's own list
+    /// (`scripted::own_by_house`) instead of scanning for it.
+    pub(crate) fn think_with_own<P: Probe>(
+        &mut self,
+        w: &World,
+        p: &mut P,
+        own: Arc<[ObjectId]>,
+    ) -> Vec<Order> {
+        self.think_from(w, p, Some(own))
+    }
+
+    /// The think, from the house's own list when given one.
+    fn think_from<P: Probe>(
+        &mut self,
+        w: &World,
+        p: &mut P,
+        own: Option<Arc<[ObjectId]>>,
+    ) -> Vec<Order> {
         let on = p.on();
         let mark = |p: &mut P, part: &'static str| {
             if on {
@@ -300,7 +324,10 @@ impl Brain {
             }
         };
         // The world does not change during the think: placement answers are kept for it.
-        self.script.begin_think();
+        match own {
+            Some(own) => self.script.begin_think_with_own(own),
+            None => self.script.begin_think(),
+        }
         mark(p, "ai:script");
         let thinks = self.thinks_at(w.tick);
         let mut out = if thinks {
@@ -324,14 +351,12 @@ impl Brain {
             mark(p, "ai:build_superweapon");
             self.build_superweapon(w, &mut out);
             mark(p, "ai:build_specials");
-            let sensors = self.special_uses().sensors;
-            self.build_sensor(w, &mut out);
-            if self.special_uses().sensors == sensors && !self.build_grinder(w, &mut out) {
-                let defences = self.special_uses().gattling_defences;
-                self.build_gattling_defence(w, &mut out);
-                if self.special_uses().gattling_defences == defences && !paying {
-                    self.build_bunker(w, &mut out);
-                }
+            if !self.build_sensor(w, &mut out)
+                && !self.build_grinder(w, &mut out)
+                && !self.build_gattling_defence(w, &mut out)
+                && !paying
+            {
+                self.build_bunker(w, &mut out);
             }
             mark(p, "ai:build_lifter");
             self.build_lifter(w, &mut out);
@@ -374,8 +399,16 @@ impl Brain {
                         .field_refinery_type(w)
                         .filter(|&t| credits < both(t))
                 });
+                let had = plant.is_some_and(|t| out.contains(&Order::Build { what: t }));
                 let n = crate::power::plant_first(w, self.house(), plant, lost, &mut out);
-                self.special.count_plants_first(n);
+                // design: own AI (#19): `plant_first` leaves one plant order however many orders it turned, so that order is the use, offered only when no earlier part of the think had ordered the plant
+                if n > 0
+                    && !had
+                    && let Some(t) = plant
+                {
+                    self.special
+                        .offer_use_of(Use::PlantFirst, Order::Build { what: t });
+                }
             }
         }
         mark(p, "ai:fire_superweapons");
@@ -468,7 +501,7 @@ impl Brain {
             } => !crate::mind::swaps_victim(w, *actor, *t),
             _ => true,
         });
-        // design: own AI (#19): the memory notes only the orders given: those left after the filters, within the room the house's pending list has left (S-0213 claim 2: an order issued while the list is full is dropped; quirks.pending_order_limit)
+        // design: own AI (#19): the memory notes, and the use counters count, only the orders given: those left after the filters, within the room the house's pending list has left (S-0213 claim 2: an order issued while the list is full is dropped; quirks.pending_order_limit)
         let room = if w.rules().quirks.pending_order_limit {
             let pending = w
                 .houses
@@ -478,7 +511,7 @@ impl Brain {
         } else {
             usize::MAX
         };
-        self.special.memory.note_given(w, &out, room);
+        self.special.note_given(w, &out, room);
         self.script.end_think();
         out
     }
@@ -570,14 +603,14 @@ impl Brain {
                 let power = scripted::role_of(w, i.t) == Some(Role::Power);
                 if i.hold == Hold::None && !(power && low_power) {
                     out.push(Order::Hold { what: i.t });
-                    self.special.count_economy_hold();
+                    self.special.offer_use(Use::EconomyHold, out);
                 }
             } else if army(i.t) && saving {
                 // Only an item that still owes money competes for it.
                 if i.hold == Hold::None && i.owed > 0 {
                     // spec: S-0404 claim 5 (the hold order)
                     out.push(Order::Hold { what: i.t });
-                    self.special.count_superweapon_hold();
+                    self.special.offer_use(Use::SuperweaponHold, out);
                 }
             } else if short && non_fighter(w, i.t, has_yard) {
                 // A non-fighter is cancelled, not held: a held item keeps
@@ -586,12 +619,12 @@ impl Brain {
                 if i.owed > 0 {
                     // spec: S-0404 claim 6 (the cancel-all order; at an unchanged price the refund is everything paid)
                     out.push(Order::CancelAll { what: i.t });
-                    self.special.count_non_fighter_cancel();
+                    self.special.offer_use(Use::NonFighterCancel, out);
                 }
             // design: own AI (#60): the tech tree's answer kept for the think
             } else if i.hold == Hold::Player && self.script.buildable(w, i.t) {
                 out.push(Order::Build { what: i.t });
-                self.special.count_resume();
+                self.special.offer_use(Use::Resume, out);
             }
         }
         (paying, short)
@@ -856,8 +889,9 @@ impl Brain {
     /// the cheapest sensor type it can build and place now
     /// ([`crate::psychic::build_sensor`]). Like a superweapon building it
     /// replaces a tech-climb building this think ordered, but not a building
-    /// the plan places or wants, nor a superweapon building.
-    fn build_sensor(&mut self, w: &World, out: &mut Vec<Order>) {
+    /// the plan places or wants, nor a superweapon building. Returns whether
+    /// it ordered one.
+    fn build_sensor(&mut self, w: &World, out: &mut Vec<Order>) -> bool {
         let climb = |t: &TypeRef| t.kind == Kind::Building && scripted::role_of(w, *t).is_none();
         let giving = |t: &TypeRef| !Self::giving_kinds(w, t.index).is_empty();
         if self.script.selling()
@@ -867,13 +901,15 @@ impl Brain {
                     || matches!(o, Order::Build { what } if what.kind == Kind::Building && (!climb(what) || giving(what)))
             })
         {
-            return;
+            return false;
         }
-        if let Some(t) = crate::psychic::build_sensor(&self.script, w) {
-            self.drop_climb(out);
-            out.push(Order::Build { what: t });
-            self.special.count_sensor();
-        }
+        let Some(t) = crate::psychic::build_sensor(&self.script, w) else {
+            return false;
+        };
+        self.drop_climb(out);
+        out.push(Order::Build { what: t });
+        self.special.offer_use(Use::Sensor, out);
+        true
     }
 
     /// Builds a recycling building (S-0603, [`crate::grinder::build_type`])
@@ -903,8 +939,9 @@ impl Brain {
     /// as a person adds base defences: once it keeps its harvesters and is
     /// not selling out, when no other building or placement was ordered in
     /// this think (a tech-climb building aside, which it replaces), nor a
-    /// superweapon building or a psychic sensor.
-    fn build_gattling_defence(&mut self, w: &World, out: &mut Vec<Order>) {
+    /// superweapon building or a psychic sensor. Returns whether it ordered
+    /// one.
+    fn build_gattling_defence(&mut self, w: &World, out: &mut Vec<Order>) -> bool {
         let climb = |t: &TypeRef| t.kind == Kind::Building && scripted::role_of(w, *t).is_none();
         let giving = |t: &TypeRef| !Self::giving_kinds(w, t.index).is_empty();
         if self.script.selling()
@@ -914,13 +951,15 @@ impl Brain {
                     || matches!(o, Order::Build { what } if what.kind == Kind::Building && (!climb(what) || giving(what)))
             })
         {
-            return;
+            return false;
         }
-        if let Some(t) = crate::gattling::defence_type(&self.script, w) {
-            self.drop_climb(out);
-            out.push(Order::Build { what: t });
-            self.special.count_gattling_defence();
-        }
+        let Some(t) = crate::gattling::defence_type(&self.script, w) else {
+            return false;
+        };
+        self.drop_climb(out);
+        out.push(Order::Build { what: t });
+        self.special.offer_use(Use::GattlingDefence, out);
+        true
     }
 
     /// Builds a magnetic lifter (S-0607, [`crate::lifter::build_type`]) as a
@@ -933,7 +972,7 @@ impl Brain {
         }
         if let Some(t) = crate::lifter::build_type(&self.script, w) {
             out.push(Order::Build { what: t });
-            self.special.count_lifter_build();
+            self.special.offer_use(Use::LifterBuild, out);
         }
     }
 
@@ -946,7 +985,7 @@ impl Brain {
         }
         if let Some(t) = crate::drain::build_type(&self.script, w) {
             out.push(Order::Build { what: t });
-            self.special.count_drainer_build();
+            self.special.offer_use(Use::DrainerBuild, out);
         }
     }
 
@@ -975,7 +1014,7 @@ impl Brain {
             self.drop_climb(out);
         }
         out.push(Order::Build { what: t });
-        self.special.count_anti_air_build();
+        self.special.offer_use(Use::AntiAirBuild, out);
     }
 
     /// Builds a tank bunker (S-0606, [`crate::bunker::build_type`]) as a
@@ -998,7 +1037,7 @@ impl Brain {
         if let Some(t) = crate::bunker::build_type(&self.script, w) {
             self.drop_climb(out);
             out.push(Order::Build { what: t });
-            self.special.count_bunker_build();
+            self.special.offer_use(Use::BunkerBuild, out);
         }
     }
 
@@ -1132,14 +1171,13 @@ impl Brain {
             if !ready {
                 continue;
             }
+            let mut curtained = false;
             let cell = match t.kind {
                 Some(SwKind::Missile) => self.strike_cell(w),
                 Some(SwKind::Storm) if w.sw.storm.state == StormState::Idle => self.strike_cell(w),
                 Some(SwKind::Paradrop | SwKind::AmerParadrop) => self.drop_cell(w),
                 Some(SwKind::IronCurtain) => self.curtain_cell(w).map(|(c, building)| {
-                    if building {
-                        self.special.count_curtained_building();
-                    }
+                    curtained = building;
                     c
                 }),
                 Some(SwKind::ForceShield) => self.shield_cell(w),
@@ -1156,15 +1194,18 @@ impl Brain {
             };
             if let Some(cell) = cell {
                 out.push(Order::FireSuperweapon { sw: i, cell });
+                if curtained {
+                    self.special.offer_use(Use::CurtainedBuilding, out);
+                }
                 if t.kind == Some(SwKind::PsychicReveal) {
-                    self.special.count_reveal();
+                    self.special.offer_use(Use::Reveal, out);
                 }
                 if t.kind == Some(SwKind::Genetic) {
-                    self.special.count_mutator_launch();
+                    self.special.offer_use(Use::MutatorLaunch, out);
                     spent.extend(crate::mutator::reached(w, cell));
                 }
                 if t.kind == Some(SwKind::Dominator) {
-                    self.special.count_dominator_launch();
+                    self.special.offer_use(Use::DominatorLaunch, out);
                     spent.extend(crate::dominator::reached(w, cell));
                 }
             }
@@ -1692,7 +1733,7 @@ impl Brain {
                     target: None,
                     dest: Some(Target::Cell(c)),
                 });
-                self.special.count_expansion_move();
+                self.special.offer_use(Use::ExpansionMove, out);
             }
         }
         if p.on() {
@@ -1736,7 +1777,7 @@ impl Brain {
                 .any(|o| matches!(o, Order::Build { what } if *what == t))
             {
                 out.push(Order::Build { what: t });
-                self.special.count_expansion_build();
+                self.special.offer_use(Use::ExpansionBuild, out);
             }
             return;
         }
@@ -1766,7 +1807,7 @@ impl Brain {
         }
         out.retain(|o| !matches!(o, Order::Build { what } if Some(*what) == climbing));
         out.push(Order::Build { what: b });
-        self.special.count_expansion_unblock();
+        self.special.offer_use(Use::ExpansionUnblock, out);
     }
 
     /// Whether the house is rich enough to expand (M8 step B1): credits in
@@ -1861,7 +1902,7 @@ impl Brain {
             out.retain(|o| !matches!(o, Order::Build { what } if *what == t));
             // spec: S-0404 claim 6 (the cancel-all order and its refund)
             out.push(Order::CancelAll { what: t });
-            self.special.count_expansion_cancel();
+            self.special.offer_use(Use::ExpansionCancel, out);
         }
     }
 
@@ -2578,11 +2619,11 @@ impl Brain {
                     target: Some(Target::Object(e)),
                     dest: None,
                 };
-                if raider.is_some() {
-                    self.special.count_economy_defence();
-                }
                 self.special.memory.offer(std::slice::from_ref(&order));
                 out.push(order);
+                if raider.is_some() {
+                    self.special.offer_use(Use::EconomyDefence, out);
+                }
             }
         }
     }
@@ -3362,11 +3403,11 @@ mod defend_tests {
                     target: Some(Target::Object(e)),
                     dest: None,
                 };
-                if raider.is_some() {
-                    b.special.count_economy_defence();
-                }
                 b.special.memory.offer(std::slice::from_ref(&order));
                 out.push(order);
+                if raider.is_some() {
+                    b.special.offer_use(Use::EconomyDefence, out);
+                }
             }
         }
     }

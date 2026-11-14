@@ -93,7 +93,7 @@ impl Special {
                 target: Some(Target::Object(e)),
                 dest: None,
             });
-            self.count_jump();
+            self.offer_use(crate::special::Use::Jump, out);
         }
         if fliers.is_empty()
             && let Some(t) = cheapest_armed_jumpjet(w, script)

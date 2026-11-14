@@ -171,7 +171,7 @@ impl Special {
                 target: Some(Target::Object(e)),
                 dest: None,
             });
-            self.count_takeover();
+            self.offer_use(crate::special::Use::Takeover, out);
         }
     }
 }

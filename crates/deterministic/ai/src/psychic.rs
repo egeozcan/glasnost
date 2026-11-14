@@ -198,7 +198,7 @@ impl Special {
                 target: Some(Target::Object(e)),
                 dest: None,
             });
-            self.count_berserk();
+            self.offer_use(crate::special::Use::Berserk, out);
         }
     }
 }
@@ -290,7 +290,7 @@ mod tests {
                 target: Some(Target::Object(e)),
                 dest: None,
             });
-            s.count_berserk();
+            s.offer_use(crate::special::Use::Berserk, out);
         }
     }
 

@@ -2423,6 +2423,35 @@ fn an_enemy_with_a_factory_left_keeps_the_guard_home() {
     );
 }
 
+// design: own AI (#27): once the house has explored every enemy start and sees no enemy building by any (S-0409 claims 9 and 19: explored stays explored, no fog in a skirmish), and has seen every cell a wave could search, it knows of no enemy base: no wave goes to a start it has seen empty. The waves went to the starts in turn, each one empty.
+#[test]
+fn no_wave_goes_to_a_start_seen_empty() {
+    let (mut w, tanks) = end_game_in(start(5), &[], true, 9);
+    let centres: Vec<glasnost_map::CellXY> = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|c| c.x % 6 == 0 && c.y % 6 == 0)
+        .collect();
+    for c in centres {
+        shroud::area_reveal(
+            &mut w,
+            HouseId(0),
+            glasnost_sim::world::Pos::centre(c, 0),
+            10,
+        );
+    }
+    assert!(
+        w.cells
+            .grid
+            .iter()
+            .all(|(c, _)| !w.cells.usable(c) || shroud::seen(&w, HouseId(0), c)),
+        "every usable cell is seen"
+    );
+    assert!(sent_off(&w, &tanks).is_empty(), "no wave to an empty start");
+}
+
 // design (M8 step A4 round 9b): a building a scout came by, away from an enemy base the house has not looked at, finishes nothing (no rush at the start of the game).
 #[test]
 fn an_enemy_building_away_from_an_unseen_base_finishes_nothing() {

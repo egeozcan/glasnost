@@ -245,7 +245,7 @@ impl Special {
                     r.1 = r.1.saturating_sub(1);
                 }
                 sent += 1;
-                self.count_absorb();
+                self.offer_use(crate::special::Use::Absorb, out);
             }
         }
         if rooms.iter().all(|&(_, r)| r == 0) {
@@ -310,7 +310,7 @@ impl Special {
                 r.1 -= 1;
             }
             sent += 1;
-            self.count_absorb();
+            self.offer_use(crate::special::Use::Absorb, out);
         }
     }
 }

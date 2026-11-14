@@ -206,7 +206,7 @@ impl Special {
             {
                 out.extend(orders);
                 chosen.push(b);
-                self.count_drain_order();
+                self.offer_use(crate::special::Use::DrainOrder, out);
             }
         }
     }

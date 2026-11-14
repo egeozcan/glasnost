@@ -130,7 +130,7 @@ impl Special {
             && affords(t)
         {
             out.push(Order::Build { what: t });
-            self.count_prism();
+            self.offer_use(crate::special::Use::Prism, out);
             ordered = true;
         }
         // A house with a charger and no overpowerable building of its own
@@ -158,7 +158,7 @@ impl Special {
                 .sum();
             if have < OVERPOWERABLE_WANTED && affords(t) {
                 out.push(Order::Build { what: t });
-                self.count_overpowerable();
+                self.offer_use(crate::special::Use::Overpowerable, out);
             }
         }
         // design: own AI (#14): the chargers aimed at each building: those
@@ -202,7 +202,7 @@ impl Special {
                 target: Some(Target::Object(b)),
                 dest: None,
             });
-            self.count_charge();
+            self.offer_use(crate::special::Use::Charge, out);
         }
     }
 }

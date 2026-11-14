@@ -453,7 +453,9 @@ fn an_enemy_far_from_the_bunker_neither_lets_out_nor_holds_back() {
     let mut br = brain(&w);
     let orders = br.think(&w);
     assert_eq!(entered(&orders, gun), Some(b), "not sent in: {orders:?}");
-    assert_eq!(br.special_uses().bunker_entries, 1);
+    // design: own AI (#19): the entry is not counted: the defence, later in
+    // the think, sends the vehicle at the enemy, and that order replaces it
+    assert_eq!(br.special_uses().bunker_entries, 0, "{orders:?}");
 }
 
 // design: own AI (#427): an enemy whose target is the bunker lets the bunkered vehicle out to attack (it has no target of its own on it), though it stands beyond ATTACK_REACH of the bunker and of every other building of the house.

@@ -304,7 +304,7 @@ impl Special {
             {
                 out.push(Order::Deploy { actor: v });
                 self.bunker.let_out.insert(v, now);
-                self.count_bunker_exit();
+                self.offer_use(crate::special::Use::BunkerExit, out);
             }
         }
         // design: own AI (#18): no vehicle is sent in while it would be let out at the next think: not into a bunker down to RETREAT_PERCENT, and not into one under threat (the vehicle would come out to fight); every idle vehicle near the base went in and out in turn
@@ -341,7 +341,7 @@ impl Special {
             if let Some(orders) = click_if(w, house, id, b, &[Action::Enter]) {
                 out.extend(orders);
                 sent.push(id);
-                self.count_bunker_entry();
+                self.offer_use(crate::special::Use::BunkerEntry, out);
             }
         }
     }
