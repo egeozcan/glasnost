@@ -773,6 +773,10 @@ struct Kept {
     wanted: Option<usize>,
     /// [`Script::startable`] by type (design: own AI, #60).
     startable: BTreeMap<TypeRef, bool>,
+    /// [`Script::knows_field`] (design: own AI, #64: one scan of the map a
+    /// think for the lifter, drainer and economy questions instead of one
+    /// each).
+    knows_field: Option<bool>,
 }
 
 impl PlaceMemo {
@@ -1920,9 +1924,14 @@ impl Script {
 
     /// Whether an explored cell of the map holds a resource for the house.
     fn knows_field(&self, w: &World) -> bool {
-        w.cells.grid.iter().any(|(c, _)| {
-            resource::resource_at(w, c).is_some() && shroud::explored(w, self.house, c)
-        })
+        self.placed.keep(
+            |m| &mut m.knows_field,
+            || {
+                w.cells.grid.iter().any(|(c, _)| {
+                    resource::resource_at(w, c).is_some() && shroud::explored(w, self.house, c)
+                })
+            },
+        )
     }
 
     /// Whether the fields the house has known are all mined out: it has
@@ -4182,6 +4191,36 @@ mod place_cell_tests {
             }
         }
         assert!(yes > 0 && no > 0, "{yes} startable, {no} not");
+    }
+
+    /// Our tooling for speed (design: own AI, #64): whether the house knows
+    /// a field, kept for a think, is the answer of a scan of the map, and
+    /// the answer of a script outside a think.
+    #[test]
+    fn the_kept_field_answer_is_the_scan_of_the_map() {
+        let mut known = 0;
+        for mut g in kept_games() {
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    let want = w.cells.grid.iter().any(|(c, _)| {
+                        resource::resource_at(w, c).is_some() && shroud::explored(w, house, c)
+                    });
+                    let s = Script::new(house, Plan::default());
+                    assert_eq!(s.knows_field(w), want, "plain: house {h}");
+                    s.begin_think();
+                    assert_eq!(s.knows_field(w), want, "house {h}");
+                    assert_eq!(s.knows_field(w), want, "kept: house {h}");
+                    s.end_think();
+                    known += usize::from(want);
+                }
+            }
+        }
+        assert!(known > 0, "{known} known");
     }
 }
 
