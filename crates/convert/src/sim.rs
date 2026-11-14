@@ -2798,6 +2798,37 @@ impl Builder<'_> {
         })
     }
 
+    /// A weapon's attached particle system in force (S-0004 claim 2 and
+    /// Edge cases): a particle-system name as [`Form::Ref`] reads it, except
+    /// that an empty value keeps the value in force, `<none>` keeps it while
+    /// `quirks.attached_system_none_keeps` is on and clears it while off,
+    /// and `none` names a type called none while
+    /// `quirks.particle_none_is_a_name` is on and acts as `<none>` while
+    /// off.
+    pub(super) fn attached_system(&self, state: Option<&KeyState>) -> Option<Node> {
+        let keeps = self.i.quirks.attached_system_none_keeps;
+        let none_is_a_name = self.i.quirks.particle_none_is_a_name;
+        fold(state, None, |v, _| {
+            let name = value::text(v, value::COMMON_TEXT_LIMIT);
+            // spec: S-0004 claim 2 (the attached particle system: an empty value keeps the value; <none> means no type; none names a type while quirks.particle_none_is_a_name is on)
+            let no_type = name.eq_ignore_ascii_case(b"<none>")
+                || (!none_is_a_name && value::is_no_type(name));
+            if name.is_empty() {
+                None
+            } else if no_type {
+                // spec: S-0004 Edge cases (quirks.attached_system_none_keeps on: <none> keeps the value; off: it clears the field)
+                (!keeps).then_some(None)
+            } else {
+                Some(Some(
+                    self.type_key(Kind::ParticleSystems, name)
+                        .unwrap_or_else(|| encode(name)),
+                ))
+            }
+        })
+        .flatten()
+        .map(jsonc::string)
+    }
+
     /// The image name after each type read (S-0007 claim 1: the image key
     /// replaces it, cut to 24 bytes). With the art lookup's result, the last
     /// read uses its image (which carries the arctic suffix, S-0007 claims 9

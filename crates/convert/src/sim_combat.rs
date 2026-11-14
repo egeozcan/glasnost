@@ -318,6 +318,10 @@ const TREE_STRENGTH_DEFAULT: i32 = 25; // spec: S-0102 Constants (game-wide tree
 const UNSET_STRENGTH: i32 = -1; // spec: S-0102 claim 23 (writing −1 unsets the strength)
 
 /// Combat fields of weapons.
+/// A weapon's attached particle system, which S-0004 claim 2 gives a
+/// reading of its own.
+const ATTACHED_SYSTEM_KEY: &str = "AttachedParticleSystem"; // spec: S-0004 Import mapping (a weapon; AttachedParticleSystem, claim 2)
+
 const WEAPON_COMBAT: &[Row] = &[
     (
         "infinite_mind_control",
@@ -343,9 +347,10 @@ const WEAPON_COMBAT: &[Row] = &[
     ),
     ("is_railgun", "IsRailgun", Bool, "S-0301"),
     // spec: S-0616 Import mapping (weapon AttachedParticleSystem: the effect weapon's emitter type, a particle-system name; absent none)
+    // spec: S-0004 claim 2 (read by `attached_system`, not by its form)
     (
         "attached_particle_system",
-        "AttachedParticleSystem",
+        ATTACHED_SYSTEM_KEY,
         Ref(Kind::ParticleSystems),
         "S-0616",
     ),
@@ -2175,7 +2180,13 @@ impl Builder<'_> {
     fn cfields(&mut self, rec: &mut Rec, t: &TypeRec, kind: Kind, table: &[Row]) {
         for &(field, k, form, _) in table {
             let what = format!("{} {} {k}", kind.key(), show(&t.name));
-            if let Some(n) = self.field(key(t, k), form, &what) {
+            let n = if kind == Kind::Weapons && k == ATTACHED_SYSTEM_KEY {
+                // spec: S-0004 claim 2 (the attached particle system keeps its value on <none> and on an empty value)
+                self.attached_system(key(t, k))
+            } else {
+                self.field(key(t, k), form, &what)
+            };
+            if let Some(n) = n {
                 rec.put(field, n);
             }
         }

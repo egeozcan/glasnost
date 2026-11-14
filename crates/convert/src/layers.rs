@@ -92,6 +92,11 @@ pub struct LayerQuirks {
     pub side_change_removes_by_position: bool,
     /// `quirks.particle_none_is_a_name` (S-0004 claim 2).
     pub particle_none_is_a_name: bool,
+    /// `quirks.attached_system_none_keeps` (S-0004 claim 2 and Edge
+    /// cases): a weapon's attached particle system keeps its value on
+    /// `<none>`; off, `<none>` clears it. An empty value keeps it either
+    /// way.
+    pub attached_system_none_keeps: bool,
     /// `quirks.override_resets_keys` (S-0006 claim 5).
     pub override_resets_keys: bool,
     /// `quirks.barrel_recoil_layer_reset` (S-0105 claim 27).
@@ -145,6 +150,8 @@ impl Default for LayerQuirks {
             tiberium_index_by_key: true,
             side_change_removes_by_position: true,
             particle_none_is_a_name: true,
+            // spec: S-0004 Edge cases (quirks.attached_system_none_keeps defaults on)
+            attached_system_none_keeps: true,
             override_resets_keys: true,
             barrel_recoil_layer_reset: true,
             reread_truncates_light_values: true,
@@ -167,7 +174,7 @@ impl Default for LayerQuirks {
 
 impl LayerQuirks {
     /// The switches by name, for the import record.
-    pub fn named(&self) -> [(&'static str, bool); 17] {
+    pub fn named(&self) -> [(&'static str, bool); 18] {
         [
             ("unlisted_reference_unread", self.unlisted_reference_unread),
             ("long_name_duplicates", self.long_name_duplicates),
@@ -177,6 +184,10 @@ impl LayerQuirks {
                 self.side_change_removes_by_position,
             ),
             ("particle_none_is_a_name", self.particle_none_is_a_name),
+            (
+                "attached_system_none_keeps",
+                self.attached_system_none_keeps,
+            ),
             ("override_resets_keys", self.override_resets_keys),
             ("barrel_recoil_layer_reset", self.barrel_recoil_layer_reset),
             (
@@ -1317,8 +1328,10 @@ impl Run<'_> {
                 refs::Names::Particle => {
                     // spec: S-0004 claim 2 (in the four particle fields `<none>` names no type)
                     if name.eq_ignore_ascii_case(b"<none>") {
-                        if f.limit == refs::ATTACHED_SYSTEM_LIMIT {
-                            // spec: S-0004 Edge cases (quirks.attached_system_none_keeps: the importer warns)
+                        if f.limit == refs::ATTACHED_SYSTEM_LIMIT
+                            && self.quirks.attached_system_none_keeps
+                        {
+                            // spec: S-0004 Edge cases (quirks.attached_system_none_keeps on: the importer warns)
                             self.warn(
                                 hist,
                                 line,

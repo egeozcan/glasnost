@@ -567,6 +567,38 @@ fn attached_particle_system_keeps_on_none_and_empty() {
     assert_eq!(fuse.as_deref(), Some("none"), "none names a type");
 }
 
+/// spec: S-0004 Edge cases (quirks.attached_system_none_keeps off: `<none>` clears the attached particle system, an empty value still keeps it; quirks.particle_none_is_a_name off: `none` acts as `<none>`)
+#[test]
+fn attached_particle_system_switches_off() {
+    use crate::layers::LayerQuirks;
+    let plume = Some("Plume".to_owned());
+    let with = |quirks| ImportOptions {
+        quirks,
+        ..ImportOptions::default()
+    };
+    let clears = LayerQuirks {
+        attached_system_none_keeps: false,
+        ..LayerQuirks::default()
+    };
+    let [torch, wick, fuse] = attached_after("<none>", &with(clears));
+    assert_eq!(torch, None, "<none> clears the field");
+    assert_eq!(wick, plume, "an empty value still keeps the value");
+    assert_eq!(fuse.as_deref(), Some("none"));
+    let no_name = LayerQuirks {
+        particle_none_is_a_name: false,
+        ..LayerQuirks::default()
+    };
+    let [torch, _, fuse] = attached_after("<none>", &with(no_name));
+    assert_eq!(torch, plume);
+    assert_eq!(fuse, plume, "none acts as <none>, which keeps the value");
+    let neither = LayerQuirks {
+        particle_none_is_a_name: false,
+        ..clears
+    };
+    let [_, _, fuse] = attached_after("<none>", &with(neither));
+    assert_eq!(fuse, None, "none acts as <none>, which clears the field");
+}
+
 /// spec: S-0006 claim 3 (a "not given" value is compared on the converted number), S-0003 Edge cases (quirks.decimal_conversion_rounding decides that number)
 #[test]
 fn not_given_values_follow_decimal_conversion_rounding() {
