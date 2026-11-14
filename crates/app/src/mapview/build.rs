@@ -1348,6 +1348,12 @@ pub struct Painter {
     /// a part draw is not a copy of its rows.
     // design: render (#134)
     vpl: Option<Option<Rc<Vpl>>>,
+    /// The protection colour masks and the extra-light values, once read:
+    /// both are read from the import alone, which does not change during a
+    /// game.
+    // design: render (#135)
+    masks: Option<super::protection::Masks>,
+    extra_light: Option<light::ExtraLight>,
     /// Tile files decoded once, by upper-case name.
     tile_files: BTreeMap<Vec<u8>, Option<TileFile>>,
     /// The shared building companion depth image (S-0102 claims 31 and
@@ -4520,8 +4526,28 @@ impl<'a> Builder<'a> {
 
     /// The protection colour masks of the import's selectors (S-0102 claim
     /// 34, F9; S-0513 claim 29a).
-    fn protection_masks(&self) -> super::protection::Masks {
-        super::protection::Masks::read(self.import)
+    fn protection_masks(&mut self) -> super::protection::Masks {
+        let import = self.import;
+        // design: render (#135)
+        *self
+            .p
+            .masks
+            .get_or_insert_with(|| super::protection::Masks::read(import))
+    }
+
+    /// The rules' extra-light values (S-0104 claim 13).
+    fn extra_lights(&mut self) -> light::ExtraLight {
+        if let Some(e) = self.p.extra_light {
+            return e;
+        }
+        // design: render (#135)
+        let e = light::ExtraLight {
+            unit: self.extra_light(b"ExtraUnitLight"),
+            infantry: self.extra_light(b"ExtraInfantryLight"),
+            aircraft: self.extra_light(b"ExtraAircraftLight"),
+        };
+        self.p.extra_light = Some(e);
+        e
     }
 
     /// The rules' extra-light value in ‰ (S-0104 claim 13), 0 when absent.
@@ -4574,11 +4600,7 @@ impl<'a> Builder<'a> {
             },
             light::CellLevels::from,
         );
-        let extra = light::ExtraLight {
-            unit: self.extra_light(b"ExtraUnitLight"),
-            infantry: self.extra_light(b"ExtraInfantryLight"),
-            aircraft: self.extra_light(b"ExtraAircraftLight"),
-        };
+        let extra = self.extra_lights();
         // spec: S-0104 claim 13 (the height above the surface, from the deck on a bridge deck)
         let height = m.above;
         // spec: S-0104 Terms and claim 13 (the shadowed-cell rows: the cell holding the position, as the live game marks it)
@@ -6378,6 +6400,8 @@ impl Painter {
             canvas,
             models: BTreeMap::new(),
             vpl: None,
+            masks: None,
+            extra_light: None,
             tile_files: BTreeMap::new(),
             companion: None,
             oversized: BTreeSet::new(),
