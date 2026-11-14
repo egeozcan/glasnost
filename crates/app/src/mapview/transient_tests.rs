@@ -24,6 +24,11 @@ use super::tests::{RULES, context_with, scene_map_text};
 /// Runs `f` with the inputs, painter and scene of a map with one vehicle
 /// type with a turret, drawn from a synthetic voxel model.
 fn with_painter(f: impl FnOnce(&Inputs, &mut Painter, &mut Scene)) {
+    with_painter_of(synthetic_model(), f);
+}
+
+/// [`with_painter`] with the vehicle's body and turret drawn from `model`.
+fn with_painter_of(model: glasnost_fmt::vxl::Vxl, f: impl FnOnce(&Inputs, &mut Painter, &mut Scene)) {
     let rules = format!("{RULES}[CARX]\nTurret=yes\n");
     let (mut import, catalogue, mut assets) = context_with(&rules);
     import.arts.insert(
@@ -39,9 +44,7 @@ fn with_painter(f: impl FnOnce(&Inputs, &mut Painter, &mut Scene)) {
     );
     assets.insert(
         b"hull.vxl",
-        VxlWriter {
-            model: &synthetic_model(),
-        }
+        VxlWriter { model: &model }
         .write(),
     );
     let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
@@ -274,5 +277,92 @@ fn a_shadow_clear_of_the_parts_is_its_footprint() {
             "the shadow images: {:?}",
             shown.iter().map(|s| s.0).collect::<Vec<_>>()
         );
+    });
+}
+
+/// The synthetic model with section bounds of ±`half` in x and y: each
+/// part image it draws is far larger than any of ordinary art.
+fn huge_model(half: f32) -> glasnost_fmt::vxl::Vxl {
+    let mut model = synthetic_model();
+    let f = glasnost_fmt::bytes::F32Bits::new;
+    for limb in &mut model.limbs {
+        limb.min = [f(-half), f(-half), f(0.0)];
+        limb.max = [f(half), f(half), f(10.0)];
+    }
+    model
+}
+
+/// The pixels of the scene images before any redraw and after each of
+/// `drawn` redraws (body facings 0, 4, 8, … of 32) and then `idle` redraws
+/// drawing nothing, each ended; and the largest image drawn.
+fn huge_run(drawn: u16, idle: u32) -> (Vec<u64>, u64) {
+    let mut held = Vec::new();
+    let mut largest = 0;
+    with_painter_of(huge_model(1500.0), |inputs, painter, scene| {
+        held.push(scene.held().1);
+        for f in 0..drawn {
+            let (entries, _) = painter.mobiles(inputs, scene, &[turned(f * 4 % 32, 0, 0)]);
+            for i in entries.iter().flat_map(|e| &e.items) {
+                let img = &scene.images[i.image as usize];
+                largest = largest.max(u64::from(img.width()) * u64::from(img.height()));
+            }
+            painter.end_redraw(scene);
+            held.push(scene.held().1);
+        }
+        for _ in 0..idle {
+            painter.end_redraw(scene);
+            held.push(scene.held().1);
+        }
+    });
+    (held, largest)
+}
+
+/// design: render (#108): the settled part images of a model whose images
+/// are far larger than ordinary art's are not kept for ever: once no redraw
+/// has used them for a while they are released, so the pixels the scene
+/// holds after the vehicle is gone fall back.
+#[test]
+fn oversized_settled_images_are_released_when_unused() {
+    let (held, largest) = huge_run(8, 8);
+    assert!(largest > 1 << 21, "the model's images are huge: {largest} pixels");
+    let start = held[0];
+    let peak = held.iter().copied().max().unwrap() - start;
+    let after = held.last().unwrap() - start;
+    assert!(
+        after < largest,
+        "the scene still holds {after} pixels more than before (peak {peak}, one image {largest})"
+    );
+}
+
+/// design: render (#108): an oversized image drawn again after its release
+/// shows the same picture as when it was first drawn.
+#[test]
+fn oversized_images_drawn_again_show_the_same_pictures() {
+    with_painter_of(huge_model(1500.0), |inputs, painter, scene| {
+        let draw = |painter: &mut Painter, scene: &mut Scene| -> Shown {
+            let (entries, _) = painter.mobiles(inputs, scene, &[turned(4, 8, 0)]);
+            entries
+                .iter()
+                .flat_map(|e| &e.items)
+                .map(|i| {
+                    let img = &scene.images[i.image as usize];
+                    (
+                        (img.width(), img.height()),
+                        img.pixels().to_vec(),
+                        i.x,
+                        i.y,
+                        format!("{:?}", i.paint),
+                    )
+                })
+                .collect()
+        };
+        let first = draw(painter, scene);
+        painter.end_redraw(scene);
+        for _ in 0..8 {
+            painter.end_redraw(scene);
+        }
+        let again = draw(painter, scene);
+        assert!(!first.is_empty());
+        assert_eq!(first, again);
     });
 }
