@@ -1716,3 +1716,38 @@ The ninth batch of the game-logic audit (#420) makes the code follow the lead's 
 **Formats.** The save format goes to 138 and the AI game format to 113, the numbers the main session gave this batch (112 is the AI batch's): no saved field changes, but what a saved game replays to does (the smoke's place among the creation draws, the shovel requests, the sensor disc at an owner change, the put-aside losses, the bridge notices). Wire version 12: no valid order's encoding changes.
 
 **Seams.** S-0108 claim 13's power freeze (#430: the reaction to an in-operation change, the disablings and re-enablings, the start frozen) is part of #430 but is not built in this batch: it is handed back for a batch of its own. S-0516's trigger-created array and S-0309's going underground are not modelled. S-0212 claim 3's connectivity update for the named cells is S-0212's.
+
+## Simulation (sim issues S13: deaths, depots, power wrap, turning and the bridge deck)
+
+The thirteenth batch of the game-logic audit works through issues #249 to #262 (after the doc-comment issues #248, #255 and #259) and two seams of the render batch R9 in the projectile rules. Each change of behaviour has a test on synthetic data committed before it. Two points the specs leave open are filed as requests: Q-3112 (#252) and Q-3113 (#256). The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S13*.
+
+**Deaths (S-0302, S-0312).**
+
+- *#249, the destruction raises follow the credit switch (S-0302 claim 16 and Edge cases).* With `quirks.delay_kill_credited_again` off, a building already in a delayed-kill countdown registers no further destruction: neither credit nor destroyed-object events. `damage::killing_hit` makes the raises of a later delayed-kill hit under the same test as its credit, and `death::kill_in` takes a `raises` flag that is off for the final killing hit, or the expiry hit, of a building with a countdown when the switch is off. Its other death effects stay.
+- *#250, the crew's layer (S-0312 claim 13, S-0209 Terms).* A crew put at the dying vehicle's exact position (a height other than the terrain's) takes the vehicle's own layer. A hovering vehicle under a high bridge is on the ground layer, so its crew is too.
+- *#251, an unplaced crew or survivor (S-0312 claims 13 and 18, S-0408 claim 7, S-0611 claim 14).* A crew or a destruction or sale survivor that is created and then gets no position, or is refused, is taken out with its whole creation set (`objects::discard_unplaced`): slot objects and slaves its creation made leave too.
+- *#252, the crash death-weapon switch (S-0312 claim 16 and Edge cases).* With `quirks.crash_death_weapon_twice` off, an exploding non-rocket aircraft that starts to crash (above the terrain at its death, or already crashing) skips the death weapon at its death and fires it only at the impact. Q-3112 asks about an aircraft killed on the ground and a crashable vehicle; both keep the switch-on behaviour meanwhile.
+
+**Repair and depots (S-0314).**
+
+- *#256, erasure (claim 12).* `econ::sell::building_turn` does not consider automatic repair or sale for a building being erased (`temporal::building_erased`) or phasing in (`teleport::phasing_in`). A repair already on keeps claim 8's paid steps until Q-3113 is answered.
+- *#257, a docked vehicle's enter order on another depot (claims 20 and 23).* A tethered vehicle keeps its contact and tether whatever the order, and otherwise the order runs normally. For an enter order on another depot that holds a contact, the normal run is claim 23's: a damaged vehicle gets the queued entry and remembers the depot, with no destination; one at full health gets nothing and the order ends. `depot::order_applied` shares one helper for claim 23 between this case and the untethered one.
+
+**Integer wrap (S-0205 claim 1).**
+
+- *#258.* The blackout end tick (S-0405 claim 6 and Edge cases), a building's output and drain sums (F1, F2), the house's output and drain sums (claim 7) and the adjusted cost (S-0408 F2) wrap on overflow instead of panicking in a checked build or saturating. The house sums were saturating, a clamp no spec states.
+
+**Turning (S-0206, S-0207).**
+
+- *#260, the seized exception (S-0206 claim 9).* It belongs to the movement-destination rest row only. A seized vehicle with no movement destination (a dropped victim) rests its turret on its body's facing.
+- *#261, a turn in place given again (S-0206 claim 3, S-0207 State and ordering).* `drive::turn_in_place` records the body's own turn start and duration. When the same facing is asked again while the body is turning to it, the body keeps its turn, so the track begins in the tick the body arrives, not a whole duration after the order.
+- *#262, the cap-off no-track loop (S-0207 claims 11 and 12).* With `quirks.drive_track_end_cap` off, each further track that a tick begun without a track goes on to begin updates `ended`, so the vehicle rests with ρ = 0 only when the last track it worked on ended.
+
+**Projectiles (S-0306 r90, render batch R9 seams).**
+
+- *The deck crossing (T1 row 1).* A straight or arcing projectile that crosses the deck height of a high-bridge cell, the old cell or the new, detonates at the deck height going down and 20 leptons below it going up. The deck height is the terrain height of the cell of *P*′ + 416, for a crossing in either cell. The steering projectile's deck row does not say which height it tests when the two cells differ (Q-3114); it keeps each cell's own deck height meanwhile.
+- *A high-bridge cell's target point (Terms, points of a cell target).* A cell target that is a high-bridge cell has its target point at the deck height, 416 leptons above its terrain. `projectile::cell_target_point` gives it, and the shot speed (claim 1), the aim point (claim 3), the stored target point *K* and its flak scatter (claim 9), *P*_R of F9, the flak row's reference height and the first row of claim 20 (c) use it. Claim 20 (b), *D*_R, *D*_S and the second row of claim 20 (c), and the voxel pitch of claim 6 (b) keep the reference point. The lob test of claim 6 (a) is open in the spec and keeps the reference point. Other users of `range::target_point` (discs, shrapnel, bolts) are not projectile rules and keep it.
+
+**Formats.** No saved or hashed field changes, but what a saved game replays to does (a turn in place given again, the crash death weapon, the power sums, the deck crossings), so the save format goes to 145 and the AI game format to 121, the numbers the main session gave this batch. Wire version 12: no valid order's encoding changes.
+
+**Seams.** Q-3112, Q-3113 and Q-3114 are open, with the interims above.
