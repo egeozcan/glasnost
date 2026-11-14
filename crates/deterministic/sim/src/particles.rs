@@ -145,7 +145,12 @@ pub fn mark(w: &mut World, sys: ObjectId) {
 // nocite: vector and matrix dimensions (three axes)
 pub fn heading(w: &World, at: Pos, target: Pos) -> [F32; 3] {
     let m = mode(w);
-    let v = [target.x - at.x, target.y - at.y, target.z - at.z];
+    // spec: S-0205 claim 1 (32-bit integer arithmetic wraps)
+    let v = [
+        target.x.wrapping_sub(at.x),
+        target.y.wrapping_sub(at.y),
+        target.z.wrapping_sub(at.z), // nocite: vector and matrix dimensions (three axes)
+    ];
     // spec: S-0616 F1 (v = Q − P per component in single precision; m = r(vₓ² + vᵧ² + v_z²), the sum in double precision)
     let vs = v.map(|x| d(i64::from(x), m).to_f32(m));
     let sum = vs
@@ -436,11 +441,12 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
         let ox = offset(w.rng.raw() as i32);
         let oy = offset(w.rng.raw() as i32);
         let origin = Pos::default();
-        for sign in [1, -1] {
+        for sign in [1_i32, -1] {
             // spec: S-0616 claim 8 (successors at (x ± oₓ, y ± o_y, z), target point (0, 0, 0), with their creation draws)
             let at = Pos::new(
-                p.pos.x.wrapping_add(sign * ox),
-                p.pos.y.wrapping_add(sign * oy),
+                // spec: S-0205 claim 1 (32-bit integer arithmetic wraps)
+                p.pos.x.wrapping_add(sign.wrapping_mul(ox)),
+                p.pos.y.wrapping_add(sign.wrapping_mul(oy)),
                 p.pos.z,
             );
             let added = crate::gas::add_particle(w, sys, next, at, origin);
