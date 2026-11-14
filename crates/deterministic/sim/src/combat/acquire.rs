@@ -592,22 +592,17 @@ fn radius(w: &World, a: ObjectId, kind: SearchKind) -> (i32, i32) {
 }
 
 /// The cells of square ring r around c in the order of S-0309 F2.
-fn search_ring(c: glasnost_map::CellXY, r: i32) -> Vec<glasnost_map::CellXY> {
+fn search_ring(c: glasnost_map::CellXY, r: i32) -> impl Iterator<Item = glasnost_map::CellXY> {
     use glasnost_map::CellXY;
-    if r == 0 {
-        return vec![c];
-    }
-    let mut out = Vec::new();
     // spec: S-0309 F2 (rows y − r and y + r in pairs by column, then columns x − r and x + r in pairs by row)
-    for x in c.x - r..=c.x + r {
-        out.push(CellXY::new(x, c.y - r));
-        out.push(CellXY::new(x, c.y + r));
-    }
-    for y in c.y - r + 1..=c.y + r - 1 {
-        out.push(CellXY::new(c.x - r, y));
-        out.push(CellXY::new(c.x + r, y));
-    }
-    out
+    let rows =
+        (c.x - r..=c.x + r).flat_map(move |x| [CellXY::new(x, c.y - r), CellXY::new(x, c.y + r)]);
+    let columns = (c.y - r + 1..=c.y + r - 1)
+        .flat_map(move |y| [CellXY::new(c.x - r, y), CellXY::new(c.x + r, y)]);
+    // Ring 0 is the centre alone: its one row pair is the centre twice, and
+    // it has no columns.
+    rows.chain(columns)
+        .take(if r == 0 { 1 } else { usize::MAX })
 }
 
 /// The friendly-row exceptions of a searcher (S-0309 Terms): attacks
@@ -1087,7 +1082,9 @@ fn score(w: &World, a: ObjectId, t: ObjectId, ground_pass: bool) -> Option<i32> 
         let n = r.combat.general.fire_supress / 256;
         let mut m = 0;
         let c = to.pos.cell();
-        for ring in 1..n {
+        // Rings past the map hold no legal cell and add nothing (#401).
+        let last = n.min(w.cells.ring_limit(c).saturating_add(1));
+        for ring in 1..last {
             for cell in search_ring(c, ring) {
                 if w.cells.cell(cell).is_none() {
                     continue;
@@ -1325,7 +1322,11 @@ pub fn search(
         if !only_aircraft && nrings >= 1 {
             let r1 = nrings / 4; // spec: S-0309 claim 9 (early stops at trunc(n / 4) and trunc(n / 2))
             let r2 = nrings / 2;
-            for ring in 0..nrings {
+            // Rings past the map hold no legal cell and add no candidate, so
+            // ending before them leaves the candidates as an early stop or
+            // the last ring would (#401). The stops keep the uncapped n.
+            let last = nrings.min(w.cells.ring_limit(centre).saturating_add(1));
+            for ring in 0..last {
                 for cell in search_ring(centre, ring) {
                     if w.cells.cell(cell).is_none() {
                         continue;
