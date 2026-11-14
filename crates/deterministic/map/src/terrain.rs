@@ -59,7 +59,11 @@ impl TileCell {
     /// (flat) for a code outside 0 … 20.
     // spec: S-0106 Edge cases (a slope code outside 0 … 20: the cell is flat, shape 0)
     pub fn shape(self) -> u8 {
-        if self.slope > MAX_SHAPE { 0 } else { self.slope }
+        if self.slope > MAX_SHAPE {
+            0
+        } else {
+            self.slope
+        }
     }
 }
 

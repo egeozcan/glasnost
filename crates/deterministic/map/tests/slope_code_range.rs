@@ -1,8 +1,7 @@
 //! A tile cell's slope code outside 0 … 20 makes a flat cell (#288).
 
 use glasnost_map::terrain::{
-    OverlayLand, RecalcRules, Roles, TerrainQuirks, TileCatalogue, TileCell, TileInfo, land,
-    recalc,
+    OverlayLand, RecalcRules, Roles, TerrainQuirks, TileCatalogue, TileCell, TileInfo, land, recalc,
 };
 use glasnost_map::{Cell, CellGrid, CellXY, Footprint};
 

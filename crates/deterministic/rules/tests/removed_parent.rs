@@ -45,11 +45,13 @@ fn a_parent_removed_by_a_later_layer_is_an_error() {
 // nocite: our own rules format (PLAN.md 4.6: an instance is an object), #330
 #[test]
 fn a_parent_that_is_not_an_object_is_an_error() {
-    let err = finish(&[r#"{"objects": {"^a": {"speed": 9}, "^b": 3, "c": {"inherits": ["^a", "^b"]}}}"#])
-        .expect_err("refused");
+    let err =
+        finish(&[r#"{"objects": {"^a": {"speed": 9}, "^b": 3, "c": {"inherits": ["^a", "^b"]}}}"#])
+            .expect_err("refused");
     assert!(
-        err.iter()
-            .any(|m| m.contains("objects.c") && m.contains("\"^b\"") && m.contains("not an object")),
+        err.iter().any(|m| m.contains("objects.c")
+            && m.contains("\"^b\"")
+            && m.contains("not an object")),
         "{err:?}"
     );
 }

@@ -65,10 +65,7 @@ fn a_null_switch_takes_its_default() {
 // nocite: our own rules format (PLAN.md 4.6: `null` removes a key, so every switch takes its default), #331
 #[test]
 fn a_null_quirks_or_globals_resets_every_switch() {
-    for null in [
-        r#"{"globals": {"quirks": null}}"#,
-        r#"{"globals": null}"#,
-    ] {
+    for null in [r#"{"globals": {"quirks": null}}"#, r#"{"globals": null}"#] {
         assert_eq!(pipeline(&[OFF, null]).unwrap(), Quirks::default(), "{null}");
         assert_eq!(direct(&[OFF, null]).unwrap(), Quirks::default(), "{null}");
     }

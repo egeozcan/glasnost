@@ -27,7 +27,11 @@ fn odd_i_at_2_pow_31_plus_1_wraps() {
         .div(factor(), Rounding::Nearest)
         .add(F64::from_parts(false, 1, -12, rz), rz);
     let i = x.mul(factor(), rz).trunc_i128();
-    assert_eq!(i, Some(i128::from(want)), "the product truncates to 2^31 + 1");
+    assert_eq!(
+        i,
+        Some(i128::from(want)),
+        "the product truncates to 2^31 + 1"
+    );
     assert_eq!(x.mul(factor(), rz).to_i32_common(), -2147483647);
     assert_eq!(sigma_from_claim_7(x, rz), 2);
     assert_eq!(table_index(x, rz), 2);
