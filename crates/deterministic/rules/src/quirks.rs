@@ -21,6 +21,10 @@ pub struct Quirks {
     // spec: S-0205 claim 5
     #[serde(default = "on")]
     pub chop_rounding: bool,
+    /// Decimal text converts by claim 6's rule, which drops an exact half (and, for a whole number below 2^64, an exact three quarters) of the last kept place, so `16777219` reads 16777218; off: every decimal is correctly rounded to the nearest single, ties to even, subnormals included. Read when a ruleset is resolved from data.
+    // spec: S-0003 claim 6 and Edge cases
+    #[serde(default = "on")]
+    pub decimal_conversion_rounding: bool,
     /// Game speed reaches game state through speed-normalised delays and a chrono flash stepping in frozen cycles.
     // spec: S-0201 claim 11; glossary G3
     #[serde(default = "on")]
@@ -2338,6 +2342,7 @@ impl Default for Quirks {
     fn default() -> Self {
         Self {
             chop_rounding: true,
+            decimal_conversion_rounding: true,
             speed_normalised_delays: true,
             building_wrap_normalisation: true,
             chrono_flash_keeps_order_block: true,
@@ -2902,6 +2907,10 @@ impl Quirks {
     pub fn named(&self) -> Vec<(&'static str, bool)> {
         vec![
             ("chop_rounding", self.chop_rounding),
+            (
+                "decimal_conversion_rounding",
+                self.decimal_conversion_rounding,
+            ),
             ("speed_normalised_delays", self.speed_normalised_delays),
             (
                 "building_wrap_normalisation",

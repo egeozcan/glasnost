@@ -154,6 +154,131 @@ pub fn parse(s: &str, field: Field, mode: Rounding) -> Result<F64, DecimalError>
     Ok(value(&parse_text(s)?, field, mode))
 }
 
+/// [`value`] with `quirks.decimal_conversion_rounding` given: on (`rule`),
+/// the single of claim 6's rule; off, the correctly rounded single
+/// ([`to_single_rounded`]). The `%` product follows as in [`value`].
+pub fn value_rounded(text: &DecimalText, field: Field, mode: Rounding, rule: bool) -> F64 {
+    let single = to_single_rounded(text, rule);
+    if !text.percent {
+        return single.to_f64();
+    }
+    // spec: S-0003 claim 7 (the single times the percent factor, rounded by the mode; narrowed for a single-precision field)
+    let product = single.to_f64().mul(percent_factor(), mode);
+    match field {
+        Field::Decimal => product,
+        Field::Single => product.to_f32(mode).to_f64(),
+    }
+}
+
+/// [`parse`] with `quirks.decimal_conversion_rounding` given.
+pub fn parse_rounded(
+    s: &str,
+    field: Field,
+    mode: Rounding,
+    rule: bool,
+) -> Result<F64, DecimalError> {
+    Ok(value_rounded(&parse_text(s)?, field, mode, rule))
+}
+
+/// Decimal text to a single as `quirks.decimal_conversion_rounding` says:
+/// on (`rule`), by claim 6's rule ([`to_single`]); off, correctly rounded.
+// spec: S-0003 Edge cases (quirks.decimal_conversion_rounding: on, claim 6's rule; off, correctly rounded to the nearest single, ties to even, subnormals included)
+pub fn to_single_rounded(text: &DecimalText, rule: bool) -> F32 {
+    if rule {
+        to_single(text)
+    } else {
+        nearest_single(text)
+    }
+}
+
+/// For text whose two conversions differ, text that claim 6's rule reads as
+/// the correctly rounded single of `s`: the exact decimal of that single
+/// (an infinity `1e400`), with `s`'s `%` kept. `None` when the two agree or
+/// `s` is not a decimal. A ruleset read with `quirks.decimal_conversion_rounding`
+/// off holds this text in place of `s`, so every later reading of it by
+/// claim 6's rule gives the correctly rounded value.
+pub fn nearest_single_text(s: &str) -> Option<String> {
+    let t = parse_text(s).ok()?;
+    let near = nearest_single(&t);
+    if near == to_single(&t) {
+        return None;
+    }
+    let pct = if t.percent { "%" } else { "" };
+    // nocite: binary32 layout (exponent field all ones, fraction zero: an infinity)
+    let digits = if near.0 & 0x7FFF_FFFF == 0x7F80_0000 {
+        // spec: S-0003 Formulas (a magnitude beyond the single range is an infinity under both conversions)
+        if t.neg { "-1e400" } else { "1e400" }.to_owned()
+    } else {
+        exact_decimal(near.to_f64())
+    };
+    Some(format!("{digits}{pct}"))
+}
+
+/// Decimal text to the nearest single, ties to even, subnormals included,
+/// an infinity from the largest finite single plus half a unit (S-0003
+/// Edge cases, `quirks.decimal_conversion_rounding` off).
+// spec: S-0003 Edge cases (quirks.decimal_conversion_rounding off: correctly rounded, ties to even, subnormals included)
+fn nearest_single(text: &DecimalText) -> F32 {
+    // nocite: binary32 layout (precision, exponent range)
+    let (p, emin, emax): (i64, i64, i64) = (24, -126, 127);
+    let signed = |m: u128, e: i64| -> F32 {
+        F64::from_parts(text.neg, m, e as i32, Rounding::TowardZero).to_f32(Rounding::TowardZero)
+    };
+    let zero = F32(if text.neg { 1 << 31 } else { 0 });
+    let Some(first) = text.digits.iter().position(|&d| d != b'0') else {
+        return zero;
+    };
+    let digits = &text.digits[first..];
+    let magnitude = digits.len() as i64 + text.exp10;
+    // nocite: binary32 infinity bit pattern
+    let inf = F32(if text.neg { 0xFF80_0000 } else { 0x7F80_0000 });
+    if magnitude > DECIMAL_EXPONENT_LIMIT {
+        return inf;
+    }
+    if magnitude < -DECIMAL_EXPONENT_LIMIT {
+        return zero;
+    }
+    let n = BigUint::parse_bytes(digits, 10).unwrap_or_default();
+    let ten = BigUint::from(10u32);
+    let (num, den) = if text.exp10 >= 0 {
+        (n * ten.pow(text.exp10 as u32), BigUint::from(1u32))
+    } else {
+        (n, ten.pow((-text.exp10) as u32))
+    };
+    let mut e = num.bits() as i64 - den.bits() as i64 - (p - 1);
+    let (mut t, mut rem, mut d) = scaled_quotient(&num, &den, e);
+    let lo = BigUint::from(1u32) << ((p - 1) as u32);
+    let hi = BigUint::from(1u32) << (p as u32);
+    while t >= hi {
+        e += 1;
+        (t, rem, d) = scaled_quotient(&num, &den, e);
+    }
+    while t < lo {
+        e -= 1;
+        (t, rem, d) = scaled_quotient(&num, &den, e);
+    }
+    if e + (p - 1) < emin {
+        // Below the smallest normal: to the nearest multiple of the smallest subnormal.
+        e = emin - (p - 1);
+        (t, rem, d) = scaled_quotient(&num, &den, e);
+    }
+    // Ties to even: up when the discarded part exceeds a half, or is a half and t is odd.
+    let two_rem = &rem << 1u32;
+    let odd = t.bit(0);
+    let mut t = u128::try_from(t).unwrap_or(0);
+    if two_rem > d || (two_rem == d && odd) {
+        t += 1;
+    }
+    if t == 0 {
+        return zero;
+    }
+    let top = e + i64::from(128 - t.leading_zeros()) - 1;
+    if top > emax {
+        return inf;
+    }
+    signed(t, e)
+}
+
 /// Magnitudes far outside the single range are settled without big
 /// integers.
 // nocite: engineering bound beyond both formats' ranges
@@ -378,5 +503,79 @@ mod tests {
         assert!(parse_text(".").is_err());
         assert!(parse_text("1x").is_err());
         assert!(parse_text("1e").is_err());
+    }
+
+    fn rounded(s: &str, rule: bool) -> F64 {
+        parse_rounded(s, Field::Decimal, RZ, rule).unwrap()
+    }
+
+    // spec: S-0003 Edge cases (quirks.decimal_conversion_rounding off: correctly rounded, ties to even, subnormals included; 16777219 gives 16777220)
+    #[test]
+    fn decimal_conversion_rounding_off_rounds_correctly() {
+        let int = |v: i64| F64::from_i64(v, RZ);
+        for (s, on, off) in [
+            ("16777219", 16777218, 16777220),
+            ("33554435", 33554432, 33554436),
+            ("8388609.5", 8388609, 8388610),
+            ("-8388609.5", -8388609, -8388610),
+            ("8388608.5", 8388608, 8388608),
+            ("16777218", 16777218, 16777218),
+        ] {
+            assert_eq!(rounded(s, true), int(on), "{s} on");
+            assert_eq!(rounded(s, false), int(off), "{s} off");
+        }
+        // Subnormals: to the nearest multiple of 2^-149, ties to even.
+        let unit = |k: u128| F64::from_parts(false, k, -149, RZ);
+        let half_units = |k: u128| exact_decimal(F64::from_parts(false, k, -150, RZ));
+        assert_eq!(rounded("1e-45", true), F64::ZERO);
+        assert_eq!(rounded("1e-45", false), unit(1));
+        assert_eq!(rounded(&half_units(1), false), F64::ZERO);
+        assert_eq!(rounded(&half_units(3), false), unit(2));
+        assert_eq!(rounded(&half_units(5), false), unit(2));
+        // The largest finite single plus half a unit is a tie that rounds to an infinity.
+        let tie = exact_decimal(F64::from_parts(false, (1 << 25) - 1, 103, RZ));
+        let below = exact_decimal(F64::from_parts(false, (1 << 26) - 3, 102, RZ));
+        let max = F64::from_parts(false, (1 << 24) - 1, 104, RZ);
+        assert_eq!(rounded(&tie, false), F32(0x7F80_0000).to_f64());
+        assert_eq!(rounded(&below, false), max);
+        // Integers above 2^24, 2^25 and 2^40 against integer rounding.
+        let starts = [1i64 << 24, 1i64 << 25, 1i64 << 40];
+        for n in starts.into_iter().flat_map(|a| a..a + 4000) {
+            let s = 64 - i64::from(n.leading_zeros()) - 24;
+            let (q, r, half) = (n >> s, n & ((1 << s) - 1), 1i64 << (s - 1));
+            let q = if r > half || (r == half && q & 1 == 1) {
+                q + 1
+            } else {
+                q
+            };
+            assert_eq!(rounded(&n.to_string(), false), int(q << s), "{n}");
+        }
+    }
+
+    // spec: S-0003 Edge cases (quirks.decimal_conversion_rounding off), claim 6
+    #[test]
+    fn nearest_single_text_reads_back_by_claim_six() {
+        assert_eq!(nearest_single_text("16777219").as_deref(), Some("16777220"));
+        assert_eq!(
+            nearest_single_text("-8388609.5%").as_deref(),
+            Some("-8388610%")
+        );
+        assert_eq!(nearest_single_text("0.1"), None);
+        assert_eq!(nearest_single_text("16777218"), None);
+        assert_eq!(nearest_single_text("abc"), None);
+        let tie = exact_decimal(F64::from_parts(true, (1 << 25) - 1, 103, RZ));
+        assert_eq!(nearest_single_text(&tie).as_deref(), Some("-1e400"));
+        for s in ["16777219", "8388609.5%", "1e-45", "33554435", &tie] {
+            let text = nearest_single_text(s).unwrap();
+            for field in [Field::Decimal, Field::Single] {
+                for mode in [RZ, RN] {
+                    assert_eq!(
+                        parse(&text, field, mode),
+                        parse_rounded(s, field, mode, false),
+                        "{s} -> {text}"
+                    );
+                }
+            }
+        }
     }
 }

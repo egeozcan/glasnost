@@ -57,12 +57,31 @@ impl Error {
 
 /// Deserializes a `T` from `node`.
 pub fn from_node<'de, T: de::Deserialize<'de>>(node: &'de Node) -> Result<T, Error> {
-    T::deserialize(NodeDe(node)).map_err(|e| e.or_at(node.span))
+    from_node_with(node, false)
 }
 
-/// The deserializer for one node.
+/// [`from_node`], with `nearest` true when `quirks.decimal_conversion_rounding`
+/// is off (S-0003 Edge cases): every [`crate::sim::Decimal`] whose text the
+/// two conversions read differently then holds the text that claim 6's rule
+/// reads as the correctly rounded single
+/// (`glasnost_num::decimal::nearest_single_text`), so its `value` and
+/// `single_value` give the correctly rounded value.
+pub fn from_node_with<'de, T: de::Deserialize<'de>>(
+    node: &'de Node,
+    nearest: bool,
+) -> Result<T, Error> {
+    T::deserialize(NodeDe(node, nearest)).map_err(|e| e.or_at(node.span))
+}
+
+/// The name under which [`crate::sim::Decimal`] asks for its text, so the
+/// deserializer can apply `quirks.decimal_conversion_rounding`.
+// nocite: our own marker name, not game data
+pub const DECIMAL_MARKER: &str = "glasnost_rules::Decimal";
+
+/// The deserializer for one node, and whether decimals are read correctly
+/// rounded ([`from_node_with`]).
 #[derive(Clone, Copy)]
-pub struct NodeDe<'a>(pub &'a Node);
+pub struct NodeDe<'a>(pub &'a Node, pub bool);
 
 impl NodeDe<'_> {
     fn kind(&self) -> &'static str {
@@ -134,11 +153,16 @@ impl<'de> de::Deserializer<'de> for NodeDe<'de> {
                 }
             }
             Value::String(s) => visitor.visit_borrowed_str(s),
-            Value::Array(items) => visitor.visit_seq(Seq { items, i: 0 }),
+            Value::Array(items) => visitor.visit_seq(Seq {
+                items,
+                i: 0,
+                nearest: self.1,
+            }),
             Value::Object(members) => visitor.visit_map(Map {
                 members,
                 i: 0,
                 value: None,
+                nearest: self.1,
             }),
         };
         r.map_err(|e| e.or_at(span))
@@ -222,16 +246,31 @@ impl<'de> de::Deserializer<'de> for NodeDe<'de> {
 
     fn deserialize_newtype_struct<V: Visitor<'de>>(
         self,
-        _name: &'static str,
+        name: &'static str,
         visitor: V,
     ) -> Result<V::Value, Error> {
+        // spec: S-0003 Edge cases (quirks.decimal_conversion_rounding off: every decimal correctly rounded)
+        if self.1
+            && name == DECIMAL_MARKER
+            && let Value::String(s) = &self.0.value
+            && let Some(text) = glasnost_num::decimal::nearest_single_text(s)
+        {
+            let d: de::value::StringDeserializer<Error> = text.into_deserializer();
+            return visitor
+                .visit_newtype_struct(d)
+                .map_err(|e| e.or_at(self.0.span));
+        }
         visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
         match &self.0.value {
             Value::Array(items) => visitor
-                .visit_seq(Seq { items, i: 0 })
+                .visit_seq(Seq {
+                    items,
+                    i: 0,
+                    nearest: self.1,
+                })
                 .map_err(|e| e.or_at(self.0.span)),
             _ => Err(self.wrong("an array")),
         }
@@ -264,6 +303,7 @@ impl<'de> de::Deserializer<'de> for NodeDe<'de> {
                     members,
                     i: 0,
                     value: None,
+                    nearest: self.1,
                 })
                 .map_err(|e| e.or_at(self.0.span)),
             _ => Err(self.wrong("an object")),
@@ -295,6 +335,7 @@ impl<'de> de::Deserializer<'de> for NodeDe<'de> {
                 .visit_enum(Enum {
                     tag: &members[0].key,
                     value: &members[0].value,
+                    nearest: self.1,
                 })
                 .map_err(|e| e.or_at(self.0.span)),
             _ => Err(self.wrong("a variant name or a one-member object")),
@@ -313,6 +354,7 @@ impl<'de> de::Deserializer<'de> for NodeDe<'de> {
 struct Seq<'a> {
     items: &'a [Node],
     i: usize,
+    nearest: bool,
 }
 
 impl<'de> SeqAccess<'de> for Seq<'de> {
@@ -326,7 +368,7 @@ impl<'de> SeqAccess<'de> for Seq<'de> {
             return Ok(None);
         };
         self.i += 1;
-        seed.deserialize(NodeDe(node))
+        seed.deserialize(NodeDe(node, self.nearest))
             .map(Some)
             .map_err(|e| e.or_at(node.span))
     }
@@ -340,6 +382,7 @@ struct Map<'a> {
     members: &'a [crate::jsonc::Member],
     i: usize,
     value: Option<&'a Node>,
+    nearest: bool,
 }
 
 impl<'de> MapAccess<'de> for Map<'de> {
@@ -366,7 +409,7 @@ impl<'de> MapAccess<'de> for Map<'de> {
             .value
             .take()
             .ok_or_else(|| <Error as de::Error>::custom("value without a key"))?;
-        seed.deserialize(NodeDe(node))
+        seed.deserialize(NodeDe(node, self.nearest))
             .map_err(|e| e.or_at(node.span))
     }
 }
@@ -374,6 +417,7 @@ impl<'de> MapAccess<'de> for Map<'de> {
 struct Enum<'a> {
     tag: &'a str,
     value: &'a Node,
+    nearest: bool,
 }
 
 impl<'de> de::EnumAccess<'de> for Enum<'de> {
@@ -386,7 +430,7 @@ impl<'de> de::EnumAccess<'de> for Enum<'de> {
     ) -> Result<(V::Value, Self::Variant), Error> {
         let tag: de::value::BorrowedStrDeserializer<'de, Error> =
             de::value::BorrowedStrDeserializer::new(self.tag);
-        Ok((seed.deserialize(tag)?, NodeDe(self.value)))
+        Ok((seed.deserialize(tag)?, NodeDe(self.value, self.nearest)))
     }
 }
 

@@ -9186,6 +9186,11 @@
           "type": "boolean",
           "default": true
         },
+        "decimal_conversion_rounding": {
+          "description": "Decimal text converts by claim 6's rule, which drops an exact half (and, for a whole number below 2^64, an exact three quarters) of the last kept place, so `16777219` reads 16777218; off: every decimal is correctly rounded to the nearest single, ties to even, subnormals included. Read when a ruleset is resolved from data.",
+          "type": "boolean",
+          "default": true
+        },
         "deck_side_step_ground_level": {
           "description": "A step from a bridge deck is judged by the ground level under the deck, so a side step of 1 level lands on ground 3 or 5 levels below; off: such a step onto a cell that is not a bridge cell is refused.",
           "type": "boolean",
@@ -14240,7 +14245,7 @@
           "default": null
         },
         "verses": {
-          "description": "`Verses`: the eleven versus values in class-index order (S-0003\nclaim 13, S-0305), each written as the exact decimal of its double,\nwithout `%` (the importer has applied claim 13's `%` readings);\nvalidation refuses an item with `%`.",
+          "description": "`Verses`: the eleven versus values in class-index order (S-0003\nclaim 13, S-0305), each written as the exact decimal of its double,\nwithout `%` (the importer has applied claim 13's `%` readings);\nvalidation refuses an item with `%`. Read as written whatever\n`quirks.decimal_conversion_rounding` says.",
           "type": [
             "array",
             "null"
