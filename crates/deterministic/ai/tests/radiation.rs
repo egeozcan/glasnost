@@ -164,6 +164,19 @@ fn stays_when_it_is_safe() {
     assert_eq!(brain.special_uses().radiation, 0);
 }
 
+// S-0525 claim 8 (design: own AI, #48): a unit in the air above a field (at least 208 leptons above its surface, S-0525 Terms) is not hit, so it is not sent out of the field
+#[test]
+fn a_unit_in_the_air_above_a_field_stays() {
+    let g = game();
+    let (mut w, unit, at) = scene(&g, "WALKER", true);
+    assert!(radiation::exposure(&w, at) > 0);
+    w.obj_mut(unit).unwrap().pos.z += 400;
+    assert!(glasnost_sim::combat::weapon::airborne_by_height(&w, unit));
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    assert_eq!(moves(&brain.think(&w), unit), None);
+    assert_eq!(brain.special_uses().radiation, 0);
+}
+
 // S-0525, PLAN §4.7: it reads only what its house has explored: a unit on an unexplored irradiated cell is not sent anywhere.
 #[test]
 fn reads_only_explored_cells() {

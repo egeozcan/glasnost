@@ -1652,18 +1652,21 @@ impl Brain {
             if matches!(o.dest, Some(Target::Cell(c)) if goes(c) && fits(c)) {
                 continue;
             }
-            let around = |centre: CellXY| {
+            // `limit`: the far field, when the spiral is centred on it.
+            let around = |centre: CellXY, limit: Option<CellXY>| {
                 (1..=SPIRAL_RINGS).find_map(|ring| {
                     (-ring..=ring)
                         .flat_map(|dy| (-ring..=ring).map(move |dx| (dx, dy)))
                         .filter(|&(dx, dy)| dx.abs() == ring || dy.abs() == ring)
                         .map(|(dx, dy)| CellXY::new(centre.x + dx, centre.y + dy))
                         .filter(|&c| c != here)
+                        // design: own AI (#41): a cell by the far field is one within its reach, the test the unit deploys by when it gets there; the outer rings reach beyond it, and a unit sent there deployed short of the field's reach
+                        .filter(|&c| limit.is_none_or(|f| dist2(c, f) <= reach))
                         // design: own AI (#5) and S-0212 claim 4: only a cell the unit can drive to (in its reach region); one across water was picked again on every think and never reached
                         .find(|&c| goes(c) && fits(c))
                 })
             };
-            let mut spot = around(field.unwrap_or(here));
+            let mut spot = around(field.unwrap_or(here), field);
             if spot.is_none() && field.is_some() {
                 // design: own AI (#5): with no cell it can reach by the far field (an island's), the unit deploys as a spare yard where it stands, or near it
                 if fits(here) {
@@ -1671,7 +1674,7 @@ impl Brain {
                     out.push(Order::Deploy { actor: id });
                     continue;
                 }
-                spot = around(here);
+                spot = around(here, None);
             }
             if let Some(c) = spot {
                 out.push(Order::Behaviour {

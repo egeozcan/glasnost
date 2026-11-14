@@ -13,7 +13,9 @@
 //!   original owner's unit, yet its power goes to the building's owner
 //!   (claims 7 and 10): a captured enemy foot soldier turns into power and
 //!   frees the controller for another victim. Every idle controlled enemy
-//!   infantry unit is sent;
+//!   infantry unit is sent. A permanently controlled one frees no
+//!   controller and belongs to the house for good (S-0601 claim 13), so it
+//!   counts as the house's own ([`held_by_controller`]);
 //! - **puts spare infantry in.** Idle infantry of the house's own at home
 //!   are sent while the house is short of power, or while more than
 //!   [`KEEP`] idle infantry stand at home, the cheapest first, so the
@@ -21,9 +23,10 @@
 //!   controllers are kept for their own work;
 //! - **fills one place at a time.** No building gets more entrants than it
 //!   has room for, counting the ones already on their way or waiting in
-//!   line (claims 3 and 4), and the order is the click a person gives on
-//!   the building (the *enter* cursor, S-0214 rows x3 and x4), so a full,
-//!   switched-off or unfinished building is never chosen;
+//!   line (claims 3 and 4) and the stalled ones sent again, and the order
+//!   is the click a person gives on the building (the *enter* cursor,
+//!   S-0214 rows x3 and x4), so a full, switched-off or unfinished building
+//!   is never chosen: the unit goes to the nearest one that takes it;
 //! - **sends a stalled entrant again.** An entrant that has left *enter*
 //!   while it still holds its link place keeps it, and every later entrant
 //!   waits for good (S-0605 claim 17). Such a unit gets the *enter* click
@@ -172,6 +175,8 @@ impl Special {
             return;
         }
         let mut sent = 0;
+        let mut rooms: Vec<(ObjectId, usize)> =
+            buildings.iter().map(|&b| (b, room(w, b))).collect();
         // Stalled entrants first: the enter click on their building again.
         for &id in own {
             if sent >= PER_THINK {
@@ -190,12 +195,15 @@ impl Special {
             }
             if let Some(orders) = click_if(w, house, id, b, &[Action::Enter]) {
                 out.extend(orders);
+                // design: own AI (#44): a stalled entrant is left out of
+                // `en_route`, so the one sent again takes its room here.
+                if let Some(r) = rooms.iter_mut().find(|(x, _)| *x == b) {
+                    r.1 = r.1.saturating_sub(1);
+                }
                 sent += 1;
                 self.count_absorb();
             }
         }
-        let mut rooms: Vec<(ObjectId, usize)> =
-            buildings.iter().map(|&b| (b, room(w, b))).collect();
         if rooms.iter().all(|&(_, r)| r == 0) {
             return;
         }
@@ -208,7 +216,7 @@ impl Special {
         let controlled: Vec<ObjectId> = free
             .iter()
             .copied()
-            .filter(|&id| mind::mind_controlled(w, id))
+            .filter(|&id| held_by_controller(w, id))
             .collect();
         let home = script.home(w);
         let at_home = |id: ObjectId| {
@@ -220,7 +228,7 @@ impl Special {
         let mut spare: Vec<ObjectId> = free
             .iter()
             .copied()
-            .filter(|&id| !mind::mind_controlled(w, id) && at_home(id))
+            .filter(|&id| !held_by_controller(w, id) && at_home(id))
             .collect();
         let cost = |id: ObjectId| {
             w.obj(id)
@@ -240,23 +248,36 @@ impl Special {
             let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
                 continue;
             };
-            let pick = rooms
+            let mut near: Vec<(i64, ObjectId)> = rooms
                 .iter()
                 .filter(|&&(b, r)| r > 0 && self.memory.ok(w, id, Target::Object(b)))
                 .map(|&(b, _)| (distance(w, b, at), b))
-                .min()
-                .map(|(_, b)| b);
-            let Some(b) = pick else { continue };
-            if let Some(orders) = click_if(w, house, id, b, &[Action::Enter]) {
-                out.extend(orders);
-                if let Some(r) = rooms.iter_mut().find(|(x, _)| *x == b) {
-                    r.1 -= 1;
-                }
-                sent += 1;
-                self.count_absorb();
+                .collect();
+            near.sort_unstable();
+            // design: own AI (#44): the nearest building that takes the
+            // click; one that refuses it (switched off, say) does not stop
+            // the unit from going to the next.
+            let pick = near
+                .into_iter()
+                .find_map(|(_, b)| Some((b, click_if(w, house, id, b, &[Action::Enter])?)));
+            let Some((b, orders)) = pick else { continue };
+            out.extend(orders);
+            if let Some(r) = rooms.iter_mut().find(|(x, _)| *x == b) {
+                r.1 -= 1;
             }
+            sent += 1;
+            self.count_absorb();
         }
     }
+}
+
+/// Whether `id` is held by a controller: a mind-controlled enemy whose
+/// controller it frees on the way in. A permanently controlled one has no
+/// controller to free and belongs to the house for good (S-0601 claim 13),
+/// so it counts as the house's own.
+// design: own AI (#35)
+pub(crate) fn held_by_controller(w: &World, id: ObjectId) -> bool {
+    mind::controlled_by(w, id).is_some()
 }
 
 fn distance(w: &World, b: ObjectId, at: CellXY) -> i64 {

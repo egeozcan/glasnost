@@ -186,9 +186,25 @@ fn best(script: &Script, w: &World) -> Option<(CellXY, i64, i64, usize)> {
                 })
                 .sum();
             if explosion {
-                // spec: S-0611 claim 3 (one area hit with the explosion warhead; its reach, falloff and versus are S-0303's and S-0302's)
-                loss +=
-                    crate::dominator::blast_loss(w, &owners, c, BLAST, m.explosion_warhead, false);
+                // spec: S-0611 claim 3 (one area hit with the explosion warhead; its reach, falloff and versus are S-0303's and S-0302's) and F1 (centred on the mutation point, lifted by the bridge lift on a high-bridge cell)
+                // spec: S-0303 claim 4 (a point on a high-bridge cell more than half a deck above the terrain hits the deck layer only)
+                // design: own AI (#34): the estimate reads the blast's own point and layer, not the dominator's ground point
+                let blast = crate::dominator::Blast {
+                    at: glasnost_sim::superweapons::cell_point(w, c, true),
+                    layer: if w.high_bridge(c) {
+                        glasnost_sim::world::Layer::Deck
+                    } else {
+                        glasnost_sim::world::Layer::Ground
+                    },
+                };
+                loss += crate::dominator::blast_loss(
+                    w,
+                    &owners,
+                    blast,
+                    BLAST,
+                    m.explosion_warhead,
+                    false,
+                );
             }
             (gain >= OUTWEIGH * loss).then_some((c, gain, loss, hit.len()))
         })

@@ -899,6 +899,14 @@ struct Watch {
     /// [`INCOME_WINDOW`] ticks, once one has passed.
     #[serde(default)]
     income: Option<i64>,
+    /// The world's next object id at the last think: objects made since
+    /// have ids from it on (#50).
+    #[serde(default)]
+    next_id: Option<u32>,
+    /// The house's buildings being sold at the last think, with the refund
+    /// each pays when it goes (#50).
+    #[serde(default)]
+    sales: BTreeMap<ObjectId, i32>,
 }
 
 impl Script {
@@ -1418,6 +1426,12 @@ impl Script {
         let blockers = tech::unmet_prerequisites(w, self.house, t)?;
         let mut options: Vec<Vec<u32>> =
             blockers.into_iter().map(|p| Self::meeting(w, p)).collect();
+        // design: own AI (#49): a blocker that no building clears (an
+        // upgrade or an unknown name, S-0407 claim 8 (d)) keeps the type
+        // blocked whatever is built for the others, so none is climbed for it
+        if options.iter().any(Vec::is_empty) {
+            return None;
+        }
         if options.is_empty() {
             // Every prerequisite is met: a factory of its kind may be
             // missing. A factory type the house already has does not help
@@ -1490,7 +1504,11 @@ impl Script {
     /// the balance for an item started since); an item gone from the lines
     /// paid the rest of its balance when its object is still there (done
     /// and released or placed), and was cancelled, its payments refunded
-    /// (S-0404 claim 6, at an unchanged price), when not. A fall of the
+    /// (S-0404 claim 6, at an unchanged price), when not. An own object made
+    /// since the last think and no longer on a line was started and done in
+    /// between, and paid its whole start price. The refund of a building
+    /// seen in its sale at the last think and gone now is no income
+    /// (#50). A fall of the
     /// credits that no payment explains (a drain, S-0608) is no income.
     /// Every [`INCOME_WINDOW`] ticks the window's sum becomes
     /// [`Script::income`]. M8 step B5: a house that kept every harvester it
@@ -1525,7 +1543,41 @@ impl Script {
                 -(i64::from(start) - i64::from(owed))
             };
         }
-        let gained = i64::from(credits) - i64::from(self.watch.credits) + paid;
+        // design: own AI (#50): an item started and done between two thinks
+        // (an own object made since the last think, with a start price and
+        // no longer on a line) paid its whole start price meanwhile (S-0404
+        // claims 2 and 4).
+        if let Some(first) = self.watch.next_id {
+            paid += w
+                .objects
+                .range(ObjectId(first)..)
+                .filter(|(id, o)| o.owner == Some(self.house) && !now.contains_key(id))
+                .filter_map(|(_, o)| o.econ.start_price)
+                .map(i64::from)
+                .sum::<i64>();
+        }
+        // design: own AI (#50): the refund of a building the house sold
+        // (S-0408 claim 1, paid when the build-down ends and the building
+        // goes, S-0408 claims 6 and 17) is no income. A building seen in
+        // its sale at a think and gone at the next paid it; one sold
+        // whole between two thinks, or an upgrade sold off (claim 5), is
+        // not seen.
+        let refunds: i64 = self
+            .watch
+            .sales
+            .iter()
+            .filter(|&(id, _)| w.obj(*id).is_none_or(|o| o.owner != Some(self.house)))
+            .map(|(_, &r)| i64::from(r))
+            .sum();
+        self.watch.sales = w
+            .objects
+            .values()
+            .filter(|o| o.owner == Some(self.house) && o.kind == Kind::Building)
+            .filter(|o| o.econ.sale.as_ref().is_some_and(|s| !s.packs))
+            .map(|o| (o.id, sell::refund(w, self.house, tech::type_of(o))))
+            .collect();
+        self.watch.next_id = Some(w.next_id);
+        let gained = i64::from(credits) - i64::from(self.watch.credits) + paid - refunds;
         self.watch.earned += gained.max(0);
         self.watch.owed = now;
         // A window ends at each multiple of INCOME_WINDOW; the watch reads it at the first think at or after it (thinks come every THINK_PERIOD ticks, at the house's phase).
@@ -1628,6 +1680,11 @@ impl Script {
                 .flatten()
         });
         if let Some(actor) = sale {
+            // design: own AI (#50): its refund is no income at the think after it goes
+            if let Some(o) = w.obj(actor) {
+                let r = sell::refund(w, self.house, tech::type_of(o));
+                self.watch.sales.insert(actor, r);
+            }
             out.push(Order::Sell { actor });
             self.watch.last_sale = Some(t);
             self.watch.stall_since = Some(t);
@@ -3304,8 +3361,17 @@ impl Script {
         );
         let mut reach: BTreeMap<String, (usize, usize)> = BTreeMap::new();
         if let Some(home) = self.home(w) {
-            let mut probe = w.clone();
-            regions::ensure(&mut probe);
+            // design: own AI (#51): every tick ends with the regions up to
+            // date, so the world is read as it is; it is copied only when
+            // they are not (before the first tick).
+            let probe: std::borrow::Cow<'_, World> =
+                if w.regions.dirty || w.regions.region.is_empty() {
+                    let mut p = w.clone();
+                    regions::ensure(&mut p);
+                    std::borrow::Cow::Owned(p)
+                } else {
+                    std::borrow::Cow::Borrowed(w)
+                };
             if let Some(&(_, goal)) = enemies.iter().min_by_key(|&&(_, c)| dist2(c, home)) {
                 for id in self.of_role(w, Role::Army) {
                     let Some(o) = w.obj(id) else { continue };
@@ -3876,5 +3942,137 @@ mod start_tests {
         let targets = s.enemy_starts(&w);
         assert!(!targets.contains(&mine), "{targets:?} holds {mine:?}");
         assert_eq!(targets.len(), starts.len() - 1, "{targets:?}");
+    }
+}
+
+#[cfg(test)]
+mod income_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+    use glasnost_sim::testkit;
+
+    /// The fixture skirmish's world and a cell by house 0's first object.
+    fn world() -> (World, CellXY) {
+        let g = Game::new(
+            fixture::rules(),
+            &fixture::map(),
+            "synthetic-skirmish",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the skirmish loads");
+        let w = g.world.clone();
+        let home = w
+            .objects
+            .values()
+            .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+            .map(|o| o.pos.cell())
+            .expect("house 0 has an object");
+        (w, CellXY::new(home.x + 4, home.y + 4))
+    }
+
+    // design: own AI (#50): an item started and done between two thinks was paid for (S-0404 claim 4), so its price is no lost income
+    #[test]
+    fn an_item_made_between_two_thinks_is_no_lost_income() {
+        let (mut w, at) = world();
+        let house = HouseId(0);
+        let mut s = Script::new(house, Plan::default());
+        let c0 = w.houses[0].credits;
+        s.watch.credits = c0;
+        s.watch_income(&w);
+        assert_eq!(s.watch.earned, 0);
+        // Before the next think: a load pays 300 and a tank is bought and
+        // made for 700, never seen on its line.
+        let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, at, 0);
+        w.obj_mut(tank).unwrap().econ.start_price = Some(700);
+        w.houses[0].credits = c0 + 300 - 700;
+        w.tick += THINK_PERIOD;
+        s.watch_income(&w);
+        assert_eq!(s.watch.earned, 300);
+    }
+
+    // design: own AI (#50): the refund of a building the house sold (S-0408 claim 1) is no income
+    #[test]
+    fn a_sale_refund_is_no_income() {
+        let (mut w, at) = world();
+        let house = HouseId(0);
+        let b = testkit::spawn(&mut w, Kind::Building, "PROC", 0, at, 0);
+        w.obj_mut(b).unwrap().econ.sale = Some(sell::Sale::default());
+        let mut s = Script::new(house, Plan::default());
+        let c0 = w.houses[0].credits;
+        s.watch.credits = c0;
+        s.watch_income(&w);
+        let refund = sell::refund(&w, house, tech::type_of(w.obj(b).unwrap()));
+        assert!(refund > 0);
+        glasnost_sim::objects::remove(&mut w, b);
+        w.houses[0].credits = c0 + refund;
+        w.tick += THINK_PERIOD;
+        s.watch_income(&w);
+        assert_eq!(s.watch.earned, 0);
+    }
+}
+
+#[cfg(test)]
+mod unblocker_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// Gives infantry type `t` the prerequisite list `prereq`.
+    fn needing(w: &mut World, t: u32, prereq: Vec<tech::Prereq>) {
+        let mut r = (*w.rules_arc()).clone();
+        r.econ.tech.infantry[t as usize].prereq = prereq;
+        w.rules = Some(std::sync::Arc::new(r));
+    }
+
+    // design: own AI (#49): a type with a blocker that no building clears (an upgrade or an unknown name, S-0407 claim 8 (d)) is never unblocked, so no building is climbed for it
+    #[test]
+    fn a_type_with_a_blocker_nothing_clears_has_no_unblocker() {
+        let mut g = Game::new(
+            fixture::rules(),
+            &fixture::map(),
+            "synthetic-skirmish",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the skirmish loads");
+        for _ in 0..900 {
+            g.step();
+        }
+        let mut w = g.world.clone();
+        let house = HouseId(0);
+        let s = Script::new(house, Plan::default());
+        // The scene: a building the house lacks and can build and place now.
+        let b = (0..w.rules().buildings.len() as u32)
+            .map(|index| TypeRef {
+                kind: Kind::Building,
+                index,
+            })
+            .find(|&b| {
+                tech::present_count(&w, house, b) == 0 && s.buildable(&w, b) && s.placeable(&w, b)
+            })
+            .expect("a building the house can add");
+        let t = (0..w.rules().infantry.len() as u32)
+            .find(|&index| {
+                let t = TypeRef {
+                    kind: Kind::Infantry,
+                    index,
+                };
+                tech::unmet_prerequisites(&w, house, t).is_some()
+            })
+            .expect("an infantry type no other condition refuses");
+        let infantry = TypeRef {
+            kind: Kind::Infantry,
+            index: t,
+        };
+        needing(&mut w, t, vec![tech::Prereq::Building(b.index)]);
+        let s = Script::new(house, Plan::default());
+        assert_eq!(s.unblocker(&w, infantry, CLIMB_DEPTH), Some(b));
+        needing(
+            &mut w,
+            t,
+            vec![tech::Prereq::Building(b.index), tech::Prereq::Unmet],
+        );
+        let s = Script::new(house, Plan::default());
+        assert_eq!(s.unblocker(&w, infantry, CLIMB_DEPTH), None);
     }
 }

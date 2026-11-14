@@ -26,8 +26,9 @@
 //!   not refused by the firing check. The dearest type goes first, then the
 //!   nearest;
 //! - **drops them where the fall kills.** While a lifter holds a vehicle at
-//!   [`DROP_HEIGHT`] leptons or more over water, or over a cell that holds
-//!   another vehicle or a building of a house it is not allied to, it gives
+//!   [`DROP_HEIGHT`] leptons or more over water the vehicle cannot enter
+//!   (not over a bridge deck), or over a cell that holds another vehicle or
+//!   a building it sees, of a house it is not allied to, it gives
 //!   the lifter a move order to its own cell. That ends the grip and the
 //!   vehicle falls there (claims 12 and 17). A vehicle pulled all the way
 //!   is dropped unhurt on a free cell beside the lifter (claim 8), so a
@@ -177,9 +178,9 @@ fn liftable(w: &World, l: ObjectId, e: ObjectId) -> bool {
 
 impl Special {
     /// Magnetic lifters: drops over killing cells first, then lift orders
-    /// at enemy vehicles, then idle lifters back home. Returns the drop
-    /// orders apart: the brain issues them after its filter of orders to
-    /// holding lifters.
+    /// at enemy vehicles, then idle lifters back home, all pushed onto
+    /// `out` (#48: the doc follows the code). A drop is a move to the
+    /// lifter's own cell, which [`keeps_order`] keeps for a holding lifter.
     pub(crate) fn lifters(
         &mut self,
         script: &Script,
@@ -309,8 +310,9 @@ fn clear_below(w: &World, x: ObjectId) -> bool {
 }
 
 /// Whether held unit `x` is high enough over a cell where its fall kills
-/// it: water, or a cell that holds a vehicle or building of a house that
-/// `house` is not allied to (S-0607 claims 16 and 17).
+/// it: water it cannot enter, away from a bridge deck, or a cell that holds
+/// a vehicle or building, seen by `house`, of a house that `house` is not
+/// allied to (S-0607 claims 16 and 17).
 fn drop_here(w: &World, house: HouseId, x: ObjectId) -> bool {
     let Some(xo) = w.obj(x) else { return false };
     if w.height_above_surface(x) < DROP_HEIGHT {
@@ -320,10 +322,15 @@ fn drop_here(w: &World, house: HouseId, x: ObjectId) -> bool {
     if !glasnost_sim::econ::shroud::explored(w, house, c) {
         return false;
     }
-    let water = w
-        .cells
-        .cell(c)
-        .is_some_and(|k| k.land == glasnost_map::terrain::land::WATER);
+    // spec: S-0607 claim 17 (water counts when the land is water and the unit does not land on a bridge deck; it sinks only where the cell is blocked for it, by S-0209 claim 5's zero speed check (5a) for its class)
+    // design: own AI (#46): a held vehicle that may enter water (a hovercraft, say), or one over a bridge deck, is not dropped there
+    let water = !w.high_bridge(c)
+        && w.cells
+            .cell(c)
+            .is_some_and(|k| k.land == glasnost_map::terrain::land::WATER)
+        && w.rules().unit(xo.kind, xo.type_index).is_some_and(|u| {
+            !glasnost_sim::passability::enterable_by_class(w.rules(), w, c, u.class, u.zone, false)
+        });
     let occupants = w.cells.list(c, glasnost_sim::world::Layer::Ground);
     let own_there = occupants
         .iter()
@@ -334,6 +341,8 @@ fn drop_here(w: &World, house: HouseId, x: ObjectId) -> bool {
     water
         || occupants.iter().any(|&o| {
             o != x
+                // design: own AI (#46): an enemy the house does not see (a cloaked one it does not sense) is not known to be there
+                && crate::in_view(w, house, o)
                 && w.obj(o).is_some_and(|p| {
                     matches!(p.kind, Kind::Vehicle | Kind::Building)
                         && !w.allied(Some(house), p.owner)
@@ -372,5 +381,88 @@ pub(crate) fn keeps_order(w: &World, order: &Order) -> bool {
             attack_move: true, ..
         } => false,
         _ => !holding(w, actor),
+    }
+}
+
+#[cfg(test)]
+mod drop_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+    use glasnost_map::CellXY;
+    use glasnost_sim::world::Pos;
+
+    const H: HouseId = HouseId(0);
+
+    /// The synthetic skirmish and a cell south of house 0's start, explored
+    /// by it.
+    fn world() -> (World, CellXY) {
+        let g = Game::new(
+            fixture::rules(),
+            &fixture::map(),
+            "synthetic",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the skirmish loads");
+        let mut w = g.world.clone();
+        let home = w
+            .objects
+            .values()
+            .find(|o| o.owner == Some(H) && o.on_map)
+            .map(|o| o.pos.cell())
+            .expect("house 0 on the map");
+        let at = CellXY::new(home.x, home.y + 6);
+        glasnost_sim::econ::shroud::area_reveal(&mut w, H, Pos::centre(at, 0), 6);
+        (w, at)
+    }
+
+    /// An enemy vehicle `name` on cell `c`, lifted 400 leptons.
+    fn hanging(w: &mut World, name: &str, c: CellXY) -> ObjectId {
+        let id = glasnost_sim::testkit::spawn(w, Kind::Vehicle, name, 1, c, 0);
+        w.obj_mut(id).expect("the vehicle").pos.z += 400;
+        assert!(w.height_above_surface(id) >= DROP_HEIGHT);
+        id
+    }
+
+    fn water(w: &mut World, c: CellXY) {
+        w.cells.grid.get_mut(c).expect("a legal cell").land = glasnost_map::terrain::land::WATER;
+    }
+
+    // S-0607 claim 17 (a dropped unit sinks only when the cell is water, it did not land on a bridge deck, and the cell is blocked for it), design: own AI (#46): a held vehicle that may enter water, or one over a bridge deck, is not dropped there; a land vehicle over open water is.
+    #[test]
+    fn water_kills_only_what_cannot_stand_on_it() {
+        let (mut w, at) = world();
+        let land = CellXY::new(at.x, at.y);
+        let hover = CellXY::new(at.x + 2, at.y);
+        let deck = CellXY::new(at.x + 4, at.y);
+        let gunr = hanging(&mut w, "GUNR", land);
+        let hovr = hanging(&mut w, "HOVR", hover);
+        let over_deck = hanging(&mut w, "GUNR", deck);
+        for c in [land, hover, deck] {
+            water(&mut w, c);
+        }
+        let i = w.cells.idx(deck).expect("a legal cell");
+        w.cells.deck[i] = true;
+        assert!(drop_here(&w, H, gunr), "a land vehicle over water sinks");
+        assert!(!drop_here(&w, H, hovr), "a hovercraft lands on water");
+        assert!(!drop_here(&w, H, over_deck), "a bridge deck holds it");
+    }
+
+    // S-0516 Terms and claim 28 (a cloaked object the house does not sense is hidden from it), design: own AI (#46): an enemy vehicle hidden from the house does not make the cell a killing cell.
+    #[test]
+    fn a_hidden_enemy_does_not_make_a_killing_cell() {
+        let (mut w, at) = world();
+        let held = hanging(&mut w, "GUNR", at);
+        let below = glasnost_sim::testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, at, 0);
+        assert_eq!(w.obj(below).map(|o| o.pos.cell()), Some(at));
+        assert!(drop_here(&w, H, held), "a seen enemy vehicle below");
+        w.obj_mut(below).expect("the vehicle below").cloak.state =
+            glasnost_sim::cloak::CloakState::Cloaked;
+        assert!(glasnost_sim::cloak::hidden_from(&w, below, Some(H)));
+        assert!(
+            !drop_here(&w, H, held),
+            "{:?}",
+            w.cells.list(at, glasnost_sim::world::Layer::Ground)
+        );
     }
 }
