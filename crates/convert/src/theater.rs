@@ -577,6 +577,20 @@ impl Catalogue {
                 let show = String::from_utf8_lossy(name).into_owned();
                 match read(name).map(|b| tile_info(&b)) {
                     Some(Ok(mut i)) => {
+                        // spec: S-0106 Edge cases (a slope code outside 0 … 20: the cell is flat and the importer warns about the tile)
+                        let bad: Vec<String> = i
+                            .cells
+                            .iter()
+                            .flatten()
+                            .filter(|c| c.shape() != c.slope)
+                            .map(|c| c.slope.to_string())
+                            .collect();
+                        if !bad.is_empty() {
+                            warnings.push(format!(
+                                "tile {t}: {show} has slope codes outside 0 … 20 ({}); those cells are flat (S-0106 Edge cases)",
+                                bad.join(", ")
+                            ));
+                        }
                         i.variants = u8::try_from(img.variants.len()).unwrap_or(u8::MAX);
                         info = i;
                     }

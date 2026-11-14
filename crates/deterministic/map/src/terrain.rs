@@ -47,8 +47,20 @@ pub mod land {
 pub struct TileCell {
     /// Terrain code, 0 … 15 in valid data.
     pub terrain_code: u8,
-    /// Slope shape (S-0106), 0 … 20 in valid data.
+    /// Slope shape (S-0106), 0 … 20 in valid data; see [`TileCell::shape`].
     pub slope: u8,
+}
+
+/// The highest slope shape (S-0106: shapes 0 … 20).
+const MAX_SHAPE: u8 = 20; // spec: S-0106 Edge cases (shape values 0 … 20)
+
+impl TileCell {
+    /// The slope shape this tile cell gives a cell: its slope code, or 0
+    /// (flat) for a code outside 0 … 20.
+    // spec: S-0106 Edge cases (a slope code outside 0 … 20: the cell is flat, shape 0)
+    pub fn shape(self) -> u8 {
+        if self.slope > MAX_SHAPE { 0 } else { self.slope }
+    }
 }
 
 /// One tile of the theater.
@@ -360,7 +372,7 @@ pub fn recalc(grid: &mut CellGrid, c: CellXY, rules: &RecalcRules<'_>) -> Recalc
                     .get(usize::from(cell.sub_tile) % n)
                     .copied()
                     .flatten()
-                    .map_or(0, |tc| tc.slope)
+                    .map_or(0, TileCell::shape)
             } else {
                 0
             };
@@ -369,8 +381,8 @@ pub fn recalc(grid: &mut CellGrid, c: CellXY, rules: &RecalcRules<'_>) -> Recalc
         land_type = o.land;
         smoothed = true;
     } else if let Some(tc) = usable.filter(|_| (0..count).contains(&cell.tile)) {
-        // spec: S-0010 claim 6 (tile case: the slope shape of the tile cell)
-        new.slope = tc.slope;
+        // spec: S-0010 claim 6 (tile case: the slope shape of the tile cell), S-0106 Edge cases (a code outside 0 … 20 is flat)
+        new.slope = tc.shape();
         let tib = overlay.filter(|o| o.tiberium);
         // spec: S-0211 claims 5 and 7 (row 4: ore on slope shapes 0 … 4; removed on 5 and above)
         land_type = match tib {
