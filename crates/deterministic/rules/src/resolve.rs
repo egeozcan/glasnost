@@ -518,7 +518,17 @@ fn overlay(base: &mut Node, own: &Node, path: &mut Path) {
                 }
                 Some(i) => overlay(&mut base_members[i].value, &om.value, path),
                 None if matches!(om.value.value, Value::Null) => {}
-                None => base_members.push(om.clone()),
+                // nocite: our own rules format (PLAN.md 4.6, #328): a new member is overlaid on nothing, so a set operation becomes its list before heirs see it
+                None => {
+                    let mut value = empty_object();
+                    overlay(&mut value, &om.value, path);
+                    value.span = om.value.span;
+                    base_members.push(Member {
+                        key: om.key.clone(),
+                        key_span: om.key_span,
+                        value,
+                    });
+                }
             }
         }
         path.pop();
