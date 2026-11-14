@@ -593,8 +593,10 @@ fn resolve_instance(
     }
     let own = node.get(id)?.clone();
     visiting.push(id.to_owned());
+    // nocite: our own rules format (PLAN.md 4.6: `null` removes a key; a removed `inherits` names no parents)
     let parents = match own.get("inherits") {
         None => Vec::new(),
+        Some(p) if matches!(p.value, Value::Null) => Vec::new(),
         Some(p) => string_list(p).unwrap_or_else(|| {
             errors.push(error(format!(
                 "{collection}.{id}: inherits must be a list of names"
