@@ -1494,6 +1494,33 @@ fn claim_17_engineer_enters_the_hut() {
     }
 }
 
+// spec: S-0511 claim 17 (every infantry unit forgets the hut as a target), S-0301 claim 4 (a cleared target resets the burst counter), S-0107 claim 11, Changes of target (the loss of the target is tested at the change: the attack state ends at once)
+#[test]
+fn claim_17_forgetting_the_hut_target_resets_the_burst_and_the_attack_state() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let h = hut(&mut w, at(3, 3));
+    let e = engineer(&mut w, at(3, 2));
+    let a = spawn(&mut w, Kind::Infantry, "WALKER", at(8, 8));
+    {
+        let o = w.obj_mut(a).unwrap();
+        o.target = Some(Target::Object(h));
+        o.combat.burst = 1;
+        let s = o.infantry.as_mut().expect("infantry state");
+        s.attack = true;
+        s.watch = Some(Target::Object(h));
+    }
+    assert!(hut::engineer_entered_hut(&mut w, e, h));
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, None, "the hut is forgotten as a target");
+    assert_eq!(o.combat.burst, 0, "the burst counter is reset");
+    assert!(
+        !o.infantry.as_ref().unwrap().attack,
+        "the attack state ends"
+    );
+}
+
 // spec: S-0511 claim 18 (the start piece: the nearest start ramp or pier on the start-side ray; a pier is restored with the bridge two steps toward its start side; quirks.repair_walk_unbounded)
 #[test]
 fn claim_18_which_bridge_is_repaired() {
