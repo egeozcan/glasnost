@@ -1860,6 +1860,10 @@ impl Builder<'_> {
         }
         if kind == Kind::Infantry {
             self.infantry_art(rec, kind, index, t);
+            // spec: S-0215 Import mapping (the infantry type whose identifier matches the name fixed by the original without regard to case carries the named area-fire deployer flag; no match: no type has it) and Terms (#232)
+            if t.name.eq_ignore_ascii_case(b"DESO") {
+                rec.put("named_area_fire_deployer", jsonc::boolean(true));
+            }
         }
         self.unit_combat(rec, kind, index, t);
         self.type_econ(rec, kind, index, t);

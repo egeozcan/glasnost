@@ -1197,14 +1197,30 @@ fn process_unload_infantry(w: &mut World, id: ObjectId) -> i32 {
         let slot = if spray { 0 } else { 1 };
         let area = crate::combat::weapon::slot_weapon(w, id, slot)
             .is_some_and(|x| w.rules().combat.weapon(x).area_fire);
-        if area && let Some(ob) = w.obj_mut(id) {
-            // spec: S-0215 claim 30 (a deploy weapon with the area-fire flag: a unit of any type but the one singled out by name takes its own cell as its target); Q-3100 (interim: no type is singled out, in both positions of quirks.named_deploy_area_fire, so the named type's rows are not built) (#232)
+        // spec: S-0215 r139 claim 30, Terms and Import mapping (the type singled out by name carries the named area-fire deployer flag; quirks.named_deploy_area_fire off ignores it, Edge cases and quirks; Q-3100) (#232)
+        let named = w.rules().quirks.named_deploy_area_fire
+            && w.rules()
+                .unit(o.kind, o.type_index)
+                .is_some_and(|u| u.raw.named_area_fire_deployer.unwrap_or(false));
+        if area
+            && !named
+            && let Some(ob) = w.obj_mut(id)
+        {
+            // spec: S-0215 claim 30 (a deploy weapon with the area-fire flag: a unit of the type singled out by name aims at nothing new, a unit of any other type takes its own cell as its target)
             crate::spawn::set_own_target(ob, Some(Target::Cell(o.pos.cell())));
             // spec: S-0301 claim 5, Moment of a retarget's let-go (at the change of the firer's target)
             crate::emitters::retarget_let_go(w, id);
         }
-        // spec: S-0215 claim 30 (undeployed: the undeploy delay when 0 or more, else 450 ticks)
-        if delay >= 0 { delay } else { NO_RULE_DELAY }
+        if delay >= 0 {
+            // spec: S-0215 claim 30 (undeployed, undeploy delay 0 or more: that delay, in ticks)
+            delay
+        } else if area && named {
+            // spec: S-0215 claim 30 (undeployed, negative undeploy delay, area-fire deploy weapon, the type singled out by name: the frame count of its deploy sequence + 1)
+            frame_count(w, id, Seq::Deploy).wrapping_add(1)
+        } else {
+            // spec: S-0215 claim 30 (undeployed, negative undeploy delay, any other case: 450 ticks)
+            NO_RULE_DELAY
+        }
     };
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0215 claim 30 (in every case it forces guard and clears its destination)

@@ -9997,7 +9997,7 @@
           "default": true
         },
         "named_deploy_area_fire": {
-          "description": "The deploy area-fire rule singles out one infantry type by name. Not consulted: the\narea-fire part of S-0215 claim 30 is not built (`process.rs`) (#327).",
+          "description": "The deploy area-fire rule singles out one infantry type by name, the type that carries\nthe named area-fire deployer flag. Off: the flag is ignored and that type takes its own\ncell like any other. Consulted in `process.rs`, *unload* for infantry (#232).",
           "type": "boolean",
           "default": true
         },
