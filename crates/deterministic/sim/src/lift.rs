@@ -239,7 +239,7 @@ pub fn seize_hit(
     damage: i32,
     warhead: crate::combat::data::WarheadId,
 ) {
-    // spec: S-0607 claim 2 (the hit does nothing at all when the firer has left play)
+    // spec: S-0607 claim 2 (the hit does nothing at all when the firer has left play); Q-3119 (interim: an open-topped transport's passenger, off the map, counts as having left play, as claim 21 counts going inside a transport, so its seizing hit does nothing; the glossary keeps such a passenger in play) (#285)
     let Some(f) = firer.filter(|&f| w.obj(f).is_some_and(|o| o.on_map)) else {
         return;
     };
