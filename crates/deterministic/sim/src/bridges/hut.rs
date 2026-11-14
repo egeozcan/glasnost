@@ -290,15 +290,21 @@ fn forget_and_scatter(w: &mut World, engineer: ObjectId, hut: ObjectId) {
         .map(|o| o.id)
         .collect();
     for id in ids {
+        let mut lost = false;
         if let Some(o) = w.obj_mut(id) {
             // spec: S-0511 claim 17 (every infantry unit forgets the hut as a target or destination)
             if o.target == Some(Target::Object(hut)) {
-                o.target = None;
-                crate::emitters::cleared(o);
+                crate::spawn::clear_own_target(o);
+                o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+                lost = true;
             }
             if o.dest == Some(Target::Object(hut)) {
                 o.dest = None;
             }
+        }
+        if lost {
+            // spec: S-0107 claim 11, Changes of target (the loss of the target is tested at the change, whatever rule makes it: the attack state ends at once)
+            crate::infantry::watch_test(w, id);
         }
     }
     for id in scatter {
