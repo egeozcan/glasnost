@@ -482,6 +482,17 @@ pub(super) enum Pose {
 /// cutout, while the images held follow the objects in play.
 const TRANSIENT_REDRAWS: u64 = 4;
 
+/// The pixels above which a settled voxel part or shadow image is kept as a
+/// transient image (design: render (#108)): our own bound, far above any
+/// image of ordinary art (a few hundred pixels a side) and far below S-0105
+/// claim 22's largest retained image of 4096 × 4096.
+const LARGE_PART_PIXELS: u64 = 1 << 20;
+
+/// Whether a voxel part or shadow image is large (design: render (#108)).
+fn large_image(img: &voxel::PartImage) -> bool {
+    u64::from(img.width) * u64::from(img.height) > LARGE_PART_PIXELS
+}
+
 /// The scene images released by the painter, for its next transient images
 /// to take (design: render (#104)), and the redraws ended so far.
 #[derive(Clone, Debug, Default)]
@@ -1336,8 +1347,21 @@ pub struct Painter {
     /// The composed images of sprite-body vehicles with the turret flag
     /// (S-0105 claim 12, *One image*), by their parts (scene image and
     /// offset from the draw point, in painting order): bounded by the
-    /// cached images they combine.
+    /// cached images they combine. One that combines a released large
+    /// image goes with it (design: render (#108)).
     composed: BTreeMap<Vec<(u32, i32, i32)>, Option<PlacedPart>>,
+    /// The settled voxel part and shadow images of more than
+    /// [`LARGE_PART_PIXELS`] pixels of a type other than a building's (whose
+    /// drawings are kept, not redrawn), by type and image key, each with the
+    /// last redraw that used it: kept apart from the types' image caches as
+    /// transient images and released once unused for [`TRANSIENT_REDRAWS`]
+    /// redraws, so that a model drawn very large keeps no image per pose for
+    /// ever (design: render (#108)).
+    large: BTreeMap<(Kind, usize, voxel::ImageKey), (PlacedPart, u64)>,
+    /// The settled vehicle shadow footprints whose image is large, by their
+    /// key in `footprints`, each with the last redraw that used it: released
+    /// with their images once unused, as `large` (design: render (#108)).
+    large_footprints: BTreeMap<(Kind, usize, Option<Pose>, voxel::ImageKey), u64>,
     /// Where fresh voxel draws are made (S-0105 claims 32, 34): each starts
     /// transparent, and the depth-buffered mode is on only during a fresh
     /// depth-option part draw.
@@ -5277,13 +5301,36 @@ impl<'a> Builder<'a> {
         key: voxel::ImageKey,
         draw: impl FnOnce(&mut Self) -> Option<voxel::PartImage>,
     ) -> Option<(u32, [i32; 2])> {
+        let now = self.p.pool.now;
+        // design: render (#108): a large settled image, marked used in this redraw
+        if rocked.is_none()
+            && let Some((p, used)) = self.p.large.get_mut(&(kind, idx, key))
+        {
+            *used = now;
+            return Some(*p);
+        }
         if let Some(p) = self
             .image_cache(kind, idx, rocked)
             .and_then(|c| c.get(&key))
         {
             return *p;
         }
-        let part = draw(self).and_then(|img| match rocked {
+        let img = draw(self);
+        // A building's drawing is kept and drawn again from its inputs (#145), not looked up per
+        // redraw, so its images stay settled.
+        if rocked.is_none()
+            && kind != Kind::Buildings
+            && let Some(img) = &img
+            && large_image(img)
+        {
+            // design: render (#108): kept as a transient image, not in the type's cache
+            let part = add_transient_image(&mut self.built.scene, &mut self.p.pool, img);
+            if let Some(p) = part {
+                self.p.large.insert((kind, idx, key), (p, now));
+            }
+            return part;
+        }
+        let part = img.and_then(|img| match rocked {
             None => self.add_part(&img),
             Some(_) => add_transient_image(&mut self.built.scene, &mut self.p.pool, &img),
         });
@@ -5736,6 +5783,13 @@ impl<'a> Builder<'a> {
                     as_is: None,
                 });
                 self.p.footprints.insert(fkey, footprint);
+            }
+            // design: render (#108): a large settled footprint, marked used in this redraw
+            if unpitched.is_none()
+                && let Some(Some(f)) = self.p.footprints.get(&fkey)
+                && large_image(&f.image)
+            {
+                self.p.large_footprints.insert(fkey, self.p.pool.now);
             }
             let part = match self.p.footprints.get_mut(&fkey) {
                 Some(Some(footprint)) => vehicle_shadow(
@@ -6397,6 +6451,8 @@ impl Painter {
             cutouts: BTreeMap::new(),
             pool: TransientPool::default(),
             composed: BTreeMap::new(),
+            large: BTreeMap::new(),
+            large_footprints: BTreeMap::new(),
             canvas,
             models: BTreeMap::new(),
             vpl: None,
@@ -6656,7 +6712,10 @@ impl Painter {
     /// [`Painter::set_effect_tint`], and the drawings kept from frame to
     /// frame are shaded again by [`Painter::retint_houses`]); claim 10's
     /// and claim 16's height terms and the cell light of the static objects
-    /// of the cell pass are not followed. The named palettes' tables take
+    /// of the cell pass are not followed. The building light sources are
+    /// those of the map's placed structures, collected when the view is
+    /// built: a lit building built or lost in play adds or removes no
+    /// source, though claim 12 relights on both (#152). The named palettes' tables take
     /// the effect tint with the house-colour tables (S-0103 claim 17). The
     /// house tables are all built when the game starts (S-0104 Open questions),
     /// so claim 2's third column, the tint of a table built while an effect
@@ -7034,6 +7093,9 @@ impl Painter {
             footprints,
             cutouts,
             pool,
+            large,
+            large_footprints,
+            composed,
             ..
         } = self;
         let now = pool.now;
@@ -7050,14 +7112,37 @@ impl Painter {
             keep
         });
         let mut gone_footprints = BTreeSet::new();
-        footprints.retain(|&(kind, idx, pose, _), footprint| {
-            let keep = pose.is_none_or(|pose| !gone.contains(&(kind, idx, pose)));
+        footprints.retain(|&(kind, idx, pose, key), footprint| {
+            // design: render (#108): a large settled footprint unused for a while goes too
+            let stale_large = large_footprints
+                .get(&(kind, idx, pose, key))
+                .is_some_and(|&used| stale(used));
+            let keep = pose.is_none_or(|pose| !gone.contains(&(kind, idx, pose))) && !stale_large;
             if !keep && let Some(f) = footprint {
                 gone_footprints.insert(f.id);
                 released.extend(f.as_is.flatten().map(|p| p.0));
             }
             keep
         });
+        large_footprints.retain(|_, used| !stale(*used));
+        // design: render (#108): a large settled image goes when unused, and a composed image
+        // made from one goes with it
+        large.retain(|_, (part, used)| {
+            let keep = !stale(*used);
+            if !keep {
+                released.insert(part.0);
+            }
+            keep
+        });
+        let mut gone_composed = Vec::new();
+        composed.retain(|parts, image| {
+            let keep = parts.iter().all(|p| !released.contains(&p.0));
+            if !keep && let Some(p) = image {
+                gone_composed.push(p.0);
+            }
+            keep
+        });
+        released.extend(gone_composed);
         cutouts.retain(|(footprint, parts, _), (cut, used)| {
             let keep = !stale(*used)
                 && !gone_footprints.contains(footprint)

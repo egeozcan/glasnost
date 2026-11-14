@@ -1347,9 +1347,33 @@ fn drift(w: &mut World, p: &mut Particle) {
     }
 }
 
+/// The deck height of a high-bridge cell `c` at or below a gas particle at
+/// height `z`, when `quirks.gas_through_bridge_deck` is off (claim 19
+/// **Off**); `None` otherwise.
+fn deck_under(w: &World, c: CellXY, z: i32) -> Option<i32> {
+    // spec: S-0613 claim 19 (switch on: a gas particle has no on-deck state)
+    if w.rules().quirks.gas_through_bridge_deck || !w.high_bridge(c) {
+        return None;
+    }
+    let level = w.cells.cell(c).map_or(0, |c| i32::from(c.level));
+    // spec: S-0613 claim 19 Off and S-0616 claim 14 (the deck height (height level × 104) + 416, one value for the cell)
+    let deck = level * 104 + DECK;
+    // spec: S-0613 claim 19 Off (a particle at or above the deck height, tested with its height before the move)
+    (z >= deck).then_some(deck)
+}
+
+/// The height a gas particle at height `z` measures from at (x, y): the
+/// terrain *H*, or the deck height by claim 19 **Off**.
+fn ground(w: &World, x: i32, y: i32, z: i32) -> i32 {
+    // spec: S-0204 claim 2 (the containing cell)
+    let c = CellXY::new(x / 256, y / 256);
+    // spec: S-0613 claim 19 Off (the deck height in place of H for claims 9 and 11)
+    deck_under(w, c, z).unwrap_or_else(|| w.surface_at(x, y))
+}
+
 /// Claim 9, F4: the vertical speed on an even tick.
 fn vertical(w: &World, p: &mut Particle) {
-    let a = p.pos.z - w.surface_at(p.pos.x, p.pos.y);
+    let a = p.pos.z - ground(w, p.pos.x, p.pos.y, p.pos.z);
     // spec: S-0613 F4 (v_z ← max(v_z − 1, −5) when a > 5, otherwise max(v_z, 0))
     p.vel[2] = if a > HOVER {
         (p.vel[2] - 1).max(FALL_LIMIT)
@@ -1489,7 +1513,12 @@ fn damage_step(w: &mut World, sys: ObjectId, i: usize) {
     let owner = w.gas.systems.get(&sys).and_then(|s| s.owner);
     let mode = rules.mode;
     // spec: S-0613 claim 13 (every object listed in the ground layer of its cell, in listing order, S-0209 claim 13, whatever the particle's height)
-    let list: Vec<ObjectId> = w.cells.list(pos.cell(), Layer::Ground).to_vec();
+    // spec: S-0613 claim 19 Off (the bridge-deck layer for a particle at or above its cell's deck height)
+    let layer = match deck_under(w, pos.cell(), pos.z) {
+        Some(_) => Layer::Deck,
+        None => Layer::Ground,
+    };
+    let list: Vec<ObjectId> = w.cells.list(pos.cell(), layer).to_vec();
     for target in list {
         let Some(o) = w.obj(target) else { continue };
         // spec: S-0613 claim 13 (alive with health above 0, judged at the hit); S-0504 claim 10 (a sinking vessel with health left is not immune; #172)
@@ -1579,13 +1608,14 @@ pub(crate) fn move_particle(w: &World, t: &ParticleType, p: &mut Particle) {
     let y1 = F64::from_i64(i64::from(y) + i64::from(dy), mode)
         .add(p.defl[1].to_f64(), mode)
         .to_i32_common();
-    let h1 = w.surface_at(x1, y1);
+    // spec: S-0613 claim 19 Off (each position's test uses the height z before the move)
+    let h1 = ground(w, x1, y1, z);
     // spec: S-0613 F5 (z₁ = z − clamp(z − h₁ − 5, 0, 2))
     let z1 = z - (z - h1 - HOVER).clamp(0, SINK_STEP);
     // spec: S-0613 F5 ((x′, y′) = (x₁ + vₓ, y₁ + vᵧ); z′ = max(z₁ + v_z, H(x′, y′) + 5))
     let x2 = x1.wrapping_add(p.vel[0]);
     let y2 = y1.wrapping_add(p.vel[1]);
-    let z2 = (z1 + p.vel[2]).max(w.surface_at(x2, y2) + HOVER); // spec: S-0613 F5 (never below the hover height above the terrain)
+    let z2 = (z1 + p.vel[2]).max(ground(w, x2, y2, z) + HOVER); // spec: S-0613 F5 (never below the hover height above the terrain)
     p.pos = Pos::new(x2, y2, z2);
 }
 

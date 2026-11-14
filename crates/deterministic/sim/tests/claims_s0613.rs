@@ -1203,3 +1203,163 @@ fn claim_18_drift_draws_before_death_draws() {
     assert_eq!([v[0], v[1]], [expected[0], expected[1]], "drift drew first");
     assert_ne!(w.rng, a, "the death's draws followed");
 }
+
+/// The deck height of a level-0 cell: (0 + 4) × 104 (S-0616 claim 14,
+/// S-0613 claim 19 **Off**).
+const DECK: i32 = 416;
+
+/// The rules with `quirks.gas_through_bridge_deck` set to `on`.
+fn deck_rules(on: bool) -> Ruleset {
+    let mut r = rules();
+    r.globals.quirks.gas_through_bridge_deck = on;
+    r
+}
+
+/// Makes the cell of `at` a high-bridge deck cell (S-0211 claim 15).
+fn bridge(w: &mut World, at: Pos) {
+    let i = w.cells.idx(at.cell()).unwrap();
+    w.cells.deck[i] = true;
+}
+
+/// Runs `n` updates of the shared system with particle `i` brought back to
+/// the horizontal position `at` before each (no drift), and returns its
+/// height after them.
+fn settle(w: &mut World, i: usize, at: Pos, n: i32) -> i32 {
+    let s = shared(w);
+    for _ in 0..n {
+        edit(w, i, |p| {
+            p.vel[0] = 0;
+            p.vel[1] = 0;
+            p.pos = Pos::new(at.x, at.y, p.pos.z);
+        });
+        gas::system_turn(w, s);
+        w.tick += 1;
+    }
+    list(w, s)[i].pos.z
+}
+
+/// spec: S-0613 claim 19 (with `quirks.gas_through_bridge_deck` on, a gas particle made at a
+/// high bridge's deck height sinks through the deck: below the deck's height after its first
+/// odd-tick move, then toward 5 leptons above the terrain under the bridge)
+#[test]
+fn claim_19_gas_sinks_through_the_deck() {
+    let mut w = game(&deck_rules(true));
+    to_even(&mut w);
+    let at = centre(0, 0);
+    bridge(&mut w, at);
+    let i = puff(&mut w, "WISP", Pos::new(at.x, at.y, DECK));
+    edit(&mut w, i, |p| p.life = 1000);
+    assert!(
+        settle(&mut w, i, at, 2) < DECK,
+        "below the deck's height after the first odd-tick move"
+    );
+    assert_eq!(
+        settle(&mut w, i, at, 200),
+        5,
+        "5 above the terrain under the bridge"
+    );
+}
+
+/// spec: S-0613 claim 19 **Off** (with `quirks.gas_through_bridge_deck` off, a gas particle at or
+/// above its high-bridge cell's deck height treats the deck as its ground: claims 9 and 11 settle it
+/// 5 leptons above the deck; the deck height is one value for the cell, (level + 4) × 104, not
+/// H + 416 on a slope)
+#[test]
+fn claim_19_off_gas_settles_on_the_deck() {
+    for (slope, start) in [(0, DECK), (0, DECK + 300), (2, DECK + 1)] {
+        let mut w = game(&deck_rules(false));
+        to_even(&mut w);
+        let at = centre(0, 0);
+        bridge(&mut w, at);
+        if let Some(cell) = w.cells.grid.get_mut(at.cell()) {
+            cell.slope = slope;
+        }
+        if slope != 0 {
+            assert!(
+                w.surface_at(at.x, at.y) + DECK > start,
+                "H + 416 is above the start"
+            );
+        }
+        let i = puff(&mut w, "WISP", Pos::new(at.x, at.y, start));
+        edit(&mut w, i, |p| p.life = 1000);
+        assert_eq!(
+            settle(&mut w, i, at, 200),
+            DECK + 5,
+            "5 above the deck (slope {slope}, start {start})"
+        );
+    }
+}
+
+/// spec: S-0613 claim 19 **Off** (below its cell's deck height, or over a cell without a high
+/// bridge, a gas particle uses H again and sinks to 5 leptons above the terrain; it does not return
+/// to a deck it is below)
+#[test]
+fn claim_19_off_gas_below_a_deck_or_off_a_bridge_uses_the_terrain() {
+    for (high_bridge, start) in [(true, DECK - 1), (false, DECK + 100)] {
+        let mut w = game(&deck_rules(false));
+        to_even(&mut w);
+        let at = centre(0, 0);
+        if high_bridge {
+            bridge(&mut w, at);
+        }
+        let i = puff(&mut w, "WISP", Pos::new(at.x, at.y, start));
+        edit(&mut w, i, |p| p.life = 1000);
+        assert_eq!(
+            settle(&mut w, i, at, 200),
+            5,
+            "5 above the terrain (high bridge {high_bridge}, start {start})"
+        );
+    }
+}
+
+/// spec: S-0613 claims 13 and 19 (switch on: the hits list the ground layer whatever the
+/// particle's height, so an object on the deck is not hit while the cloud is level with the deck;
+/// **Off**: a particle at or above the deck height lists the bridge-deck layer, one below it the
+/// ground layer)
+#[test]
+fn claim_19_hits_take_the_layer_of_the_switch() {
+    use glasnost_sim::world::Layer;
+    // (switch on, particle height, expect the ground object hit, expect the deck object hit)
+    for (on, z, ground, deck) in [
+        (true, DECK + 5, true, false),
+        (false, DECK + 5, false, true),
+        (false, DECK, false, true),
+        (false, DECK - 1, true, false),
+    ] {
+        let mut w = game(&deck_rules(on));
+        let c = testkit::mid(SIZE, 0, 0);
+        let at = Pos::centre(c, 0);
+        bridge(&mut w, at);
+        let below = testkit::spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, c, 0);
+        let n = testkit::mid(SIZE, 2, 0);
+        let above = testkit::spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, n, 0);
+        w.cells.leave(n, Layer::Ground, above);
+        w.cells.enter(c, Layer::Deck, above, false);
+        {
+            let o = w.obj_mut(above).unwrap();
+            o.layer = Layer::Deck;
+            o.pos = Pos::new(at.x, at.y, DECK);
+        }
+        let i = puff(&mut w, "FOG", Pos::new(at.x, at.y, z));
+        edit(&mut w, i, |p| p.life = 1000);
+        let s = shared(&w);
+        let mut hit = (false, false);
+        for _ in 0..10 {
+            // Hold the cloud at its height in its cell.
+            edit(&mut w, i, |p| {
+                p.vel = [0, 0, 0];
+                p.pos = Pos::new(at.x, at.y, z);
+            });
+            w.effects.clear();
+            gas::system_turn(&mut w, s);
+            w.tick += 1;
+            for e in &w.effects {
+                if let Effect::GasHit { id, .. } = e {
+                    hit.0 |= *id == below;
+                    hit.1 |= *id == above;
+                }
+            }
+        }
+        assert_eq!(hit, (ground, deck), "switch on {on}, height {z}");
+    }
+}

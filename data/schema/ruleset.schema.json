@@ -9671,6 +9671,11 @@
           "type": "boolean",
           "default": true
         },
+        "gas_through_bridge_deck": {
+          "description": "A gas particle has no on-deck state: made on a high bridge's deck, it sinks through the deck toward 5 leptons above the terrain and hits the ground layer; off: a gas particle at or above its cell's deck height treats the deck as its ground and hits the bridge-deck layer (`glasnost_sim::gas`).",
+          "type": "boolean",
+          "default": true
+        },
         "gate_reverse_snaps": {
           "description": "A gate door that reverses from closing to opening is at rest open at the gate's next update; off: the reopening takes as long as the closing had run.",
           "type": "boolean",

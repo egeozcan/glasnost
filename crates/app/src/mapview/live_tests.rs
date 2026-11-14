@@ -1077,6 +1077,152 @@ fn overlays_changed_in_play_are_redrawn() {
     assert_eq!(scene.items.len(), before);
 }
 
+/// The palette rows each drawing of `items` takes, as it would draw: a lit
+/// drawing's table rows with its brightness and mask.
+fn drawn_rows<'a>(
+    scene: &Scene,
+    items: impl Iterator<Item = &'a glasnost_render::scene::Item>,
+) -> Vec<(Vec<[u16; 256]>, u16, u16)> {
+    items
+        .filter_map(|i| match i.paint {
+            Paint::Lit(s) | Paint::LitDiamond(s) | Paint::Translucent(s, _) => Some((
+                scene.rows[s.base as usize..][..usize::from(s.rows)].to_vec(),
+                s.rho,
+                s.mask,
+            )),
+            Paint::Row(r) | Paint::Diamond(r) => Some((vec![scene.rows[r]], 0, 0)),
+            Paint::Shadow | Paint::Pixel(_) => None,
+        })
+        .collect()
+}
+
+/// spec: S-0104 claims 4, 5 and 9 (the game's lighting changed: the cells are
+/// lit again) and S-0112 claims 1 to 9 (the overlays changed in play, drawn
+/// from the game's cells, take their cells' light): the overlays changed
+/// before a relight are drawn again with the new light, as those changed
+/// after it are (#152).
+#[test]
+fn a_relight_draws_the_changed_overlays_again() {
+    let (import, catalogue, assets) = context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let wall = |live: &mut Live| {
+        // A clear level-0 cell of the synthetic map, lit by the map's light.
+        let cell = live.world.cells.grid.get_mut(testkit::cell(0, 6)).unwrap();
+        assert_eq!(cell.overlay, glasnost_map::NO_OVERLAY);
+        // FENCEX (the import's overlay 2) with data value 1.
+        cell.overlay = 2;
+        cell.overlay_data = 1;
+    };
+    // An invented change of the current ambient, hundredths.
+    let dim = |live: &mut Live| live.world.lighting.current += 37;
+    // The drawings after the cell pass that name no object: the changed
+    // overlays (the synthetic game draws no other).
+    let overlays = |scene: &Scene| {
+        drawn_rows(
+            scene,
+            scene.items[scene.cell_pass_len..]
+                .iter()
+                .filter(|i| i.object.is_none()),
+        )
+    };
+    // The wall built before the light changes.
+    let (mut before, mut scene_before) = synthetic_live();
+    before.redraw(&inputs, &mut scene_before);
+    wall(&mut before);
+    before.redraw(&inputs, &mut scene_before);
+    let old = overlays(&scene_before);
+    dim(&mut before);
+    before.redraw(&inputs, &mut scene_before);
+    // The wall built after it.
+    let (mut after, mut scene_after) = synthetic_live();
+    after.redraw(&inputs, &mut scene_after);
+    dim(&mut after);
+    after.redraw(&inputs, &mut scene_after);
+    wall(&mut after);
+    after.redraw(&inputs, &mut scene_after);
+    let drawn = overlays(&scene_after);
+    assert!(!drawn.is_empty(), "the wall is drawn lit");
+    assert!(drawn != old, "the new light shades the wall otherwise");
+    assert!(overlays(&scene_before) == drawn, "the wall built before");
+}
+
+/// spec: S-0104 claims 4, 5 and 9 (the game's lighting changed: the cells are
+/// lit again; objects take their cell's light when drawn): the mobiles
+/// drawn on the tick of a relight take the new light, as they do on the
+/// ticks after it (#152).
+#[test]
+fn mobiles_drawn_with_a_relight_take_the_new_light() {
+    use glasnost_sim::rules::Kind as SimKind;
+    // The combat ruleset's infantry, drawn with the test art's infantry sprite.
+    let rules = RULES.replace("1=MANX\n", "1=MANX\n2=WALKER\n");
+    let art = format!("{}[WALKER]\nSequence=MANSEQ\n", super::tests::ART);
+    let (mut import, catalogue, assets) = super::tests::context_full(&rules, &art);
+    let i = import.outcome.registries[&Kind::Infantry]
+        .iter()
+        .position(|t| t.name == b"WALKER")
+        .unwrap();
+    import.arts.insert(
+        (Kind::Infantry, i),
+        super::tests::art_of("WALKER", "manx.shp"),
+    );
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut world = testkit::game_with(&testkit::combat_ruleset(), 24, 3);
+    let walker = testkit::spawn(
+        &mut world,
+        SimKind::Infantry,
+        "WALKER",
+        0,
+        testkit::mid(24, 0, 0),
+        16384,
+    );
+    let sim_rules = world.rules_arc();
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, sim_rules, testkit::setup(3), Vec::new()),
+    );
+    let mut scene = built.scene;
+    let code = sim_code(walker);
+    let walker_rows =
+        |scene: &Scene| drawn_rows(scene, scene.items.iter().filter(|i| i.object == Some(code)));
+    live.redraw(&inputs, &mut scene);
+    let lit = walker_rows(&scene);
+    assert!(!lit.is_empty(), "the walker is drawn");
+    // An invented change of the current ambient, hundredths.
+    live.world.lighting.current += 37;
+    live.redraw(&inputs, &mut scene);
+    let relit = walker_rows(&scene);
+    assert!(relit != lit, "the new light shades the walker otherwise");
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(relit, walker_rows(&scene));
+}
+
 // ---------------------------------------------------------------------------
 // Combat in the live view (synthetic combat ruleset, invented overlay art)
 // ---------------------------------------------------------------------------
@@ -4730,6 +4876,146 @@ fn particles_draw_their_sprites_in_the_air_layer() {
     live.set_debug_markers(true);
     live.redraw(&inputs, &mut scene);
     assert_eq!(effect_items(&scene, true), 1, "the debug view marks it");
+}
+
+/// #424: spec: S-0613 claim 19 (a gas particle is drawn at its own world height with the particle
+/// depth of S-0616 claim 27 and no rule of its own for bridges, in either position of
+/// `quirks.gas_through_bridge_deck`: only the simulation's height differs) and S-0616 claim 30
+/// (the air layer): the same particle at the deck's height and 5 above it draws the same items
+/// whether or not its cell carries a high bridge
+#[test]
+fn a_gas_particle_draws_alike_over_a_high_bridge() {
+    use glasnost_num::F32;
+    use glasnost_render::scene::Group;
+    use glasnost_rules::sim::{ParticleSystemType, ParticleType};
+    use glasnost_sim::gas::{Particle, ParticleSystem};
+    use glasnost_sim::world::Pos;
+    let rules = format!("{RULES}[Particles]\n0=PUFF\n[PUFF]\nX=1\n");
+    let (mut import, catalogue, mut assets) = super::tests::context_full(&rules, super::tests::ART);
+    let i = import.outcome.registries[&Kind::Particles]
+        .iter()
+        .position(|t| t.name == b"PUFF")
+        .unwrap();
+    import.arts.insert(
+        (Kind::Particles, i),
+        super::tests::art_of("PUFF", "puff.shp"),
+    );
+    assets.insert(b"puff.shp", shp((20, 20), 4, (3, 3), (2, 2)));
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let mut r = testkit::ruleset();
+    r.registries
+        .entry("particles".into())
+        .or_default()
+        .push("PUFF".into());
+    r.sim.particles.insert(
+        "PUFF".into(),
+        ParticleType {
+            behaves_like: Some("gas".into()),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("particle_systems".into())
+        .or_default()
+        .push("CLOUD".into());
+    r.sim.particle_systems.insert(
+        "CLOUD".into(),
+        ParticleSystemType {
+            holds_what: Some("PUFF".into()),
+            ..Default::default()
+        },
+    );
+    // The deck height of a level-0 cell (S-0616 claim 14).
+    let deck = 416;
+    let drawn = |high_bridge: bool, z: i32| {
+        let sim_rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic"));
+        let world = glasnost_sim::load::new_game(
+            sim_rules.clone(),
+            &map,
+            testkit::catalogue(),
+            &testkit::setup(5),
+        )
+        .unwrap();
+        let (mut built, painter) = build_parts(&inputs, true);
+        let mut live = Live::new(
+            &inputs,
+            &mut built,
+            painter,
+            (world, sim_rules.clone(), testkit::setup(5), Vec::new()),
+        );
+        let mut scene = built.scene;
+        live.set_debug_markers(false);
+        live.step();
+        // A level-0 cell of the synthetic map, clear of its plateau.
+        let pos = Pos::centre(testkit::cell(0, 6), z);
+        if high_bridge {
+            let c = live.world.cells.idx(pos.cell()).unwrap();
+            live.world.cells.deck[c] = true;
+        }
+        let cloud = sim_rules.gas.system("CLOUD").unwrap();
+        let mut system = ParticleSystem::new(
+            cloud,
+            &sim_rules.gas.systems[cloud as usize],
+            pos,
+            None,
+            sim_rules.mode,
+        );
+        system.particles = vec![Particle {
+            id: ObjectId(9001),
+            type_index: 0,
+            pos,
+            vel: [0; 3],
+            defl: [F32(0); 2],
+            life: 100,
+            countdown: 0,
+            stage: 1,
+            dead: false,
+            speed: F32(0),
+            dir: [F32(0); 3],
+            fvel: [F32(0); 3],
+            step: [0; 3],
+            advance: 0,
+            translucency: 0,
+            colour: Default::default(),
+            origin: pos,
+            aim: pos,
+        }];
+        live.world.gas.systems.insert(ObjectId(9000), system);
+        live.redraw(&inputs, &mut scene);
+        assert_eq!(live.counts.particles_drawn, 1);
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Effects && !i.provisional)
+            .map(|i| {
+                let img = &scene.images[i.image as usize];
+                (
+                    i.x,
+                    i.y,
+                    img.width(),
+                    img.pixels().to_vec(),
+                    format!("{:?} {:?} {:?}", i.paint, i.depth, i.test),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    for z in [deck, deck + 5] {
+        let open = drawn(false, z);
+        assert_eq!(open.len(), 1, "one sprite item at height {z}");
+        assert_eq!(drawn(true, z), open, "height {z}");
+    }
 }
 
 /// The rules of the protection tests: the curtain selector names table
