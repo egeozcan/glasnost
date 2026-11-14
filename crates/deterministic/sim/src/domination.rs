@@ -332,11 +332,7 @@ pub fn launch(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
 
 /// The registration index of animation type `name`.
 fn anim_index(w: &World, name: &str) -> Option<u32> {
-    w.rules()
-        .animations
-        .iter()
-        .position(|a| a.name.eq_ignore_ascii_case(name))
-        .and_then(|i| u32::try_from(i).ok())
+    w.rules().anim_index(name.as_bytes())
 }
 
 /// Starts a domination animation of type `anim` at `pos` in the update

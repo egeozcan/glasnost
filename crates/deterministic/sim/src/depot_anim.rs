@@ -112,10 +112,7 @@ fn create(
 ) -> Option<ObjectId> {
     let rules = w.rules_arc();
     // spec: S-0108 Terms (the names of an animation type are looked up when a slot starts; one that names no animation type starts nothing)
-    let index = rules
-        .animations
-        .iter()
-        .position(|a| a.name.eq_ignore_ascii_case(name))?;
+    let index = rules.anim_index(name.as_bytes())? as usize;
     let a = &rules.animations[index];
     let pos = w.obj(k)?.pos;
     // spec: S-0109 claim 29 and S-0202 claim 10 (an animation's creation and start-event draws at the creation, on the scenario stream, claim 28)

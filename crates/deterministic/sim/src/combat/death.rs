@@ -1022,10 +1022,9 @@ fn death_anim(w: &mut World, name: &str, pos: Pos) {
         return;
     }
     let walker = rules
-        .animations
-        .iter()
-        .position(|a| a.name.eq_ignore_ascii_case(name))
-        .filter(|&i| rules.animations[i].flaming);
+        .anim_index(name.as_bytes())
+        .map(|i| i as usize)
+        .filter(|&i| rules.animations.get(i).is_some_and(|a| a.flaming));
     match walker {
         // spec: S-0615 claim 1 (kind 4's type is a burning walker when it has the burning-walker flag; the flag decides, whatever the kind, claims 4 to 11)
         Some(i) => crate::walker::create(w, u32::try_from(i).unwrap_or(u32::MAX), pos),

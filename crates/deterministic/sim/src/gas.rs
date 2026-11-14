@@ -1107,10 +1107,8 @@ pub fn virus_death(w: &mut World, pos: Pos, owner: Option<HouseId>, extra: bool)
         return;
     };
     let Some((index, a)) = rules
-        .animations
-        .iter()
-        .enumerate()
-        .find(|(_, a)| a.name.eq_ignore_ascii_case(&name))
+        .anim_index(name.as_bytes())
+        .and_then(|i| rules.animations.get(i as usize).map(|a| (i as usize, a)))
     else {
         return;
     };
