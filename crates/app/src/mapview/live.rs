@@ -464,6 +464,11 @@ pub struct Live {
     /// The tick's layer moments of S-0102 claim 4 the simulation reported,
     /// in order, until the layers take them.
     layer_moments: Vec<super::layers::Moment>,
+    /// The game tick whose mobile objects [`Live::after_tick`] or
+    /// [`Live::resume`] placed in their layers, until the redraw that
+    /// follows takes it: that redraw evaluates them again only for a game
+    /// at another tick (design: render (#146)).
+    synced: Option<i32>,
     /// The drawing's quirk switches (S-0102 Edge cases).
     view_quirks: super::quirks::ViewQuirks,
     /// Images and rows the combat drawing added.
@@ -1373,6 +1378,7 @@ impl Live {
             ground: GroundLayer::default(),
             layers: super::layers::Layers::default(),
             layer_moments: Vec::new(),
+            synced: None,
             view_quirks: super::quirks::ViewQuirks::default(),
             cache: Cache::default(),
             transients: Vec::new(),
@@ -1611,6 +1617,7 @@ impl Live {
         self.laps.slots += self.lap_end(&mut lap);
         self.sync_layers(true);
         self.sync_ground();
+        self.synced = Some(self.world.tick);
         self.laps.layers += self.lap_end(&mut lap);
     }
 
@@ -1682,6 +1689,7 @@ impl Live {
         self.update_slots();
         self.sync_layers(true);
         self.sync_ground();
+        self.synced = Some(self.world.tick);
     }
 
     /// Draws the game's animations in play that the drawing does not show
@@ -1855,11 +1863,17 @@ impl Live {
     /// Newcomers of one tick enter as mobile objects, then animations by
     /// creation, then particles by object number (our order within a tick).
     fn sync_layers(&mut self, tick: bool) {
-        use super::slots::Layer;
         let events_only = self.view_quirks.layer_change_on_events_only;
         let moments = std::mem::take(&mut self.layer_moments);
         self.layers
             .evaluate_mobiles(&self.world, tick, events_only, &moments);
+        self.sync_entrants();
+    }
+
+    /// [`Live::sync_layers`]' animations, particles, projectiles and debris
+    /// pieces.
+    fn sync_entrants(&mut self) {
+        use super::slots::Layer;
         let anims: BTreeMap<u32, Layer> = self.anims.iter().map(|a| (a.serial, a.layer)).collect();
         let particles: BTreeSet<ObjectId> = self
             .world
@@ -1895,26 +1909,26 @@ impl Live {
         for (serial, layer) in anims {
             if layer != Layer::Ground && listed.insert(Entrant::Anim(serial)) {
                 // spec: S-0102 claims 4 and 7 (an animation placed in a layer other than ground becomes its last)
-                self.layers.place(Entrant::Anim(serial), layer);
+                self.layers.place_new(Entrant::Anim(serial), layer);
             }
         }
         for id in particles {
             if listed.insert(Entrant::Particle(id)) {
                 // spec: S-0616 claim 30 and S-0102 claim 3 (a particle enters the air layer when it is made, at its end, and keeps its place until removed)
-                self.layers.place(Entrant::Particle(id), Layer::Air);
+                self.layers.place_new(Entrant::Particle(id), Layer::Air);
             }
         }
         for (id, flat) in projectiles {
             if listed.insert(Entrant::Projectile(id)) {
                 // spec: S-0102 claims 3, 4 and 7 (a projectile is in the air layer, or the surface layer when its image is flat; placed at the layer's end)
                 let layer = if flat { Layer::Surface } else { Layer::Air };
-                self.layers.place(Entrant::Projectile(id), layer);
+                self.layers.place_new(Entrant::Projectile(id), layer);
             }
         }
         for id in pieces {
             if listed.insert(Entrant::Piece(id)) {
                 // spec: S-0102 claims 3, 4 and 7 (a voxel animation is in the air layer; placed at the layer's end)
-                self.layers.place(Entrant::Piece(id), Layer::Air);
+                self.layers.place_new(Entrant::Piece(id), Layer::Air);
             }
         }
     }
@@ -3601,7 +3615,12 @@ impl Live {
         // design: render (#145) (the benchmark's parts of the scene update)
         let mut lap = self.lap_start();
         self.learn_types(inputs);
-        self.sync_layers(false);
+        // design: render (#146) (the mobile objects the tick's sync placed are not evaluated again for the game at that tick: objects enter and leave the map only in a tick, and orders wait for the next)
+        if self.synced.take() == Some(self.world.tick) {
+            self.sync_entrants();
+        } else {
+            self.sync_layers(false);
+        }
         if !self.view_quirks.unsorted_upper_layers {
             // spec: S-0102 Edge cases (quirks.unsorted_upper_layers off: the other layers are sorted like the ground layer, by the keys of claim 5)
             let keys = self.upper_keys();

@@ -160,6 +160,15 @@ impl Layers {
         }
     }
 
+    /// [`Layers::place`] for an entrant in no list: the end of `layer`'s
+    /// list, with no list to take it out of (design: render (#146)).
+    pub fn place_new(&mut self, e: super::live::Entrant, layer: Layer) {
+        if layer != Layer::Ground {
+            // spec: S-0102 claims 4 and 7 (an object entering a layer other than ground becomes the last of its list)
+            self.lists.entry(layer).or_default().push(e);
+        }
+    }
+
     /// Takes `e` out of every list.
     pub fn remove(&mut self, e: super::live::Entrant) {
         for v in self.lists.values_mut() {
