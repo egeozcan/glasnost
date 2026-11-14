@@ -497,7 +497,7 @@ pub fn natural_smoke_yellow(w: &mut World, id: ObjectId) {
     s.timer = s
         .timer
         .to_f64()
-        .mul(crate::rules::nearest_double("1.5"), m)
+        .mul(crate::consts::THREE_HALVES, m)
         .to_f32(m);
 }
 
@@ -575,7 +575,7 @@ pub fn damage_sparks(w: &mut World, id: ObjectId) {
 /// The spark chance scale of S-0616 claim 1 and F10.
 fn spark_scale() -> F64 {
     // spec: S-0616 Constants (spark chance scale 4.656612877414201 × 10⁻¹⁰)
-    crate::rules::nearest_double("4.656612877414201e-10")
+    crate::consts::DRAW_SCALE
 }
 
 /// S-0616 claim 1, sparks of a deactivated vehicle: on the ticks for which

@@ -329,9 +329,9 @@ fn approach_u_prime(w: &World, r_prime: i32, beta: i32, infantry: bool) -> i32 {
     let mode = w.rules().mode;
     // spec: S-0307 F4 and Constants (margin a: 281.6 leptons for infantry, 179.2 for vehicles, the nearest doubles)
     let margin = if infantry {
-        crate::rules::nearest_double("281.6")
+        crate::consts::APPROACH_MARGIN_INFANTRY
     } else {
-        crate::rules::nearest_double("179.2")
+        crate::consts::APPROACH_MARGIN_VEHICLE
     };
     // spec: S-0307 F4 (u = max(0, trunc(RZ₅₃(ρ′ + β − a))); ρ′ + β wraps as a 32-bit sum)
     let sum = wrap(i64::from(r_prime) + i64::from(beta));
@@ -349,7 +349,7 @@ pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec
     let mode = w.rules().mode;
     let first = approach_u_prime(w, r_prime, beta, infantry);
     // spec: S-0307 F4 and Constants (radii u′, u′ − 256, …, strictly greater than 204.8 leptons)
-    let cut = crate::rules::nearest_double("204.8");
+    let cut = crate::consts::APPROACH_RADIUS_CUT;
     (0..)
         .map(|k: i32| first.wrapping_sub(k.wrapping_mul(256))) // spec: S-0307 F4 (steps of 256 leptons)
         .take_while(|&rad| F64::from_i64(i64::from(rad), mode).gt(cut))
@@ -472,7 +472,7 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
     );
     let b = glasnost_num::geom::n_step(f, 256) as i32; // spec: S-0307 F4 (a 256-step facing)
     // spec: S-0307 F4 (c = the double nearest −0.00009587672516830327 radians per facing unit)
-    let c = crate::rules::nearest_double("-0.00009587672516830327");
+    let c = crate::consts::WALK_C2;
     let a_cell = ap.cell();
     let t_cell = tp.cell();
     let q = &r.quirks;
@@ -576,24 +576,39 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
         // spec: S-0307 Edge cases (approach_alternative_walk off: the eight neighbours in step-direction order 0 to 7)
         &crate::regions::STEPS
     };
+    let primary_cell = |w: &World, radius: i32, d: i32| -> CellXY {
+        let rd = F64::from_i64(i64::from(radius), mode);
+        // spec: S-0307 F4 (p: the signed representative of 256(b + δ) modulo 65536)
+        let p = i64::from((256 * (b + d)).rem_euclid(65536) as u16 as i16);
+        // spec: S-0307 F4 (θ = RZ₅₃((p − 16383) × c))
+        let theta = F64::from_i64(p - 16383, mode).mul(c, mode);
+        // spec: S-0307 F4 (x = trunc(RZ₅₃(T.x + RZ₅₃(cosₜ(θ) × radius))), y = trunc(RZ₅₃(T.y − RZ₅₃(sinₜ(θ) × radius))))
+        let x = F64::from_i64(i64::from(tp.x), mode)
+            .add(cos_q(w, theta, mode).mul(rd, mode), mode)
+            .to_i32_common();
+        let y = F64::from_i64(i64::from(tp.y), mode)
+            .sub(sin_q(w, theta, mode).mul(rd, mode), mode)
+            .to_i32_common();
+        // spec: S-0307 F4 (candidate cell (trunc(x / 256), trunc(y / 256)))
+        CellXY::new(x / 256, y / 256)
+    };
+    // Without claim 22 (c)'s position choice, a primary outside the usable
+    // area matters only as claim 17's anchor, and every test of it reads the
+    // world without changing it: its range test waits until the search has
+    // failed and the anchor is needed (#254).
+    let defer = !(close && infantry);
     // spec: S-0307 claim 17 (the failure centre: the last primary passing the range test, or its alternative that failed only the detour limit)
     let mut anchor: Option<CellXY> = None;
-    for &radius in &radii {
-        let rd = F64::from_i64(i64::from(radius), mode);
-        for d in BEARINGS {
-            // spec: S-0307 F4 (p: the signed representative of 256(b + δ) modulo 65536)
-            let p = i64::from((256 * (b + d)).rem_euclid(65536) as u16 as i16);
-            // spec: S-0307 F4 (θ = RZ₅₃((p − 16383) × c))
-            let theta = F64::from_i64(p - 16383, mode).mul(c, mode);
-            // spec: S-0307 F4 (x = trunc(RZ₅₃(T.x + RZ₅₃(cosₜ(θ) × radius))), y = trunc(RZ₅₃(T.y − RZ₅₃(sinₜ(θ) × radius))))
-            let x = F64::from_i64(i64::from(tp.x), mode)
-                .add(cos_q(w, theta, mode).mul(rd, mode), mode)
-                .to_i32_common();
-            let y = F64::from_i64(i64::from(tp.y), mode)
-                .sub(sin_q(w, theta, mode).mul(rd, mode), mode)
-                .to_i32_common();
-            // spec: S-0307 F4 (candidate cell (trunc(x / 256), trunc(y / 256)))
-            let mut cell = CellXY::new(x / 256, y / 256);
+    // The first primary, as (radius index, bearing index), whose range test
+    // waits, since the last anchor set (#254).
+    let mut waiting: Option<(usize, usize)> = None;
+    for (ri, &radius) in radii.iter().enumerate() {
+        for (bi, &d) in BEARINGS.iter().enumerate() {
+            let mut cell = primary_cell(w, radius, d);
+            if defer && !usable(w, cell, false) {
+                waiting.get_or_insert((ri, bi));
+                continue;
+            }
             let point = if close && infantry {
                 // spec: S-0307 claim 22 (c) and (f) (an infantry primary's point: the position choice in the primary cell, desired point T, its ground record; its draw comes before the range test)
                 match crate::walk::choose_position(w, cell, Layer::Ground, t_class, false) {
@@ -622,6 +637,7 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
             }
             // spec: S-0307 claim 17 (a primary passing the range test is the failure anchor, whether or not it is usable or clear)
             anchor = Some(cell);
+            waiting = None;
             // spec: S-0307 claim 15 (a primary outside the usable area never qualifies)
             if !usable(w, cell, false) {
                 continue;
@@ -656,6 +672,30 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
     let hunter = u.raw.hunter_seeker.unwrap_or(false);
     if hunter || (infantry && u.vehicle_thief) {
         return Some(Approach::TargetItself);
+    }
+    if let Some(first) = waiting {
+        // The primaries whose range test waited, from the last back to the
+        // first: the last that passes it (and the deploy-to-fire cell test)
+        // is the anchor, as it would have been in F4 order (#254).
+        'back: for ri in (first.0..radii.len()).rev() {
+            for bi in (0..BEARINGS.len()).rev() {
+                if (ri, bi) < first {
+                    break 'back;
+                }
+                let cell = primary_cell(w, radii[ri], BEARINGS[bi]);
+                // A usable primary here failed its range test or the
+                // deploy-to-fire cell test when it was reached.
+                if usable(w, cell, false)
+                    || (deploy_to_fire_actor && !crate::econ::inplace::deploy_test_cell(w, cell))
+                {
+                    continue;
+                }
+                if ranged(w, Pos::centre(cell, height(w, cell, false))) {
+                    anchor = Some(cell);
+                    break 'back;
+                }
+            }
+        }
     }
     // spec: S-0307 claim 17 (any other actor drops the target; the nearby-cell search is centred on the failure anchor's cell, else on the target's reference cell, with the empty-radius parameters)
     let centre = anchor.unwrap_or(t_cell);

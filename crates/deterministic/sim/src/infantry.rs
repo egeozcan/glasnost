@@ -725,7 +725,7 @@ pub fn sequence_turn(w: &mut World, id: ObjectId, moving_now: bool, in_progress:
         if let Some(fraction) = crate::jump::speed_fraction(w, id) {
             // spec: S-0107 claim 10 (moving now: a jumpjet asks for nothing while in the attack state, otherwise for hover at a speed fraction of at most 0.8 and fly above it; the double nearest 0.8)
             if !s.attack {
-                let q = if fraction.le(crate::rules::nearest_double("0.8")) {
+                let q = if fraction.le(crate::consts::FOUR_FIFTHS) {
                     Seq::Hover
                 } else {
                     Seq::Fly

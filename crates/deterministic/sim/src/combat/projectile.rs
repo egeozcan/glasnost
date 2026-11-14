@@ -24,8 +24,8 @@ use crate::world::{HouseId, ObjectId, Pos, Target, World};
 
 /// The double nearest −π/32767, the pitch and facing scale of S-0306 Terms.
 pub fn kappa() -> F64 {
-    // spec: S-0306 Constants (pitch scale: the double nearest −π/32767)
-    crate::rules::nearest_double("-0.00009587672516830327")
+    // spec: S-0306 Constants (pitch scale: the double nearest −π/32767, the pattern of −0.00009587672516830327)
+    crate::consts::WALK_C2
 }
 
 /// θ(f) = (f − 16383) × κ for a facing read as a signed 16-bit value
@@ -245,7 +245,7 @@ fn straight_pitch(w: &World, fire: Pos, q: Pos, target_building: bool, hb: i32) 
     } else {
         (dz, 20)
     };
-    let x = f(i64::from(dprime), mode).max(crate::rules::nearest_double("0.05"));
+    let x = f(i64::from(dprime), mode).max(crate::consts::TWENTIETH);
     let y = f(i64::from(z.abs() - tau), mode);
     let (a, i) = table_angle_real(x, y, mode);
     // spec: S-0306 F13 (θ_c = sgn(Z) × A(|Z| − τ, max(d′, 0.05)))
@@ -261,7 +261,7 @@ fn scatter(w: &World, p: (i32, i32), sigma: i32, xi: i32) -> (i32, i32) {
     let r = w.rules();
     let mode = r.mode;
     // spec: S-0306 F5 (k_ξ = the double nearest 1/2147483646; 2π and π/2 the doubles nearest them)
-    let k = crate::rules::nearest_double("4.656612877414201e-10");
+    let k = crate::consts::DRAW_SCALE;
     let (c1, c2) = direction_constants();
     let two_pi = c1.mul(f(4, mode), mode);
     // spec: S-0306 F5 (f_ξ = trunc(RZ₅₃(RZ₅₃(RZ₅₃(RZ₅₃(ξ k_ξ) 2π) − π/2) c₂)) as signed 16-bit)
@@ -671,7 +671,7 @@ fn lead(w: &World, firer: ObjectId, target: ObjectId, aim: Pos) -> Pos {
     // spec: S-0306 claim 3 (u, the target's speed estimate: S-0207 F2 at the fraction it holds now, read as leptons per tick); S-0207 claim 18 and F2a
     let u = crate::drive::speed_estimate(w, target);
     let b = w.obj(target).map_or(0, |o| i32::from(o.body.value(w.tick)));
-    let point9 = crate::rules::nearest_double("0.9");
+    let point9 = crate::consts::NINE_TENTHS;
     // spec: S-0306 F6 (ℓ = trunc(RZ₅₃(RZ₅₃(D₃ / RZ₅₃(w × 0.9)) × u)))
     let l = f(i64::from(dd3), mode)
         .div(f(i64::from(ws), mode).mul(point9, mode), mode)
@@ -699,7 +699,7 @@ fn turn_step(w: &World, pr: &Projectile, rot: i32, near: bool) -> i32 {
     let m = r.combat.general.missile_rot_var;
     // spec: S-0306 claim 13 (j = (object number + tick number) mod 15)
     let j = (i64::from(pr.id.0) + i64::from(w.tick)).rem_euclid(15);
-    let k15 = crate::rules::nearest_double("0.06666666666666667");
+    let k15 = crate::consts::FIFTEENTH;
     let (c1, _) = direction_constants();
     let two_pi = c1.mul(f(4, mode), mode);
     let angle = f(j, mode).mul(k15, mode).mul(two_pi, mode);
@@ -712,7 +712,7 @@ fn turn_step(w: &World, pr: &Projectile, rot: i32, near: bool) -> i32 {
     // spec: S-0306 F7 (q* = trunc(q × 1.5) near the target)
     let qs = if near {
         f(i64::from(qi), mode)
-            .mul(crate::rules::nearest_double("1.5"), mode)
+            .mul(crate::consts::THREE_HALVES, mode)
             .to_i32_common()
     } else {
         qi
@@ -769,8 +769,7 @@ fn steer(w: &World, pr: &mut Projectile, p: &ProjectileRules) -> ([F64; 3], [F64
             pr.turns + 1 >= kappa_l
         } else if kappa_l == 0 {
             // spec: S-0306 claim 12 (κ = 0: the first turn with S ≥ 40 or S ≤ |V| + 0.5)
-            pr.top_speed >= 40
-                || s_top.le(speed_before.add(crate::rules::nearest_double("0.5"), mode))
+            pr.top_speed >= 40 || s_top.le(speed_before.add(crate::consts::HALF, mode))
         } else {
             false
         };

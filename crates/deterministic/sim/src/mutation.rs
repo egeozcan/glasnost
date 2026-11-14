@@ -242,11 +242,7 @@ pub fn playback(w: &World, a: &AnimRules) -> Playback {
 
 /// The registration index of animation type `name`.
 fn anim_index(w: &World, name: &[u8]) -> Option<u32> {
-    w.rules()
-        .animations
-        .iter()
-        .position(|a| a.name.as_bytes().eq_ignore_ascii_case(name))
-        .and_then(|i| u32::try_from(i).ok())
+    w.rules().anim_index(name)
 }
 
 /// Whether an animation of type `anim` is infantry-making at some type of

@@ -126,6 +126,46 @@ fn save_load_round_trip_keeps_the_hash_and_the_future() {
     assert_eq!(a, b);
 }
 
+/// A replay hands each tick's effects to its callback and then takes them,
+/// as a drawing driver does (#398): the callback sees what a driver that
+/// drains the list after every tick sees, and the list never piles up.
+#[test]
+fn a_replay_takes_each_ticks_effects() {
+    let ticks = 400;
+    let rep = testkit::combat_replay(7, ticks);
+    let mut seen = Vec::new();
+    let mut hashes = Vec::new();
+    let w = rep
+        .run(
+            testkit::combat_rules(),
+            &testkit::map(),
+            testkit::catalogue(),
+            |w| {
+                seen.push(w.effects.len());
+                hashes.push(save::state_hash(w));
+            },
+        )
+        .unwrap();
+    assert!(
+        w.effects.is_empty(),
+        "the world keeps no effect after the run"
+    );
+    // The same game stepped by hand, draining after every tick.
+    let mut v = testkit::combat_game(7);
+    let mut want = Vec::new();
+    let mut want_hashes = Vec::new();
+    while tick::ticks_run(&v) < ticks && !v.econ.end.finished {
+        rep.issue_due(&mut v);
+        tick::step(&mut v);
+        want.push(v.effects.len());
+        want_hashes.push(save::state_hash(&v));
+        v.effects.clear();
+    }
+    assert_eq!(hashes, want_hashes);
+    assert_eq!(seen, want);
+    assert!(seen.iter().sum::<usize>() > 0, "the fight makes effects");
+}
+
 #[test]
 fn save_load_mid_combat_keeps_the_hash_and_the_future() {
     // Save while shots are in flight and reload timers run; the saved and the

@@ -64,16 +64,45 @@ impl std::fmt::Display for SaveError {
 
 impl std::error::Error for SaveError {}
 
-/// The bytes of a world's state. Serialization of plain data cannot fail;
-/// if it ever did, hashing nothing would hide every difference, so it
-/// panics instead.
-fn state_bytes(w: &World) -> Vec<u8> {
-    postcard::to_allocvec(w).expect("the game state serializes")
+/// [`Save`] with the world borrowed: the same fields in the same order, so
+/// the same bytes, written without a copy of the world (#410).
+#[derive(Serialize)]
+struct SaveRef<'a> {
+    version: u32,
+    rules_hash: &'a str,
+    world: &'a World,
 }
 
-/// The state hash: SHA-256 of the state's bytes, hexadecimal.
+/// A postcard output that hashes the bytes as they are written instead of
+/// keeping them (#410).
+struct Hashing(Sha256);
+
+impl postcard::ser_flavors::Flavor for Hashing {
+    type Output = Sha256;
+
+    fn try_push(&mut self, data: u8) -> postcard::Result<()> {
+        self.0.update([data]);
+        Ok(())
+    }
+
+    fn try_extend(&mut self, data: &[u8]) -> postcard::Result<()> {
+        self.0.update(data);
+        Ok(())
+    }
+
+    fn finalize(self) -> postcard::Result<Sha256> {
+        Ok(self.0)
+    }
+}
+
+/// The state hash: SHA-256 of the state's bytes, hexadecimal. The bytes
+/// are hashed as they are written, never held whole (#410). Serialization
+/// of plain data cannot fail; if it ever did, hashing nothing would hide
+/// every difference, so it panics instead.
 pub fn state_hash(w: &World) -> String {
-    hex(&Sha256::digest(state_bytes(w)))
+    let h = postcard::serialize_with_flavor(w, Hashing(Sha256::new()))
+        .expect("the game state serializes");
+    hex(&h.finalize())
 }
 
 // nocite: hexadecimal text encoding of a digest
@@ -89,10 +118,10 @@ fn hex(b: &[u8]) -> String {
 
 /// Saves a game.
 pub fn save(w: &World) -> Vec<u8> {
-    let s = Save {
+    let s = SaveRef {
         version: FORMAT_VERSION,
-        rules_hash: w.rules().hash.clone(),
-        world: w.clone(),
+        rules_hash: &w.rules().hash,
+        world: w,
     };
     postcard::to_allocvec(&s).expect("the game state serializes")
 }
@@ -248,12 +277,59 @@ impl Replay {
     /// Continues the replay on a world (a new game or a loaded save) up to
     /// tick `until` (counted by [`crate::tick::ticks_run`]), calling `each`
     /// after every tick. No tick runs after the final one (S-0414 claim 8).
+    /// `each` sees the effects of its tick only: the replay takes them
+    /// afterwards, as a drawing driver would (they are presentation, neither
+    /// saved nor hashed; #398).
     pub fn run_on(&self, w: &mut World, until: i32, mut each: impl FnMut(&World)) {
         // spec: S-0201 claim 1 and S-0414 claim 8 (the final tick leaves the tick number at itself; no tick runs after it)
         while crate::tick::ticks_run(w) < until && !w.econ.end.finished {
             self.issue_due(w);
             crate::tick::step(w);
             each(w);
+            w.effects.clear();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testkit;
+
+    /// The save and the state hash are those of the owned bytes: a save is
+    /// the postcard bytes of [`Save`] holding a copy of the world, and the
+    /// hash is SHA-256 of the world's postcard bytes (#410). Checked on a
+    /// game mid-fight, shots in flight, and after a save/load round trip.
+    #[test]
+    fn save_and_hash_are_those_of_the_owned_bytes() {
+        let mut w = testkit::combat_replay(17, 140)
+            .run(
+                testkit::combat_rules(),
+                &testkit::map(),
+                testkit::catalogue(),
+                |_| {},
+            )
+            .unwrap();
+        let mut extra = 0;
+        while w.projectiles.is_empty() && extra < 200 {
+            crate::tick::step(&mut w);
+            extra += 1;
+        }
+        assert!(!w.projectiles.is_empty(), "no shot in flight");
+        let owned = |w: &World| {
+            postcard::to_allocvec(&Save {
+                version: FORMAT_VERSION,
+                rules_hash: w.rules().hash.clone(),
+                world: w.clone(),
+            })
+            .unwrap()
+        };
+        let digest = |w: &World| hex(&Sha256::digest(postcard::to_allocvec(w).unwrap()));
+        let bytes = save(&w);
+        assert_eq!(bytes, owned(&w));
+        assert_eq!(state_hash(&w), digest(&w));
+        let l = load(&bytes, testkit::combat_rules(), testkit::catalogue()).unwrap();
+        assert_eq!(save(&l), bytes);
+        assert_eq!(state_hash(&l), digest(&w));
     }
 }

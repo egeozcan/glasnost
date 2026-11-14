@@ -3,7 +3,7 @@
 //! while it is not; removal, sale, destruction and capture collapse it at
 //! once.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use glasnost_map::CellXY;
 
@@ -80,24 +80,60 @@ fn reevaluate(w: &mut World, cells: &[CellXY]) {
     }
 }
 
-/// Whether another generator of house `h` covers `c` now (the fixed
-/// behaviour of `quirks.cloak_field_overlap_loss`).
-fn other_covers(w: &World, id: ObjectId, h: HouseId, c: CellXY) -> bool {
-    w.objects.values().any(|o| {
-        o.id != id
-            && o.cloak.field.is_some_and(|g| {
-                g.house == h
-                    && g.radius > 0
-                    && field_circle(g.radius).contains(&(c.x - g.centre.x, c.y - g.centre.y))
-            })
-    })
+/// The other generators of a house, for the fixed behaviour of
+/// `quirks.cloak_field_overlap_loss`: their centres and radii, and one
+/// circle per distinct radius. Taken once before a pass of clears, which
+/// change no generator (#389).
+struct Others {
+    generators: Vec<(CellXY, i32)>,
+    circles: BTreeMap<i32, BTreeSet<(i32, i32)>>,
+}
+
+impl Others {
+    /// The generators of house `h` other than `id` with a positive radius;
+    /// none when the switch is on, as `clear` then never asks.
+    fn of(w: &World, id: ObjectId, h: HouseId) -> Option<Self> {
+        // spec: S-0516 claim 20 and quirks.cloak_field_overlap_loss (a flag, not a count: shared cells leave the field)
+        if w.rules().quirks.cloak_field_overlap_loss {
+            return None;
+        }
+        let mut generators = Vec::new();
+        let mut circles = BTreeMap::new();
+        for o in w.objects.values() {
+            if o.id == id {
+                continue;
+            }
+            if let Some(g) = o.cloak.field
+                && g.house == h
+                && g.radius > 0
+            {
+                generators.push((g.centre, g.radius));
+                circles
+                    .entry(g.radius)
+                    .or_insert_with(|| field_circle(g.radius));
+            }
+        }
+        Some(Self {
+            generators,
+            circles,
+        })
+    }
+
+    /// Whether one of them covers `c` now.
+    fn cover(&self, c: CellXY) -> bool {
+        self.generators.iter().any(|&(centre, r)| {
+            self.circles
+                .get(&r)
+                .is_some_and(|s| s.contains(&(c.x - centre.x, c.y - centre.y)))
+        })
+    }
 }
 
 /// Takes cell `c` out of house `h`'s field (claim 20, overlaps); whether it
-/// was cleared.
-fn clear(w: &mut World, id: ObjectId, h: HouseId, c: CellXY) -> bool {
-    // spec: S-0516 claim 20 and quirks.cloak_field_overlap_loss (a flag, not a count: shared cells leave the field)
-    if !w.rules().quirks.cloak_field_overlap_loss && other_covers(w, id, h, c) {
+/// was cleared. `others` is [`Others::of`] for the clearing generator.
+fn clear(w: &mut World, h: HouseId, others: Option<&Others>, c: CellXY) -> bool {
+    // spec: S-0516 Edge cases (quirks.cloak_field_overlap_loss off: a cell stays in the field while any powered generator of the house covers it)
+    if others.is_some_and(|o| o.cover(c)) {
         return false;
     }
     w.cloak.fields.remove(&(h.0, c))
@@ -184,6 +220,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
             } else {
                 BTreeSet::new()
             };
+            let others = Others::of(w, id, g.house);
             let mut gone = Vec::new();
             let mut interrupted = false;
             // spec: S-0516 claim 20 (a shrink update clears its own ring; cells an earlier interrupted shrink left are not retried)
@@ -193,7 +230,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
                 }
                 gone.push(c);
                 // spec: S-0516 claim 20 and quirks.cloak_field_building_interrupt (a shrink update stops after clearing an own building's centre, the generator's own centre included)
-                if clear(w, id, g.house, c) && own.contains(&c) {
+                if clear(w, g.house, others.as_ref(), c) && own.contains(&c) {
                     interrupted = true;
                     break;
                 }
@@ -281,8 +318,9 @@ pub fn vanish(w: &mut World, id: ObjectId) {
     };
     if g.radius > 0 {
         let gone = cells(g.centre, g.radius);
+        let others = Others::of(w, id, g.house);
         for &c in &gone {
-            clear(w, id, g.house, c);
+            clear(w, g.house, others.as_ref(), c);
         }
         set_radius(w, id, 0);
         reevaluate(w, &gone);

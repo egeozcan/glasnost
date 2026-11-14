@@ -1208,6 +1208,41 @@ fn claim_17_failure_anchor_is_the_last_ranged_primary() {
     );
 }
 
+// spec: S-0307 claim 17 (failure centre: the last primary in F4 order that passes the range test, though outside the usable area, centres the nearby-cell search; #254: its range test is taken only once the search has failed)
+#[test]
+fn claim_17_failure_anchor_outside_the_usable_area() {
+    use glasnost_sim::path::{NearbyUse, nearby};
+    let r = base("2");
+    // The target on the map's edge x − y = −39, the attacker ten cells from
+    // it at y − 10, every cell within four of the target rock.
+    let t = CellXY::new(21, 60);
+    let mut w = testkit::game_with(&r, N, 1);
+    let a = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, CellXY::new(21, 50), 0);
+    let x = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, t, 0);
+    w.obj_mut(a).unwrap().target = Some(Target::Object(x));
+    for dx in -4..=4 {
+        for dy in -4..=4 {
+            let c = CellXY::new(t.x + dx, t.y + dy);
+            if let Some(cell) = w.cells.grid.get_mut(c) {
+                cell.land = glasnost_map::terrain::land::ROCK;
+                glasnost_sim::regions::cell_changed(&mut w, c);
+            }
+        }
+    }
+    glasnost_sim::regions::ensure(&mut w);
+    assert_eq!(approach_radii(&w, 400, 0, false), vec![256]);
+    let got = approach_search(&mut w, a, 400);
+    let around = |c: CellXY| nearby(&w, c, NearbyUse::Approach { unit: a });
+    // F4's last primary at radius 256, a quarter turn off the attacker's
+    // bearing, is the cell at x − 1 from the target, off the map; the cell
+    // at x + 1, across the line of approach, is on it.
+    let (off, on) = (CellXY::new(20, 60), CellXY::new(22, 60));
+    assert!(w.cells.cell(off).is_none() && !w.cells.usable(off));
+    assert!(w.cells.usable(on));
+    assert_ne!(around(off), around(on));
+    assert_eq!(got, Some(Approach::Drop(around(off))));
+}
+
 // spec: S-0307 claim 19 (a primary in a high-bridge cell is measured at the terrain height plus 416 leptons: at range 4.2 cells the cell four cells west of the target passes at height 0 and fails at deck height)
 #[test]
 fn claim_19_primary_measured_on_the_deck() {

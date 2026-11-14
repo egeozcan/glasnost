@@ -136,8 +136,15 @@ const TERRAIN_FACTOR: i64 = 5; // spec: S-0109 claim 17, F5 and Constants (5δ w
 /// loop delay (claim 13), then it enters the update order at the end
 /// (S-0203 claims 3 and 4).
 pub fn spawn(w: &mut World, name: &str, at: Option<Pos>, s: Spawn) -> Spawned {
+    let index = anim_index(w, name.as_bytes());
+    spawn_index(w, index, at, s)
+}
+
+/// [`spawn`] for the type with registration index `index` (`None`: no
+/// such type), already looked up by name.
+pub fn spawn_index(w: &mut World, index: Option<u32>, at: Option<Pos>, s: Spawn) -> Spawned {
     let rules = w.rules_arc();
-    let Some(index) = anim_index(w, name.as_bytes()) else {
+    let Some(index) = index else {
         return Spawned::default();
     };
     let Some(a) = rules.animations.get(index as usize) else {
@@ -222,11 +229,7 @@ pub(crate) fn link(w: &World, from: Option<u32>, marked: bool, name: &str) -> Op
 }
 
 fn anim_index(w: &World, name: &[u8]) -> Option<u32> {
-    w.rules()
-        .animations
-        .iter()
-        .position(|a| a.name.as_bytes().eq_ignore_ascii_case(name))
-        .and_then(|i| u32::try_from(i).ok())
+    w.rules().anim_index(name)
 }
 
 /// Removes animation `id` from play now (a removal from the update order,

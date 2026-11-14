@@ -420,6 +420,17 @@ impl Cells {
         self.grid.footprint()
     }
 
+    /// The farthest square ring around `c` that can hold a legal cell:
+    /// every legal cell lies in the coordinate square 0 … side − 1 (S-0009
+    /// claim 2), so a ring of a larger radius holds none and a search that
+    /// skips cells that are not legal finds nothing there (#401, #386).
+    pub fn ring_limit(&self, c: CellXY) -> i32 {
+        let hi = i64::from(self.footprint().coordinate_side()) - 1;
+        let (x, y) = (i64::from(c.x), i64::from(c.y));
+        let far = x.abs().max((hi - x).abs()).max(y.abs()).max((hi - y).abs());
+        i32::try_from(far).unwrap_or(i32::MAX)
+    }
+
     /// The dense index of a legal cell.
     pub fn idx(&self, c: CellXY) -> Option<usize> {
         self.grid.index(c)
@@ -677,6 +688,35 @@ mod tests {
         side_positions_only: true,
         stale: true,
     };
+
+    // spec: S-0009 claims 1 and 2 (every legal cell lies within the ring limit of any centre, #401)
+    #[test]
+    fn every_legal_cell_lies_within_the_ring_limit() {
+        for (w, h) in [(8, 8), (5, 3), (2, 9), (1, 1), (0, 4)] {
+            let c = Cells::new(CellGrid::new(Footprint::new(w, h, [0, 0, w, h])));
+            let side = i32::from(c.footprint().coordinate_side());
+            let span = -3..side + 3;
+            let legal: Vec<CellXY> = span
+                .clone()
+                .flat_map(|y| span.clone().map(move |x| CellXY::new(x, y)))
+                .filter(|&p| c.cell(p).is_some())
+                .collect();
+            for cy in span.clone() {
+                for cx in span.clone() {
+                    let limit = c.ring_limit(CellXY::new(cx, cy));
+                    let far = legal
+                        .iter()
+                        .map(|p| (p.x - cx).abs().max((p.y - cy).abs()))
+                        .max();
+                    assert!(far.is_none_or(|f| f <= limit), "{w}×{h} at ({cx}, {cy})");
+                }
+            }
+        }
+        // The far corner of the coordinate square bounds a centre in it.
+        let c = cells();
+        assert_eq!(c.ring_limit(CellXY::new(8, 8)), 8);
+        assert_eq!(c.ring_limit(CellXY::new(2, 12)), 13);
+    }
 
     // spec: S-0209 claim 13 (listing order: non-buildings most recent first, buildings in placement order)
     #[test]

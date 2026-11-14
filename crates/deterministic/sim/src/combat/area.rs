@@ -148,7 +148,7 @@ pub fn ring(r: i32, ring_eleven_quirk: bool) -> Vec<(i32, i32)> {
 /// The double nearest 0.99 (S-0303 F2).
 fn c99() -> F64 {
     // spec: S-0303 F2 (c = the double nearest 0.99)
-    crate::rules::nearest_double("0.99")
+    crate::consts::AREA_C99
 }
 
 /// The spread radius R and scan radius k of a warhead (S-0303 F1, F2).

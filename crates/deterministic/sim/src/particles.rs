@@ -100,6 +100,7 @@ fn d(v: i64, m: Rounding) -> F64 {
     F64::from_i64(v, m)
 }
 
+#[cfg(test)]
 fn c(text: &str) -> F64 {
     crate::rules::nearest_double(text)
 }
@@ -175,8 +176,8 @@ pub fn own_advance(w: &World, t: &ParticleType, at: Pos, target: Pos, u: [F32; 3
         d(i64::from(prod.to_i32_common()), m).abs()
     };
     let (ax, ay) = (a(u[0]), a(u[1]));
-    let threshold = c("0.000001"); // spec: S-0616 Constants (normalised speed threshold 10⁻⁶)
-    let none = c("9999.0"); // spec: S-0616 Constants (normalised no-motion time 9999.0 ticks)
+    let threshold = crate::consts::MILLIONTH; // spec: S-0616 Constants (normalised speed threshold 10⁻⁶)
+    let none = d(9999, m); // spec: S-0616 Constants (normalised no-motion time 9999.0 ticks)
     let dist = |p: i32, q: i32| single(d(i64::from(p), m).sub(d(i64::from(q), m), m).abs());
     // spec: S-0616 F13 (tₓ = fl(|Pₓ − Qₓ| / aₓ) when aₓ > 10⁻⁶; t_y likewise; t from the four cases)
     let tx = ax
@@ -531,7 +532,7 @@ fn smoke_update(w: &mut World, sys: ObjectId, i: usize) {
         p.dead = true;
     }
     // spec: S-0616 claim 6 and Constants (when S > 3.0, S goes down by the slowing field, single precision)
-    if p.speed.to_f64().gt(c("3.0")) {
+    if p.speed.to_f64().gt(d(3, m)) {
         p.speed = p.speed.to_f64().sub(t.deacc.to_f64(), m).to_f32(m);
     }
     crate::gas::put(w, sys, i, p);
@@ -612,10 +613,11 @@ fn smoke_emission(w: &mut World, sys: ObjectId) {
                 let loss = s_timer
                     .to_f64()
                     .sub(d(i64::from(t.spawn_frames), m), m)
-                    .mul(c("0.35"), m);
+                    .mul(crate::consts::SMOKE_SPEED_LOSS, m);
                 let mut v = p.speed.to_f64().sub(loss, m).to_f32(m);
-                if v.to_f64().lt(c("2.0")) {
-                    v = c("2.0").to_f32(m);
+                // spec: S-0616 F4 and Constants (raised to 2.0 below 2.0)
+                if v.to_f64().lt(d(2, m)) {
+                    v = d(2, m).to_f32(m); // spec: S-0616 F4 and Constants (raised to 2.0)
                 }
                 p.speed = v;
                 // spec: S-0616 claim 9, F4 and claim 26 (its translucency rises by 25 when T > τ, compared in single precision)
@@ -792,11 +794,11 @@ pub fn flame_sweep(w: &mut World, sys: ObjectId, o: ObjectId, g: ObjectId) {
 /// F6: the swing table entry *V*[*i*].
 pub fn swing(i: i32, m: Rounding) -> i32 {
     // spec: S-0616 F6 (V[i] = trunc(sinₜ(0.125 × i) × 12.0 + 0.49), argument and sum in double precision)
-    let x = c("0.125").mul(d(i64::from(i), m), m);
+    let x = crate::consts::EIGHTH.mul(d(i64::from(i), m), m);
     // spec: S-0105 F1 (the argument is never negative here, so quirks.table_trig_negative_bias changes nothing)
     glasnost_num::trig::sin_t(x, m)
-        .mul(c("12.0"), m)
-        .add(c("0.49"), m)
+        .mul(d(12, m), m)
+        .add(crate::consts::SWING_BIAS, m)
         .to_i32_common()
 }
 
@@ -893,7 +895,9 @@ fn fire_update(w: &mut World, sys: ObjectId, i: usize) {
     // spec: S-0616 F8 (one raw value r: k = (r rem 10) − 5, φ = k × 0.02 + 1.0 in double precision)
     let r = w.rng.raw() as i32;
     let k = glasnost_num::int::rem(r, 10) - 5; // spec: S-0616 F8 (k = (r rem 10) − 5)
-    let phi = d(i64::from(k), m).mul(c("0.02"), m).add(d(1, m), m);
+    let phi = d(i64::from(k), m)
+        .mul(crate::consts::FIFTIETH, m)
+        .add(d(1, m), m);
     let sp = p.speed.to_f64();
     // spec: S-0616 F8 (step = (trunc(fl(φ × uₓ) × S), trunc(fl(φ × u_y) × S), trunc(φ × u_z × S)))
     let xy = |u: F32| {
@@ -1044,7 +1048,7 @@ pub fn spark_turn(w: &mut World, sys: ObjectId) {
             true
         } else {
             let r = w.rng.ranged(0, DRAW_TOP, half);
-            let scale = c("4.656612877414201e-10"); // spec: S-0616 Constants (spark chance scale 4.656612877414201 × 10⁻¹⁰)
+            let scale = crate::consts::DRAW_SCALE; // spec: S-0616 Constants (spark chance scale 4.656612877414201 × 10⁻¹⁰)
             d(i64::from(r), m).mul(scale, m).le(t.chance)
         };
         match t.holds {

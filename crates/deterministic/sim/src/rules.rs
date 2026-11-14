@@ -1062,6 +1062,18 @@ pub struct SimRules {
     pub gates: GateTypes,
     /// Animation types by registration index.
     pub animations: Vec<AnimRules>,
+    /// The registration index of each animation type name, keyed by the
+    /// name with ASCII letters folded to lower case; the first registered
+    /// type of a folded name wins (#407). Derived from `animations`.
+    anim_by_name: BTreeMap<Vec<u8>, u32>,
+    /// The length of `animations` when `anim_by_name` was built.
+    anim_by_name_len: usize,
+    /// Each kind's type names with ASCII letters folded to lower case, to
+    /// the registration index of the last name in `names` order that folds
+    /// to it (#400). Derived from `names`.
+    names_folded: BTreeMap<Kind, BTreeMap<Vec<u8>, u32>>,
+    /// The length of `names` when `names_folded` was built.
+    names_folded_len: usize,
     /// Particle and particle-system types, the shared gas system and the
     /// wind (S-0613).
     pub gas: crate::gas::GasRules,
@@ -1570,7 +1582,26 @@ impl SimRules {
         let pieces = crate::pieces::PieceRules::new(r, &warhead_names, &gas, mode);
         // spec: S-0319 r30 claim 15, S-0317 r59 claim 29, S-0306 r87 claim 21a, S-0616 r29 claim 8a (the loops of the links between types)
         let loops = crate::loops::LinkLoops::new(&animations, &pieces, &combat, &gas);
+        let mut anim_by_name = BTreeMap::new();
+        for (i, a) in animations.iter().enumerate() {
+            if let Ok(i) = u32::try_from(i) {
+                anim_by_name
+                    .entry(a.name.as_bytes().to_ascii_lowercase())
+                    .or_insert(i);
+            }
+        }
+        let mut names_folded: BTreeMap<Kind, BTreeMap<Vec<u8>, u32>> = BTreeMap::new();
+        for ((k, n), &i) in &names {
+            names_folded
+                .entry(*k)
+                .or_default()
+                .insert(n.as_bytes().to_ascii_lowercase(), i);
+        }
         Self {
+            anim_by_name,
+            anim_by_name_len: animations.len(),
+            names_folded,
+            names_folded_len: names.len(),
             loops,
             crates,
             superweapons,
@@ -1635,9 +1666,48 @@ impl SimRules {
     /// The animation type a name names (S-0003 claim 14: ASCII case
     /// folding), if the rules list it.
     pub fn animation(&self, name: &str) -> Option<&AnimRules> {
-        self.animations
-            .iter()
-            .find(|a| a.name.eq_ignore_ascii_case(name))
+        self.anim_index(name.as_bytes())
+            .and_then(|i| self.animations.get(i as usize))
+    }
+
+    /// The registration index of the animation type a name names: the
+    /// first registered type whose name matches with ASCII letters folded
+    /// (S-0003 claim 14, S-0004 claim 13), if the rules list one.
+    pub fn anim_index(&self, name: &[u8]) -> Option<u32> {
+        if self.anim_by_name_len != self.animations.len() {
+            // The list changed after the rules were built: search it.
+            return self
+                .animations
+                .iter()
+                .position(|a| a.name.as_bytes().eq_ignore_ascii_case(name))
+                .and_then(|i| u32::try_from(i).ok());
+        }
+        // nocite: stack buffer size for folding a name before the look-up; longer names fold on the heap (#407)
+        let mut buf = [0u8; 64];
+        if let Some(b) = buf.get_mut(..name.len()) {
+            b.copy_from_slice(name);
+            b.make_ascii_lowercase();
+            self.anim_by_name.get(&*b).copied()
+        } else {
+            self.anim_by_name.get(&name.to_ascii_lowercase()).copied()
+        }
+    }
+
+    /// The registration index of the type of `kind` whose name, with ASCII
+    /// letters folded to lower case, equals `folded` (already folded); of
+    /// several such types, the one whose name comes last in `names` order
+    /// (#400: what a scan of `names` keeping its last match finds).
+    pub fn index_of_folded(&self, kind: Kind, folded: &[u8]) -> Option<u32> {
+        if self.names_folded_len != self.names.len() {
+            // The names changed after the rules were built: search them.
+            return self
+                .names
+                .iter()
+                .filter(|((k, n), _)| *k == kind && n.as_bytes().eq_ignore_ascii_case(folded))
+                .map(|(_, &i)| i)
+                .next_back();
+        }
+        self.names_folded.get(&kind)?.get(folded).copied()
     }
 
     /// A type's registration index by kind and name.
@@ -2032,6 +2102,55 @@ fn overlay_rules(name: &str, o: rs::OverlayType) -> OverlayRules {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The name index answers as the linear case-folded search it replaced
+    /// (#407): the first registered type of a folded name, names longer
+    /// than the stack buffer, missing names, and a list grown after the
+    /// build.
+    #[test]
+    fn anim_index_matches_linear_search() {
+        let long = "L".repeat(80);
+        let names = ["Boom", "BOOM", "smoke", "Smoke2", long.as_str(), "a"];
+        let mut set = crate::testkit::ruleset();
+        set.registries.insert(
+            "animations".to_owned(),
+            names.iter().map(|n| (*n).to_owned()).collect(),
+        );
+        let mut r = SimRules::new(&set, "synthetic-anim-index");
+        let linear = |r: &SimRules, n: &str| {
+            r.animations
+                .iter()
+                .position(|a| a.name.eq_ignore_ascii_case(n))
+                .and_then(|i| u32::try_from(i).ok())
+        };
+        let long_lower = long.to_ascii_lowercase();
+        let probes = [
+            "boom",
+            "BOOM",
+            "Boom",
+            "bOoM",
+            "SMOKE",
+            "smoke2",
+            "smoke3",
+            "",
+            "A",
+            long.as_str(),
+            long_lower.as_str(),
+            "nothing",
+        ];
+        for n in probes {
+            assert_eq!(r.anim_index(n.as_bytes()), linear(&r, n), "{n}");
+        }
+        assert_eq!(r.anim_index(b"BOOM"), Some(0));
+        assert_eq!(r.animation("SMOKE").map(|a| a.name.as_str()), Some("smoke"));
+        let mut extra = r.animations[2].clone();
+        extra.name = "Late".to_owned();
+        r.animations.push(extra);
+        assert_eq!(r.anim_index(b"late"), Some(6));
+        for n in probes {
+            assert_eq!(r.anim_index(n.as_bytes()), linear(&r, n), "{n}");
+        }
+    }
 
     // spec: S-0207 claim 1 (v = 100 gives 255, v = 1 gives 2, above 100 acts as 100)
     #[test]

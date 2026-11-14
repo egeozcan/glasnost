@@ -141,6 +141,17 @@ fn ty(w: &World, id: ObjectId) -> Option<Ty> {
     })
 }
 
+/// The type record `t` that a caller already holds for aircraft `id`, or,
+/// without one, the record built now (a missing one reads as the default).
+/// An object's type never changes, so a record held for the update is the
+/// one [`ty`] would build again (#387).
+fn ty_or<'a>(w: &World, id: ObjectId, t: Option<&'a Ty>) -> std::borrow::Cow<'a, Ty> {
+    match t {
+        Some(t) => std::borrow::Cow::Borrowed(t),
+        None => std::borrow::Cow::Owned(ty(w, id).unwrap_or_default()),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // State
 
@@ -1306,6 +1317,12 @@ pub fn crash_step(k: i32, h: i32, dead: bool) -> (i32, i32) {
 /// ([`AirState::raised`]); any other destination is read as it would be
 /// accepted now.
 pub fn flight_point(w: &World, id: ObjectId, d: Target) -> Pos {
+    flight_point_of(w, id, d, None)
+}
+
+/// [`flight_point`] with the aircraft's type record `t` when the caller
+/// holds it (#387).
+fn flight_point_of(w: &World, id: ObjectId, d: Target, t: Option<&Ty>) -> Pos {
     let held = w.obj(id).and_then(|o| o.air.as_ref());
     // spec: S-0501 claim 6 (the replacement is made when a movement point is accepted while the aircraft has a target and ammunition; it concerns the flight point held for movement and is not recomputed when the target or ammunition later goes)
     let raised = match held {
@@ -1317,7 +1334,7 @@ pub fn flight_point(w: &World, id: ObjectId, d: Target) -> Pos {
         Some(a) if a.flying_to == Some(d) && matches!(d, Target::Object(_)) => a.handed,
         _ => None,
     };
-    point_from(w, id, d, raised, handed)
+    point_from(w, id, d, raised, handed, t)
 }
 
 /// Whether a movement point accepted now has its height replaced (claim
@@ -1328,13 +1345,20 @@ fn raise_now(w: &World, id: ObjectId) -> bool {
 
 /// [`flight_point`] with the height replacement given and the
 /// destination's heading point `handed` at the last hand-over, or read now
-/// when `None`.
-fn point_from(w: &World, id: ObjectId, d: Target, raised: bool, handed: Option<Pos>) -> Pos {
+/// when `None`, and the type record `t` when the caller holds it.
+fn point_from(
+    w: &World,
+    id: ObjectId,
+    d: Target,
+    raised: bool,
+    handed: Option<Pos>,
+    t: Option<&Ty>,
+) -> Pos {
     // spec: S-0501 claim 40 (the destination's heading point with the aircraft as requesting actor: a cell's centre at its surface, a mobile object's next movement point or position, a building's centre)
-    let mut p = handed.unwrap_or_else(|| heading_point_for(w, id, d));
+    let mut p = handed.unwrap_or_else(|| heading_point_of(w, id, d, t));
     // spec: S-0501 claim 6 (a movement point accepted while the aircraft has a target and ammunition: its world height becomes the terrain height there plus the cruise height)
     if raised {
-        let cruise = ty(w, id).map_or(0, |t| t.cruise);
+        let cruise = ty_or(w, id, t).cruise;
         p.z = w.surface_at(p.x, p.y) + cruise;
     }
     if let Target::Object(k) = d
@@ -1353,12 +1377,18 @@ fn point_from(w: &World, id: ObjectId, d: Target, raised: bool, handed: Option<P
 /// actor (claims 24 and 40): for an aircraft without a contact, a pad's
 /// is its docking position without a contact place.
 fn heading_point_for(w: &World, id: ObjectId, d: Target) -> Pos {
-    let docks = ty(w, id).map(|t| t.docks).unwrap_or_default();
+    heading_point_of(w, id, d, None)
+}
+
+/// [`heading_point_for`] with the type record `t` when the caller holds it
+/// (#387).
+fn heading_point_of(w: &World, id: ObjectId, d: Target, t: Option<&Ty>) -> Pos {
+    let t = ty_or(w, id, t);
     // spec: S-0501 Terms (a pad: a building whose type is one of the aircraft type's dock types)
     if let Target::Object(k) = d
         && w.obj(id).is_some_and(|o| o.contact.is_none())
         && w.obj(k)
-            .is_some_and(|b| b.kind == Kind::Building && docks.contains(&b.type_index))
+            .is_some_and(|b| b.kind == Kind::Building && t.docks.contains(&b.type_index))
     {
         // spec: S-0501 claim 24 (r103, Q-2366: for an aircraft without a contact, the pad's heading point is the docking position of its one docking place, height included, or its foundation centre when it has several places or none, S-0404 claim 15 and S-0506 claim 14; a pad that is neither a helipad nor a unit repair building gives its centre, S-0404 claim 15). Any other building keeps S-0506 claim 14's centre, whose docking-point cases are a seam there
         return crate::econ::release::pad_position_at(w, k, NO_PLACE);
@@ -1418,9 +1448,15 @@ enum Facet {
 /// is undone before the new one, so it has no lasting effect (claim 42,
 /// S-0206 claim 1).
 fn request(w: &mut World, id: ObjectId, which: Facet, f: Facing) {
-    let tick = w.tick;
     // spec: S-0206 claim 7 (an aircraft's body and turret facings turn at the type's turn rate)
     let rate = ty(w, id).map_or(0, |t| t.turn_rate);
+    request_at(w, id, which, f, rate);
+}
+
+/// [`request`] with the type's turn rate given by a caller that holds the
+/// type record (#387).
+fn request_at(w: &mut World, id: ObjectId, which: Facet, f: Facing, rate: i32) {
+    let tick = w.tick;
     let mut a = st(w, id);
     if a.request_tick != tick {
         a.request_tick = tick;
@@ -1495,12 +1531,12 @@ fn guidance(w: &mut World, id: ObjectId, t: &Ty) {
     let Some(d) = flight_target(w, id) else {
         return;
     };
-    let Some(o) = w.obj(id).cloned() else { return };
-    if crate::combat::damage::dead(&o) {
+    let Some(o) = w.obj(id) else { return };
+    if crate::combat::damage::dead(o) {
         return;
     }
-    let p = flight_point(w, id, d);
-    let here = o.pos;
+    let (here, body, target) = (o.pos, o.body, o.target);
+    let p = flight_point_of(w, id, d, Some(t));
     // spec: S-0501 claim 42 (the bearing of S-0204 claim 8 from its current position)
     let bearing = toward(w, here, p);
     // spec: S-0501 claim 42 (the distance to the flight point after any pad-position adjustment)
@@ -1509,15 +1545,15 @@ fn guidance(w: &mut World, id: ObjectId, t: &Ty) {
     // spec: S-0501 claim 42 (a strafer at most 768 leptons from the point requests its body only when the bearing differs from its current body facing by at most 8192 facing units)
     let strafer_skips = is_strafer
         && dist <= STRAFER_WINDOW
-        && glasnost_num::geom::delta(o.body.value(w.tick), bearing).abs() > STRAFER_TURN;
+        && glasnost_num::geom::delta(body.value(w.tick), bearing).abs() > STRAFER_TURN;
     if !strafer_skips {
         // spec: S-0501 claim 42 (the body facing is requested toward the flight point)
-        request(w, id, Facet::Body, bearing);
+        request_at(w, id, Facet::Body, bearing, t.turn_rate);
     }
-    let armed_target = o.target.is_some() && ammo_left(w, id);
+    let armed_target = target.is_some() && ammo_left(w, id);
     // spec: S-0501 claim 42 (below 256 leptons, no fly-by flag, not a strafer with a target and ammunition left: the aiming facing toward the target with a target and ammunition left, otherwise toward the landing direction of claim 25; in every other case toward the flight point)
     let aim = if dist < AIM_NEAR && !t.fly_by && !(is_strafer && armed_target) {
-        match o.target {
+        match target {
             // spec: S-0204 claim 8 and S-0310 F1 (the direction of the target: toward its reference point)
             Some(tg) if armed_target => toward(w, here, crate::combat::range::target_point(w, tg)),
             _ => landing_facing(w, id),
@@ -1525,7 +1561,7 @@ fn guidance(w: &mut World, id: ObjectId, t: &Ty) {
     } else {
         bearing
     };
-    request(w, id, Facet::Aim, aim);
+    request_at(w, id, Facet::Aim, aim, t.turn_rate);
 }
 
 /// Moving in the sense of S-0501 claim 26 (its locomotor is moving).
@@ -2403,18 +2439,19 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
         return false;
     }
     let Some(t) = ty(w, id) else { return false };
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return false;
     };
     if !o.on_map {
         return false;
     }
+    let dead = crate::combat::damage::dead(o);
+    let start = o.pos;
+    let unplaced = o.air.is_none();
     let rules = w.rules_arc();
     let mode = rules.mode;
     let ar = &rules.air;
-    let dead = crate::combat::damage::dead(&o);
-    let start = o.pos;
-    if o.air.is_none() {
+    if unplaced {
         placed(w, id);
     }
     // spec: S-0501 claim 47 (c) (the sector update comes at the start of each movement update, before its forward step)
@@ -2454,12 +2491,14 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
     if alive {
         guard_move(w, id, &t);
     }
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return false;
     };
+    // The object's fields as this point of the update left them.
+    let (o_dest, here, current, target) = (o.dest, o.pos, o.beh.current, o.target);
     // spec: S-0501 claim 7 (r146, Q-2676: the survivor holding the origin point as flight point is moving, claim 6, so a clear of the destination it kept is being given no destination)
     let holds_point = a.flying_to.is_some() || (a.origin && a.ignored.is_some());
-    if alive && o.dest.is_none() && holds_point && !a.own_point && flight_target(w, id).is_none() {
+    if alive && o_dest.is_none() && holds_point && !a.own_point && flight_target(w, id).is_none() {
         // spec: S-0501 claim 6 (r120, Q-2507: an aircraft in flight, moving and not landing that is given no destination lands where it is; a clear that did not go through the destination assignment is met at this movement update, with the aircraft where the clear left it)
         let was_landing = a.landing;
         given_no_destination(w, id);
@@ -2491,17 +2530,16 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
         // spec: S-0501 claim 8 (r110, Q-2437: its flight ignores a destination in the cell of the point it is landing at: the flight point stays as it was and it goes on landing there) and r120 (the test is made only at hand-over, not at the movement updates in between)
         dest = a.flying_to;
     }
-    let dp = dest.map(|d| flight_point(w, id, d));
-    let here = o.pos;
+    let dp = dest.map(|d| flight_point_of(w, id, d, Some(&t)));
     let d = dp.map(|p| planar(w, here, p));
     let dest_above = dp.map(|p| p.z - w.surface_at(p.x, p.y));
     // spec: S-0501 claim 6 (holding height: destination more than 120 leptons above terrain, a target with ammunition left, the run lock, or a type that is not landable)
     // spec: S-0501 claim 6 (an enter movement update clears the mark)
-    let entering = o.beh.current == Some(Behaviour::Enter);
+    let entering = current == Some(Behaviour::Enter);
     a.holding = alive
         && !entering
         && (dest_above.is_some_and(|z| z > HOLD_ABOVE)
-            || (o.target.is_some() && ammo_left(w, id))
+            || (target.is_some() && ammo_left(w, id))
             || a.run_lock
             || !t.landable);
     // Claim 8: a new destination makes an aircraft on the ground (or landing) take off.
@@ -2515,7 +2553,7 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
     } else if alive
         && dest.is_some()
         // spec: S-0501 claim 53 (r183: the flight point a loss left is held with no destination; nothing hands it to the flight again)
-        && !(a.lost && o.dest.is_none())
+        && !(a.lost && o_dest.is_none())
         && !a.landing
         && !a.taking_off
         && low_release_at_height_0(w, id, &a)
@@ -2658,9 +2696,11 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
     if removed {
         return true;
     }
-    let Some(o) = w.obj(id).cloned() else {
+    let Some(o) = w.obj(id) else {
         return true;
     };
+    // The object's fields after the forward step.
+    let (stepped, current, o_dest) = (o.pos, o.beh.current, o.dest);
     // Altitude (claims 2 and 3).
     let h = height(w, id);
     if !a.ground {
@@ -2692,8 +2732,8 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
         }
         // spec: S-0501 claim 4 (r183: a living descending aircraft that holds a flight point, with or without a destination object, moves 5 more leptons toward the centre of its flight point's cell, after the forward step and the height reduction, except during enter while its destination is a helipad building)
         // spec: S-0501 claims 6 and 8 (r183, Q-3041: the descent move needs a flight point, not a destination: landing where it is, after an ignored destination, and after a destination object left play, claim 53, it draws the aircraft toward the cell of the flight point it holds)
-        let toward_helipad = o.beh.current == Some(Behaviour::Enter)
-            && matches!(o.dest, Some(Target::Object(k)) if helipad(w, k));
+        let toward_helipad = current == Some(Behaviour::Enter)
+            && matches!(o_dest, Some(Target::Object(k)) if helipad(w, k));
         if alive
             && nh < h
             && !toward_helipad
@@ -2701,7 +2741,7 @@ fn tick_flight(w: &mut World, id: ObjectId, started_landing: bool) -> bool {
         {
             let c = p.cell();
             let centre = Pos::centre(c, 0);
-            let now = w.obj(id).map_or(o.pos, |x| x.pos);
+            let now = w.obj(id).map_or(stepped, |x| x.pos);
             // spec: S-0501 claim 4 (the direction by S-0204 claim 8, F3's facing conversion and table trigonometry with step length 5, no clamp; the world height kept)
             let f = toward(w, now, centre);
             let bias = w.rules().quirks.table_trig_negative_bias; // spec: S-0105 F1 (quirks.table_trig_negative_bias)
@@ -3140,7 +3180,7 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool, ordinary: O
         // spec: S-0501 claim 7 (r146, Q-2676: the survivor holding the origin point: claim 6's exact-cell trigger tests the origin point's cell and never finds it there with a target fraction of 0, as it stops where it was hit or flies on at fraction 1; this test reads the target of the update's claim 5 calculation, which does not run for it, with the same outcome; the close-approach trigger belongs to guidance, which does not act; so no movement update starts a landing or repeats the check or the hit)
         None => false,
         Some(dd) => {
-            let p = flight_point(w, id, dd);
+            let p = flight_point_of(w, id, dd, Some(t));
             let dist = planar(w, o.pos, p);
             // spec: S-0501 claim 6 (r93, Q-2252: standing in its flight point's cell with the target fraction of the same tick's ordinary calculation of claim 5 at 0; a replacement target is never tested, so within 128 leptons it does not start to land while its ordinary target is positive) and claim 5 (r93: that calculation runs in every tick in which the test can apply)
             // spec: S-0501 claim 7 (r134, Q-2648: claim 6's exact-cell trigger applies to an aircraft sliding on the ground too, as at any height: in an update in which it stands in its flight point's cell with that update's target fraction at 0 it starts a landing, and that update's landing step touches down at once, at height 0, [`landing_step`])

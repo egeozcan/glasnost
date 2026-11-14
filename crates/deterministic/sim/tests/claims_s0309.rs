@@ -762,6 +762,19 @@ fn candidates_up_to_the_stop_ring_compete_on_score() {
     assert_eq!(range_search(&mut w, a), Some(better));
 }
 
+// spec: S-0309 claim 9 and F2 (rings 0 … n − 1, cells that are not legal left out: a guard range far beyond the map still reaches the legal cell farthest from the centre, #401)
+#[test]
+fn a_range_far_beyond_the_map_reaches_its_farthest_legal_cell() {
+    let mut r = base();
+    guard(&mut r, "CART", "100000");
+    let mut w = game(&r);
+    // From (28, 30) the legal cell (59, 30) is 31 rings out, at the far
+    // edge of the coordinate square 0 … 59.
+    let a = veh(&mut w, "CART", 0, -2, 0);
+    let far = veh(&mut w, "T0", 1, 29, 0);
+    assert_eq!(range_search(&mut w, a), Some(far));
+}
+
 // ---------------------------------------------------------------------------
 // Claim 10: one object per cell
 
@@ -1508,6 +1521,26 @@ fn suppression_halves_per_allied_building_cell() {
         put(&mut w, Kind::Building, "TOWER", 0, bx, 0);
         let want = if counted { None } else { Some(b) };
         assert_eq!(range_search(&mut w, a), want, "building at ring {}", bx - 2);
+    }
+}
+
+// spec: S-0309 claim 14 and F6 (a fire-suppression distance far beyond the map still counts the allied building cell farthest from the candidate, #401)
+#[test]
+fn suppression_far_beyond_the_map_reaches_its_farthest_legal_cell() {
+    for building in [false, true] {
+        let mut r = suppress_rules();
+        r.sim.general.fire_supress = Some(d("100000"));
+        special(&mut r, "T0", "-99999"); // 1
+        let mut w = game(&r);
+        let a = veh(&mut w, "CART", 0, 0, 0);
+        // The candidate at (28, 30); the building at (59, 30), 31 rings out
+        // at the far edge of the coordinate square 0 … 59.
+        let b = veh(&mut w, "T0", 1, -2, 0);
+        if building {
+            put(&mut w, Kind::Building, "TOWER", 0, 29, 0);
+        }
+        let want = if building { None } else { Some(b) };
+        assert_eq!(range_search(&mut w, a), want, "building {building}");
     }
 }
 

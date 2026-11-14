@@ -592,22 +592,17 @@ fn radius(w: &World, a: ObjectId, kind: SearchKind) -> (i32, i32) {
 }
 
 /// The cells of square ring r around c in the order of S-0309 F2.
-fn search_ring(c: glasnost_map::CellXY, r: i32) -> Vec<glasnost_map::CellXY> {
+fn search_ring(c: glasnost_map::CellXY, r: i32) -> impl Iterator<Item = glasnost_map::CellXY> {
     use glasnost_map::CellXY;
-    if r == 0 {
-        return vec![c];
-    }
-    let mut out = Vec::new();
     // spec: S-0309 F2 (rows y − r and y + r in pairs by column, then columns x − r and x + r in pairs by row)
-    for x in c.x - r..=c.x + r {
-        out.push(CellXY::new(x, c.y - r));
-        out.push(CellXY::new(x, c.y + r));
-    }
-    for y in c.y - r + 1..=c.y + r - 1 {
-        out.push(CellXY::new(c.x - r, y));
-        out.push(CellXY::new(c.x + r, y));
-    }
-    out
+    let rows =
+        (c.x - r..=c.x + r).flat_map(move |x| [CellXY::new(x, c.y - r), CellXY::new(x, c.y + r)]);
+    let columns = (c.y - r + 1..=c.y + r - 1)
+        .flat_map(move |y| [CellXY::new(c.x - r, y), CellXY::new(c.x + r, y)]);
+    // Ring 0 is the centre alone: its one row pair is the centre twice, and
+    // it has no columns.
+    rows.chain(columns)
+        .take(if r == 0 { 1 } else { usize::MAX })
 }
 
 /// The friendly-row exceptions of a searcher (S-0309 Terms): attacks
@@ -1087,7 +1082,9 @@ fn score(w: &World, a: ObjectId, t: ObjectId, ground_pass: bool) -> Option<i32> 
         let n = r.combat.general.fire_supress / 256;
         let mut m = 0;
         let c = to.pos.cell();
-        for ring in 1..n {
+        // Rings past the map hold no legal cell and add nothing (#401).
+        let last = n.min(w.cells.ring_limit(c).saturating_add(1));
+        for ring in 1..last {
             for cell in search_ring(c, ring) {
                 if w.cells.cell(cell).is_none() {
                     continue;
@@ -1121,34 +1118,57 @@ fn score(w: &World, a: ObjectId, t: ObjectId, ground_pass: bool) -> Option<i32> 
     Some(sc.max(1))
 }
 
+/// The searcher's own facts that claims 9 and 10 read for every cell and
+/// candidate: none of them changes during one search (#408).
+#[derive(Clone, Copy)]
+struct Searcher {
+    /// `healer_for_acquisition`.
+    healer: bool,
+    /// `friendly_exception`.
+    any: bool,
+    /// `controlled_carrier_house`.
+    carrier: Option<Option<HouseId>>,
+    /// `attacks_or_berserk`.
+    attacks: bool,
+}
+
+impl Searcher {
+    fn of(w: &World, a: ObjectId) -> Self {
+        Self {
+            healer: crate::combat::weapon::healer_for_acquisition(w, a),
+            any: friendly_exception(w, a),
+            carrier: controlled_carrier_house(w, a),
+            attacks: attacks_or_berserk(w, a),
+        }
+    }
+}
+
 /// The object a visited cell offers (S-0309 claim 10).
-fn offered(w: &World, a: ObjectId, c: glasnost_map::CellXY) -> Option<ObjectId> {
+fn offered(w: &World, a: ObjectId, s: Searcher, c: glasnost_map::CellXY) -> Option<ObjectId> {
     let ao = w.obj(a)?;
     let deck = w.cells.list(c, crate::world::Layer::Deck);
-    let list: Vec<ObjectId> = if !deck.is_empty() {
-        deck.to_vec()
+    let list = if !deck.is_empty() {
+        deck
     } else {
-        w.cells.list(c, crate::world::Layer::Ground).to_vec()
+        w.cells.list(c, crate::world::Layer::Ground)
     };
     let units: Vec<ObjectId> = list
-        .into_iter()
+        .iter()
+        .copied()
         .filter(|&x| x != a && w.obj(x).is_some_and(|o| o.kind != Kind::Terrain))
         .collect();
-    let healer = crate::combat::weapon::healer_for_acquisition(w, a);
-    let any = friendly_exception(w, a);
-    let carrier = controlled_carrier_house(w, a);
     // spec: S-0309 claim 10 (the first object the searcher selects)
     let sel = units.iter().copied().find(|&x| {
         let Some(o) = w.obj(x) else { return false };
         let allied = w.allied(ao.owner, o.owner);
-        if healer {
+        if s.healer {
             allied && o.health < crate::combat::damage::strength(w, x)
-        } else if let Some(h) = carrier
-            && !attacks_or_berserk(w, a)
+        } else if let Some(h) = s.carrier
+            && !s.attacks
         {
             // spec: S-0309 claim 10 (a passenger of a mind-controlled open-topped transport selects an object allied with the house that controls the transport)
             w.allied(h, o.owner)
-        } else if any {
+        } else if s.any {
             true
         } else {
             !allied
@@ -1228,6 +1248,7 @@ pub fn search(
         let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
         // spec: S-0309 claim 7 (aircraft first when looking for aircraft, then ground-layer objects; allied ones only for a healer, every one with a friendly-row exception)
         let healer = crate::combat::weapon::healer_for_acquisition(w, a);
+        let any = friendly_exception(w, a);
         for pass in 0..2 {
             for &x in &ids {
                 let Some(o) = w.obj(x) else { continue };
@@ -1247,11 +1268,7 @@ pub fn search(
                     continue;
                 }
                 let allied = w.allied(ao.owner, o.owner);
-                let consider = if healer {
-                    allied
-                } else {
-                    friendly_exception(w, a) || !allied
-                };
+                let consider = if healer { allied } else { any || !allied };
                 if !consider {
                     continue;
                 }
@@ -1272,6 +1289,9 @@ pub fn search(
                 .unwrap_or(ao.pos.cell()),
             _ => ao.pos.cell(),
         };
+        // The searcher's facts, the same for every cell and candidate below
+        // (the draws of claim 25 (g) change nothing they read).
+        let s = Searcher::of(w, a);
         // spec: S-0309 claim 9 (a range or area search that looks for aircraft first scans the tracked flying objects that S-0303's flying-object search finds around the centre cell, radius max(n, 1) cells; they precede cell candidates on equal scores, and count in K for the early stops)
         if c.aircraft && matches!(kind, SearchKind::Range | SearchKind::Area) {
             // spec: S-0309 table C row "class" (the scan of airborne objects also accepts infantry and vehicles)
@@ -1287,7 +1307,7 @@ pub fn search(
                 if x == a || !o.on_map || crate::temporal::ground_layer(w, x) {
                     continue;
                 }
-                if w.allied(ao.owner, o.owner) && !friendly_exception(w, a) {
+                if w.allied(ao.owner, o.owner) && !s.any {
                     continue;
                 }
                 if admit(w, a, x, ca, big_r, kind, false)
@@ -1302,14 +1322,18 @@ pub fn search(
         if !only_aircraft && nrings >= 1 {
             let r1 = nrings / 4; // spec: S-0309 claim 9 (early stops at trunc(n / 4) and trunc(n / 2))
             let r2 = nrings / 2;
-            for ring in 0..nrings {
+            // Rings past the map hold no legal cell and add no candidate, so
+            // ending before them leaves the candidates as an early stop or
+            // the last ring would (#401). The stops keep the uncapped n.
+            let last = nrings.min(w.cells.ring_limit(centre).saturating_add(1));
+            for ring in 0..last {
                 for cell in search_ring(centre, ring) {
                     if w.cells.cell(cell).is_none() {
                         continue;
                     }
                     // spec: S-0309 claim 11 (an area search skips cells outside the searcher's zone region)
                     let cands_here: Vec<ObjectId> = if rules.quirks.search_one_object_per_cell {
-                        offered(w, a, cell).into_iter().collect()
+                        offered(w, a, s, cell).into_iter().collect()
                     } else {
                         // spec: S-0309 Edge cases (search_one_object_per_cell off: every unit and building of the cell)
                         [crate::world::Layer::Ground, crate::world::Layer::Deck]
@@ -1322,9 +1346,7 @@ pub fn search(
                     };
                     for x in cands_here {
                         let allied = w.allied(ao.owner, w.obj(x).and_then(|o| o.owner));
-                        let tested = !allied
-                            || crate::combat::weapon::healer_for_acquisition(w, a)
-                            || friendly_exception(w, a);
+                        let tested = !allied || s.healer || s.any;
                         if tested
                             && admit(w, a, x, c, big_r, kind, kind == SearchKind::Area)
                             && let Some(s) = score(w, a, x, false)

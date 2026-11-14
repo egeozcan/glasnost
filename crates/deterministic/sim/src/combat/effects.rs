@@ -812,12 +812,7 @@ pub fn anim_delayed(w: &mut crate::world::World, name: &str, pos: Pos, delay: i3
         anim(w, name, pos);
         return;
     }
-    let index = w
-        .rules()
-        .animations
-        .iter()
-        .position(|a| a.name.eq_ignore_ascii_case(name))
-        .and_then(|i| u32::try_from(i).ok());
+    let index = w.rules().anim_index(name.as_bytes());
     if index.is_some_and(|i| crate::mutation::makes_infantry(w, i)) {
         anim(w, name, pos);
         return;
@@ -830,7 +825,7 @@ pub fn anim_delayed(w: &mut crate::world::World, name: &str, pos: Pos, delay: i3
         },
         ..Default::default()
     };
-    anim_spawned(w, name, pos, false, None, spawn);
+    anim_spawned(w, name, index, pos, false, None, spawn);
 }
 
 fn anim_with(
@@ -841,12 +836,7 @@ fn anim_with(
     z_adjust: Option<i32>,
     looped: bool,
 ) {
-    let index = w
-        .rules()
-        .animations
-        .iter()
-        .position(|a| a.name.eq_ignore_ascii_case(name))
-        .and_then(|i| u32::try_from(i).ok());
+    let index = w.rules().anim_index(name.as_bytes());
     if !reverse
         && let Some(i) = index
         && crate::mutation::makes_infantry(w, i)
@@ -863,6 +853,7 @@ fn anim_with(
     anim_spawned(
         w,
         name,
+        index,
         pos,
         reverse,
         z_adjust,
@@ -892,7 +883,8 @@ pub fn trailer_marked(w: &mut crate::world::World, name: &str, pos: Pos, looped:
         looped,
         ..Default::default()
     };
-    anim_spawned(w, name, pos, false, None, spawn);
+    let index = w.rules().anim_index(name.as_bytes());
+    anim_spawned(w, name, index, pos, false, None, spawn);
 }
 
 /// Creates an ordinary animation of type `name` at `pos` with what its
@@ -905,17 +897,20 @@ pub fn anim_spawn(
     pos: Pos,
     spawn: crate::anims::Spawn,
 ) -> Option<crate::world::ObjectId> {
-    anim_spawned(w, name, pos, false, None, spawn).id
+    let index = w.rules().anim_index(name.as_bytes());
+    anim_spawned(w, name, index, pos, false, None, spawn).id
 }
 
 /// The initial loop delay a projectile gives its trailer, in updates.
 const TRAILER_LOOP_DELAY: i32 = 1; // spec: S-0109 claim 29 (a projectile trailer: an initial loop delay of 1 update)
 
 /// Creates an ordinary animation in play with `spawn` (S-0109 claim 29)
-/// and its presentation event.
+/// and its presentation event; `index` is the registration index `name`
+/// names (`None`: no such type).
 fn anim_spawned(
     w: &mut crate::world::World,
     name: &str,
+    index: Option<u32>,
     pos: Pos,
     reverse: bool,
     z_adjust: Option<i32>,
@@ -923,7 +918,7 @@ fn anim_spawned(
 ) -> crate::anims::Spawned {
     // spec: S-0109 claim 29 and Terms (a reverse request: the deploying presentation of an undeploy, S-0517 claim 7)
     spawn.creation.reverse |= reverse;
-    let made = crate::anims::spawn(w, name, Some(pos), spawn);
+    let made = crate::anims::spawn_index(w, index, Some(pos), spawn);
     w.effects.push(Effect::Anim {
         name: name.to_owned(),
         pos,

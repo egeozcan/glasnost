@@ -190,6 +190,34 @@ fn the_same_target_does_not_cancel() {
     assert!(w.strike.strikes[&d].active);
 }
 
+// spec: S-0519 claim 19 (revision 3): the sweep after a turn finds the one designator whose target changed among several whose targets did not (#409: the look before the cancels)
+#[test]
+fn the_sweep_finds_a_change_behind_unchanged_designators() {
+    let mut w = world(|_| {});
+    let d1 = quiet(&mut w, Kind::Vehicle, "DESIG", 0, at(0, 0));
+    let d2 = quiet(&mut w, Kind::Vehicle, "DESIG", 0, at(0, 2));
+    let a = quiet(&mut w, Kind::Building, "BLDG", 1, at(6, 0));
+    let b = quiet(&mut w, Kind::Building, "BLDG", 1, at(8, 0));
+    run_to(&mut w, 100);
+    designate(&mut w, d1, a);
+    designate(&mut w, d2, a);
+    assert!(w.strike.strikes[&d1].active && w.strike.strikes[&d2].active);
+    glasnost_sim::strike::sweep(&mut w);
+    assert!(w.strike.strikes[&d1].active && w.strike.strikes[&d2].active);
+    let (lo, hi) = if d1 < d2 { (d1, d2) } else { (d2, d1) };
+    glasnost_sim::spawn::set_own_target(w.obj_mut(hi).unwrap(), Some(Target::Object(b)));
+    glasnost_sim::strike::sweep(&mut w);
+    assert!(
+        w.strike.strikes[&lo].active,
+        "the unchanged one keeps its strike"
+    );
+    let s = &w.strike.strikes[&hi];
+    assert!(
+        !s.active && s.target.is_none(),
+        "the changed one is cancelled"
+    );
+}
+
 // spec: S-0519 claim 22 (revision 3): a bomb with no bomb warhead ends normally, stops ticking, detaches from its carrier and makes no area hits
 #[test]
 fn a_bomb_with_no_warhead_ends_without_a_blast() {

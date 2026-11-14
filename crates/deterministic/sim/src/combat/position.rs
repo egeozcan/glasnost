@@ -10,19 +10,12 @@ use crate::rules::Kind;
 use crate::world::{ObjectId, Pos, World};
 use glasnost_rules::sim::Flh;
 
-/// A single-precision constant from the decimal that identifies it.
-fn single_const(text: &str) -> F64 {
-    crate::rules::nearest_double(text)
-        .to_f32(Rounding::Nearest)
-        .to_f64()
-}
-
 /// A pixel shift in leptons (S-0313 F3): map x and map y.
 pub fn pixel_to_leptons(w: &World, p: i32, q: i32) -> (i32, i32) {
     let mode = w.rules().mode;
     // spec: S-0313 F3 (α = 4.26669979095459 and β = 8.53339958190918, single-precision constants)
-    let alpha = single_const("4.26669979095459");
-    let beta = single_const("8.53339958190918");
+    let alpha = crate::consts::PIXEL_ALPHA;
+    let beta = crate::consts::PIXEL_BETA;
     let pf = F64::from_i64(i64::from(p), mode).to_f32(mode).to_f64();
     let qf = F64::from_i64(i64::from(q), mode).to_f32(mode).to_f64();
     let bq = beta.mul(qf, mode);
@@ -100,7 +93,7 @@ impl M34 {
 /// The double nearest −π/16 (S-0313 F2).
 fn c16() -> F64 {
     // spec: S-0313 F2 (c = −0.19634954084936207, the double nearest −π/16)
-    crate::rules::nearest_double("-0.19634954084936207")
+    crate::consts::FIRE_C16
 }
 
 /// The fire point of a shot with the weapon in `slot`, made with burst

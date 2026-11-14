@@ -343,7 +343,7 @@ pub(crate) fn step(
         // spec: S-0319 claim 6 and Constants (the cliff test: the new cell at least 2 height levels above the old one)
         let cliff = level(w, nc) >= level(w, oc) + 2;
         // spec: S-0319 claim 6 and Constants (the cliff speed line −0.0002, compared in double precision with u_z widened exactly)
-        let line = crate::rules::nearest_double("-0.0002");
+        let line = crate::consts::CLIFF_SPEED_LINE;
         // spec: S-0319 claim 6 (undone when u_z < −0.0002 and z₁ > z₀; for every other u_z, 0 included, when z₁ > z₀ + u_z + 1)
         let lifted = if u.lt(line) {
             z1.gt(z0)
