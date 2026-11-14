@@ -3800,25 +3800,25 @@ impl<'a> Builder<'a> {
     /// turned by its orientation alone; no items when its type has no
     /// model, the model does not parse or the section is not in it.
     fn live_piece(&mut self, d: &PieceDraw) -> Vec<Item> {
-        let Some(file) = self
-            .import
+        // design: render (#140) (the file name and the section are borrowed, not copied: the import outlives the builder, the model is held here)
+        let import = self.import;
+        let Some(file) = import
             .arts
             .get(&(Kind::VoxelAnimations, d.idx))
-            .and_then(|a| a.voxels.get("body").cloned())
+            .and_then(|a| a.voxels.get("body"))
         else {
             return Vec::new();
         };
         let q = VoxelQuirks::default();
         // spec: S-0007 claim 30 (the own model loads no motion file)
-        let Some(model) = self.bare_voxel_model(&file) else {
+        let Some(model) = self.bare_voxel_model(file) else {
             return Vec::new();
         };
         // spec: S-0317 claim 23 and Import mapping (the section of the type's VoxelIndex, absent 0; one outside the model draws nothing)
-        let index = rule_int(self.import, Kind::VoxelAnimations, d.idx, b"VoxelIndex", 0);
+        let index = rule_int(import, Kind::VoxelAnimations, d.idx, b"VoxelIndex", 0);
         let Some(section) = usize::try_from(index)
             .ok()
             .and_then(|i| model.sections.get(i))
-            .cloned()
         else {
             return Vec::new();
         };
@@ -3841,9 +3841,9 @@ impl<'a> Builder<'a> {
                 let one = voxel::VoxelModel::from_sections(vec![section.clone()], None, &q);
                 let vpl = self.vpl();
                 let body = voxel::draw_model_shaded(&one, 0, &r, vpl.as_deref(), &shades, &q);
-                let body = self.limit_checked(&file, "piece", "its orientation", body);
+                let body = self.limit_checked(file, "piece", "its orientation", body);
                 // spec: S-0317 claim 27 and F11 (the footprint of the drawn section under the rotation alone)
-                let shadow = voxel::draw_piece_shadow(&section, &r, &q);
+                let shadow = voxel::draw_piece_shadow(section, &r, &q);
                 self.p
                     .pieces
                     .store(
