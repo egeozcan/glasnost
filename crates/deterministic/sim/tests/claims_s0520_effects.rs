@@ -230,7 +230,10 @@ fn a_placed_unit_shows_no_animation() {
     });
     let v = armed(&mut w);
     let before = credits(&w, 0);
-    assert!(pick(&mut w, v, 1), "the unit is placed, the step is blocked");
+    assert!(
+        pick(&mut w, v, 1),
+        "the unit is placed, the step is blocked"
+    );
     assert_eq!(credits(&w, 0), before, "no money fallback");
     assert_eq!(count(&w, Kind::Vehicle, "GOODIE"), 1);
     assert_eq!(anims(&w), vec![], "no animation after a placed unit");

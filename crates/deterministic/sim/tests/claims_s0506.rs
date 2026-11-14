@@ -2452,14 +2452,8 @@ fn claim_19_lazy_flight_ends_when_the_nose_reaches_the_aim_height() {
         let o = w.obj(x).expect("the missile flies");
         let rs = o.rocket.clone().unwrap();
         let aim = rs.aim.expect("the aim point is fixed");
-        let nose = glasnost_sim::rocket::nose_b(
-            o.pos,
-            length,
-            rs.pitch,
-            o.body.value(w.tick),
-            mode,
-            bias,
-        );
+        let nose =
+            glasnost_sim::rocket::nose_b(o.pos, length, rs.pitch, o.body.value(w.tick), mode, bias);
         w.effects.clear();
         testkit::run(&mut w, 1);
         if w.obj(x).is_none() {
