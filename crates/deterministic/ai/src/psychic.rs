@@ -79,7 +79,7 @@ pub(crate) fn build_sensor(script: &Script, w: &World) -> Option<TypeRef> {
     all_types(w)
         .into_iter()
         .filter(|&t| sensor_type(w, t))
-        .filter(|&t| crate::startable(w, house, t))
+        .filter(|&t| script.startable(w, t))
         .filter(|&t| script.place_cell(w, t).is_some())
         .filter(|&t| !script.busy(w, t))
         .min_by_key(|&t| (production::cost_field(w, t), t.index))

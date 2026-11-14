@@ -684,17 +684,17 @@ impl Special {
     }
 
     /// The cheapest type of infantry the house can build now that
-    /// satisfies `f`.
+    /// satisfies `f` (the script's kept buildability; design: own AI, #60).
     pub(crate) fn buildable_infantry(
+        script: &Script,
         w: &World,
-        house: HouseId,
         f: impl Fn(&glasnost_sim::rules::UnitRules) -> bool,
     ) -> Option<TypeRef> {
         all_types(w)
             .into_iter()
             .filter(|t| t.kind == Kind::Infantry)
             .filter(|&t| w.rules().unit(t.kind, t.index).is_some_and(&f))
-            .filter(|&t| tech::buildable(w, house, t))
+            .filter(|&t| script.buildable(w, t))
             .min_by_key(|&t| (production::cost_field(w, t), t.index))
     }
 
@@ -836,7 +836,7 @@ impl Special {
                 }
             }
         }
-        let Some(t) = Self::buildable_infantry(w, house, |u| u.engineer) else {
+        let Some(t) = Self::buildable_infantry(script, w, |u| u.engineer) else {
             return;
         };
         // design: every tech building that pays, in sight and with no
@@ -1013,7 +1013,7 @@ impl Special {
         }
         if !any
             && let Some(t) =
-                Self::buildable_infantry(w, house, |u| u.raw.agent.unwrap_or(false) && !u.engineer)
+                Self::buildable_infantry(script, w, |u| u.raw.agent.unwrap_or(false) && !u.engineer)
             && !Self::has_or_makes(w, house, |id| spy::is_spy(w, id))
             && Self::infiltratable_in_sight(w, house)
         {

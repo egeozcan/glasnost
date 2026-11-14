@@ -771,6 +771,8 @@ struct Kept {
     ore_goal: Option<Option<CellXY>>,
     /// [`Script::harvesters_wanted`] (design: own AI, #58).
     wanted: Option<usize>,
+    /// [`Script::startable`] by type (design: own AI, #60).
+    startable: BTreeMap<TypeRef, bool>,
 }
 
 impl PlaceMemo {
@@ -1427,6 +1429,18 @@ impl Script {
         yes
     }
 
+    /// [`crate::startable`] for the house, asking the kept
+    /// [`Script::buildable`] first; the answer is kept for the rest of a
+    /// think (design: own AI, #60: the special builders ask it of many
+    /// types, each answer a scan of the objects).
+    pub(crate) fn startable(&self, w: &World, t: TypeRef) -> bool {
+        self.placed.keep_by(
+            |m| &mut m.startable,
+            t,
+            || self.buildable(w, t) && crate::could_start(w, self.house, t),
+        )
+    }
+
     /// Whether a build order for `t` would be refused at issue now by its
     /// build limit or by claim 16's test, a full pad total for a dock-bound
     /// aircraft among them ([`tech::refused_at_issue`]), the answer kept for
@@ -1687,11 +1701,13 @@ impl Script {
         // Broke: too few credits for anything the house can build now.
         // design: own AI (#60): asked last, as the patience and the refund
         // decide alone most thinks (the test reads every type's tech).
+        // design: own AI (#60): the price before the tech tree, as most
+        // types cost more than a broke house holds.
         let affordable = || {
             all_types(w)
                 .into_iter()
-                .filter(|&a| self.buildable(w, a))
-                .any(|a| credits >= production::cost_field(w, a))
+                .filter(|&a| credits >= production::cost_field(w, a))
+                .any(|a| self.buildable(w, a))
         };
         if t - since < BROKE_PATIENCE || refund || affordable() {
             return;
@@ -4096,6 +4112,43 @@ mod place_cell_tests {
             }
         }
         assert!(answers > 0 && busy > 0, "{answers} answers, {busy} busy");
+    }
+
+    /// Design: own AI (#60). The kept [`Script::startable`] gives
+    /// [`crate::startable`]'s answer for every type, asked twice in a think
+    /// (the second answer kept) and outside one, at several points of each
+    /// fixture game, for every house.
+    #[test]
+    fn the_kept_startable_answer_is_the_plain_one() {
+        let mut yes = 0;
+        let mut no = 0;
+        for mut g in kept_games() {
+            for _ in 0..3 {
+                for _ in 0..900 {
+                    g.step();
+                }
+                let w = &g.world;
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    let s = Script::new(house, Plan::default());
+                    let plain = Script::new(house, Plan::default());
+                    s.begin_think();
+                    for t in all_types(w) {
+                        let want = crate::startable(w, house, t);
+                        assert_eq!(s.startable(w, t), want, "house {h}, {t:?}");
+                        assert_eq!(s.startable(w, t), want, "kept: house {h}, {t:?}");
+                        assert_eq!(plain.startable(w, t), want, "plain: house {h}, {t:?}");
+                        if want {
+                            yes += 1;
+                        } else {
+                            no += 1;
+                        }
+                    }
+                    s.end_think();
+                }
+            }
+        }
+        assert!(yes > 0 && no > 0, "{yes} startable, {no} not");
     }
 }
 

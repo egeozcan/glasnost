@@ -1549,9 +1549,13 @@ impl Brain {
     }
 
     /// The vehicle types the house can build now that deploy into a
-    /// construction yard, cheapest first.
+    /// construction yard, cheapest first ([`yard_units`] with the script's
+    /// kept buildability; design: own AI, #60).
     fn yard_units(&self, w: &World) -> Vec<TypeRef> {
-        yard_units(w, self.house())
+        yard_types(w)
+            .into_iter()
+            .filter(|&t| self.script.buildable(w, t))
+            .collect()
     }
 
     /// Rebuilds a lost construction yard: while the house has neither a

@@ -234,7 +234,7 @@ impl Special {
                             && unit(id).is_some_and(|p| heals_in(w, vr, p))
                     });
                     if !has {
-                        plan.build = Self::buildable_infantry(w, house, |p| heals_in(w, vr, p));
+                        plan.build = Self::buildable_infantry(script, w, |p| heals_in(w, vr, p));
                     }
                     break;
                 }

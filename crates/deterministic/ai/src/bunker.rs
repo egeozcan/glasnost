@@ -149,7 +149,7 @@ pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
     all_types(w)
         .into_iter()
         .filter(|&t| bunker_type(w, t))
-        .filter(|&t| crate::startable(w, house, t))
+        .filter(|&t| script.startable(w, t))
         .filter(|&t| !script.busy(w, t))
         .filter(|&t| credits >= production::cost_field(w, t).saturating_mul(RESERVE))
         .filter(|&t| script.place_cell(w, t).is_some())
