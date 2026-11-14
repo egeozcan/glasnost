@@ -2964,10 +2964,43 @@ impl Script {
             .to_vec()
     }
 
-    /// [`Script::seen_enemies`]'s scan. The cloak is asked only of an
-    /// enemy (it only reads the world, so the answer is the same as asking
-    /// it of every object first; design: own AI, #53).
+    /// The [`Script::seen_enemies`] whose object passes `pick`, in object
+    /// order: read off the kept list when the think has one, else found by
+    /// one scan that asks `pick` before the view and the disguise (design:
+    /// own AI, #56: on a tick between thinks the defence wants only the
+    /// enemies near the base or raiding it, and the view of every enemy on
+    /// the map was most of that tick's AI time). `pick` must only read the
+    /// world.
+    pub(crate) fn seen_enemies_where(
+        &self,
+        w: &World,
+        pick: impl Fn(&Object) -> bool,
+    ) -> Vec<(ObjectId, CellXY)> {
+        let kept = self.placed.0.borrow().as_ref().and_then(|m| m.seen.clone());
+        match kept {
+            Some(seen) => seen
+                .iter()
+                .copied()
+                .filter(|&(id, _)| w.obj(id).is_some_and(&pick))
+                .collect(),
+            None => self.scan_seen_where(w, pick),
+        }
+    }
+
+    /// [`Script::seen_enemies`]'s scan.
     fn scan_seen_enemies(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
+        self.scan_seen_where(w, |_| true)
+    }
+
+    /// The seen enemies whose object passes `pick`, in object order. The
+    /// cloak is asked only of an enemy that `pick` takes (it and `pick`
+    /// only read the world, so the answer is the same as asking it of
+    /// every object first; design: own AI, #53 and #56).
+    fn scan_seen_where(
+        &self,
+        w: &World,
+        pick: impl Fn(&Object) -> bool,
+    ) -> Vec<(ObjectId, CellXY)> {
         let me = &w.houses[usize::from(self.house.0)];
         w.objects
             .values()
@@ -2984,7 +3017,7 @@ impl Script {
                 let seen = || crate::in_view(w, self.house, o.id);
                 // design: own AI (#37): an enemy unit the house is shown as its disguise is taken for what it shows (S-0516 claims 35 and 37)
                 let disguised = || crate::shown_as_disguise(w, self.house, o.id);
-                (enemy && seen() && !disguised()).then_some((o.id, c))
+                (enemy && pick(o) && seen() && !disguised()).then_some((o.id, c))
             })
             .collect()
     }

@@ -2378,36 +2378,88 @@ impl Brain {
 
     /// Seen enemies near the house's buildings.
     fn intruders(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
-        let own = self.script.own(w);
-        let buildings: Vec<CellXY> = own
+        let near = self.near_base(w);
+        self.script
+            .seen_enemies(w)
+            .into_iter()
+            .filter(|&(_, c)| near(c))
+            .collect()
+    }
+
+    /// Whether a cell lies within [`DEFEND`] cells of one of the house's
+    /// buildings ([`Brain::intruders`]). A cell outside the buildings'
+    /// bounding box grown by [`DEFEND`] is farther than that from each of
+    /// them, so it is not measured against each (design: own AI, #56).
+    fn near_base<'w>(&self, w: &'w World) -> impl Fn(CellXY) -> bool + 'w {
+        let buildings: Vec<CellXY> = self
+            .script
+            .own(w)
             .iter()
             .filter_map(|&id| w.obj(id))
             .filter(|o| o.kind == Kind::Building)
             .map(|o| o.pos.cell())
             .collect();
+        let xy = |c: CellXY| (i64::from(c.x), i64::from(c.y));
+        let bounds = buildings.iter().map(|&c| xy(c)).fold(None, |b, (x, y)| {
+            Some(match b {
+                None => (x, x, y, y),
+                Some((x0, x1, y0, y1)) => (x.min(x0), x.max(x1), y.min(y0), y.max(y1)),
+            })
+        });
+        move |c| {
+            let (x, y) = xy(c);
+            bounds.is_some_and(|(x0, x1, y0, y1)| {
+                x >= x0 - DEFEND && x <= x1 + DEFEND && y >= y0 - DEFEND && y <= y1 + DEFEND
+            }) && buildings.iter().any(|&b| dist2(b, c) <= DEFEND * DEFEND)
+        }
+    }
+
+    /// The seen enemies of [`Brain::intruders`] and the raiders (those
+    /// [`Brain::raids`] takes), from one pass over the seen enemies that
+    /// asks the view only of enemies near the base or raiding it (design:
+    /// own AI, #56).
+    fn intruders_and_raiders(&self, w: &World) -> (Sightings, Sightings) {
+        let near = self.near_base(w);
+        let raids = self.raids(w);
+        let seen = self
+            .script
+            .seen_enemies_where(w, |o| near(o.pos.cell()) || raids(o));
+        let intruders = seen.iter().copied().filter(|&(_, c)| near(c)).collect();
+        let raiders = seen
+            .into_iter()
+            .filter(|&(e, _)| w.obj(e).is_some_and(&raids))
+            .collect();
+        (intruders, raiders)
+    }
+
+    /// The raiders among the seen enemies ([`Brain::raids`]), each with its
+    /// cell. The defence reads them off [`Brain::intruders_and_raiders`];
+    /// the tests ask them alone.
+    #[cfg(test)]
+    fn raiders(&self, w: &World) -> Sightings {
+        let raids = self.raids(w);
         self.script
             .seen_enemies(w)
             .into_iter()
-            .filter(|&(_, c)| buildings.iter().any(|&b| dist2(b, c) <= DEFEND * DEFEND))
+            .filter(|&(e, _)| w.obj(e).is_some_and(&raids))
             .collect()
     }
 
-    /// The seen enemies a person answers first (M7b AI round 2), each with
-    /// its cell: a drainer draining one of the house's power plants, which
-    /// blacks out the whole house (S-0405 claim 5) and whose building
+    /// Whether a seen enemy is one a person answers first (M7b AI round
+    /// 2), a raider: a drainer draining one of the house's power plants,
+    /// which blacks out the whole house (S-0405 claim 5) and whose building
     /// cannot be sold (S-0408 claim 3), and an enemy attacking one of the
     /// house's harvesters, slave miners or slaves (its target is the
     /// worker: a person sees the shots). In the lane the Allied side's
     /// waves killed up to 165 slaves of a Yuri house in one game, mostly
     /// with infantry, while the Yuri army stood near by.
-    fn raiders(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
+    fn raids<'w>(&self, w: &'w World) -> impl Fn(&glasnost_sim::world::Object) -> bool + 'w {
         let house = self.house();
-        let seen = self.script.seen_enemies(w);
         let drainers: Vec<ObjectId> = crate::power::drained_plants(w, house)
             .into_iter()
             .map(|(_, d)| d)
             .collect();
-        let worker = |id: ObjectId| {
+        let worker = move |id: ObjectId| {
             w.obj(id).is_some_and(|o| {
                 o.owner == Some(house)
                     && (o.econ.harvest.is_some()
@@ -2416,22 +2468,17 @@ impl Brain {
                         || glasnost_sim::econ::slaves::is_master(w, id))
             })
         };
-        seen.into_iter()
-            .filter(|&(e, _)| {
-                drainers.contains(&e)
-                    || w.obj(e)
-                        .is_some_and(|o| matches!(o.target, Some(Target::Object(t)) if worker(t)))
-            })
-            .collect()
+        move |o| {
+            drainers.contains(&o.id) || matches!(o.target, Some(Target::Object(t)) if worker(t))
+        }
     }
 
     /// Defends the base: every army unit near home that is not already
     /// fighting an intruder attacks the intruder nearest to it. A raider
-    /// ([`Brain::raiders`]) comes first, for every army unit that can
+    /// ([`Brain::raids`]) comes first, for every army unit that can
     /// attack it and is near home or idle, within [`RECALL`] cells of it.
     fn defend(&mut self, w: &World, out: &mut Vec<Order>) {
-        let intruders = self.intruders(w);
-        let raiders = self.raiders(w);
+        let (intruders, raiders) = self.intruders_and_raiders(w);
         if intruders.is_empty() && raiders.is_empty() {
             return;
         }
@@ -2536,6 +2583,9 @@ impl Brain {
         }
     }
 }
+
+/// Seen enemies, each with its cell.
+type Sightings = Vec<(ObjectId, CellXY)>;
 
 /// The enemies `of`, nearest `at` first and on equal distance by object:
 /// the order in which `min_by_key` on `(distance, object)` ranks them, so
@@ -3380,6 +3430,110 @@ mod defend_tests {
         assert!(
             defended > 0 && orders > 0,
             "{defended} defences, {orders} orders"
+        );
+    }
+
+    /// [`Brain::intruders`] as before #56: every seen enemy measured
+    /// against every building.
+    fn intruders_as_before(b: &Brain, w: &World) -> Vec<(ObjectId, CellXY)> {
+        let buildings: Vec<CellXY> = b
+            .script
+            .own(w)
+            .iter()
+            .filter_map(|&id| w.obj(id))
+            .filter(|o| o.kind == Kind::Building)
+            .map(|o| o.pos.cell())
+            .collect();
+        b.script
+            .seen_enemies(w)
+            .into_iter()
+            .filter(|&(_, c)| buildings.iter().any(|&x| dist2(x, c) <= DEFEND * DEFEND))
+            .collect()
+    }
+
+    /// [`Brain::raiders`] as before #56.
+    fn raiders_as_before(b: &Brain, w: &World) -> Vec<(ObjectId, CellXY)> {
+        let house = b.house();
+        let drainers: Vec<ObjectId> = crate::power::drained_plants(w, house)
+            .into_iter()
+            .map(|(_, d)| d)
+            .collect();
+        let worker = |id: ObjectId| {
+            w.obj(id).is_some_and(|o| {
+                o.owner == Some(house)
+                    && (o.econ.harvest.is_some()
+                        || scripted::role_of(w, tech::type_of(o)) == Some(Role::Harvester)
+                        || o.econ.slave.is_some()
+                        || glasnost_sim::econ::slaves::is_master(w, id))
+            })
+        };
+        b.script
+            .seen_enemies(w)
+            .into_iter()
+            .filter(|&(e, _)| {
+                drainers.contains(&e)
+                    || w.obj(e)
+                        .is_some_and(|o| matches!(o.target, Some(Target::Object(t)) if worker(t)))
+            })
+            .collect()
+    }
+
+    /// Our tooling for speed (design: own AI, #56): the intruders and
+    /// raiders found by the one pass that asks the view only of enemies
+    /// near the base or raiding it are the ones every seen enemy gives,
+    /// outside a think, in a think before the seen enemies are kept and
+    /// in one after, for every house's brain at many points of the M6c,
+    /// M7a and M7b duels.
+    #[test]
+    fn the_threats_of_the_one_pass_are_the_threats_of_every_seen_enemy() {
+        let games = [
+            (
+                crate::fixture_m6c::rules(),
+                crate::fixture_m6c::map(),
+                crate::fixture_m6c::MAP_NAME,
+                crate::fixture_m6c::setup(2),
+            ),
+            (
+                crate::fixture_m7a::rules(),
+                crate::fixture_m7a::map(),
+                crate::fixture_m7a::MAP_NAME,
+                crate::fixture_m7a::setup(17),
+            ),
+            (
+                crate::fixture_m7b::rules(),
+                crate::fixture_m7b::map(),
+                crate::fixture_m7b::MAP_NAME,
+                crate::fixture_m7b::setup(11),
+            ),
+        ];
+        let (mut intruded, mut raided) = (0, 0);
+        for (rules, map, map_name, setup) in games {
+            let mut g = Game::new(rules, &map, map_name, fixture::catalogue(), setup)
+                .expect("the duel loads");
+            for _ in 0..120 {
+                for _ in 0..75 {
+                    g.step();
+                }
+                let w = &g.world;
+                for b in g.brains() {
+                    let want = (intruders_as_before(b, w), raiders_as_before(b, w));
+                    let at = format!("{map_name}, tick {}, {:?}", w.tick, b.house());
+                    assert_eq!(b.intruders_and_raiders(w), want, "{at}");
+                    assert_eq!(b.intruders(w), want.0, "{at}");
+                    assert_eq!(b.raiders(w), want.1, "{at}");
+                    b.script.begin_think();
+                    assert_eq!(b.intruders_and_raiders(w), want, "first in a think: {at}");
+                    let _ = b.script.seen_enemies(w);
+                    assert_eq!(b.intruders_and_raiders(w), want, "kept: {at}");
+                    b.script.end_think();
+                    intruded += usize::from(!want.0.is_empty());
+                    raided += usize::from(!want.1.is_empty());
+                }
+            }
+        }
+        assert!(
+            intruded > 0 && raided > 0,
+            "{intruded} intruded, {raided} raided"
         );
     }
 }
