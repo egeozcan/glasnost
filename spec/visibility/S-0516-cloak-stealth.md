@@ -2,13 +2,13 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 20
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-13
+approved-on: 2026-11-14
 measurements: []
-requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796, Q-3060]
+requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796, Q-3060, Q-3085]
 supersedes: []
 ---
 
@@ -805,8 +805,15 @@ Two kinds of rule are kept apart throughout.
     infantry unit is made to clear its disguise (claim 34), it returns to this default instead
     of becoming undisguised. Vehicles do not have this reset: clearing their disguise makes them
     undisguised even if their type has the permanent flag.
-    - Backing: `measurable` (CS13, part b)
-    - Confidence: high
+    - Backing: `measurable` (CS13, part b) for the default a unit is created with, and (S-0517
+      scenario P8, part b) for a permanent vehicle that is undisguised when its undeploy step
+      clears its disguise (claim 34 (d)). P8 (b) records the disguise flag at that step, so a
+      reset to the side default would show there as a retained disguise, which P8 (b) already
+      counts as falsifying. `unmeasured` for the infantry reset to the side default: only claim
+      34 (e) clears a permanent infantry unit's disguise, and no scenario removes a disguise
+      house from the game
+    - Confidence: high for the default a unit is created with; medium for the vehicle, as S-0517
+      claim 6 rates the disguise removal at undeploy, and for the infantry reset
 
 33. **Disguise when still (vehicles).** These rules apply, on every tick, to each vehicle whose
     type can disguise but does not disguise permanently. They never apply to infantry.
@@ -836,8 +843,10 @@ Two kinds of rule are kept apart throughout.
 
 34. **Losing a disguise.** A unit loses its disguise when one of these happens:
     - **(a) Damage.** The hits of S-0302 claim 12 clear it and set the re-disguise lockout, whose
-      length is given there. This applies to infantry and vehicles alike. The lockout only matters
-      to a vehicle, through claim 33 (c).
+      length is given there. This applies to infantry and vehicles alike whose type can disguise
+      but does not disguise permanently. A unit whose type disguises permanently keeps its
+      disguise through such a hit, whether it holds a copied disguise or its side default. The
+      lockout only matters to a vehicle, through claim 33 (c).
     - **(b) Moving,** for vehicles only: claim 33 (a).
     - **(c) Neighbouring infantry,** for vehicles only: claim 33 (b).
     - **(d) Beginning to undeploy.** An in-place deploying vehicle loses its disguise when its
@@ -849,8 +858,14 @@ Two kinds of rule are kept apart throughout.
     - entering a transport or a building without being used up
     - a change of owner, including mind control
     - being detected.
-    - Backing: `measurable` (CS13, part c; CS14, part c)
-    - Confidence: high
+    - Backing: `measurable` (CS13, part c; CS14, part c), except part (e), which is `unmeasured`:
+      no scenario removes a disguise house from the game
+    - Confidence: high for a hit on a type that does not disguise permanently and for a hit on a
+      permanently disguising infantry unit, with a copied disguise or its side default (part a,
+      CS13 (c)); medium for a hit on a permanently disguising vehicle (part a); high for parts (b)
+      and (c) (claim 33), except medium for part (c)'s rule that only the first infantry unit a
+      cell lists counts; medium for part (d), as S-0517 claim 6 rates the disguise removal at
+      undeploy, and for part (e); high for the list of what preserves a disguise
 
 35. **Appears disguised to H (game state).** A unit *appears disguised to house H* when all of
     these hold:
@@ -1533,11 +1548,18 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
     disguise house and an unsensing enemy's acquisition. Expected: the default type and
     owner's house are held, while the enemy can still acquire it. A different identity or
     refusal solely from this default disguise falsifies claim 32.
-  - **(c)** Disguise permanent infantry as another house, then deliver an accepted surviving
-    hit. Expected: its disguise resets to its owner's side default, rather than preserving
-    the copied identity or becoming undisguised. Clear the permanent flag in a separate
-    fixture run: a hit now clears the disguise. Move that temporary infantry disguiser
-    without damage: movement alone preserves its disguise. The opposite state/identity
+  - **(c)** Disguise permanent infantry as undisguised infantry of a non-neutral, non-special
+    house its owner does not ally, then hit it with ordinary damage that it survives and that
+    reports *unchanged*, *now yellow* or *now red* (S-0302 claim 12). Record its disguise type and
+    disguise house, and whether units of the copied house acquire it, with no detector coverage
+    there and of types that cannot detect disguises. Expected: it keeps the copied identity and
+    still appears disguised to that house (claim 35), so those units do not acquire it (S-0309
+    claim 12, table C row "disguise"), rather than resetting to its owner's side default or
+    becoming undisguised. Repeat the hit on (b)'s unit, which holds its side default: it keeps the
+    default type and its owner as disguise house. Repeat the hit on the permanent-disguise vehicle
+    of S-0517 scenario P8 (b), still and not deployed: it stays disguised. Clear the permanent
+    flag in a separate fixture run: a hit now clears the disguise. Move that temporary infantry
+    disguiser without damage: movement alone preserves its disguise. The opposite state/identity
     in any of these controls falsifies claims 32–34.
 - **CS14, disguise when still.**
   - **(a)** A still disguise-when-still vehicle takes a terrain disguise. The random-state recorder confirms one draw of
@@ -1617,7 +1639,7 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 21–23, 40 | Observe detection across a mobile sensor's movement, capture and removal. Compare a type flag alone with a range alone. Restore *K*'s power after placing its array at set-up under low power (CS12 c). Capture *K*'s array (CS12 e). Compare mobile and building disguise detectors. | Coverage is owner-only and does not lift shroud. Mobile range supplies coverage. Restored power adds no array coverage, and capture adds none for the new owner. Mobile disguise detectors supply no shared coverage. |
 | 23, 40 | Make the array's cloak radius larger than its sensor sight. After removal, cover an affected outer cell with one sensor, then two. Detector removal is not tested here (claim 40). | A formerly −1 cell needs two additions. Array removal uses cloak radius. |
 | 27–29 | Compare owner, mutual-ally and enemy views on explored ground with/without own sensors. Record clicks, shadow, radar and images every tick. Include a stage count reaching fraction 255. | Claim 28 bands hold. Unsensed allies see the cloak image but cannot click or list it on radar. Fading vehicles have no shadow. Fraction 255 is not drawn for non-owners. |
-| 30–32 | Copy undisguised/disguised infantry, disguised/undisguised vehicles, rock overlays and terrain objects. Create permanent disguisers with each side default. Remove the disguise house. Observe image, colour, health and acquisition. | Claim 31 copies and rejected kinds hold, without target damage. Defaults have the owner's house and do not fool enemy logic. Cleared permanent infantry resets to default; a vehicle clears outright. |
+| 30–32 | Copy undisguised/disguised infantry, disguised/undisguised vehicles, rock overlays and terrain objects. Create permanent disguisers with each side default. Observe image, colour, health and acquisition. | Claim 31 copies and rejected kinds hold, without target damage. Defaults have the owner's house and do not fool enemy logic. |
 | 33, 34 | Move temporary infantry/vehicle disguisers; introduce neighbours on all 8 tick phases, ground/bridge layers, contact and lockout. Compare damage on permanent/temporary types. Try transport entry and capture. For undeployment, use S-0517's P8 (b) fixture and record disguise at the first undeploy processing and at completion, with and without a deploying presentation. | Only temporary vehicles lose disguise while moving. Adjacent checks skip ticks divisible by 8. An eligible still vehicle draws once. Damage follows S-0302 claim 12. The listed non-removal events preserve disguise. Undeployment clears disguise at the first step, before animated completion, or at the immediate step without a presentation; a disguise lost before the step makes that trial inconclusive. |
 | 35, 36 | Vary disguise house among observer, ally and enemy. Vary ownership and detector coverage. Observe acquisition, retaliation, automatic crush choice versus ordered drive-through, cell entry, cursor, hover bar/name, insignia and scenery selection/flash. | Outcomes using claim 35 change with its predicate as claim 36 and the owning specs state. Disguise blocks automatic crush choice, not an otherwise valid drive-through. Detection changes the observer's treatment, not the copied disguise. |
 | 37–39 | Capture the owner's full 256-tick cycle and each Table B band. Compare ally/enemy images and radar colours. Fire vehicles using two fake-blink times, also while undisguised; compare infantry. | Owner bands/cycle hold. Non-owners see real during vehicle fake blink, then the same disguise again. Infantry firing starts no fake blink. Radar uses owner colour when the owner allies the viewer, otherwise a non-empty disguise house's colour; repeat opposite one-way alliances as CS16 (c). |
