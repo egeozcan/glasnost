@@ -2391,7 +2391,7 @@ fn terms_firer_removed_or_inside() {
     }
 }
 
-// spec: S-0306 T1 row 1 (crossing a bridge deck going up: z at the deck height)
+// spec: S-0306 T1 row 1 (crossing a bridge deck going up, from P below the deck height to P′ at or above it: z 20 below the deck height)
 #[test]
 fn t1_row1_deck_crossing_up() {
     let mut s = setup(&base(), 5, 5);
@@ -2400,11 +2400,11 @@ fn t1_row1_deck_crossing_up() {
     let id = place(&mut s, far(), p, [10, 0, 40]);
     assert_eq!(
         step(&mut s, id),
-        Out::Detonated(Pos::new(p.x + 10, p.y, 416))
+        Out::Detonated(Pos::new(p.x + 10, p.y, 396))
     );
 }
 
-// spec: S-0306 T1 row 1 (crossing a bridge deck going down: z 20 below the deck)
+// spec: S-0306 T1 row 1 (crossing a bridge deck going down, from P at or above the deck height to P′ below it: z at the deck height)
 #[test]
 fn t1_row1_deck_crossing_down() {
     let mut s = setup(&base(), 5, 5);
@@ -2413,7 +2413,7 @@ fn t1_row1_deck_crossing_down() {
     let id = place(&mut s, far(), p, [10, 0, -10]);
     assert_eq!(
         step(&mut s, id),
-        Out::Detonated(Pos::new(p.x + 10, p.y, 396))
+        Out::Detonated(Pos::new(p.x + 10, p.y, 416))
     );
 }
 
