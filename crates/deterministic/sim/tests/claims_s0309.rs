@@ -2171,6 +2171,65 @@ fn attack_move_destination_engaged() {
     assert!(w.obj(a).unwrap().combat.engaged);
 }
 
+/// Sim issues S11, #229: makes `a` (a vehicle) not ready, its body still
+/// turning while it is in *move* (S-0215 claim 11).
+fn turning(w: &mut World, a: ObjectId) {
+    let t = w.tick;
+    let o = w.obj_mut(a).unwrap();
+    o.body.t0 = t;
+    o.body.duration = 8;
+    o.body.step = 1;
+    assert!(
+        !glasnost_sim::process::ready(w, a),
+        "set-up: the vehicle is not ready"
+    );
+}
+
+// spec: S-0309 claim 23 (a), row "a destination, not engaged" (a target found: attack queued with an immediate start) and S-0215 claim 7 ("with an immediate start" is the readiness-dependent start: not ready, attack stays queued)
+#[test]
+fn issue_229_attack_move_destination_search_not_ready_queues_attack() {
+    let mut r = base();
+    cart_mut(&mut r).combat.can_passive_aquire = Some(false);
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let b = veh(&mut w, "T0", 1, 2, 0);
+    set_beh(&mut w, a, Behaviour::Move);
+    attack_move(&mut w, a, Target::Cell(at(-8, 0)), false);
+    expire(&mut w, a);
+    turning(&mut w, a);
+    acquire::per_tick(&mut w, a);
+    assert_eq!(target(&w, a), obj(b));
+    let o = w.obj(a).unwrap();
+    assert!(o.combat.engaged);
+    assert_eq!(
+        (o.beh.current, o.beh.queued),
+        (Some(Behaviour::Move), Some(Behaviour::Attack)),
+        "move stays current and attack stays queued"
+    );
+}
+
+// spec: S-0309 claim 23 (a), row "only a target", any other state (a target found: attack queued with an immediate start) and S-0215 claim 7 (the readiness-dependent start)
+#[test]
+fn issue_229_attack_move_target_search_not_ready_queues_attack() {
+    let mut w = game(&base());
+    let a = veh(&mut w, "CART", 0, 0, 0);
+    let m = veh(&mut w, "T0", 1, 12, 0);
+    let b = veh(&mut w, "T1", 1, -2, 0);
+    set_beh(&mut w, a, Behaviour::Move);
+    attack_move(&mut w, a, Target::Object(m), false);
+    expire(&mut w, a);
+    turning(&mut w, a);
+    acquire::per_tick(&mut w, a);
+    assert_eq!(target(&w, a), obj(b));
+    let o = w.obj(a).unwrap();
+    assert!(o.combat.engaged);
+    assert_eq!(
+        (o.beh.current, o.beh.queued),
+        (Some(Behaviour::Move), Some(Behaviour::Attack)),
+        "move stays current and attack stays queued"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Claim 25: the neutral and special houses
 

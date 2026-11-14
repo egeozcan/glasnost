@@ -222,3 +222,80 @@ fn guard_spot_row_after_a_resumed_attack_queues_move() {
     assert_eq!(o.dest, Some(spot));
     assert_eq!(o.guard_spot, None);
 }
+
+// Sim issues S11, #229: the resumption's immediate start depends on
+// readiness.
+
+// spec: S-0309 claim 23 (b) (a destination: move queued with an immediate start) and S-0215 claim 7 ("with an immediate start" is the readiness-dependent start); S-0215 claim 11 (a vehicle moving outside guard is not ready)
+#[test]
+fn issue_229_a_vehicle_that_is_not_ready_keeps_the_resumed_move_queued() {
+    let (mut w, a, e) = setup(12);
+    let c = Target::Cell(mid(SIZE, 8, 0));
+    let t = w.tick;
+    let o = w.obj_mut(a).unwrap();
+    o.attack_move = Some(AttackMoveMemory::Dest(c));
+    o.combat.engaged = true;
+    o.target = Some(Target::Object(e));
+    o.beh.force(Behaviour::Attack, t, true);
+    // Its body is still turning: moving, in attack with a target.
+    o.body.t0 = t;
+    o.body.duration = 8;
+    o.body.step = 1;
+    assert!(!process::ready(&w, a), "set-up: the vehicle is not ready");
+    process::fall_back(&mut w, a, false);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.dest, Some(c), "the memory's destination is the object's");
+    assert_eq!(
+        (o.beh.current, o.beh.queued),
+        (Some(Behaviour::Attack), Some(Behaviour::Move)),
+        "attack stays current and move stays queued"
+    );
+}
+
+// spec: S-0309 claim 23 (b) (only a target: attack queued with an immediate start) and S-0215 claim 13 (Q-0202: the resumed attack is current if it could start, queued otherwise); S-0215 r118 claim 11 (infantry in the middle of firing is not ready)
+#[test]
+fn issue_229_an_infantry_unit_that_is_not_ready_keeps_the_resumed_attack_queued() {
+    let r = testkit::combat_ruleset();
+    let mut w = testkit::game_with(&r, SIZE, 5);
+    let a = spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 0), 64);
+    let e = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 12, 0), 192);
+    let t = w.tick;
+    let o = w.obj_mut(a).unwrap();
+    o.beh.last_common_effects = None;
+    o.attack_move = Some(AttackMoveMemory::Target(Target::Object(e)));
+    o.combat.engaged = false;
+    o.beh.force(Behaviour::Guard, t, true);
+    o.infantry.as_mut().unwrap().attack = true;
+    assert!(!process::ready(&w, a), "set-up: the unit is not ready");
+    process::fall_back(&mut w, a, false);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, Some(Target::Object(e)));
+    assert_eq!(
+        (o.beh.current, o.beh.queued),
+        (Some(Behaviour::Guard), Some(Behaviour::Attack)),
+        "guard stays current and attack stays queued"
+    );
+}
+
+// spec: S-0215 claim 13 (Q-0202: if readiness prevented the resumed start, move remains queued and the previous behaviour remains current; the guard-spot row then replaces the destination and the guard spot is forgotten)
+#[test]
+fn issue_229_guard_spot_row_after_a_resumed_move_that_did_not_start() {
+    let (mut w, a, _, spot) = infantry_setup();
+    let c = Target::Cell(mid(SIZE, 8, 0));
+    let t = w.tick;
+    let o = w.obj_mut(a).unwrap();
+    o.attack_move = Some(AttackMoveMemory::Dest(c));
+    o.combat.engaged = true;
+    o.beh.force(Behaviour::Attack, t, true);
+    o.infantry.as_mut().unwrap().attack = true;
+    assert!(!process::ready(&w, a), "set-up: the unit is not ready");
+    process::fall_back(&mut w, a, false);
+    let o = w.obj(a).unwrap();
+    assert_eq!(
+        (o.beh.current, o.beh.queued),
+        (Some(Behaviour::Attack), Some(Behaviour::Move)),
+        "the previous behaviour stays current and move stays queued"
+    );
+    assert_eq!(o.dest, Some(spot));
+    assert_eq!(o.guard_spot, None);
+}
