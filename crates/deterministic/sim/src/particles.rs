@@ -710,7 +710,8 @@ pub fn fire_turn(w: &mut World, sys: ObjectId) {
     };
     let tick = w.tick;
     // spec: S-0616 claim 11 (emits when the tick is a multiple of the spawn interval, or a multiple of 3 in a turn that made a sweep)
-    let due = (spawn_frames != 0 && glasnost_num::int::rem(tick, spawn_frames) == 0)
+    // spec: S-0616 claim 20 and S-0205 claim 3 (an interval of 0: the remainder is the dividend, so the test passes at tick 0 only)
+    let due = glasnost_num::int::rem(tick, spawn_frames) == 0
         || (swept && glasnost_num::int::rem(tick, SWEEP_CADENCE) == 0);
     if due {
         fire_emission(w, sys);
