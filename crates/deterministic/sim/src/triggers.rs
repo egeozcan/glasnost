@@ -837,38 +837,45 @@ fn var(w: &World, v: i32) -> bool {
         .unwrap_or(false)
 }
 
+/// The kinds a type event's name is looked up in, in turn (S-0011 claim 21).
+const TYPE_EVENT_KINDS: [Kind; 4] = [
+    Kind::Building,
+    Kind::Vehicle,
+    Kind::Infantry,
+    Kind::Aircraft,
+];
+
+/// The type a type event's name names (S-0011 claim 21), if any.
+fn named_type(r: &crate::rules::SimRules, name: &[u8], exact: bool) -> Option<(Kind, u32)> {
+    // The four kinds together; the last match wins (the order is not established, claim 21; ours: buildings, vehicles, infantry, aircraft).
+    if exact {
+        // spec: S-0011 claim 21 (the stored name equals the event's exactly, letter case included, quirks.exact_trigger_type_names)
+        let mut key = (Kind::Building, std::str::from_utf8(name).ok()?.to_owned());
+        TYPE_EVENT_KINDS
+            .into_iter()
+            .filter_map(|kind| {
+                key.0 = kind;
+                r.names.get(&key).map(|&i| (kind, i))
+            })
+            .last()
+    } else {
+        // Of several names of one kind that match with letters folded, the last in name order (#400).
+        let folded = name.to_ascii_lowercase();
+        TYPE_EVENT_KINDS
+            .into_iter()
+            .filter_map(|kind| r.index_of_folded(kind, &folded).map(|i| (kind, i)))
+            .last()
+    }
+}
+
 /// The type events (S-0011 claim 21).
 fn type_event(w: &World, e: &glasnost_map::triggers::Event) -> bool {
     let Some(name) = e.type_name.as_deref() else {
         return false;
     };
     let r = w.rules();
-    let exact = r.quirks.exact_trigger_type_names;
-    // The four kinds together; the last match wins (the order is not established, claim 21; ours: buildings, vehicles, infantry, aircraft).
-    let mut found = None;
-    for kind in [
-        Kind::Building,
-        Kind::Vehicle,
-        Kind::Infantry,
-        Kind::Aircraft,
-    ] {
-        for ((k, n), &i) in &r.names {
-            if *k != kind {
-                continue;
-            }
-            // spec: S-0011 claim 21 (the stored name equals the event's exactly, letter case included, quirks.exact_trigger_type_names)
-            let eq = if exact {
-                n.as_bytes() == name
-            } else {
-                n.as_bytes().eq_ignore_ascii_case(name)
-            };
-            if eq {
-                found = Some((kind, i));
-            }
-        }
-    }
     // spec: S-0011 claim 21 (no type of that name: neither event is ever judged true)
-    let Some((kind, ti)) = found else {
+    let Some((kind, ti)) = named_type(r, name, r.quirks.exact_trigger_type_names) else {
         return false;
     };
     let real = |k: Kind| {
@@ -1276,5 +1283,78 @@ pub fn remove_country(w: &mut World, c: u32) {
                 i.removed = true;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rules::SimRules;
+
+    /// The scan of every name of each kind in turn, keeping the last match.
+    fn scanned(r: &SimRules, name: &[u8], exact: bool) -> Option<(Kind, u32)> {
+        let mut found = None;
+        for kind in TYPE_EVENT_KINDS {
+            for ((k, n), &i) in &r.names {
+                let eq = if exact {
+                    n.as_bytes() == name
+                } else {
+                    n.as_bytes().eq_ignore_ascii_case(name)
+                };
+                if *k == kind && eq {
+                    found = Some((kind, i));
+                }
+            }
+        }
+        found
+    }
+
+    // spec: S-0011 claim 21 (the type a type event names; quirks.exact_trigger_type_names)
+    #[test]
+    fn named_type_matches_the_scan_of_every_name() {
+        let mut set = crate::testkit::ruleset();
+        let mut add = |reg: &str, names: &[&str]| {
+            set.registries
+                .entry(reg.to_owned())
+                .or_default()
+                .extend(names.iter().map(|n| (*n).to_owned()));
+        };
+        add("buildings", &["Zq", "ZQ", "Yx"]);
+        add("vehicles", &["zq", "Wv"]);
+        add("infantry", &["ZQ", "wV"]);
+        add("terrain_objects", &["Ut"]);
+        let mut r = SimRules::new(&set, "synthetic-type-event-names");
+        let probes: [&[u8]; 9] = [
+            b"zq", b"ZQ", b"Zq", b"yX", b"Yx", b"wv", b"Wv", b"ut", b"\xff",
+        ];
+        let check = |r: &SimRules| {
+            for name in probes {
+                for exact in [false, true] {
+                    assert_eq!(
+                        named_type(r, name, exact),
+                        scanned(r, name, exact),
+                        "{name:?} exact {exact}"
+                    );
+                }
+            }
+        };
+        check(&r);
+        // Two buildings fold to "zq": the later name in order ("Zq") wins.
+        let zq = r.index_of(Kind::Building, "Zq");
+        assert_eq!(r.index_of_folded(Kind::Building, b"zq"), zq);
+        assert_ne!(r.index_of(Kind::Building, "ZQ"), zq);
+        assert_eq!(
+            named_type(&r, b"ZQ", false).map(|(k, _)| k),
+            Some(Kind::Infantry)
+        );
+        assert_eq!(
+            named_type(&r, b"ut", false),
+            None,
+            "terrain is not searched"
+        );
+        // A name added after the build is still found.
+        r.names.insert((Kind::Aircraft, "zQ".to_owned()), 7);
+        check(&r);
+        assert_eq!(named_type(&r, b"zq", false), Some((Kind::Aircraft, 7)));
     }
 }

@@ -1068,6 +1068,12 @@ pub struct SimRules {
     anim_by_name: BTreeMap<Vec<u8>, u32>,
     /// The length of `animations` when `anim_by_name` was built.
     anim_by_name_len: usize,
+    /// Each kind's type names with ASCII letters folded to lower case, to
+    /// the registration index of the last name in `names` order that folds
+    /// to it (#400). Derived from `names`.
+    names_folded: BTreeMap<Kind, BTreeMap<Vec<u8>, u32>>,
+    /// The length of `names` when `names_folded` was built.
+    names_folded_len: usize,
     /// Particle and particle-system types, the shared gas system and the
     /// wind (S-0613).
     pub gas: crate::gas::GasRules,
@@ -1584,9 +1590,18 @@ impl SimRules {
                     .or_insert(i);
             }
         }
+        let mut names_folded: BTreeMap<Kind, BTreeMap<Vec<u8>, u32>> = BTreeMap::new();
+        for ((k, n), &i) in &names {
+            names_folded
+                .entry(*k)
+                .or_default()
+                .insert(n.as_bytes().to_ascii_lowercase(), i);
+        }
         Self {
             anim_by_name,
             anim_by_name_len: animations.len(),
+            names_folded,
+            names_folded_len: names.len(),
             loops,
             crates,
             superweapons,
@@ -1675,6 +1690,23 @@ impl SimRules {
         } else {
             self.anim_by_name.get(&name.to_ascii_lowercase()).copied()
         }
+    }
+
+    /// The registration index of the type of `kind` whose name, with ASCII
+    /// letters folded to lower case, equals `folded` (already folded); of
+    /// several such types, the one whose name comes last in `names` order
+    /// (#400: what a scan of `names` keeping its last match finds).
+    pub fn index_of_folded(&self, kind: Kind, folded: &[u8]) -> Option<u32> {
+        if self.names_folded_len != self.names.len() {
+            // The names changed after the rules were built: search them.
+            return self
+                .names
+                .iter()
+                .filter(|((k, n), _)| *k == kind && n.as_bytes().eq_ignore_ascii_case(folded))
+                .map(|(_, &i)| i)
+                .last();
+        }
+        self.names_folded.get(&kind)?.get(folded).copied()
     }
 
     /// A type's registration index by kind and name.
