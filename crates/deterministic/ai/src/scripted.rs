@@ -1880,15 +1880,19 @@ impl Script {
             ((x0..=x1).contains(&c.x) && (y0..=y1).contains(&c.y))
                 .then(|| (c.y - y0) as usize * wide + (c.x - x0) as usize)
         };
-        let mut state = vec![0u8; wide * high];
+        // The marks of the dense map.
+        const NONE: u8 = 0; // nocite: a mark of our own search, not game behaviour
+        const ORE: u8 = 1; // nocite: a mark of our own search, not game behaviour
+        const WORKED: u8 = 2; // nocite: a mark of our own search, not game behaviour
+        let mut state = vec![NONE; wide * high];
         let mut todo: Vec<CellXY> = Vec::new();
         for &c in &ore {
             let Some(i) = index(c) else { continue };
             if centres.iter().any(|&m| dist2(m, c) <= reach) {
-                state[i] = 2;
+                state[i] = WORKED;
                 todo.push(c);
             } else {
-                state[i] = 1;
+                state[i] = ORE;
             }
         }
         while let Some(c) = todo.pop() {
@@ -1896,20 +1900,20 @@ impl Script {
                 for dx in -FIELD_GAP - 1..=FIELD_GAP + 1 {
                     let n = CellXY::new(c.x + dx, c.y + dy);
                     if let Some(i) = index(n)
-                        && state[i] == 1
+                        && state[i] == ORE
                     {
-                        state[i] = 2;
+                        state[i] = WORKED;
                         todo.push(n);
                     }
                 }
             }
         }
-        let worked = state.iter().filter(|&&s| s == 2).count();
+        let worked = state.iter().filter(|&&s| s == WORKED).count();
         let enemy_starts = self.enemy_starts(w);
         let own_half: Vec<CellXY> = ore
             .iter()
             .copied()
-            .filter(|&c| index(c).is_some_and(|i| state[i] == 1))
+            .filter(|&c| index(c).is_some_and(|i| state[i] == ORE))
             .filter(|&c| enemy_starts.iter().all(|&t| dist2(c, home) < dist2(c, t)))
             .collect();
         Fields {
