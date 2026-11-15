@@ -2700,8 +2700,9 @@ impl CheerMemory {
     /// when the rate limit lets it through. An accepted press is recorded
     /// even if the pending list then drops the order.
     pub fn cheer(&mut self, w: &World) -> Option<Order> {
-        // spec: S-0213 Formulas (accepted ⇔ t > L + R)
-        if w.tick > self.last.wrapping_add(w.rules().general.cheer_rate) {
+        // spec: S-0213 Formulas (accepted ⇔ t > L + R; the sum and the comparison are exact integer operations, so they are taken in 64 bits) (#419)
+        let bound = i64::from(self.last) + i64::from(w.rules().general.cheer_rate);
+        if i64::from(w.tick) > bound {
             self.last = w.tick;
             Some(Order::Cheer)
         } else {
