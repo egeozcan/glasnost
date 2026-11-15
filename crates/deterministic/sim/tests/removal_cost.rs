@@ -8,6 +8,16 @@
 //! cargo test --release -p glasnost-sim --test removal_cost -- --ignored --nocapture
 //! ```
 
+// The clock, the microsecond figures and the printing belong to the bench,
+// not to the simulation, which only runs the removals timed.
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    clippy::disallowed_macros,
+    clippy::float_arithmetic,
+    clippy::cast_precision_loss
+)]
+
 use std::time::Instant;
 
 use glasnost_sim::combat::damage::Hit;
