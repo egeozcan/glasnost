@@ -457,6 +457,8 @@ pub fn set_charge(w: &mut World, h: HouseId, i: u32, p: i32) {
     // spec: S-0512 claim 14 (the clock runs from that tick; quirks.superweapon_restart_ignores_suspension: even when suspended)
     let running = !rec.suspended || ignores;
     rec.restart(t, r, running);
+    // spec: S-0512 claim 10 (only a source pick's own re-completion is silent) and claim 14 (the new clock completes through claim 5, with its announcement, #353)
+    rec.silent = false;
     if !keeps_ready {
         // spec: S-0512 claim 14 (quirks.set_charge_keeps_ready off: readiness is cleared)
         rec.ready = false;
@@ -487,6 +489,8 @@ pub fn reset(w: &mut World, h: HouseId, i: u32) {
     if r.running {
         r.start = t;
     }
+    // spec: S-0512 claim 10 (only a source pick's own re-completion is silent) and claims 15 and 5 (the full recharge becomes ready with its announcement and ready tick, #353)
+    r.silent = false;
 }
 
 /// Spy infiltration of building `b` (S-0510 claim 3, row E4; S-0512 claim
