@@ -402,6 +402,8 @@ pub fn load_request(w: &mut World, t: ObjectId, p: ObjectId) -> Reply {
             .cell(to.pos.cell())
             .is_some_and(|c| c.land == land::WATER);
         let zone = w.rules().unit(po.kind, po.type_index).map(|u| u.zone);
+        // spec: S-0507 claim 5 and S-0212 claim 5 (the reach regions the map content gives, a category change earlier in the tick included: brought up to date before they are read, as the region readers' contract asks)
+        crate::regions::ensure(w);
         let apart = zone.is_some_and(|z| {
             !crate::regions::same_region(w, z, to.pos.cell(), to.layer, po.pos.cell(), po.layer)
         });
