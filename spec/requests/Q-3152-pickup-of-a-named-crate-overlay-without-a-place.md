@@ -1,9 +1,9 @@
 ---
 id: Q-3152
 title: Whether the pickup of a named crate overlay that holds no place and is no map crate removes it
-status: open
+status: answered
 related: [S-0520, S-0319, S-0202]
-answered-by: []
+answered-by: [S-0520]
 ---
 
 ## Need
