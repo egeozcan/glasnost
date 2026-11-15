@@ -20,7 +20,7 @@ const CANDIDATE_LIMIT: u32 = 1000; // spec: S-0009 Constants (failed random star
 const MARGIN: i32 = 10; // spec: S-0009 Constants (random start margin 10 cells)
 
 /// The number of players P of a game: every house that is a player
-/// (S-0009 claim 17; our engine has no observers).
+/// (S-0009 claim 17; our lobby offers no observer rows).
 pub fn player_count(w: &World) -> usize {
     w.houses
         .iter()

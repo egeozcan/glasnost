@@ -3,11 +3,13 @@
 //! "Draws during map loading"; S-0009 claims 34 to 43 for the pre-placed
 //! objects).
 //!
-//! The groups of draws run in the table's order. The groups that belong to
-//! specs not implemented here (the tags of S-0011 claim 34, the smudge
-//! selection of S-0312 claim 26 and the resource chain reaction of S-0401
-//! claim 20 in an animation's start event) take no draw and are recorded in
-//! the world's notes when a map reaches them.
+//! The groups of draws run in the table's order. The tags of S-0011 claim
+//! 34 are created with their draws (`triggers::cell_tags` and
+//! `triggers::end_of_loading`). The groups that belong to specs not
+//! implemented here (the smudge selection of S-0312 claim 26 and the
+//! resource chain reaction of S-0401 claim 20 in an animation's start
+//! event) take no draw and are recorded in the world's notes when a map
+//! reaches them.
 
 use std::sync::Arc;
 
@@ -359,8 +361,9 @@ pub(crate) fn middle_event(
 /// (value per bale times bales, S-0401 claim 2, a wrapping signed 32-bit
 /// product) is nonzero takes the choice R(0, f − 1); a result of 0 creates
 /// the glint with no loop delay, its creation draws taken before the next
-/// cell's choice. The glint is cosmetic in our engine: only its draws are
-/// kept.
+/// cell's choice. The glint is an ordinary animation without a position
+/// (`crate::anims`): in the simulation state and appended to the update
+/// order.
 pub fn resource_glints(w: &mut World, order: &[CellXY]) {
     let rules = w.rules_arc();
     // spec: S-0202 claim 14 (with no configured animation the group takes no draw)
@@ -639,7 +642,7 @@ pub fn new_game(
     }
 
     // Initial fill (S-0009 claim 6): one draw per visited cell for a water fill.
-    let (clear_base, water_base) = setup_bases(&rules, &catalogue, setup);
+    let (clear_base, water_base) = setup_bases(&rules, &catalogue);
     for &c in &order {
         let tile = match map.fill {
             Fill::Clear => clear_base,
@@ -770,15 +773,15 @@ pub fn new_game(
 /// human-controlled nor passive in the country data in force) whose
 /// predecessor in house order it did not remove
 /// (`quirks.cleanup_skips_next_house`; off, every eligible house). The
-/// removed house's triggers are not removed: map triggers are not
-/// implemented (S-0011).
+/// removed house's existing trigger instances, those whose definition's
+/// owner country is its country, are removed with it.
 pub fn cleanup(w: &mut World, setup: &GameSetup) {
     let rules = w.rules_arc();
     // spec: S-0009 claim 28 and S-0412 claim 12 (AI houses take the computer slots: one stops the cleanup)
     if setup.houses.iter().any(|h| h.ai) {
         return;
     }
-    // spec: S-0009 claim 28 (human slots, observers included; our engine has no observers)
+    // spec: S-0009 claim 28 (human slots, observers included; our lobby offers no observer rows)
     let human_slots = setup
         .houses
         .iter()
@@ -823,10 +826,10 @@ pub fn cleanup(w: &mut World, setup: &GameSetup) {
 }
 
 /// The fill's base tiles (S-0009 claim 6): with `quirks.stale_fill_tiles`
-/// those of the theater loaded before (the setup's choice; 0 for both in a
-/// new session), otherwise this theater's clear and water role starts.
-fn setup_bases(r: &SimRules, cat: &TileCatalogue, setup: &GameSetup) -> (i32, i32) {
-    let _ = setup;
+/// those of the theater loaded before, which for a game our engine starts
+/// is always none (0 for both); otherwise this theater's clear and water
+/// role starts.
+fn setup_bases(r: &SimRules, cat: &TileCatalogue) -> (i32, i32) {
     if r.quirks.stale_fill_tiles {
         // spec: S-0009 claim 6 (tile 0 for both when no theater has been loaded since the program started)
         (0, 0)
