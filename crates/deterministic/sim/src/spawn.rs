@@ -723,6 +723,10 @@ pub fn firing_answer(
 /// (S-0506 claim 2).
 pub fn turn(w: &mut World, spawner: ObjectId) {
     settle_clear(w, spawner);
+    // spec: S-0506 claim 2, Passes and the spawner's turns (Q-3134: a building makes no pass while it is being erased, S-0514 claim 17; a mobile spawner's erased turns end before this call)
+    if crate::temporal::building_erased(w, spawner) {
+        return;
+    }
     let t = w.tick;
     let due = w
         .obj(spawner)
@@ -732,8 +736,8 @@ pub fn turn(w: &mut World, spawner: ObjectId) {
         return;
     }
     if let Some(c) = w.obj_mut(spawner).and_then(|o| o.spawn.as_mut()) {
-        // spec: S-0506 claim 2 (each later pass comes 10 ticks after the previous one)
-        c.next_pass = c.next_pass.wrapping_add(10).max(t.wrapping_add(1));
+        // spec: S-0506 claim 2, Passes and the spawner's turns (Q-3134: a turn that finds a pass due makes it, however long ago it fell due, and the next one falls due 10 ticks after the tick of the pass just made; missed passes are not made up and the earlier phase is not kept)
+        c.next_pass = t.wrapping_add(10);
     }
     pass(w, spawner);
 }
