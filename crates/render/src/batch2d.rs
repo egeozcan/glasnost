@@ -127,15 +127,41 @@ pub fn clip(q: Quad, clip: [i32; 4]) -> Option<Quad> {
 /// The quads of a line between two pixels (both included): one 1-pixel
 /// rectangle per run of a Bresenham walk.
 pub fn line(from: (i32, i32), to: (i32, i32), rgba: [u8; 4]) -> Vec<Quad> {
+    let mut out = Vec::new();
+    line_into(&mut out, from, to, rgba);
+    out
+}
+
+/// [`line`], appended to `out`.
+///
+/// design: render (#125): consecutive pixels of the walk on one row (or
+/// one column) are one quad, a 1-pixel-high (or wide) rectangle, instead
+/// of one quad each. The quads stay disjoint and cover the same pixels in
+/// the same ink, so the picture is the same; a quad of an earlier line in
+/// `out` is never extended.
+pub fn line_into(out: &mut Vec<Quad>, from: (i32, i32), to: (i32, i32), rgba: [u8; 4]) {
     let (mut x, mut y) = from;
     let dx = (to.0 - x).abs();
     let dy = -(to.1 - y).abs();
     let sx = if x < to.0 { 1 } else { -1 };
     let sy = if y < to.1 { 1 } else { -1 };
     let mut err = dx + dy;
-    let mut out = Vec::new();
+    let start = out.len();
     loop {
-        out.push(Quad::solid([x, y, 1, 1], rgba));
+        let run = out[start..].last_mut().map(|q| &mut q.dst);
+        match run {
+            Some([rx, ry, rw, 1]) if *ry == y && x == *rx + *rw => *rw += 1,
+            Some([rx, ry, rw, 1]) if *ry == y && x == *rx - 1 => {
+                *rx -= 1;
+                *rw += 1;
+            }
+            Some([rx, ry, 1, rh]) if *rx == x && y == *ry + *rh => *rh += 1,
+            Some([rx, ry, 1, rh]) if *rx == x && y == *ry - 1 => {
+                *ry -= 1;
+                *rh += 1;
+            }
+            _ => out.push(Quad::solid([x, y, 1, 1], rgba)),
+        }
         if (x, y) == to {
             break;
         }
@@ -149,7 +175,6 @@ pub fn line(from: (i32, i32), to: (i32, i32), rgba: [u8; 4]) -> Vec<Quad> {
             y += sy;
         }
     }
-    out
 }
 
 /// The CPU side of the index atlas: a shelf packer over an R8 image.
@@ -817,9 +842,32 @@ mod tests {
     fn lines_cover_both_ends() {
         let l = line((0, 0), (4, 2), [9, 9, 9, 255]);
         assert_eq!(l.first().unwrap().dst, [0, 0, 1, 1]);
-        assert_eq!(l.last().unwrap().dst, [4, 2, 1, 1]);
-        assert_eq!(l.len(), 5);
+        assert_eq!(l.last().unwrap().dst, [3, 2, 2, 1]);
+        assert_eq!(l.len(), 3);
         assert_eq!(line((3, 3), (3, 3), [0; 4]).len(), 1);
+    }
+
+    /// design: render (#125): a straight line is one quad, a run of the
+    /// walk on one row or column is one quad either way it is walked, and
+    /// a line appended to others never extends their quads.
+    #[test]
+    fn render_perf_125_runs_are_one_quad() {
+        let ink = [9, 9, 9, 255];
+        assert_eq!(dsts(&line((0, 0), (99, 0), ink)), [[0, 0, 100, 1]]);
+        assert_eq!(dsts(&line((99, 0), (0, 0), ink)), [[0, 0, 100, 1]]);
+        assert_eq!(dsts(&line((5, 9), (5, 0), ink)), [[5, 0, 1, 10]]);
+        assert_eq!(dsts(&line((5, 0), (5, 9), ink)), [[5, 0, 1, 10]]);
+        assert_eq!(
+            dsts(&line((4, 2), (0, 0), ink)),
+            [[4, 2, 1, 1], [2, 1, 2, 1], [0, 0, 2, 1]]
+        );
+        let mut out = line((0, 0), (3, 0), ink);
+        line_into(&mut out, (4, 0), (6, 0), ink);
+        assert_eq!(dsts(&out), [[0, 0, 4, 1], [4, 0, 3, 1]]);
+    }
+
+    fn dsts(q: &[Quad]) -> Vec<[i32; 4]> {
+        q.iter().map(|q| q.dst).collect()
     }
 
     /// design: render (#125) (a line's quads): every line's quads cover
