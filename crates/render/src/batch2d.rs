@@ -144,15 +144,41 @@ pub fn clip(q: Quad, clip: [i32; 4]) -> Option<Quad> {
 /// The quads of a line between two pixels (both included): one 1-pixel
 /// rectangle per run of a Bresenham walk.
 pub fn line(from: (i32, i32), to: (i32, i32), rgba: [u8; 4]) -> Vec<Quad> {
+    let mut out = Vec::new();
+    line_into(&mut out, from, to, rgba);
+    out
+}
+
+/// [`line`], appended to `out`.
+///
+/// design: render (#125): consecutive pixels of the walk on one row (or
+/// one column) are one quad, a 1-pixel-high (or wide) rectangle, instead
+/// of one quad each. The quads stay disjoint and cover the same pixels in
+/// the same ink, so the picture is the same; a quad of an earlier line in
+/// `out` is never extended.
+pub fn line_into(out: &mut Vec<Quad>, from: (i32, i32), to: (i32, i32), rgba: [u8; 4]) {
     let (mut x, mut y) = from;
     let dx = (to.0 - x).abs();
     let dy = -(to.1 - y).abs();
     let sx = if x < to.0 { 1 } else { -1 };
     let sy = if y < to.1 { 1 } else { -1 };
     let mut err = dx + dy;
-    let mut out = Vec::new();
+    let start = out.len();
     loop {
-        out.push(Quad::solid([x, y, 1, 1], rgba));
+        let run = out[start..].last_mut().map(|q| &mut q.dst);
+        match run {
+            Some([rx, ry, rw, 1]) if *ry == y && x == *rx + *rw => *rw += 1,
+            Some([rx, ry, rw, 1]) if *ry == y && x == *rx - 1 => {
+                *rx -= 1;
+                *rw += 1;
+            }
+            Some([rx, ry, 1, rh]) if *rx == x && y == *ry + *rh => *rh += 1,
+            Some([rx, ry, 1, rh]) if *rx == x && y == *ry - 1 => {
+                *ry -= 1;
+                *rh += 1;
+            }
+            _ => out.push(Quad::solid([x, y, 1, 1], rgba)),
+        }
         if (x, y) == to {
             break;
         }
@@ -166,7 +192,6 @@ pub fn line(from: (i32, i32), to: (i32, i32), rgba: [u8; 4]) -> Vec<Quad> {
             y += sy;
         }
     }
-    out
 }
 
 /// The CPU side of the index atlas: a shelf packer over an R8 image.
@@ -366,6 +391,10 @@ pub struct Batch2d {
     instances: wgpu::Buffer,
     capacity: u64,
     runs: Vec<(Option<u32>, u32, u32)>,
+    /// The quads in `instances` and the target size in `screen`, as last
+    /// written: a prepare of the same skips the writes (#124).
+    held: Vec<Quad>,
+    held_size: Option<(u32, u32)>,
     stats: BatchStats,
 }
 
@@ -567,6 +596,8 @@ impl Batch2d {
             instances,
             capacity,
             runs: Vec::new(),
+            held: Vec::new(),
+            held_size: None,
             stats: BatchStats::default(),
         }
     }
@@ -754,6 +785,11 @@ impl Batch2d {
 
     /// Writes the quads of the next [`draw`](Self::draw) for a target of
     /// `size` pixels, and splits them into runs by image.
+    ///
+    /// design: render (#124): the batch keeps the quads and the size it
+    /// last wrote; the same size writes no screen uniform again, and the
+    /// same quads write no instances and keep their runs (the runs follow
+    /// from the quads alone).
     pub fn prepare(
         &mut self,
         device: &wgpu::Device,
@@ -761,29 +797,36 @@ impl Batch2d {
         size: (u32, u32),
         quads: &[Quad],
     ) {
-        let s: [f32; 4] = [size.0 as f32, size.1 as f32, 0.0, 0.0];
-        queue.write_buffer(&self.screen, 0, bytemuck::cast_slice(&s));
+        if self.held_size != Some(size) {
+            let s: [f32; 4] = [size.0 as f32, size.1 as f32, 0.0, 0.0];
+            queue.write_buffer(&self.screen, 0, bytemuck::cast_slice(&s));
+            self.held_size = Some(size);
+        }
         // As `reference`: a quad without size draws nothing (the shader
         // would mirror a negative size and clamp a zero source wrongly).
         let quads = drawable(quads);
         let quads: &[Quad] = &quads;
-        let n = quads.len() as u64;
-        if n > self.capacity {
-            self.capacity = n.next_power_of_two();
-            self.instances = Self::instance_buffer(device, self.capacity);
-        }
-        if n > 0 {
-            queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(quads));
-            self.stats.uploads += 1;
-            self.stats.upload_bytes += std::mem::size_of_val(quads) as u64;
-        }
         self.stats.quads += quads.len();
-        self.runs.clear();
-        for (i, q) in quads.iter().enumerate() {
-            let img = (q.mode() == MODE_IMAGE).then_some(q.image);
-            match self.runs.last_mut() {
-                Some((last, _, len)) if *last == img => *len += 1,
-                _ => self.runs.push((img, i as u32, 1)),
+        if quads != self.held.as_slice() {
+            let n = quads.len() as u64;
+            if n > self.capacity {
+                self.capacity = n.next_power_of_two();
+                self.instances = Self::instance_buffer(device, self.capacity);
+            }
+            if n > 0 {
+                queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(quads));
+                self.stats.uploads += 1;
+                self.stats.upload_bytes += std::mem::size_of_val(quads) as u64;
+            }
+            self.held.clear();
+            self.held.extend_from_slice(quads);
+            self.runs.clear();
+            for (i, q) in quads.iter().enumerate() {
+                let img = (q.mode() == MODE_IMAGE).then_some(q.image);
+                match self.runs.last_mut() {
+                    Some((last, _, len)) if *last == img => *len += 1,
+                    _ => self.runs.push((img, i as u32, 1)),
+                }
             }
         }
         self.stats.draws += self.runs.len();
@@ -838,9 +881,109 @@ mod tests {
     fn lines_cover_both_ends() {
         let l = line((0, 0), (4, 2), [9, 9, 9, 255]);
         assert_eq!(l.first().unwrap().dst, [0, 0, 1, 1]);
-        assert_eq!(l.last().unwrap().dst, [4, 2, 1, 1]);
-        assert_eq!(l.len(), 5);
+        assert_eq!(l.last().unwrap().dst, [3, 2, 2, 1]);
+        assert_eq!(l.len(), 3);
         assert_eq!(line((3, 3), (3, 3), [0; 4]).len(), 1);
+    }
+
+    /// design: render (#125): a straight line is one quad, a run of the
+    /// walk on one row or column is one quad either way it is walked, and
+    /// a line appended to others never extends their quads.
+    #[test]
+    fn render_perf_125_runs_are_one_quad() {
+        let ink = [9, 9, 9, 255];
+        assert_eq!(dsts(&line((0, 0), (99, 0), ink)), [[0, 0, 100, 1]]);
+        assert_eq!(dsts(&line((99, 0), (0, 0), ink)), [[0, 0, 100, 1]]);
+        assert_eq!(dsts(&line((5, 9), (5, 0), ink)), [[5, 0, 1, 10]]);
+        assert_eq!(dsts(&line((5, 0), (5, 9), ink)), [[5, 0, 1, 10]]);
+        assert_eq!(
+            dsts(&line((4, 2), (0, 0), ink)),
+            [[4, 2, 1, 1], [2, 1, 2, 1], [0, 0, 2, 1]]
+        );
+        let mut out = line((0, 0), (3, 0), ink);
+        line_into(&mut out, (4, 0), (6, 0), ink);
+        assert_eq!(dsts(&out), [[0, 0, 4, 1], [4, 0, 3, 1]]);
+    }
+
+    fn dsts(q: &[Quad]) -> Vec<[i32; 4]> {
+        q.iter().map(|q| q.dst).collect()
+    }
+
+    /// design: render (#125) (a line's quads): every line's quads cover
+    /// exactly the pixels of its Bresenham walk, each pixel once (so a
+    /// translucent line blends each pixel once), all of one colour.
+    #[test]
+    fn render_perf_125_line_quads_cover_the_walk_once() {
+        fn walk(from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
+            let (mut x, mut y) = from;
+            let dx = (to.0 - x).abs();
+            let dy = -(to.1 - y).abs();
+            let sx = if x < to.0 { 1 } else { -1 };
+            let sy = if y < to.1 { 1 } else { -1 };
+            let mut err = dx + dy;
+            let mut out = Vec::new();
+            loop {
+                out.push((x, y));
+                if (x, y) == to {
+                    break;
+                }
+                let e2 = 2 * err;
+                if e2 >= dy {
+                    err += dy;
+                    x += sx;
+                }
+                if e2 <= dx {
+                    err += dx;
+                    y += sy;
+                }
+            }
+            out
+        }
+        let ink = [10, 20, 30, 128];
+        let mut ends = Vec::new();
+        for (x, y) in [(0, 0), (5, 3), (-4, 7), (13, -2)] {
+            for (dx, dy) in [
+                (0, 0),
+                (9, 0),
+                (-9, 0),
+                (0, 9),
+                (0, -9),
+                (9, 9),
+                (-9, 9),
+                (9, 4),
+                (4, 9),
+                (-9, -4),
+                (-4, -9),
+                (17, 3),
+                (3, -17),
+                (-40, 13),
+                (1, 1),
+                (2, 1),
+            ] {
+                ends.push(((x, y), (x + dx, y + dy)));
+            }
+        }
+        for (from, to) in ends {
+            let quads = line(from, to, ink);
+            let mut covered = Vec::new();
+            for q in &quads {
+                assert_eq!(*q, Quad::solid(q.dst, ink), "{from:?} to {to:?}");
+                let [x, y, w, h] = q.dst;
+                assert!(w > 0 && h > 0);
+                for py in y..y + h {
+                    for px in x..x + w {
+                        covered.push((px, py));
+                    }
+                }
+            }
+            let n = covered.len();
+            covered.sort_unstable();
+            covered.dedup();
+            assert_eq!(covered.len(), n, "{from:?} to {to:?}: a pixel twice");
+            let mut want = walk(from, to);
+            want.sort_unstable();
+            assert_eq!(covered, want, "{from:?} to {to:?}");
+        }
     }
 
     #[test]

@@ -136,6 +136,13 @@ pub struct Session {
     /// The button images the sidebar draws and lays out (S-0411 claim 19).
     buttons: hud::ButtonArt,
     pointer: Option<Point>,
+    /// The pointer picks of the frame being drawn, from
+    /// [`Session::begin_frame`] to [`Session::end_frame`]: each point's cell
+    /// and object (with the view centre and window size they were made
+    /// for), made once and handed to the marks, the cursor, the tip and the
+    /// drawing. `None` outside a frame, where every pick is made afresh.
+    // design: render (#120)
+    picks: Option<Vec<(Pick, Picked)>>,
     /// The tips' rest and the tip that shows: the name tip (S-0111 claims
     /// 20 to 26) or a sidebar tip (S-0411 claims 20 to 22).
     name_tip: name_tip::NameTip,
@@ -223,6 +230,13 @@ pub struct Session {
     /// The last step's laps, when [`Session::lap_clock`] is set.
     pub laps: StepLaps,
 }
+
+/// What a frame's pointer pick was made for: the point, the view centre
+/// and the window size (design: render (#120)).
+type Pick = (Point, (i32, i32), (i32, i32));
+
+/// What a pointer pick found: the cell and the object under the point.
+type Picked = (CellXY, Option<ObjectId>);
 
 /// Host-clock times of one step's parts, in milliseconds, for the
 /// performance benchmark (M8 step C4; our own tooling, never game state).
@@ -530,6 +544,7 @@ impl Session {
             sidebar_art: None,
             buttons: hud::ButtonArt::default(),
             pointer: None,
+            picks: None,
             name_tip: name_tip::NameTip::default(),
             focus_tip: None,
             // spec: S-0111 claim 20 and Import mapping (the tooltip option is on unless the player's settings turn it off)
@@ -591,7 +606,20 @@ impl Session {
     }
 
     /// Calls `f` with the live drawing state holding the canonical world.
+    /// The frame's pointer picks are made again after it, since `f` may
+    /// change the scene.
     pub fn with_live<R>(
+        &mut self,
+        f: impl FnOnce(&mut Live, &Inputs, &mut Scene) -> R,
+    ) -> Option<R> {
+        // design: render (#120)
+        self.forget_picks();
+        self.with_live_kept(f)
+    }
+
+    /// [`Session::with_live`] for an `f` that leaves the scene as it is, so
+    /// that the frame's pointer picks stand.
+    fn with_live_kept<R>(
         &mut self,
         f: impl FnOnce(&mut Live, &Inputs, &mut Scene) -> R,
     ) -> Option<R> {
@@ -1191,9 +1219,49 @@ impl Session {
         (v.origin.0 + p.x - m.x, v.origin.1 + p.y - m.y)
     }
 
+    /// Starts a drawn frame's pointer picks: from here to
+    /// [`Session::end_frame`] each point is picked once ([`Session::under`]).
+    // design: render (#120)
+    pub fn begin_frame(&mut self) {
+        self.picks = Some(Vec::new());
+    }
+
+    /// Ends the drawn frame's pointer picks: from here on every pick is
+    /// made afresh.
+    // design: render (#120)
+    pub fn end_frame(&mut self) {
+        self.picks = None;
+    }
+
+    /// Drops the frame's pointer picks made so far, for a scene that may
+    /// have changed.
+    fn forget_picks(&mut self) {
+        if let Some(p) = self.picks.as_mut() {
+            p.clear();
+        }
+    }
+
     /// The cell and the selectable object under a screen point of the
-    /// battlefield.
+    /// battlefield: within a drawn frame, the frame's pick of the point
+    /// (design: render (#120)).
     pub fn under(&mut self, p: Point) -> (CellXY, Option<ObjectId>) {
+        let key = (p, self.centre, self.screen);
+        if let Some(&(_, hit)) = self
+            .picks
+            .as_ref()
+            .and_then(|v| v.iter().find(|(k, _)| *k == key))
+        {
+            return hit;
+        }
+        let hit = self.pick(p);
+        if let Some(v) = self.picks.as_mut() {
+            v.push((key, hit));
+        }
+        hit
+    }
+
+    /// [`Session::under`] made afresh.
+    fn pick(&mut self, p: Point) -> (CellXY, Option<ObjectId>) {
         let (qx, qy) = self.world_point(p);
         // spec: S-0101 F8 (the probe reads each cell's height level): the world's cells, whose levels change in play (a collapsed pier), not the map file's (#83)
         let cells = &self.play.game.world.cells.grid;
@@ -1225,7 +1293,7 @@ impl Session {
             .scene
             .object_at(qx, qy, &view, &self.filter, &ComposeQuirks::default());
         let id = code.and_then(|c| {
-            self.with_live(|live, _, _| live.object_of_code(c))
+            self.with_live_kept(|live, _, _| live.object_of_code(c))
                 .flatten()
         });
         (CellXY::new(cell.0, cell.1), id)
@@ -2535,16 +2603,22 @@ impl Session {
         self.update_name_tip();
         let selection = self.play.selection.clone();
         let digits = self.play.group_digits();
-        self.with_live(|live, inputs, scene| {
+        let redrawn = self.with_live_kept(|live, inputs, scene| {
             let marks = live.set_marks(&selection, hovered);
             // Making or changing a group changes no mark, but its digits.
             let groups = live.set_group_digits(digits);
             // spec: S-0111 claim 1 (status extras are culled against the battlefield view as drawn)
             // design: render (#78) a view moved between ticks (a scroll, a radar click, a jump to a group) redraws the status extras in the frame it shows, not at the next tick
-            if marks || groups || live.status_view_stale() {
+            let redraw = marks || groups || live.status_view_stale();
+            if redraw {
                 live.redraw_status(inputs, scene);
             }
+            redraw
         });
+        // design: render (#120) the status extras never supply the pick (#68), but the scene changed: the frame's later picks are made again
+        if redrawn == Some(true) {
+            self.forget_picks();
+        }
     }
 
     /// One frame of the tips (S-0111 claims 20 and 26, S-0411 claims 20 and
@@ -3238,7 +3312,15 @@ impl Session {
             }
         }
         // spec: S-0601 claim 18 (the control ring on a controlled object, the permanent ring on a permanently controlled one, raised by the ring height; on a building in front of it). Seam: the ring animations' art is not drawn yet; a marker stands in at the ring's place.
-        for o in w.objects.values() {
+        // design: render (#122) only a victim or a permanently controlled object has a ring (`mind::ring`), so those records are walked, in object order, instead of every object
+        let ringed: std::collections::BTreeSet<ObjectId> = w
+            .mind
+            .victims
+            .keys()
+            .chain(&w.mind.permanent)
+            .copied()
+            .collect();
+        for o in ringed.into_iter().filter_map(|id| w.obj(id)) {
             // Our own: no ring on objects in cells the local player has not
             // explored (in a watch game, where nothing is shrouded, on every one).
             let seen = self

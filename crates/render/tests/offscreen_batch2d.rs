@@ -95,6 +95,89 @@ fn batch_pixels_match_the_cpu_reference() {
     }
 }
 
+/// design: render (#124): whatever the batch keeps between prepares, each
+/// draw shows the quads and the target size of the latest prepare: other
+/// quads of the same count, a shorter list that starts like the held one,
+/// the same quads for a target of another size, more quads than the
+/// instance buffer held, and the first quads again.
+#[test]
+fn render_perf_124_each_prepare_draws_its_own_quads() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut atlas = Atlas::default();
+    let glyph: Vec<u8> = (0..5 * 7).map(|i| u8::from(i % 3 == 0)).collect();
+    let gr = atlas.add(5, 7, &glyph).unwrap();
+    let rows = [palette(0)];
+    let images = BTreeMap::new();
+    let a = vec![
+        Quad::solid([0, 0, 64, 48], [30, 40, 50, 255]),
+        Quad::solid([10, 10, 30, 20], [0, 0, 255, 128]),
+        Quad::glyph(40, 5, gr, [250, 200, 10, 255]),
+    ];
+    let mut b = a.clone();
+    b[1] = Quad::solid([12, 8, 20, 30], [255, 0, 0, 200]);
+    let shorter = a[..2].to_vec();
+    let many: Vec<Quad> = (0..1500)
+        .map(|i| Quad::solid([i % 64, (i / 64) % 48, 1, 1], [(i % 251) as u8, 9, 9, 255]))
+        .collect();
+    let mut batch = Batch2d::new(&device, OFFSCREEN_FORMAT);
+    batch.upload_atlas(&queue, &mut atlas);
+    batch.set_palettes(&device, &queue, &rows);
+    let steps: [(&str, &[Quad], (u32, u32)); 7] = [
+        ("first", &a, (64, 48)),
+        ("other quads", &b, (64, 48)),
+        ("the first again", &a, (64, 48)),
+        ("a shorter list", &shorter, (64, 48)),
+        ("another size", &shorter, (40, 30)),
+        ("more than held", &many, (40, 30)),
+        ("the first at last", &a, (64, 48)),
+    ];
+    for (what, quads, (w, h)) in steps {
+        batch.prepare(&device, &queue, (w, h), quads);
+        let got = render_rgba(&device, &queue, w, h, |pass| batch.draw(pass));
+        let want = batch2d::reference(quads, &atlas, &rows, &images, w as i32, h as i32);
+        for (i, (g, e)) in got.chunks(4).zip(want.chunks(4)).enumerate() {
+            for k in 0..3 {
+                let d = (i32::from(g[k]) - i32::from(e[k])).abs();
+                assert!(
+                    d <= 1,
+                    "{what}: pixel ({}, {}) got {g:?} want {e:?}",
+                    i as u32 % w,
+                    i as u32 / w
+                );
+            }
+        }
+    }
+}
+
+/// design: render (#124): a prepare of the quads the batch holds uploads
+/// nothing and draws them in as many draw calls as before; other quads
+/// upload once.
+#[test]
+fn render_perf_124_the_same_quads_upload_nothing() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let quads = vec![
+        Quad::solid([0, 0, 8, 8], [1, 2, 3, 255]),
+        Quad::image(7, (4, 3), [0, 0, 4, 3]),
+        Quad::solid([2, 2, 2, 2], [4, 5, 6, 255]),
+    ];
+    let mut batch = Batch2d::new(&device, OFFSCREEN_FORMAT);
+    batch.prepare(&device, &queue, (8, 8), &quads);
+    let first = batch.take_stats();
+    assert_eq!((first.uploads, first.quads, first.draws), (1, 3, 3));
+    batch.prepare(&device, &queue, (8, 8), &quads);
+    let again = batch.take_stats();
+    assert_eq!((again.uploads, again.upload_bytes), (0, 0));
+    assert_eq!((again.quads, again.draws), (3, 3));
+    let mut other = quads.clone();
+    other[2] = Quad::solid([3, 3, 2, 2], [4, 5, 6, 255]);
+    batch.prepare(&device, &queue, (8, 8), &other);
+    assert_eq!(batch.take_stats().uploads, 1);
+}
+
 /// An image drawn from a texture the caller owns (the client's map target)
 /// matches the same image uploaded through `set_image`.
 #[test]

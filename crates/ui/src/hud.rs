@@ -362,6 +362,52 @@ pub fn shown_tab(w: &World, house: HouseId, current: usize) -> usize {
         .unwrap_or(current)
 }
 
+/// The icons of every tab of `house`, [`entries`] of each.
+fn all_entries(w: &World, house: HouseId) -> [Vec<Entry>; TABS] {
+    std::array::from_fn(|i| entries(w, house, i))
+}
+
+/// [`shown_tab`] from the tabs' icons `all`.
+fn shown_of(all: &[Vec<Entry>; TABS], current: usize) -> usize {
+    if all.get(current).is_some_and(|es| !es.is_empty()) {
+        return current;
+    }
+    // spec: S-0411 claim 2 (the shown tab without icons: switch to the first tab with icons)
+    (0..TABS).find(|&i| !all[i].is_empty()).unwrap_or(current)
+}
+
+/// The tab buttons of `house` from the tabs' icons `all`, without the
+/// flash start the client keeps.
+fn tab_views(w: &World, house: HouseId, all: &[Vec<Entry>; TABS]) -> [TabView; TABS] {
+    use glasnost_sim::superweapons::charge;
+    std::array::from_fn(|i| {
+        let es = &all[i];
+        TabView {
+            count: es.len(),
+            // spec: S-0411 claim 11 (a done building or defence waiting for placement flashes its tab; tabs 1 and 2 feed those lines, claim 1)
+            waiting: i < 2
+                && es.iter().any(|e| {
+                    matches!(e, Entry::Type(t) if sidebar::icon_state(w, house, *t).is_some_and(|s| s.ready))
+                }),
+            flash_start: None,
+            // spec: S-0411 claim 11 and S-0512 claim 17 (a ready superweapon inside its flash window flashes its tab)
+            sw_ready: es
+                .iter()
+                .any(|e| matches!(e, Entry::Superweapon(k) if charge::flashing(w, house, *k))),
+        }
+    })
+}
+
+/// The tab buttons of `house`'s sidebar as [`model`] gives them, without
+/// the rest of the model: for the client's per-tick cues and flashes.
+// design: render (#121)
+pub fn tabs(w: &World, house: HouseId) -> [TabView; TABS] {
+    if w.houses.get(usize::from(house.0)).is_none() {
+        return [TabView::default(); TABS];
+    }
+    tab_views(w, house, &all_entries(w, house))
+}
+
 /// Reads the sidebar of `house` from the world. `credits` is the counter's
 /// shown value (S-0416); `name` and `art` give each type's name and icon.
 pub fn model(
@@ -372,9 +418,11 @@ pub fn model(
     name: &dyn Fn(TypeRef) -> String,
     art: &dyn Fn(Entry) -> Option<(u32, u32, i32, i32)>,
 ) -> HudModel {
+    // design: render (#121) each tab's icons are read once
+    let all = all_entries(w, house);
     let mut m = HudModel {
         credits,
-        shown: shown_tab(w, house, shown),
+        shown: shown_of(&all, shown),
         tick: w.tick,
         flash_extra: w.rules().quirks.tab_flash_initial_extra_period,
         ..HudModel::default()
@@ -386,21 +434,12 @@ pub fn model(
     m.meter = power_meter(w, house);
     m.radar = glasnost_sim::econ::radar::available(w, house);
     use glasnost_sim::superweapons::charge::{self, Label};
-    for i in 0..TABS {
-        let es = entries(w, house, i);
-        m.tabs[i].count = es.len();
-        // spec: S-0411 claim 11 (a done building or defence waiting for placement flashes its tab; tabs 1 and 2 feed those lines, claim 1)
-        m.tabs[i].waiting = i < 2
-            && es.iter().any(|e| {
-                matches!(e, Entry::Type(t) if sidebar::icon_state(w, house, *t).is_some_and(|s| s.ready))
-            });
-        // spec: S-0411 claim 11 and S-0512 claim 17 (a ready superweapon inside its flash window flashes its tab)
-        m.tabs[i].sw_ready = es
-            .iter()
-            .any(|e| matches!(e, Entry::Superweapon(k) if charge::flashing(w, house, *k)));
-    }
+    m.tabs = tab_views(w, house, &all);
     let types = &w.rules().superweapons.types;
-    m.cameos = entries(w, house, m.shown)
+    m.cameos = all
+        .into_iter()
+        .nth(m.shown)
+        .unwrap_or_default()
         .into_iter()
         .map(|e| match e {
             Entry::Type(t) => {
@@ -1372,6 +1411,104 @@ mod tests {
                 assert_eq!(s, cur);
             }
         }
+    }
+
+    /// design: render (#121) (the model reads each tab's icons once): the
+    /// shown tab, every tab button and the shown tab's icons as
+    /// [`shown_tab`] and [`entries`] give them, for every current tab, one
+    /// past the tabs included, and for a house the world does not have.
+    #[test]
+    fn render_perf_121_the_model_follows_the_entries() {
+        use glasnost_sim::load;
+        use glasnost_sim::superweapons::charge;
+        let mut w = load::new_game(
+            glasnost_ai::fixture::rules(),
+            &glasnost_ai::fixture::map(),
+            glasnost_ai::fixture::catalogue(),
+            &glasnost_ai::fixture::setup(1),
+        )
+        .unwrap();
+        // Icons on the first and third tabs of house 0, none on the others.
+        for (tab, n) in [(0, 5), (2, 3)] {
+            w.houses[0].econ.tech.icons[tab] = (0..n)
+                .map(|i| glasnost_sim::econ::tech::Icon {
+                    t: TypeRef {
+                        kind: Kind::Vehicle,
+                        index: i,
+                    },
+                    cost: 0,
+                })
+                .collect();
+        }
+        let w = w;
+        let name = |t: TypeRef| format!("{:?}{}", t.kind, t.index);
+        for h in [HouseId(0), HouseId(1), HouseId(200)] {
+            for cur in 0..TABS + 2 {
+                let m = model(&w, h, cur, 7, &name, &|_| None);
+                assert_eq!(m.shown, shown_tab(&w, h, cur), "house {h:?}, tab {cur}");
+                let real = w.houses.get(usize::from(h.0)).is_some();
+                for (i, tv) in m.tabs.iter().enumerate() {
+                    let es = entries(&w, h, i);
+                    let want = if real {
+                        TabView {
+                            count: es.len(),
+                            waiting: i < 2
+                                && es.iter().any(|e| {
+                                    matches!(e, Entry::Type(t) if sidebar::icon_state(&w, h, *t).is_some_and(|s| s.ready))
+                                }),
+                            flash_start: None,
+                            sw_ready: es.iter().any(|e| {
+                                matches!(e, Entry::Superweapon(k) if charge::flashing(&w, h, *k))
+                            }),
+                        }
+                    } else {
+                        TabView::default()
+                    };
+                    assert_eq!(*tv, want, "house {h:?}, tab {cur}, button {i}");
+                }
+                let shown: Vec<Entry> = if real {
+                    entries(&w, h, m.shown)
+                } else {
+                    Vec::new()
+                };
+                let got: Vec<Entry> = m.cameos.iter().map(|c| c.entry).collect();
+                assert_eq!(got, shown, "house {h:?}, tab {cur}");
+                for c in &m.cameos {
+                    if let Entry::Type(t) = c.entry {
+                        assert_eq!(c.name, name(t));
+                    }
+                }
+            }
+        }
+    }
+
+    /// design: render (#121) ([`tabs`], the client's per-tick read): the
+    /// model's tab buttons, for a house with icons, one without and one the
+    /// world does not have.
+    #[test]
+    fn render_perf_121_the_tabs_are_the_models() {
+        use glasnost_sim::load;
+        let mut w = load::new_game(
+            glasnost_ai::fixture::rules(),
+            &glasnost_ai::fixture::map(),
+            glasnost_ai::fixture::catalogue(),
+            &glasnost_ai::fixture::setup(1),
+        )
+        .unwrap();
+        w.houses[0].econ.tech.icons[2] = (0..4)
+            .map(|i| glasnost_sim::econ::tech::Icon {
+                t: TypeRef {
+                    kind: Kind::Vehicle,
+                    index: i,
+                },
+                cost: 0,
+            })
+            .collect();
+        for h in [HouseId(0), HouseId(1), HouseId(200)] {
+            let m = model(&w, h, 0, 0, &|_| String::new(), &|_| None);
+            assert_eq!(tabs(&w, h), m.tabs, "house {h:?}");
+        }
+        assert_eq!(tabs(&w, HouseId(0))[2].count, 4);
     }
 
     #[test]

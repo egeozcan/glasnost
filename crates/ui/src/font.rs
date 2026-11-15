@@ -170,18 +170,75 @@ pub fn glyph(c: char) -> Option<Glyph> {
     Some(parse(s.0, s.1))
 }
 
+/// The widest row of a mask, in columns.
+const fn mask_width(m: &str) -> i32 {
+    let b = m.as_bytes();
+    let (mut i, mut row, mut widest) = (0, 0, 0);
+    while i < b.len() {
+        if b[i] == b'/' {
+            row = 0;
+        } else {
+            row += 1;
+            if row > widest {
+                widest = row;
+            }
+        }
+        i += 1;
+    }
+    widest
+}
+
+/// The advance of the glyph of `c`, or of `?` for a character the font
+/// lacks, or a space's when even `?` is missing.
+const fn table_advance(c: char) -> i32 {
+    let mut fallback = None;
+    let mut i = 0;
+    while i < GLYPHS.len() {
+        let (g, m) = GLYPHS[i];
+        if g == c {
+            return mask_width(m) + SPACING;
+        }
+        if g == '?' && fallback.is_none() {
+            fallback = Some(mask_width(m) + SPACING);
+        }
+        i += 1;
+    }
+    match fallback {
+        Some(a) => a,
+        None => SPACE_ADVANCE,
+    }
+}
+
+/// The advance of every ASCII character, then (`ADVANCES[128]`) the
+/// advance of every character past ASCII.
+///
+/// design: render (#126): built once at compile time from the glyph
+/// table, which is a constant, so no input can change it.
+const ADVANCES: [i32; 129] = {
+    let mut g = 0;
+    while g < GLYPHS.len() {
+        assert!(GLYPHS[g].0.is_ascii(), "a glyph past ASCII");
+        g += 1;
+    }
+    let mut t = [0; 129];
+    let mut i = 0;
+    while i < 128 {
+        t[i] = if i == b' ' as usize {
+            SPACE_ADVANCE
+        } else {
+            table_advance(i as u8 as char)
+        };
+        i += 1;
+    }
+    // No glyph is past ASCII (asserted above), so every such character
+    // takes the advance of a character without a glyph.
+    t[128] = table_advance('\u{fffd}');
+    t
+};
+
 /// The advance of one character.
 pub fn advance(c: char) -> i32 {
-    if c == ' ' {
-        return SPACE_ADVANCE;
-    }
-    let s = GLYPHS
-        .iter()
-        .find(|(g, _)| *g == c)
-        .or_else(|| GLYPHS.iter().find(|(g, _)| *g == '?'));
-    s.map_or(SPACE_ADVANCE, |(_, m)| {
-        m.split('/').map(str::len).max().unwrap_or(0) as i32 + SPACING
-    })
+    ADVANCES[(c as usize).min(128)]
 }
 
 /// The width of a line of text (no trailing spacing).
@@ -191,16 +248,19 @@ pub fn text_width(s: &str) -> i32 {
 }
 
 /// Cuts `s` to fit in `width` pixels, ending with ".." when cut.
+///
+/// design: render (#126): one pass over the widths of the prefixes; a
+/// prefix and the ".." measure as their advances' sum less one spacing.
 pub fn fit(s: &str, width: i32) -> String {
     if text_width(s) <= width {
         return s.to_owned();
     }
+    let dots = 2 * advance('.');
     let mut out = String::new();
+    let mut w = 0;
     for c in s.chars() {
-        let mut t = out.clone();
-        t.push(c);
-        t.push_str("..");
-        if text_width(&t) > width {
+        w += advance(c);
+        if w + dots - SPACING > width {
             break;
         }
         out.push(c);
@@ -272,6 +332,80 @@ mod tests {
                 l.ch,
                 d.ch
             );
+        }
+    }
+
+    /// The measuring as it was before render perf RP3 (#126): a search of
+    /// the glyph table per character, and a fit that measures every
+    /// candidate again. The oracle of the measuring now.
+    fn old_advance(c: char) -> i32 {
+        if c == ' ' {
+            return SPACE_ADVANCE;
+        }
+        let s = GLYPHS
+            .iter()
+            .find(|(g, _)| *g == c)
+            .or_else(|| GLYPHS.iter().find(|(g, _)| *g == '?'));
+        s.map_or(SPACE_ADVANCE, |(_, m)| {
+            m.split('/').map(str::len).max().unwrap_or(0) as i32 + SPACING
+        })
+    }
+
+    fn old_text_width(s: &str) -> i32 {
+        let w: i32 = s.chars().map(old_advance).sum();
+        if w > 0 { w - SPACING } else { 0 }
+    }
+
+    fn old_fit(s: &str, width: i32) -> String {
+        if old_text_width(s) <= width {
+            return s.to_owned();
+        }
+        let mut out = String::new();
+        for c in s.chars() {
+            let mut t = out.clone();
+            t.push(c);
+            t.push_str("..");
+            if old_text_width(&t) > width {
+                break;
+            }
+            out.push(c);
+        }
+        out.push_str("..");
+        out
+    }
+
+    /// Invented texts for the oracle: every printable character, spaces,
+    /// dots, characters the font lacks, in a fixed pseudo-random mix.
+    fn texts() -> Vec<String> {
+        let pool: Vec<char> = (' '..='~')
+            .chain(['é', 'ß', '\u{1}', '\t', '\u{263a}', '.', '.', ' '])
+            .collect();
+        let mut seed = 12_345_u32;
+        let mut out = vec![String::new(), " ".into(), "..".into(), "é".into()];
+        for len in 1..40 {
+            let s = (0..len)
+                .map(|_| {
+                    seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                    pool[(seed >> 16) as usize % pool.len()]
+                })
+                .collect();
+            out.push(s);
+        }
+        out
+    }
+
+    /// design: render (#126): every character measures as before, and
+    /// every text's width and cut are the old ones at every width.
+    #[test]
+    fn render_perf_126_measures_match_the_old_ones() {
+        for c in (0..0x3000).filter_map(char::from_u32) {
+            assert_eq!(advance(c), old_advance(c), "{c:?}");
+        }
+        for s in texts() {
+            assert_eq!(text_width(&s), old_text_width(&s), "{s:?}");
+            for width in -4..=old_text_width(&s) + 4 {
+                assert_eq!(fit(&s, width), old_fit(&s, width), "{s:?} in {width}");
+            }
         }
     }
 

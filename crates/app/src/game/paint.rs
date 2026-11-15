@@ -207,7 +207,7 @@ impl Painter {
                         out.push(Quad::image(*id, size, r4(*rect)));
                     }
                 }
-                Prim::Line { from, to, rgba } => out.extend(batch2d::line(*from, *to, *rgba)),
+                Prim::Line { from, to, rgba } => batch2d::line_into(&mut out, *from, *to, *rgba),
                 Prim::Layer { scale, list } => {
                     // Clipped in logical pixels, then each destination
                     // scaled; the sources stay, so the 2D batch's nearest
