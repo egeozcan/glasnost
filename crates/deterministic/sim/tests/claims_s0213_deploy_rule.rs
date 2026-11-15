@@ -203,7 +203,10 @@ fn deploy_check_and_readiness() {
     let ok = put(&mut w, "TANK", Kind::Vehicle, 0, 0, 0);
     let off = put(&mut w, "TANK", Kind::Vehicle, 0, 4, 0);
     w.obj_mut(off).unwrap().econ.building.unit_disabled = true;
-    assert!(targeting::deploy_check(&w, off), "deactivated is not disabled");
+    assert!(
+        targeting::deploy_check(&w, off),
+        "deactivated is not disabled"
+    );
     assert!(targeting::deploy_check(&w, ok));
     assert_eq!(key(&w, &[ok, off]), orders_for(&[ok]));
     // A plain vehicle with no way to deploy has no deploy readiness.

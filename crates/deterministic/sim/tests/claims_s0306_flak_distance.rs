@@ -27,7 +27,11 @@ fn issue_317_the_differences_wrap() {
     let w = world(true);
     let x = Pos::new(i32::MIN, 0, 0);
     let y = Pos::new(i32::MAX, 0, 0);
-    assert_eq!(flak_distance(&w, x, y), 1, "Δx = i32::MAX − i32::MIN wraps to −1");
+    assert_eq!(
+        flak_distance(&w, x, y),
+        1,
+        "Δx = i32::MAX − i32::MIN wraps to −1"
+    );
     let x = Pos::new(0, i32::MAX, 0);
     let y = Pos::new(0, i32::MIN, 0);
     assert_eq!(flak_distance(&w, x, y), 1, "Δy wraps to +1");

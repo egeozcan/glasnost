@@ -2216,7 +2216,8 @@ pub fn rep_distance(w: &World, id: ObjectId, on: ClickOn) -> u64 {
 fn representative(w: &World, sel: &[ObjectId], on: ClickOn) -> Option<ObjectId> {
     let mut best: Option<(u8, u64, ObjectId)> = None;
     for &id in sel.iter().filter(|&&id| w.obj(id).is_some()) {
-        let key = (rank(w, id), rep_distance(w, id, on));        let better = match best {
+        let key = (rank(w, id), rep_distance(w, id, on));
+        let better = match best {
             None => true,
             Some((r, d, _)) => key.0 > r || (key.0 == r && key.1 < d),
         };

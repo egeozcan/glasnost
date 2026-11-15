@@ -19,7 +19,10 @@ fn issue_413_a_deactivated_vehicle_force_firing_on_a_cell_in_range_attacks() {
     let tank = put(&mut w, Kind::Vehicle, "CRUSHER", ALPHA, 0, 0);
     deactivate(&mut w, tank);
     assert!(!targeting::movable(&w, A, tank));
-    assert!(targeting::deploy_check(&w, tank), "deactivated is not disabled");
+    assert!(
+        targeting::deploy_check(&w, tank),
+        "deactivated is not disabled"
+    );
     let fire = Modifiers {
         force_fire: true,
         ..Default::default()

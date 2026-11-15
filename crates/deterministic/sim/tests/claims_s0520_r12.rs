@@ -38,7 +38,10 @@ fn places_on(w: &World, c: CellXY) -> Vec<u16> {
 /// A crate placed on `c` by a trigger action, with a place; returns its key.
 fn placed(w: &mut World, c: CellXY) -> u16 {
     let before: Vec<u16> = w.crates.places.keys().copied().collect();
-    assert!(crates::place_trigger(w, c, 0), "set-up: a crate on the cell");
+    assert!(
+        crates::place_trigger(w, c, 0),
+        "set-up: a crate on the cell"
+    );
     *w.crates
         .places
         .keys()

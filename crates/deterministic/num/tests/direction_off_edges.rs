@@ -34,6 +34,10 @@ fn issue_294_arguments_that_are_not_finite() {
     assert_eq!(off(NAN, INF), 0, "not a number counts as zero");
     assert_eq!(off(NEG_INF, n(-7)), 49152);
     assert_eq!(off(n(3), NEG_INF), 32768);
-    assert_eq!(off(NAN, NAN), 16384, "both zero after the not-a-number rule");
+    assert_eq!(
+        off(NAN, NAN),
+        16384,
+        "both zero after the not-a-number rule"
+    );
     assert_eq!(off(NAN, n(3)), 0, "a finite argument with a zero");
 }
