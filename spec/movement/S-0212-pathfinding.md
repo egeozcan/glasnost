@@ -2,14 +2,14 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 100
+revision: 107
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-15
 measurements: []
 requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280, Q-1751, Q-1771,
-Q-1870, Q-1975, Q-2896, Q-3115]
+Q-1870, Q-1975, Q-2896, Q-3115, Q-3122]
 supersedes: []
 ---
 
@@ -69,7 +69,7 @@ independent evidence:
 |---|---|---|
 | Search selection | first-recorded route retention and its margin (11), original tie differences (12a), corridor progress, free-part and closure predicates, individual sector and connection choices (13 to 13b), flattening precedence and straight-run V's (17), threat and post-tunnel transformations (18) | These jointly predict a stored path, but no proposed scenario separates each remaining predicate from the others. They are unmeasured route hypotheses, not settled observations of intermediate work. Their exact definitions keep the reference predictions falsifiable as a family. |
 | Unreachable or oversized cases | comparisons involving off-map cells (2, 4), unobservable connectivity changes and same-tick update timing (3, 5), unknown-zone gate exception (6), unusual train start state (7), exact gate and remaining train cost entries (8), permanent marks (9), same-cell computation and search limits (12, 13), absent-link bridge reads and estimate legs (3, 4, 13b, 24), loaner and retreat conditions (14), duplicate/hidden-centre and hidden-ring limits (25) | Normal input cannot force the relevant state, or no discriminating fixture is known. Limits and undefined-result departures still need deterministic answers in our engine. The local backing states which parts are original hypotheses and which are design rules. |
-| Remaining caller/state distinctions | lepton-scale refresh boundary and table-root distinction, the dropped first step, the absence of a refresh at a curve over the last two stored steps, ship retained-step and ship/hover/walker chase-cut isolation (20), post-substitution gate and jumpjet estimate zone (14, 24), mode-2 path-length conditions and independently existing marks (19), remaining locomotors' failure retention (23), untested no-move/object-order parameters (25) | The scenarios do not isolate these states from other reactions. They remain explicitly unmeasured; ordinary caller observations are no backing for them. |
+| Remaining caller/state distinctions | lepton-scale refresh boundary and table-root distinction, the dropped first step, the absence of a refresh at a curve over the last two stored steps, ship retained-step and ship/hover/walker chase-cut isolation (20), post-substitution gate and jumpjet estimate zone (14, 24), mode-2 path-length conditions, independently existing marks, the layers read on bridge cells, the flags that make a cell occupied in (ii), the block search when the layer read lists nothing, a walking vehicle's heading test in it, and the off form of `quirks.path_congestion_ground_record` (19), remaining locomotors' failure retention (23), untested no-move/object-order parameters (25) | The scenarios do not isolate these states from other reactions. They remain explicitly unmeasured; ordinary caller observations are no backing for them. |
 
 Scenarios P20 to P25 add separate probes of reachable height, nearby-search, blocker-chain,
 cost and timing rules. Their qualification conditions are checked against observable state.
@@ -272,9 +272,10 @@ Terms specific to this spec:
   cell* (claim 13); *free part*, *borders*, *probe cell*, *whole* and *split* (claim 13a); *lane
   cells* (claim 13b); *run*, *V* and *final* step (claim 17); *stretch*, *diagonal-first* and
   *straight-first* shapes, *removed step*, *leg*, *turns back*, *reference distance*, *record*,
-  *triggers*, *new maximum* and *closing stretch* (claim 18); *cell ahead* and *qualifies* for a
-  re-path (claim 19); *deck mode*, *simplified movement zone*, *scan order*, *row cell*, *column
-  cell*, a cell that *qualifies*, *height condition*, *further test*, *collected cells* and
+  *triggers*, *new maximum* and *closing stretch* (claim 18); *cell ahead*, *units considered*,
+  *qualifies* and *occupied* for a re-path (claim 19); *deck mode*, *simplified movement zone*,
+  *scan order*, *row cell*, *column cell*, a cell that *qualifies*, *height condition*,
+  *further test*, *collected cells* and
   *visibility test* (claim 25); *close case* (claim 27).
 
 ## Behaviour
@@ -1494,39 +1495,122 @@ Terms specific to this spec:
 
 19. **Re-paths avoid congestion.** In search modes 1 and 2, cells around the blockage carry the
     congestion mark (so *τ* = 4 in F1) for the duration of that one search. The *cell ahead* is the cell
-    one step from the unit in the 8-direction of its body facing. A unit in the cell ahead
-    *qualifies* when, in mode 2, it is any vehicle or infantry unit, or, in mode 1, it is of a
-    different type from the blocked unit, its type has a lower speed number (Terms: S-0207 claim 1
-    for a vehicle type, S-0208 F4 for an infantry type) than the blocked unit's type, and it is
-    inside the usable area. The two speed numbers are compared as integers 0 to 255, whichever of
-    the two formulas gave each, so a vehicle and an infantry unit are compared directly. In
-    addition, in both modes, a vehicle qualifies only if its stored path has at least two steps,
-    and an infantry unit only if it has at least three (that mode 2 has these conditions too is
-    this spec's assumption, not established, Open questions). Each cell is then counted once for
-    each of these that names it:
+    one step from the unit in the 8-direction of its body facing.
+
+    The *units considered* are those listed in one layer of the cell ahead: its deck when the cell
+    ahead is a bridge cell and either the blocked unit is on a bridge deck or the height levels of
+    the unit's own cell and of the cell ahead differ by more than 3 (in either direction), and its
+    ground otherwise. The other layer of the cell ahead is not read for them, and the height level
+    of the unit's search pair (claim 7) plays no part in the choice. When the layer read lists no
+    object, the units considered are found in the 5 × 5 block centred on the cell ahead instead.
+    Let *H* be the cell ahead's height level, plus 4 when its deck was the layer read. The block's
+    cells are examined in rows of increasing *y*, each row in order of increasing *x*. In each cell
+    the layer examined is its deck when it is a bridge cell whose height level differs from *H* by
+    more than 2, and its ground otherwise, in the listing order of S-0209 claim 13. Let *Q* be the
+    centre of the cell ahead at world height *H* × 104 leptons. The first unit found whose
+    locomotion is heading to *Q*, by the heading test of S-0511 claim 11 with *Q* in place of its
+    *P* and the cell ahead in place of its *c*, is considered, together with the objects listed
+    after it in the same cell layer. An object that is not a unit, and a unit whose locomotion that
+    test never counts (the kinds S-0511 claim 11 lists), is never the unit found. The blocked unit
+    itself can be: when it is the first unit in that order to pass the test, it is the unit found,
+    with the objects listed after it in that cell layer. In mode 1 it
+    never qualifies (its type is its own), but those objects are still examined; in mode 2 it
+    qualifies by the path-length conditions below, and its own stored path is counted in (i). As
+    the original's rule (low), a walking vehicle (mech locomotion) takes the test that claim gives
+    walk locomotion: it has a current heading point in the cell ahead, and the stored world height
+    of that heading point differs from *Q*'s height by at most 104 leptons. When none is found, no
+    unit is considered.
+
+    A unit considered *qualifies* when it is a vehicle or an infantry unit and, in mode 1, it is
+    also of a different type from the blocked unit, its type has a lower speed number (Terms: S-0207
+    claim 1 for a vehicle type, S-0208 F4 for an infantry type) than the blocked unit's type, and it
+    is inside the usable area. In mode 2 these three conditions do not apply. The two speed numbers
+    are compared as integers 0 to 255, whichever of the two formulas gave each, so a vehicle and an
+    infantry unit are compared directly. In addition, in both modes, a vehicle qualifies only if its
+    stored path has at least two steps, and an infantry unit only if it has at least three (that
+    mode 2 has these conditions too is this spec's assumption, not established, Open questions).
+    Each cell is then counted once for each of these that names it:
     - (i) the stored path of each qualifying unit: the cells that its remaining stored steps (up to
       24) lead through, starting from the cell it is moving into, that cell itself not included,
     - (ii) the occupied cells of the 5 × 5 block centred on the cell ahead, except the unit's own
-      cell (one count each),
-    - (iii) the cell ahead itself (one count).
+      cell (one count each). A cell is *occupied* here when the occupancy record of its ground
+      layer (S-0209 Terms) is not empty as a whole: a standing position is taken, or its
+      vehicle-present, building-present or object-present flag is set. The infantry house plays
+      no part. The deck layer's record is not read, whichever layer the blocked unit is on and
+      whatever the height level of its search pair, so a cell is counted at most once in (ii)
+      (`quirks.path_congestion_ground_record`).
+      What marks the ground record under a deck counts, and what marks only a deck record does
+      not. S-0209 claim 1 says which objects mark each record; an overlay is not among them,
+    - (iii) the cell ahead itself (one count), whatever its layers hold.
 
     In mode 1, when (i) counts no cell, nothing is counted and the search runs as mode 0 instead.
     Otherwise, during the search a cell carries the congestion mark exactly when one, but not both, of
     these holds: it carried the mark before the search, or its count is odd
     (`quirks.path_congestion_toggle`). After the search every cell carries the mark it carried
-    before.
+    before. The mark belongs to the cell, not to one of its layers: while a bridge cell carries it,
+    a step onto its ground and a step onto its deck both cost four times their base cost (claim 9).
 
-    So a cell counted twice is not made costly. In particular the cell ahead, which is normally
-    occupied (that is why the unit is blocked), is counted once in (ii) and once in (iii). It
-    therefore ends up *not* made costly, unless the stored path of a qualifying unit counts it a
-    third time.
-    - Backing: `measurable` (P14 for mode-1 stored-path marks and parity, P6 for timing).
-      P25(c) tests mode-2 qualification independently of type and speed. The exact path-length
-      cutoffs remain `unmeasured`: no run holds otherwise identical blockage state while varying
-      remaining path length across the two-step and three-step boundaries. `unmeasured` for restoration of an
-      independently pre-existing mark: no scenario establishes one before the search
-    - Confidence: medium for the rule. Low for the exact unit test of mode 1 and the path-length
-      conditions
+    So a cell counted twice is not made costly. In particular the cell ahead is counted once in
+    (iii), and once more in (ii) when its ground record is not empty. When the layer read for the
+    units considered in the cell ahead is its ground and that record is not empty, the cell ahead
+    ends up *not* made costly, unless the stored path of a qualifying unit counts it a third time.
+    When that layer is its deck, whichever layer the blocked unit is on, and nothing marks the
+    ground record under the deck, the cell ahead is counted in (iii) only and is made costly,
+    unless a stored path counts it a second time. A blocker moving out of the cell ahead can
+    already have cleared its mark there (S-0209 claim 1: a driving vehicle clears the flag of the
+    cell it is leaving before its position leaves it, and an infantry unit frees its old position
+    when it marks its walking target in the next cell); with no other mark in that ground record,
+    the cell ahead is then counted in (iii) only and is made costly, unless a stored path counts it
+    a second time.
+
+    The cell that a qualifying unit is moving into is not counted in (i). When it lies in the block
+    and is neither the cell ahead nor the blocked unit's own cell, it is counted once in (ii) if
+    that unit has already marked it in the cell's ground record (S-0209 claim 1: a driving vehicle
+    sets the flag of the cell it starts a step into at once, and an infantry unit marks its walking
+    target at once), so it is made costly unless another count reaches it.
+
+    The thresholds above (a difference of more than 3 height levels for the cell ahead, more than
+    2 for a cell of the block) are claim 19's own. Claim 8 reads a further cell of its chain from
+    the deck when the unit heading into it stands "at least 3 above that further cell's height
+    level"; the cell ahead's test here differs on purpose (more than 3, in either direction), so
+    for a bridge cell exactly 3 levels below the cell of a unit that is not on a deck, claim 8
+    reads the deck and this claim the ground. Both also differ from
+    the cell layer that counts of S-0209 Terms, where, for the walking asks, vehicle step checks
+    and path searches it lists, a high-bridge cell's listed objects are those of its deck when the
+    reference height level differs from the cell's by more than 1. None of these rules replaces
+    another.
+    - Backing: `measurable` (P14 runs 1, 2 and 4 for mode-1 stored-path marks, P6 for timing). P25(c)
+      tests mode-2 qualification independently of type and speed. The exact path-length cutoffs
+      remain `unmeasured`: no run holds otherwise identical blockage state while varying remaining
+      path length across the two-step and three-step boundaries. `unmeasured` for restoration of an
+      independently pre-existing mark: no scenario establishes one before the search. `unmeasured`
+      for the layers read (the layer of the cell ahead for the units considered, its thresholds and
+      those of the block, the ground record of (ii)) and for the mark covering both layers of a
+      bridge cell: no scenario of this spec runs a re-path with a bridge cell in its 5 × 5 block,
+      and without one every layer reading gives the same counts. `unmeasured` for the search in the
+      block when the layer read lists no object: no scenario isolates a re-path whose cell ahead
+      lists nothing on that layer, and so for the blocked unit's own place in that search.
+      `unmeasured` for a walking vehicle's heading test in that search, which is the original's
+      rule, not a design rule: no scenario of this spec places a walking vehicle in the block of a
+      re-path. `unmeasured` for
+      the flags that make a cell occupied in (ii) (a taken standing position or any of the three
+      present flags, so a cell marked only by a building, a terrain object or an aircraft on the
+      ground counts as well as one holding a vehicle or an infantry unit): P14's setup puts no
+      object other than its test units within 2 cells of a lane (the land separating the lanes is
+      rock land, impassable by its land type alone, with no object on it), so no block of its runs
+      holds a cell marked only by such an object, and its counts are the same under a reading that
+      counts vehicles and infantry only. `unmeasured` for the parity rule (a cell counted twice is
+      left unmarked): P14 run 3 is the only run whose counts are even, and its lane choice depends
+      on how far into L *T* makes the re-path, which no scenario fixes. `unmeasured` for the cell a
+      qualifying unit is moving into and for the cell ahead whose blocker has already cleared its
+      mark: both rest on S-0209 claim 1's marking order, and no run here shows the count of such a
+      single cell. `unmeasured` for the switch's off form, which the original does not have
+    - Confidence: medium for the rule, the parity rule, the layers read, the thresholds, the flags
+      that make a cell occupied, the mark covering both layers, the cell a qualifying unit is moving
+      into and the cell ahead whose blocker has cleared its mark. Low for the exact unit test of
+      mode 1, the path-length conditions and the search in the block when the layer read lists no
+      object, the blocked unit's own place and a walking vehicle's heading test in it included.
+      Medium for the switch's off form (design rule, decided at the delegated sign-off, 2026-11-15)
 
 ### Path storage and timing
 
@@ -2765,6 +2849,15 @@ Ordering consequences:
   parity of each cell's count, so a cell counted twice is left unmarked, and a cell that already
   carried the congestion mark loses it during the search when its count is odd. Off: during the search a
   cell carries the mark when it carried it before or its count is at least 1.
+- **`quirks.path_congestion_ground_record`** (default: on). Part (ii) of claim 19 decides whether a
+  cell of the 5 × 5 block is occupied from the occupancy record of its ground layer only, so in a
+  bridge cell of the block what marks the ground record under the deck counts and what marks only
+  the deck record does not, whichever layer the blocked unit is on and whichever layer was read in
+  the cell ahead.
+  Off: a bridge cell of the block is occupied when the record of the layer read for the units
+  considered in the cell ahead (its deck or its ground, claim 19) is not empty as a whole; every
+  other cell uses its ground record as before (design rule, decided at the delegated sign-off,
+  2026-11-15). Backing: `unmeasured`, the original has no such form. Confidence: medium.
 - **`quirks.corridor_retry_no_fallback`** (default: on). When the new coarse search that follows a
   corridor retry (claim 13) fails at any level, except the chain-length failure of departure D2 (Edge cases and quirks), the path computation fails, and a unit can stop at
   once at a short strip of ground it cannot enter that the coarse searches count as open (Edge
@@ -3829,13 +3922,16 @@ acquisition, not a path computation's gate or subsequent route search.
 - **P14 (claims 9, 19, 22, 27): which cells a re-path makes costly.**
   - Setup: two parallel 1-cell-wide lanes of clear land, L and R, each 30 cells long, separated by
     impassable land and joined at both ends: at the south end by a short junction to the start area,
-    at the north end to the goal. A slow vehicle *S* of one type and a fast test vehicle *T* of
-    another type with a higher type speed (S-0207), both of the human house. A test override sets the
-    path-retry delay field to a value *P* with trunc(*P* × 900) = 90 ticks (F3) and the blockage-delay
-    field (an integer number of ticks, S-0209 Import mapping) to 3000, so that every re-path of the
+    at the north end to the goal. The impassable land is rock land (an override gives the rock land
+    type every multiplier 0, as in S-0211's scenarios), and no object stands on it or within 2 cells
+    of a lane other than the test units: no wall, tree, building, terrain object or aircraft. A slow
+    vehicle *S* of one type and a fast test vehicle *T* of another type with a higher type speed
+    (S-0207), both of the human house. A test override sets the path-retry delay field to a value
+    *P* with trunc(*P* × 900) = 90 ticks (F3) and the blockage-delay field (an integer number of
+    ticks, S-0209 Import mapping) to 3000, so that every re-path of the
     scenario is made in search mode 1. Run 1: *S* is ordered to the goal through lane L (its
     stored path runs along L), and *T* follows it into L, 3 cells behind. Run 2: the mirror image, both
-    in lane R. Run 3 (parity, low confidence): as run 1, but the blocker in the cell ahead of *T* is a
+    in lane R. Run 3: as run 1, but the blocker in the cell ahead of *T* is a
     group of two slow allied infantry units of a type whose speed number (claim 19) is lower than
     *T*'s, walking together along L with
     the same stored path, and run 4 the same with three such infantry units. Run 5 (close case):
@@ -3848,13 +3944,23 @@ acquisition, not a path computation's gate or subsequent route search.
   - Observable: the cells *T* enters after the re-path, and whether it backs out to the junction to
     take the other lane. Run 5: in addition, the tick in which *T* and *O* first stand in
     neighbouring cells, and the tick in which *T*'s stored path is emptied (recorder).
-  - Expected: runs 1 and 2: the re-path makes every cell of *S*'s remaining stored path in the lane
-    (up to 24 cells) cost four times as much, so *T* backs out and takes the other lane whenever that
+  - Expected: runs 1 and 2: the re-path makes every lane cell of *S*'s remaining stored path
+    beyond the cell *S* is moving into (up to 24 cells) cost four times as much: each is counted
+    once, in (i) of claim 19. The cell *S* is moving into is not in (i); when it is not the cell
+    ahead, it is counted once, in (ii), since *S* has already set its flag (S-0209 claim 1), and is
+    made costly too. So *T* backs out and takes the other lane whenever that
     is cheaper than following *S* (a reference implementation of claims 7 to 19 gives the choice for
     the exact positions). Without the marks *T* would stay behind *S*. The choice mirrors with the
-    lanes. Run 3: each lane cell of the common stored path is counted twice, so it is not made
-    costly, and *T* stays behind the infantry. Run 4: counted three times, made costly, and *T* takes
-    the other lane as in run 1. *T* never gets *blocked* from the unit ahead, since the two face the
+    lanes. Run 3: each lane cell of the common stored path beyond the cell the infantry are moving
+    into is counted twice, in (i), so it is not made costly. The cell they are moving into, when it
+    is not the cell ahead, is counted once, in (ii), since their walking targets already mark it
+    (S-0209 claim 1), and is made costly. So is the cell ahead when the infantry have already freed
+    their marks in it, so that its ground record is empty (claim 19). Whether *T* then stays behind
+    the infantry depends on how far into L it makes the re-path, which this setup does not fix, so
+    run 3's lane choice is not a test. Run 4: the cells beyond
+    are counted three times and made costly, as is the cell the infantry are moving into when it is
+    not the cell ahead, and *T* takes the other lane as in run 1. *T* never gets *blocked* from the unit
+    ahead, since the two face the
     same way (claim 27). Run 5: once the two stand in neighbouring cells, facing each other and less
     than 512 leptons apart, each gets outcome *blocked* for the other's cell (claim 27). *T*'s stored
     path is emptied in the tick its next step is refused (claim 22), and its fresh search treats
@@ -3865,10 +3971,9 @@ acquisition, not a path computation's gate or subsequent route search.
     far less than backing out to take the longer lane R, and *T* would wait facing *O* until the
     blockage delay of 3000 ticks ran out.
   - Falsified if: in runs 1 and 2 *T* stays behind *S* although the reference implementation with
-    claim 19 gives the other lane, or *T* takes the same lane in both runs. In run 3 *T* changes lanes,
-    or in run 4 it stays behind the infantry although it changed lanes in run 1 (the parity rule
-    predicts the opposite in each case). In run 5 *T* keeps its stored path and stays in L facing *O* for more
-    than 300 ticks after they first stand in neighbouring cells.
+    claim 19 gives the other lane, or *T* takes the same lane in both runs. In run 4 *T* stays
+    behind the infantry although it changed lanes in run 1. In run 5 *T* keeps its stored path and
+    stays in L facing *O* for more than 300 ticks after they first stand in neighbouring cells.
 - **P15 (claim 5): content changes that update connectivity.**
   - Setup: for each change, a goal pocket sealed off from a test vehicle only by the object
     concerned, everything else around the pocket impassable: (w) a wall section in a wall line,
@@ -4850,6 +4955,19 @@ proposed recorder runs, not completed measurements.
   at that moment and for a curve over the last two stored steps, which makes no recomputation.
   The ship uses S-0207 claims 7 and 15 unchanged (S-0504 claim 1). Level and backing: as S-0212
   claim 20 rates them.
+- **S-0209, Terms, Occupancy record.** "It counts only where another spec asks whether the record
+  is empty as a whole, as the free-cell test does" can name S-0212 claim 19 part (ii) beside the
+  free-cell test of claim 25: part (ii) asks whether a cell's ground record is empty as a whole,
+  so the building-present flag counts there too. Level and backing: medium, `unmeasured`, as
+  S-0212 claim 19 rates the flags that make a cell occupied.
+- **S-0511, claim 11.** Its heading test ("when its locomotion is heading to *P*") is also used by
+  S-0212 claim 19, with the centre of the cell ahead at a stated height in place of *P*, when the
+  layer read in the cell ahead lists no object. S-0511 can point to that use. Level and backing:
+  low, `unmeasured` (S-0212 claim 19). For its own use there, S-0212 claim 19 also
+  states which test a walking vehicle takes in that search (the walk heading-point test, with the
+  same 104-lepton tolerance). This is no rule change to S-0511 claim 11 and does not settle its
+  Open question on mech locomotion; S-0511 may note the use. Level and backing: low, `unmeasured`
+  (S-0212 claim 19).
 
 ## Questions for the project lead
 
