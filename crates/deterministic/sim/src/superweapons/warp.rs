@@ -359,6 +359,8 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY, fell_back: bool) {
             ob.drive = Some(crate::drive::DriveState::new());
         }
     }
+    // spec: S-0513 claim 51 (the launch ends a jumpjet's driving step and movement commitment too, #362)
+    crate::jump::warp_join(w, id);
     let landing = landing_in(w, o.kind, o.pos, to);
     if let Some(ob) = w.obj_mut(id) {
         ob.contact = None;

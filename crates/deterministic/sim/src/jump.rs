@@ -584,6 +584,24 @@ pub fn leaving(w: &mut World, id: ObjectId) {
     release_slot(w, id);
 }
 
+/// The jumpjet joins a superweapon warp (S-0513 claims 34 and 51): the
+/// launch ends its current driving step and movement commitment, and none
+/// resumes when the warp ends. Its landing reservation and hover slot go
+/// at departure ([`leaving`]).
+pub fn warp_join(w: &mut World, id: ObjectId) {
+    if !is_jumpjet(w, id) {
+        return;
+    }
+    upd(w, id, |j| {
+        // spec: S-0513 claim 51 (launch immediately clears the current driving step and the queued destinations; none resumes when the warp ends, #362)
+        j.dest = None;
+        j.order = None;
+        j.moving = false;
+        // spec: S-0502 claims 5 and 15 (a grounded jumpjet's target height is 0; the member is put down grounded at its landing point, S-0513 claim 39)
+        j.ht = 0;
+    });
+}
+
 /// Takes the jumpjet out of the cell list it is in (claim 4): the cell of
 /// its listing, which a hovering or cruising unit may have left.
 fn unlist(w: &mut World, id: ObjectId) {
