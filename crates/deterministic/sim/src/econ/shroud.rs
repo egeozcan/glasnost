@@ -109,10 +109,12 @@ impl Rules {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HouseShroud {
     /// Cover count *k* per dense cell index; the last entry is the state
-    /// shared by every cell that is not legal.
-    pub k: Vec<i16>,
+    /// shared by every cell that is not legal. 32 bits: the shared state
+    /// takes one change per field cell (claim 21), more than 16 bits hold
+    /// for a large field (#338).
+    pub k: Vec<i32>,
     /// Hostile gap count *G*, as `k`.
-    pub g: Vec<i16>,
+    pub g: Vec<i32>,
     /// Explored, seen, pending and surrounded marks, as `k`.
     pub marks: Vec<u8>,
     /// The whole-map-revealed mark (S-0409 Terms).
@@ -420,6 +422,11 @@ fn sight_point(w: &World, id: ObjectId) -> Pos {
     }
 }
 
+/// The largest gap radius our engine applies with `quirks.gap_radius_wrap`
+/// off (#338); with the switch on the radius is at most 127 anyway.
+// nocite: our own input validation (#338): far above any field the game data uses; it bounds the cells of one field (about 205 000) and keeps the squares of F4 in range
+pub const MAX_GAP_RADIUS: i32 = 255;
+
 /// A gap field's cells around a centre (claims 11 and 14, F4).
 fn gap_cells(w: &World, centre: CellXY, field: i32) -> Vec<u32> {
     let q = w.rules().quirks;
@@ -427,17 +434,18 @@ fn gap_cells(w: &World, centre: CellXY, field: i32) -> Vec<u32> {
     let r = if q.gap_radius_wrap {
         i32::from(field as i8)
     } else {
-        field
+        // design: #338 (with the wrap off, a radius past our engine's bound is used as the bound)
+        field.min(MAX_GAP_RADIUS)
     };
     let mut out = Vec::new();
     if r < 0 {
         return out;
     }
-    let lim = (r + 1) * (r + 1);
+    let lim = (i64::from(r) + 1) * (i64::from(r) + 1);
     for dy in -r..=r {
         for dx in -r..=r {
             // spec: S-0409 F4 (covered when dx² + dy² < (R + 1)²)
-            if dx * dx + dy * dy >= lim {
+            if i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy) >= lim {
                 continue;
             }
             let (mut x, mut y) = (centre.x + dx, centre.y + dy);
@@ -636,7 +644,7 @@ pub fn pending(w: &World, house: HouseId, cell: CellXY) -> bool {
 pub fn counts(w: &World, house: HouseId, cell: CellXY) -> Option<(i32, i32)> {
     let s = hs(w, house)?;
     let i = idx(w, cell)? as usize;
-    Some((i32::from(s.k[i]), i32::from(s.g[i])))
+    Some((s.k[i], s.g[i]))
 }
 
 /// Whether the house's whole-map-revealed mark is set (S-0409 Terms).
