@@ -12,8 +12,9 @@
 //! enable and disable, set and clear variable, the mission timer actions,
 //! reveal around a waypoint, and the presentation-only actions as
 //! [`Effect::Trigger`]. The actions that hand over to specs or parts of the
-//! engine that do not exist yet are recognised and leave a note (seams); so
-//! does the bridge-destroyed raise. The carrier raises of a unit's arrival
+//! engine that do not exist yet are recognised and leave a note (seams). The
+//! bridge-destroyed raise ([`bridge_destroyed`]) and the crate-pickup raise
+//! ([`crate_picked_up`]) are built. The carrier raises of a unit's arrival
 //! ([`cell_entered`], S-0207 and S-0208 claim 22) and of a killing hit
 //! ([`destruction_raises`], S-0312 claim 29) are entry points that the
 //! movement and combat code call at the moments their specs give.
@@ -781,7 +782,9 @@ fn judge(w: &World, inst: &Instance, e: &glasnost_map::triggers::Event, r: &Rais
             ATTACKED_BY_HOUSE => attacked_by_house(w, e.value, r.causer),
             // spec: S-0011 claims 19 and 20 (satisfied in every such raise)
             DESTROYED_BY | BRIDGE_DESTROYED | CRATE_PICKED_UP => true,
-            // Code-matched events outside the subset are never raised by this engine.
+            // Code-matched events outside the subset (S-0011 I3) are judged
+            // false even in a raise with their code; codes 4, 7 and 29 are
+            // raised by `destruction_raises`.
             _ => false,
         };
     }

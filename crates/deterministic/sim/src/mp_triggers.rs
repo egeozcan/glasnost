@@ -138,8 +138,10 @@ pub fn action_coverage(code: i32) -> Coverage {
         | 129
         | 130
         | 133 => Coverage::Implemented,
-        // spec: S-0011 claim 30 (teams, computer targeting, change owner, destroy attached, explosion, cheer, waypoint animations) and S-0524 claim 4 (crates, S-0520)
-        4 | 5 | 7 | 8 | 14 | 32 | 41 | 42 | 80 | 113 | 135 => Coverage::Seam,
+        // spec: S-0011 claim 24 (14 change owner), S-0011's companion-spec pointer table with S-0508 claims 10 to 13 (111 eviction, 6 house-wide hunt) and S-0217 claim 1 (6)
+        6 | 14 | 111 => Coverage::Implemented,
+        // spec: S-0011 claim 30 (teams, computer targeting, destroy attached, explosion, cheer, waypoint animations) and S-0524 claim 4 (crates, S-0520)
+        4 | 5 | 7 | 8 | 32 | 41 | 42 | 80 | 113 | 135 => Coverage::Seam,
         _ => Coverage::Unknown,
     }
 }
@@ -150,6 +152,8 @@ pub fn event_coverage(code: i32) -> Coverage {
     match code {
         // spec: S-0011 I3 (the supported subset)
         1 | 6 | 8 | 13 | 31 | 36 | 37 | 44 | 47 | 48 | 51 | 60 | 61 => Coverage::Implemented,
+        // spec: S-0520 claim 7 (event 49: a crate is picked up, raised by the pickup)
+        49 => Coverage::Implemented,
         _ => Coverage::Unknown,
     }
 }
