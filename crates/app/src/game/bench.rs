@@ -15,7 +15,8 @@
 //!
 //! Ticks follow the game's own pacer against a virtual clock of a steady
 //! 60 frames a second (`tick=paced`, the default), so the same frames tick
-//! on every run and machine; `tick=every` runs a tick every frame. The
+//! on every run and machine; `tick=every` runs a tick every frame, and
+//! `speed=N` paces the timed frames at game-speed index N (#112). The
 //! frame's drawing depends only on that virtual clock, so two builds draw
 //! the same pixels for the same frame: the offscreen host writes one
 //! picture per view to compare.
@@ -149,6 +150,10 @@ pub struct BenchOptions {
     /// every drawn frame as it was; off by default, as the readbacks
     /// disturb the timing.
     pub digest: u32,
+    /// The game-speed index the timed frames are paced at; none: the
+    /// game's own. design: render (#112): a slower index leaves frames with
+    /// no tick, whose battlefield the drawer keeps.
+    pub speed: Option<u8>,
 }
 
 impl Default for BenchOptions {
@@ -174,6 +179,7 @@ impl Default for BenchOptions {
             vsync: false,
             shots: true,
             digest: 0,
+            speed: None,
         }
     }
 }
@@ -230,6 +236,8 @@ impl BenchOptions {
                 "vsync" => o.vsync = flag(v)?,
                 "shots" => o.shots = flag(v)?,
                 "digest" => o.digest = num(v)? as u32,
+                // design: render (#112): the indices the game offers, 0 to 6 (S-0201 claim 4)
+                "speed" => o.speed = Some(num(v)?.min(6) as u8),
                 _ => return Err(format!("unknown bench option {k:?}")),
             }
         }
@@ -643,6 +651,10 @@ impl Bench {
             self.start_tick = w.tick;
             self.start_objects = w.objects.values().filter(|o| o.on_map).count();
             self.census = census(w);
+            if let Some(speed) = self.opts.speed {
+                // design: render (#112): pacing only; a skirmish's world does not hold the index
+                s.speed = speed;
+            }
             self.speed = s.speed;
             log::info!(
                 "benchmark: {} ticks in {:.1} s; timing from tick {} with {} objects",
@@ -745,7 +757,7 @@ impl Bench {
         row.work = now() - row.start;
         row.draw = end.laps;
         row.stats = end.stats;
-        (row.scene_images, row.scene_px) = c.session.as_ref().map_or((0, 0), |s| s.scene.held());
+        (row.scene_images, row.scene_px) = c.session.as_ref().map_or((0, 0), |s| s.scene().held());
         row.acquire = end.acquire;
         row.encode = end.encode;
         row.submit = end.submit;
@@ -1679,6 +1691,10 @@ mod tests {
         assert_eq!(o.frames, 50);
         assert_eq!(o.views, vec![ViewKind::Pan, ViewKind::Base]);
         assert_eq!(o.size, (1280, 720));
+        assert_eq!(o.speed, None);
+        // design: render (#112): the timed frames' pacing index, at most 6
+        assert_eq!(BenchOptions::parse("speed=4").unwrap().speed, Some(4));
+        assert_eq!(BenchOptions::parse("speed=9").unwrap().speed, Some(6));
         assert!(BenchOptions::parse("views=").is_err());
         assert!(BenchOptions::parse("zoom=2").is_err());
         assert!(BenchOptions::parse("tick=sometimes").is_err());

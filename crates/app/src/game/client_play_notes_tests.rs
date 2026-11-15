@@ -971,7 +971,7 @@ fn status_extras_follow_a_view_moved_between_ticks() {
     s.loaded.assets.insert(OVERLAY_PALETTE, vec![0; 768]);
     s.play.selection = vec![unit];
     let marks = |s: &Session| {
-        s.scene
+        s.scene()
             .items
             .iter()
             .filter(|i| i.group == Group::Status && i.object == Some(sim_code(unit)))

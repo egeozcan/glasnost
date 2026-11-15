@@ -739,7 +739,7 @@ impl Lane {
             .session
             .as_ref()
             .unwrap()
-            .scene
+            .scene()
             .items
             .iter()
             .enumerate()
@@ -755,7 +755,7 @@ impl Lane {
             .session
             .as_ref()
             .unwrap()
-            .scene
+            .scene()
             .items
             .iter()
             .find(|it| {

@@ -586,7 +586,7 @@ fn note_38_ore_near_mines() {
                 )
                 .to_rgba()
             };
-            let full = s.scene.clone();
+            let full = s.scene().clone();
             let is_live = |n: usize, it: &glasnost_render::scene::Item| {
                 n >= full.cell_pass_len && it.group == Group::Overlays
             };
@@ -734,7 +734,7 @@ fn note_39_walking_vehicles() {
                 .session
                 .as_ref()
                 .unwrap()
-                .scene
+                .scene()
                 .items
                 .iter()
                 .filter(|it| {

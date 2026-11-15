@@ -76,8 +76,10 @@ pub use glasnost_net::start::content_hash;
 pub struct Session {
     /// The map, its scene inputs and the live drawing state.
     pub loaded: Loaded,
-    /// The scene (the live objects redrawn into it after every tick).
-    pub scene: Scene,
+    /// The scene (the live objects redrawn into it after every tick),
+    /// read through [`Session::scene`] and changed only through
+    /// [`Session::scene_mut`] and [`Session::with_live`].
+    scene: Scene,
     /// The game and the local player's interface state.
     pub play: Play,
     /// The radar map (S-0410).
@@ -584,6 +586,16 @@ impl Session {
         s.play.status_view(view_w, false);
         s.play.say("Game started.");
         Ok(s)
+    }
+
+    /// The scene the battlefield is drawn from.
+    pub fn scene(&self) -> &Scene {
+        &self.scene
+    }
+
+    /// The scene, to change it.
+    pub fn scene_mut(&mut self) -> &mut Scene {
+        &mut self.scene
     }
 
     /// Calls `f` with the live drawing state holding the canonical world.

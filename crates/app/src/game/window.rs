@@ -996,7 +996,7 @@ impl GpuDraw {
         // device's limit (design: render (#105)).
         let start = self.lap();
         let synced = match self.map.as_mut() {
-            Some(m) if m.serial == serial => m.renderer.sync(device, queue, &s.scene).is_ok(),
+            Some(m) if m.serial == serial => m.renderer.sync(device, queue, s.scene()).is_ok(),
             _ => false,
         };
         if !synced {
@@ -1004,7 +1004,7 @@ impl GpuDraw {
             // design: render (#102): the old renderer and its target go before the new one is built, so the two atlases never exist at once
             self.map = None;
             self.batch.remove_image(MAP_IMAGE);
-            let renderer = MapRenderer::new(device, queue, &s.scene, COLOR_FORMAT)
+            let renderer = MapRenderer::new(device, queue, s.scene(), COLOR_FORMAT)
                 .map_err(|e| e.to_string())?;
             self.map = Some(MapGpu {
                 serial,
@@ -1055,7 +1055,7 @@ impl GpuDraw {
             encoder,
             color,
             &depth.create_view(&Default::default()),
-            &s.scene,
+            s.scene(),
             &v,
             s.filter(),
             &glasnost_render::compose::ComposeQuirks::default(),

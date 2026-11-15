@@ -181,13 +181,13 @@ impl Lane {
         // GLASNOST_TRACE="x,y;x,y": the pixel trace of the saved shot's screen points.
         // GLASNOST_BLANK="idx,idx": a second shot, "<name>-blank", without those scene items' images.
         if let Ok(b) = std::env::var("GLASNOST_BLANK") {
-            let s = self.c.session.as_mut().unwrap();
+            let s = self.c.session.as_mut().unwrap().scene_mut();
             let mut saved = Vec::new();
             for i in b.split(',').filter_map(|v| v.trim().parse::<usize>().ok()) {
-                let Some(it) = s.scene.items.get(i).copied() else {
+                let Some(it) = s.items.get(i).copied() else {
                     continue;
                 };
-                let img = &s.scene.images[it.image as usize];
+                let img = &s.images[it.image as usize];
                 let blank = glasnost_fmt::image::IndexedImage::new(
                     img.width(),
                     img.height(),
@@ -196,7 +196,7 @@ impl Lane {
                 .unwrap();
                 saved.push((
                     it.image as usize,
-                    std::mem::replace(&mut s.scene.images[it.image as usize], blank),
+                    std::mem::replace(&mut s.images[it.image as usize], blank),
                 ));
             }
             if !saved.is_empty() {
@@ -207,9 +207,9 @@ impl Lane {
                     png::png(w as u32, h as u32, &rgba),
                 )
                 .unwrap();
-                let s = self.c.session.as_mut().unwrap();
+                let s = self.c.session.as_mut().unwrap().scene_mut();
                 for (i, img) in saved {
-                    s.scene.images[i] = img;
+                    s.images[i] = img;
                 }
             }
         }
