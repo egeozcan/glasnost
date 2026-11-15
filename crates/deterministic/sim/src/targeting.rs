@@ -1440,7 +1440,8 @@ fn infantry_on(
     // Rows I17 and I18 need the weapon cursor flags, which are not imported.
     // spec: S-0214 table I row I19 (a bomb planter: bomb if the type accepts bombs and carries none)
     if uflag(w, actor, |u| u.raw.ivan.unwrap_or(false)) && g1 == Action::Attack {
-        return if bombable(w, t) {
+        // spec: S-0214 table I row I19 (the target's type accepts bombs and the target carries none, #355)
+        return if bombable(w, t) && !crate::bomb::carries(w, t) {
             Action::Bomb
         } else {
             Action::NoBomb
