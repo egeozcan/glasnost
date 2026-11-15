@@ -3003,15 +3003,17 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
             crate::refresh::adopted(w, id, o.dest);
         }
     }
-    let congested = match mode {
-        Mode::Fresh => BTreeSet::new(),
-        _ => congestion(w, id, mode).unwrap_or_default(),
+    let marks = match mode {
+        Mode::Fresh => None,
+        _ => congestion(w, id, mode),
     };
-    let mode = if mode == Mode::Blocked && congested.is_empty() {
+    // spec: S-0212 claim 19 (mode 1 runs as mode 0 only when (i) counts no cell; an empty mark set of an even-counted mode-1 search stays mode 1)
+    let mode = if mode == Mode::Blocked && marks.is_none() {
         Mode::Fresh
     } else {
         mode
     };
+    let congested = marks.unwrap_or_default();
     crate::trace::note(w, |p| {
         p.mode = Some(mode);
         p.congested = congested.iter().copied().collect();
