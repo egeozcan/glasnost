@@ -402,6 +402,32 @@ fn landing_point(w: &mut World, id: ObjectId, dc: CellXY) -> Option<Pos> {
     Some(Pos::centre(c, w.surface_at(p.x, p.y)))
 }
 
+/// A superweapon warp ends a teleporting infantry unit's fixed landing
+/// point (S-0513 claim 51; S-0208 claim 19): its standing-position
+/// reservation there is released, as when a landing point not jumped to is
+/// replaced. Called at the join and at departure; what landing choice a
+/// destination given while warp-pending makes is Q-3142.
+pub(crate) fn warp_release(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if o.kind != Kind::Infantry {
+        return;
+    }
+    let Some(mut st) = o.teleport.clone() else {
+        return;
+    };
+    let Some(c) = st.mark else { return };
+    let oq = crate::objects::occ_quirks(w);
+    // A landing point in the cell the unit stands in shares the record of its own standing entry, which stays until the departure clears that cell.
+    if (c, st.mark_layer) != (o.pos.cell(), o.layer) || !o.on_map {
+        // spec: S-0208 claim 19 (Q-0235: a landing point not jumped to releases its standing-position reservation) and S-0513 claim 51 (the launch clears the current driving step; none resumes when the warp ends, #363)
+        w.cells.clear_infantry(c, st.mark_layer, id, oq);
+    }
+    st.mark = None;
+    st.landing = None;
+    st.for_dest = None;
+    set_state(w, id, st);
+}
+
 /// An infantry unit takes destination `dest` (S-0208 claim 19): the
 /// landing point is a standing position, which the unit reserves in place
 /// of a vehicle-present mark.

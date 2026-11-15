@@ -361,6 +361,8 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY, fell_back: bool) {
     }
     // spec: S-0513 claim 51 (the launch ends a jumpjet's driving step and movement commitment too, #362)
     crate::jump::warp_join(w, id);
+    // spec: S-0513 claim 51 and S-0208 claim 19 (a teleporting infantry unit's landing point not jumped to releases its standing-position reservation, #363)
+    crate::teleport::warp_release(w, id);
     let landing = landing_in(w, o.kind, o.pos, to);
     if let Some(ob) = w.obj_mut(id) {
         ob.contact = None;
@@ -568,6 +570,8 @@ fn lift_off(w: &mut World, id: ObjectId) {
     }
     // spec: S-0502 claim 29 (going off the map for any reason ends the flying registration) and claims 4, 7, 13, 14 and 18 (a jumpjet leaving the map releases its marks, listing, landing reservation and hover slot); S-0513 claim 39 (the departure takes the member off the map, #360)
     crate::jump::leaving(w, id);
+    // spec: S-0208 claim 19 and S-0513 claims 39 and 51 (a landing point fixed while warp-pending is never jumped to: its reservation goes at departure; Q-3142 asks what the choice should be, #363)
+    crate::teleport::warp_release(w, id);
     let cell = o.pos.cell();
     w.cells.leave_both(cell, id);
     let q = crate::objects::occ_quirks(w);
