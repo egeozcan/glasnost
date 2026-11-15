@@ -110,7 +110,10 @@ pub fn detonate(w: &mut World, carrier: ObjectId) {
     let Some(o) = w.obj(carrier) else { return };
     let Some(b) = o.combat.bomb else { return };
     let (on_map, at) = (o.on_map, o.pos);
-    let hut = o.kind == Kind::Building && crate::bridges::hut::is_hut(w, carrier);
+    // The hut cell is read before the detonation, which may destroy the hut (S-0511 claim 16).
+    let hut = (o.kind == Kind::Building && crate::bridges::hut::is_hut(w, carrier))
+        .then(|| crate::bridges::hut::hut_cell(w, carrier))
+        .flatten();
     if let Some(ob) = w.obj_mut(carrier) {
         // The bomb ends first: a carrier the detonation kills sets nothing off a second time (S-0312 claim 7).
         ob.combat.bomb = None;
@@ -126,9 +129,9 @@ pub fn detonate(w: &mut World, carrier: ObjectId) {
         let source = b.planter.filter(|&p| w.obj(p).is_some());
         crate::combat::projectile::detonate_area(w, wh, ivan.damage, at, source, None, true);
     }
-    if hut && w.obj(carrier).is_some() {
-        // spec: S-0519 claim 5 (a bridge repair hut also demolishes its bridge, S-0511 claim 16)
-        crate::bridges::hut::demolish(w, carrier);
+    if let Some(c) = hut {
+        // spec: S-0519 claims 5 and 22 (a bridge repair hut also demolishes its bridge, S-0511 claim 16: after the bomb's own detonation, with no condition on the hut surviving it)
+        crate::bridges::hut::demolish_from(w, c);
     }
 }
 
