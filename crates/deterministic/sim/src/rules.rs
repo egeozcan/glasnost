@@ -1575,6 +1575,8 @@ impl SimRules {
         let mut missiles = crate::spawn::MissileRules::new(s, &names, &combat.warheads, mode);
         // spec: S-0611 F5 (a chain of spawned and slave types that leads back to a type already in it: the importer warns)
         missiles.warnings = crate::objects::creation_cycles(&missiles, &econ.harvest);
+        // design: #344 (a spawn or slave count above our engine's limit: the importer warns)
+        missiles.warnings.extend(crate::spawn::count_limits(&missiles, &econ.harvest));
         let superweapons = crate::superweapons::SwRules::new(r, &names, &combat, &animations, mode);
         let warhead_names: Vec<String> = combat.warheads.iter().map(|h| h.name.clone()).collect();
         for a in &mut animations {

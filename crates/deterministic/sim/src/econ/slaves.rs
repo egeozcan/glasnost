@@ -237,7 +237,8 @@ pub(crate) fn created_in(w: &mut World, id: ObjectId, chain: &mut crate::objects
     let t = w.tick;
     let mut members = Vec::new();
     // spec: S-0402 claim 19 (a positive count N creates N infantry of the named type; 0 or less creates none)
-    for _ in 0..g.count.max(0) {
+    // design: #344 (a slave count above our engine's limit creates the limit's number of slaves)
+    for _ in 0..g.count.clamp(0, crate::spawn::MAX_CREATED_COUNT) {
         // spec: S-0402 claim 19 and S-0611 F5 (in place order, each slave's own creation set before the next slave)
         let s = new_slave(w, id, g.slave, owner, chain);
         // spec: S-0402 claim 19 (they start ready, inside and off the map)
