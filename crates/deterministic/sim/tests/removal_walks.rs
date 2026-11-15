@@ -286,3 +286,47 @@ fn a_save_and_load_between_removals_changes_nothing() {
         Vec::<ObjectId>::new()
     );
 }
+
+/// A census that says no object holds anything, as one taken inside a
+/// removal before any of them were made.
+fn empty_census(w: &mut World) {
+    w.census = Some(glasnost_sim::census::Census::default());
+}
+
+// Our engine's bookkeeping, not game behaviour (#402): each public place
+// that can make a reference the census notes forgets the census, so the
+// rest of a removal under way walks the table again.
+// spec: S-0519 claim 2 (an infantry planter's bomb on an infantry unit) and S-0518 claim 11 (an infantry firer that hit a building is put on its charger list)
+#[test]
+fn every_place_that_makes_a_noted_reference_forgets_the_census() {
+    let mut w = testkit::game_with(&testkit::combat_ruleset(), SIZE, 1);
+    let a = walker(&mut w, 0, -4);
+    let b = walker(&mut w, 1, 4);
+    let tower = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "TOWER",
+        1,
+        testkit::mid(SIZE, 8, 8),
+        0,
+    );
+
+    empty_census(&mut w);
+    let made = walker(&mut w, 0, -8);
+    assert!(w.obj(made).is_some(), "void: not created");
+    assert!(w.census.is_none(), "a creation");
+
+    empty_census(&mut w);
+    glasnost_sim::bomb::plant(&mut w, Some(a), Some(Target::Object(b)));
+    assert!(glasnost_sim::bomb::carries(&w, b), "void: no bomb planted");
+    assert!(w.census.is_none(), "a planting");
+
+    empty_census(&mut w);
+    glasnost_sim::linked::charge_hit(&mut w, Some(a), Some(Target::Object(tower)));
+    assert_eq!(
+        w.obj(tower).unwrap().combat.chargers,
+        vec![a],
+        "void: not registered"
+    );
+    assert!(w.census.is_none(), "a charger's registration");
+}
