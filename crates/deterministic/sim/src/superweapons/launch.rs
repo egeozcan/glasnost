@@ -213,6 +213,15 @@ fn drain(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
     let r = rec.remaining(t);
     match rec.drain {
         DrainState::Ready => {
+            let mut silo = None;
+            if ty.kind == Some(SwKind::Missile) {
+                if !rec.one_time {
+                    // spec: S-0512 claim 19 (an order in ready starts the kind's launch effect) and S-0513 claim 7 (a launch of an ordinary nuclear strike record looks for the launching building; claim 8's no-launcher refusal is not a drain-mode test, #350)
+                    silo = Some(super::nuke::silo_choice(w, h, i));
+                }
+                // spec: S-0407 claim 12 (j) (the house launches a superweapon of the missile kind)
+                crate::econ::tech::recheck_due(w, h);
+            }
             // spec: S-0512 F5 (active time trunc(Z((T − r) × ρ)))
             let active = F64::from_i64(i64::from(ty.charge - r), mode)
                 .mul(rho, mode)
@@ -233,7 +242,7 @@ fn drain(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
                     x.drain = DrainState::Charging;
                 }
             }
-            effect(w, h, i, cell, rec.one_time, None);
+            effect(w, h, i, cell, rec.one_time, silo);
         }
         DrainState::Active => {
             // spec: S-0512 F5 (recharge time trunc(Z(T − Z(r / ρ))))
