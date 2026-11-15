@@ -41,7 +41,7 @@ fn claim_5_loading_reply_reads_regions_after_a_category_change() {
     let p = objects_of(&w, Kind::Infantry)[0];
     let trees = objects_of(&w, Kind::Terrain);
     let r = targeting::click(
-        &mut w,
+        &w,
         HouseId(0),
         &[p],
         ClickOn::Object(t),
