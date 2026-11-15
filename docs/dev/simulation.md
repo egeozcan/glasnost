@@ -1879,3 +1879,54 @@ The thirteenth batch of the game-logic audit works through issues #249 to #262 (
 **Formats.** No saved or hashed field changes, but what a saved game replays to does (a turn in place given again, the crash death weapon, the power sums, the deck crossings), so the save format goes to 145 and the AI game format to 121, the numbers the main session gave this batch. Wire version 12: no valid order's encoding changes.
 
 **Seams.** Q-3112, Q-3113 and Q-3114 are open, with the interims above.
+
+## Simulation (sim issues S19: build-up, bridges at load, superweapon records, storm clouds, order targeting and warp members)
+
+The nineteenth batch of the game-logic audit works through issues #347 to #365. Each change of behaviour has a test on synthetic data committed before it. Two issues need a decision the specs do not give and are filed as requests: Q-3140 (#349) and Q-3141 (#364). Q-3142 asks about the interim of #363. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S19*.
+
+**Docking buildings in their build-up (S-0605 claim 1, S-0603 claim 2, S-0314 claim 16, S-0501 claim 22).**
+
+- *#347.* An owner change replaces a building's queued *construction* with guard (S-0309 claim 31), so a building handed over before its first turn has no construction mission while it is still in its build-up. The infantry absorber, the recycler, the repair depot's permission and the reload pad's acceptance tested only the queued mission. Each now also refuses while the building's build-up state is on (`econ.construction.building_up`), as the tank bunker's row P3 does. The build-up ends at the building's next turn, and each accepts from then on.
+
+**Overlays at map load (S-0202 claim 10).**
+
+- *#348, a blocked end marker.* "Any end-row cell holding an overlay: nothing is written, nothing follows." `place_overlay` still recalculated the marker's cell after a blocked end marker, which takes the tile animation's draws on an animated tile. `end_marker` now says whether it wrote its row, and the trailing recalculation is made only then.
+- *#349, the slope condition in play (S-0009 claim 12).* Not built. The overlay refusal itself is stated, but S-0520 claim 3 does not say what a refused crate overlay does to the crate place and its lifetime draw (Q-3140), and the slope test would decide which draws a placement takes. The crate overlay is still created whatever the slope.
+
+**Superweapon records (S-0512, S-0513).**
+
+- *#350, a drain-mode missile (S-0512 claim 19, S-0513 claim 7, S-0407 claim 12 j).* A fire order on a drain-mode record in ready started the missile effect with no silo, so a type of the missile kind that is not one-time never launched. The ready branch now picks the silo as an ordinary launch does (`nuke::silo_choice`) and makes the house's tech recheck due. Claim 8's refusal of an order with no launcher stays out: claim 19 replaces claim 8 for drain-mode types.
+- *#351, a permanent flag kept (S-0512 claims 7, 12 and 13).* A one-time record that also got a permanent grant kept its permanent flag after it fired, so a later grant by a building was never judged by claims 6 and 7: it was neither lost with its building nor suspended and resumed. `grant_by_building` now clears the flag; `permanent_grant` sets it again after its call.
+- *#353, the silent re-completion (S-0512 claims 5, 10, 14 and 15).* Only the first stage's own re-completion after a source pick is silent. A reset or a set-charge after the pick now clears the silent flag, so the next completion is announced and sets the ready tick.
+
+**Storm clouds after the turn pass (S-0513 claim 46, S-0109 claim 5).**
+
+- *#352.* A cloud created after the turn pass (a trigger action in the house raise) first updates in the next tick, so its first advance is at *a* = max(*c* + *d*, *u* + 1) with *u* = *c* + 1, one tick later than a cloud made before the turn pass when *d* = 1. The world keeps a transient flag for "the turn pass of this tick has run" (`World::after_turn_pass`, not saved: it is false between ticks), each cloud records `late` when it is made, and `storm::stage` takes the later first update into its stage count. `late` is a saved field. A cloud made by a trigger that fires during the turn pass keeps *u* = *c*, as before: the flag is set when the pass ends.
+
+**Order targeting (S-0214, S-0213).**
+
+- *#354, row IC7's range alternative.* A deployed in-place deployer whose type fires while deployed gets no-move on a cell out of range of its first weapon as well as when its type does not fire while deployed. The range is `range::in_range` for the first weapon against the cell.
+- *#355, row I19.* A bomb planter gets *bomb* only when the target's type accepts bombs and the target carries none (`bomb::carries`).
+- *#356, the guard key (S-0213 table T2).* A vehicle that controls slave units gets *area guard* on its own cell as a harvester does, movable or not, armed or not.
+- *#357, attack-move eligibility (S-0214 claim 5 and Terms, *armed*).* Both the selection test (`targeting::eligible`) and the order's test (`orders::attack_move_eligible`) read the weapon in the first slot (`combat::weapon::slot_weapon`, slot 0), not the slot in use or the primary field.
+- *#358, the target-state conditions.* Values *x* and *q* are defined only for a target not being erased and not phasing in, and value *e* only for a building not being erased. The three definitions now test them, so rows x1, x2 and q1 are covered too. Where the value is undefined the action falls through as the tables say (to *g*, select by row G10, for a transport phasing in). The same "not being erased" of the accepting allied building (value *n*) and of the engineer-friendly building's passive-neutral branch is not built in this batch: no test covers them yet, and they are listed as seams, with the issue's other reading (that the passive-neutral branch should also need a repairable building that is not vehicle-like).
+- *#359, a jumpjet vehicle in the air (S-0214 Terms, *free mover*; S-0502 claim 30).* An actor in the air is a free mover. `free_mover` now asks `combat::weapon::in_air` (a unit with the jumpjet locomotor on the map at 208 leptons or more above its surface) for a vehicle or infantry unit, so a hovering jumpjet vehicle's move click goes to the clicked cell itself (claim 11). The stale doc sentence ("nothing of another kind is in the air") goes.
+
+**Warp members (S-0513 claims 34, 39 and 51; S-0502; S-0207; S-0208).**
+
+The fixes for #360 to #363 share two places of `superweapons::warp`: `join` (the launch, claim 34) and `lift_off` (the departure, claim 39). #360 and #363 both add to `lift_off`, and #362 and #363 both add to `join`.
+
+- *#360, the departure of a jumpjet member (S-0502 claims 4, 15 and 29).* `lift_off` took the member off the map without the jumpjet's own leaving: the flying registration, the landing reservation and the hover slot stayed. It now calls `jump::leaving`, as `objects` does for any other going off the map, before the cell lists are left and the cell recalculated. The actual-position mark is already gone by then: the launch's `drive::release_claims` released it and cleared it from the jumpjet state (#188), so `leaving` does not release it twice.
+- *#361, phasing in after a warp (S-0207 claim 20 a and claim 27; S-0214 and S-0513 Terms; S-0513 claim 40).* A destination given to the teleporting locomotor while phasing in is dropped. `take_destination_with` tested only the locomotor's own phasing; it now asks `teleport::phasing_in`, which also counts a warp member from its departure until its arrival hold ends.
+- *#362, a jumpjet's commitment at the launch (S-0513 claim 51; S-0502 claim 17).* The launch clears the current driving step, and none resumes when the warp ends. A jumpjet that joined while moving kept its destination point, its order-level destination and its *moving* state, and took off again for them after its placement. `join` now ends them through `jump::warp_join`: the point, the order and *moving* are cleared, and the target height goes to 0, as a stop that grounds a jumpjet leaves it (S-0502 claims 5 and 15), so the grounded unit placed at its landing point takes off later with claim 5's timing. Its flight state, height and landing reservation are left as they are until the departure, where #360's `jump::leaving` releases the reservation; the placement grounds it (`jump::placed`).
+- *#363, a teleporting infantry unit's reservation (S-0208 claim 19, Q-0235; S-0513 claim 51).* An infantry unit with the teleporting locomotor reserves its chosen standing position when it takes a destination. `join` forgot the landing point without clearing that reservation, and a destination taken while the member was pending left one that the departure did not clear. `teleport::warp_release` clears the reserved standing position of a landing point not jumped to and forgets the point; `join` and `lift_off` call it. Whether a warp-pending infantry unit should choose and reserve a landing point at all is not stated: S-0207 claim 20 (b) leaves *L* unchanged under warp-pending immobilization for other objects only (Q-3142). Meanwhile it reserves one as before, and the departure clears it, so the reservation stands from the order to the departure. A vehicle's pending reservation is the business of `drive::release_claims` and its ground-reservation switch, which this batch leaves as it is.
+
+**The update order (S-0203 claim 11).**
+
+- *#365.* With `quirks.update_order_removal_skip` off no object takes a second turn in a tick. The turn pass now passes over an object whose turn of this tick is already recorded (`last_turn`), which is what a unit that boards an open-topped transport after its own turn and is put back in the update order meets. With the switch on nothing changes.
+
+**Requests.** *#364* (`quirks.warp_naval_road_cell` off has no effect, S-0513 claim 38) is not built: the spec does not say which cell is "a road cell that is water" (Q-3141).
+
+**Formats.** #352 adds a saved field (`Cloud::late`), so the save format goes to 152 and the AI game format to 128, the numbers the main session gave this batch. Wire version 12: no order's encoding changes.
+
+**Seams.** Q-3140, Q-3141 and Q-3142 wait for answers. The "not being erased" of value *n*'s accepting allied building and of the engineer-friendly building's passive-neutral branch (#358) is not built. A teleporting vehicle's pending reservation at a warp launch with the vehicle ground-reservation switch on is not changed. None of these fixes makes or moves a rarer back-reference of `World::census` (#402): #360's `jump::leaving` only ends a flight registration, so no fix forgets the census.
