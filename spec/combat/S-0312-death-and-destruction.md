@@ -2,14 +2,14 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 78
+revision: 81
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-14
+approved-on: 2026-11-15
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132,
-Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000, Q-3042, Q-3086]
+Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000, Q-3042, Q-3086, Q-3112]
 supersedes: []
 ---
 
@@ -216,7 +216,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    for the game-wide weapon. The detonation uses that weapon's warhead and brightness, has the dying
    object as its source object and the object's house as its source house, so the dying object
    itself is not hit (it is also dead, S-0303 claim 9). An object that is not exploding fires no death
-   weapon at death; a non-rocket crashing aircraft fires one when it hits the ground (claim 16).
+   weapon at death; a non-rocket crashing aircraft in ordinary flying movement fires one when it
+   hits the ground, and so does a crashable vehicle of a balloon-hover type at its crash end
+   (claim 16).
    Rocket interception follows S-0506 claim 20 instead. The type's
    death-weapon damage factor *φ* (F3) applies to the primary weapon too, not only to a death
    weapon of the type's own. When the chosen weapon has a positive radiation level, its
@@ -256,8 +258,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
      the planted bomb's handling until AC29 part i runs; medium for its timer during the fall
 
 8. **Infantry.** A killed infantry unit takes the shared effects of claims 4 to 7 and then the death
-   sequence or removal of S-0107 claim 17, which also owns its corpse. Nothing further belongs to
-   this spec.
+   sequence or removal of S-0107 claim 17, which also owns its corpse. When a crash begins instead
+   (S-0107 claim 17), its crash end in jumpjet movement is claim 16's *Infantry crash end*,
+   rated there; in other movement modes it is an Open question.
    - Backing: `measurable` for the debris, the death weapon and the attached bomb of an infantry unit
      (scenario D4 variant b, D6 variant e; S-0107 scenario M10 for the rest); `unmeasured` for the
      passengers of an infantry unit (no scenario here gives an infantry unit passengers, so none
@@ -513,7 +516,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     crash motion: its growing fall counter supplies a downward contribution, not necessarily
     the net descent, because ordinary altitude adjustment can still apply. That claim also owns
     its sinking branch. A crashable vehicle using jumpjet movement uses the crash motion of
-    S-0502 claim 18, with its magnetic-lift qualifications. For any object using jumpjet
+    S-0502 claim 18, with its magnetic-lift qualifications, and so does a crashing infantry unit
+    using jumpjet movement. For any object using jumpjet
     movement, the crash start also makes S-0502 claim 18's empty destination assignment at
     once, inside the hit. A committed jumpjet infantry unit then reroutes with its eligible
     standing-position draw over 0 to 3; a jumpjet vehicle's reroute takes no draw. S-0502 claim 3's safety
@@ -521,13 +525,18 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     even without a move order: a dead hovering unit cannot remain suspended merely because
     its order ended. This guarantee is an engine design rule, not established original
     behaviour. A raised look-ahead ground reference can still hold the fall up in the
-    original (S-0502 claim 18, `quirks.jumpjet_crash_lookahead`). The ordinary non-rocket impact rules below still belong to this claim. Magnetic drops are
+    original (S-0502 claim 18, `quirks.jumpjet_crash_lookahead`). The impact of a vehicle or an
+    infantry unit using jumpjet movement is the vehicle crash end or the infantry crash end at
+    the end of this claim, not the aircraft impact rules below. Magnetic drops are
     different: S-0607 claims 16 to 19 own a dropped seized unit's impact, including clear-cell
-    survival and sinking. Only a vehicle whose type can crash retains this claim's ordinary
-    crash-end exception (S-0607 claim 18); a dropped seized aircraft does not (S-0607 claim 19).
+    survival and sinking. A dropped seized vehicle whose type can crash ends its fall with
+    this claim's *Vehicle crash end* (S-0607 claim 18); a dropped seized aircraft does not (S-0607
+    claim 19).
     The magnetic drop itself is not this claim's crash start: it neither kills passengers nor
     takes tumbling draws (S-0607 claim 13). For other crashable movement
-    modes, the owning movement spec supplies the motion. The following impact rules also exclude rocket missiles: S-0506 claim 20 owns their
+    modes, the owning movement spec supplies the motion, and their impact is not traced here
+    (Open questions), nor is that of an aircraft using jumpjet movement or of another kind of
+    object using ordinary flying movement. The following impact rules also exclude rocket missiles: S-0506 claim 20 owns their
     interception outcomes, with detonation governed by S-0506 claim 19. An intercepted rocket
     above the terrain starts to crash but keeps rocket-flight movement and its full detonation
     damage on the next positive-speed movement attempt, including a rejected map-edge attempt.
@@ -535,7 +544,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     is removed without a rocket detonation. Interception neither restarts nor suspends the
     rocket's phase timer, and adds no crash-fall displacement: pause and tilt keep its position
     fixed, raise keeps its ordinary rise, and positive-speed motion follows S-0506 claim 20.
-    For an ordinary non-rocket crash within this claim's scope, when it reaches the ground:
+    For an ordinary non-rocket crash of an aircraft using ordinary flying movement, when it
+    reaches the ground:
     - if it was shot down, its death weapon goes off at the impact point (claim 6, even if it already
       went off at the moment of death because the aircraft was exploding), and it leaves play,
     - if it was still alive (a crash started without a kill), it is destroyed by damage equal to its
@@ -554,6 +564,28 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     pick. The crash start's effects above apply as S-0501 claim 46 states, with one difference in
     credit: its passengers are lost and credited to nobody, since the crash has no attacker, and
     the three tumbling draws are taken.
+
+    *Vehicle crash end.* A vehicle whose type can crash and whose crash ends in jumpjet movement's
+    *crashed* state (S-0502 claim 18), including a dropped vehicle of such a type (S-0607
+    claim 18), is put at ground height and leaves play; in a high-bridge cell, the height it is
+    put at is an Open question. A balloon-hover type (S-0310 Terms) first
+    sets off its death weapon at its position, chosen and computed as in claim 6, whether or not it
+    has the explodes flag, and shows none of claim 9's animations at its crash end and takes none
+    of their list picks. A type of any other kind sets off no death weapon at this impact: it
+    shows the animations of claim 9, with their list picks (again, for a vehicle killed before
+    its crash ended). Both cases are the same whether
+    the vehicle is alive or dead, and neither deals the demolition damage of an aircraft's living
+    crash.
+    So a living dropped vehicle of a crashable type leaves play at its crash end without a killing
+    hit, as for any removal without one (claims 7 and 31).
+
+    *Infantry crash end.* An infantry unit whose type can crash and whose crash ends in jumpjet
+    movement's *crashed* state is put at ground height (in a high-bridge cell, the height is an
+    Open question) and makes the forced request for *air-death-end* (S-0107 claims 6 and 21).
+    When that sequence starts, its completion removes the unit with no corpse (S-0107 State and
+    ordering); what removes a unit whose request is turned down is an Open question. It sets off
+    no death weapon at its crash end, so an exploding one fires its death weapon only at death
+    (claim 6).
     - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0507 scenario T14 for uncredited ground-aircraft passenger cleanup, S-0522 scenario P9 for the attacker credit of the passengers lost at the crash start of an aircraft that was shot down (P9 observes only that case), S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9. The original jumpjet idle-crash aftermath remains `unmeasured` under S-0502 claim 3 (diagnostic J15): the crash start's destination clear of S-0502 claim 18 can reroute a committed unit, so the otherwise idle case has not been isolated. The destination clear and the held-up crash have S-0502 claim 18's backing (S-0502 scenarios J12 and J31). The pending-crash update guarantee is design, not an oracle observation.
       The fall-back crash of S-0501 claim 46 is `measurable` through S-0501 scenario AC29 part f
       (its health, fall and impact, the score screen's counts, and the absence of debris and of
@@ -564,6 +596,17 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       the crash having no attacker (S-0501 claim 46): `unmeasured`, since it shows only for a
       pad-bound armed aircraft that carries passengers, and no set-up is known that loads
       passengers into such a type before its run.
+      The vehicle crash end of a dead vehicle is `measurable` through scenario D11 variants c,
+      i and j (where death weapons go off, and the animations as it leaves play), and so is a
+      balloon-hover type's firing whatever its explodes flag (variant i with the flag on, variant
+      j with it off). That a balloon-hover type takes no list pick at its crash end is
+      `unmeasured`: D11 records the animations, not the draws. The living case is `unmeasured`: D11 variants c, i and j kill the
+      vehicle first, and S-0607 scenario L4 variant (c) records neither a demolition detonation
+      nor a health value at the crash end, so it does not tell a removal without a hit from the
+      aircraft's living-crash damage. The infantry crash end is `unmeasured`: it rests on
+      S-0107's start and completion of *air-death-end*, which S-0107 claim 21 rates `unmeasured`
+      (no controlled scenario starts the air-death kinds), and no scenario here kills a crashable
+      jumpjet infantry unit in the air.
     - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
       empty list, their independence from height, uncredited passenger cleanup at removal, and
       the attacker credit of the passengers lost at the crash start of an aircraft that was shot
@@ -573,11 +616,17 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       reference, height per update, speed reset and held-up condition, and medium that nothing else ends a
       held-up crash, as S-0502 claim 18 rates them; high for the jumpjet crash start's
       destination clear at the hit, with the infantry reroute draw (S-0502 claim 18),
-      medium for the non-rocket impact rules; low for the double death weapon; medium for the
+      medium for the non-rocket impact rules; low for the double death weapon, that is, the
+      original's two firings of an exploding non-rocket aircraft (the Edge cases rate the
+      switch's off form medium); medium for the
       fall-back crash of S-0501 claim 46, as that claim rates its health 0 at the start, its dead
       fall, its counts and the absent killing-hit effects until AC29 part f runs, and its
       tumbling draws until D11 variant g runs; medium for its passenger loss, as S-0501 claim 46
-      rates it; medium for those passengers being credited to nobody, which no run observes
+      rates it; medium for those passengers being credited to nobody, which no run observes, and
+      medium for the vehicle crash end of a dead vehicle; medium for a balloon-hover type's
+      firing whatever its explodes flag; medium for the absence of list picks at a balloon-hover
+      crash end; medium for the living case; medium for the infantry
+      crash end
 
 ### Buildings
 
@@ -1267,7 +1316,7 @@ otherwise. No measurement has been completed for this revision.
 | 6 | `unmeasured` for multi-turret selection and the unplaced projectile's land-type, height and water tests: D6 tests ordinary/elite primary selection and debris position, not these tests, and no setup isolating them is supplied. |
 | 12 | `unmeasured` for bridge-deck escape placement: D9 variant h tests only which row applies on a deck, and the placement point remains for the bridge specs to establish. The bomb-mark row is `measurable` on land by D8's marked-deck variant, part b; on a bridge deck and more than 10 leptons above water it is `unmeasured`, since no setup kills a marked transport on a deck or holds a marked vehicle more than 10 leptons above water at its death. |
 | 13 | `unmeasured` for crew trigger-tag inheritance: the kinds of tag that pass on are not established here, so D10 cannot predict a tag outcome. |
-| 16 | `unmeasured` for a crash begun while still alive and the absence of tumbling draws for crashing infantry: no setup is established that starts either case. D11 b is conditional, not measurable backing. Also `unmeasured`: the fall-back crash's lost passengers and their credit to nobody, since no set-up is known that loads passengers into a pad-bound armed aircraft before its run. |
+| 16 | `unmeasured` for a crash begun while still alive and the absence of tumbling draws for crashing infantry: no setup is established that starts either case. D11 b is conditional, not measurable backing. Also `unmeasured`: the fall-back crash's lost passengers and their credit to nobody, since no set-up is known that loads passengers into a pad-bound armed aircraft before its run; the vehicle crash end of a living vehicle, since D11 variants c, i and j kill the vehicle first and S-0607 scenario L4 variant (c) records neither a demolition detonation nor a health value at the crash end; the absence of list picks at a balloon-hover crash end, since D11 records the animations, not the draws; and the infantry crash end, since it rests on S-0107 claim 21, which is `unmeasured`, and no scenario here kills a crashable jumpjet infantry unit in the air. |
 | 17 | `unmeasured` for the exact ten-times-strength amount and no-escape marker: D12's contacts die, which alone cannot distinguish that amount from another lethal amount or test crew escape. Release of a non-helipad contact at or beyond 256 leptons is also unmeasured: D12 does not establish those contacts. Garrison eviction instead uses S-0508 G7 and G8's backing. |
 | 18, F4 | `unmeasured` for countries without a side and side numbers beyond 2: D10 and D13 do not construct those owners. The eight-cell 3 × 3 foundation is also unmeasured here: D13 uses a full nine-cell foundation. |
 | 18 | `unmeasured`, low confidence, for equating the owner's survivor-suppression state with defeat: no setup separates the two possible moments in Open questions. Ordinary undefeated-owner runs test the rest. |
@@ -1425,9 +1474,11 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | living grappling host | cull under S-0614 claim 11 | sinking without a hit or health change, regardless of weight |
 | positive-health sinking vehicle | another killing hit | credit, raises and applicable death effects again; 1 health only under the ordinary reprieve, otherwise claim 32's zero-health/removal outcome |
 | alive vehicle or aircraft | killing hit, can crash, positive height above the surface for a vehicle (claim 15), above the terrain for an aircraft (claim 16) | crashing, in play; rocket-missile outcomes follow S-0506 claim 20 |
-| ordinary non-rocket crashing object within claim 16's scope | reaches the ground, was shot down | death weapon, leaves play |
-| ordinary non-rocket crashing object within claim 16's scope | reaches the ground, was alive | destroyed by its remaining health, detonation |
-| dropped seized unit | fall ends | S-0607 claims 16 to 19 own the outcome; only a crashable vehicle retains claim 16's ordinary crash-end exception, not an aircraft |
+| ordinary non-rocket crashing aircraft (claim 16) | reaches the ground, was shot down | death weapon, leaves play |
+| ordinary non-rocket crashing aircraft (claim 16) | reaches the ground, was alive | destroyed by its remaining health, detonation |
+| crashing vehicle whose type can crash (claim 16, vehicle crash end) | enters jumpjet movement's *crashed* state, alive or not | at ground height (high-bridge cell: Open questions); a balloon-hover type sets off its death weapon and shows none of claim 9's animations and takes none of their picks, any other shows claim 9's animations with their picks (again, for a vehicle killed before its crash ended); leaves play |
+| crashing infantry unit whose type can crash (claim 16, infantry crash end) | enters jumpjet movement's *crashed* state | at ground height (high-bridge cell: Open questions); forced *air-death-end* request; no death weapon; leaves play when that sequence completes (S-0107) |
+| dropped seized unit | fall ends | S-0607 claims 16 to 19 own the outcome; a crashable vehicle ends its fall with claim 16's *Vehicle crash end*, an aircraft does not |
 | alive cyborg infantry, not prone | lethal hit that does not ignore defences | crippled; health becomes the greater of 1 health point and one quarter of its type's strength, truncated toward zero |
 | prone cyborg | lethal hit | dies (S-0107 claim 17) |
 | alive eligible building | lethal hit of a delay-kill warhead | 1 health point, countdown of *T* ticks (claim 3) |
@@ -1442,9 +1493,22 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
   fire more times at a vehicle death. Off: omit that extra group, leaving only the common
   group; this changes any draws taken by the omitted firings' actions.
 
-- **`quirks.crash_death_weapon_twice`** (default: on, the original). An exploding non-rocket aircraft fires its
-  death weapon at death and again at the impact of its crash (claim 16). Off: it fires only at the
-  impact. Rocket interception and its quirk are owned by S-0506 claim 20.
+- **`quirks.crash_death_weapon_twice`** (default: on, the original). An exploding object whose
+  death starts a crash fires its death weapon at death (claim 6) and again at the impact, when that
+  impact sets one off: the impact of a non-rocket aircraft in ordinary flying movement, and the
+  crash end of a crashable vehicle of a balloon-hover type (claim 16). Off: such an object fires
+  no death weapon at death, only the one at the impact; if its crash never reaches that impact, it
+  fires none. The switch reaches no other death. In both settings an exploding aircraft killed
+  with no height above the terrain, which starts no crash and leaves play at once (claim 16),
+  fires its death weapon at death, and so do an exploding crashable vehicle of any other type and
+  an exploding infantry unit whose crash ends in jumpjet movement: neither crash end sets off a
+  death weapon (claim 16). A crash whose
+  impact this spec does not trace (Open questions) is outside the switch too: the object fires
+  its death weapon at death in both settings, and the switch changes nothing at its impact.
+  Rocket interception and its quirk are owned by S-0506 claim 20. Backing: the original's two
+  firings are claims 6 and 16's; the off form is `unmeasured`, since the original has no such
+  form. Confidence: medium for the off form (design rule, decided at the delegated sign-off,
+  2026-11-15).
 - **`quirks.building_smudge_discarded_draws`** (default: on). Claim 19 (a) takes up to two ranged
   draws whose results are not used (none for a 2 × 2 foundation). Off: those draws are not taken. Turning it off changes every
   later draw, so it is a switch only for mods that do not need the original's random sequence.
@@ -1934,11 +1998,30 @@ c (claim 15): a test vehicle type with the crashable flag, killed while above th
 deck (for example in jumpjet flight). For a jumpjet, place no other object in its own cell or the
 neighbouring cells and give the test type a crash rate above 0, so that its crash is not held up
 and does fall (S-0502 claim 18 and its Edge cases): it stays in play until it reaches the
-ground.
+ground. For the vehicle crash end, use jumpjet movement, and give the type the explodes flag, a
+test death weapon whose warhead animation appears in neither of its lists, and two distinct
+entries in each of its explosion and destruction-animation lists, with its ammunition left at the
+default (unlimited) and its balloon-hover flag off. Record the tick and height of each
+death-weapon detonation, and the animations created on the tick of the killing hit and on the
+tick the vehicle leaves play. Expected: one death-weapon detonation, on the tick of the killing
+hit, none on the tick it leaves play; on each of the two ticks, claim 9's pair: the last entry of
+the explosion list and one destruction-list entry. Variant i: the same with the balloon-hover
+flag on. Expected: a death-weapon detonation on each of the two ticks, the second at ground
+height; claim 9's pair on the tick of the killing hit and no claim 9 animation on the tick it
+leaves play. Variant j: the same as i with the explodes flag off, the vehicle at its starting
+rank and the test data giving that rank no exploding ability. Expected: no death-weapon detonation on the tick
+of the killing hit, and claim 9's pair there with an explosion-list entry chosen by its pick (the
+last entry or not); on the tick it leaves play, one death-weapon detonation at ground height and
+no claim 9 animation.
 
 *Falsified if:* the death weapon goes off in the air for a non-exploding aircraft, the detonation of
 variant b has an amount other than the aircraft's remaining health, or the vehicle of variant c
-leaves play before it reaches the ground. Variant d: repeat the shot-down aircraft with its
+leaves play before it reaches the ground. In variants c, i and j, a death-weapon detonation
+count, tick or height other than expected (in j, a detonation on the tick of the killing hit, or
+none or one off ground height on the tick it leaves play), a missing pair where claim 9's pair is
+expected, an explosion animation in it other than the list's last entry in c and i, or any claim
+9 animation on the tick the vehicle leaves play in i or j, falsifies claim 9 (on the tick of the
+killing hit) or the vehicle crash end of claim 16. Variant d: repeat the shot-down aircraft with its
 explodes flag on and off. Expected: on gives death weapons at both death and impact; off gives
 one only at impact. A missing second detonation or one at death in the flag-off case falsifies d.
 Give the aircraft two distinct explosion-list entries. Record the selected animation at the
@@ -2536,7 +2619,17 @@ described, and parts (a) and (b) are inconclusive. On our engine all three end a
   beyond factory exits and docking.
 - Crash motion of crashable movement modes other than ordinary flying aircraft, jumpjets
   and rockets remains for their owning movement specs (claim 16). The jumpjet motion itself
-  is specified by S-0502 claim 18.
+  is specified by S-0502 claim 18. The impact of those crashes is not traced: neither that of
+  such a mode, nor that of an aircraft using jumpjet movement, nor that of a vehicle or an
+  infantry unit using ordinary flying movement. Which of them sets off a death weapon, tests
+  whether the object is alive, or removes it is open. `quirks.crash_death_weapon_twice` does
+  not reach them (Edge cases).
+- The height at which the vehicle crash end and the infantry crash end of claim 16 put the
+  object in a high-bridge cell, on the deck or on the ground beneath it, and so where a
+  balloon-hover type's death weapon goes off there.
+- What removes a crashed infantry unit whose forced *air-death-end* request is turned down
+  (claim 16, *Infantry crash end*; S-0107 claim 6), for a type whose sequence data leaves that
+  kind out. It sets off no death weapon at its crash end either way.
 - Whether the state that suppresses survivors (claim 18, "the owner's game is not over") is set by
   the defeat of S-0414 itself or only by the destruction of all the defeated house's objects that
   follows it. The project lead's decision of 2026-10-11 (the game runs on until one alliance
@@ -2591,6 +2684,23 @@ surface: it starts no crash and leaves play at the end of its death effects, wit
 draws (claim 15, scenario D11 variant h). The claim should say "above the surface" for a vehicle
 and point to claim 15 here; for an aircraft it stays "above the terrain" (claim 16).
 
+S-0203 claim 6, whose three passages say a crashing object "stays in play until it hits the
+ground" (citing claims 15 and 16 here): for an object using jumpjet movement, S-0502
+claim 18 says when the crash ends, and a held-up crash can keep it in play indefinitely in the
+original (`quirks.jumpjet_crash_lookahead` on). Those passages can add that cross-reference.
+The passage "An infantry unit whose type has the crash flag and which starts to crash instead
+(S-0107 claim 17, S-0312 claim 16) stays in play until it hits the ground" can also point to
+S-0312 revision 81, claim 16, *Infantry crash end*: the unit stays in play through its crash
+end and leaves play when its *air-death-end* sequence completes.
+
+S-0203 claim 13 (g), *Crashing* bullet, "A vehicle whose crash has ended leaves play on the
+ground with no health (S-0312 claims 15 and 16)": this holds for a vehicle that was killed. A
+living dropped vehicle of a crashable type (S-0607 claim 18) leaves play at its crash end
+without a killing hit, and its health is not set to 0 there (S-0312 revision 81, claim 16,
+*Vehicle crash end*). The bullet can say "a vehicle killed before its crash ended" or point to
+that paragraph. Level and backing: as S-0312 claim 16 rates the living case (medium,
+`unmeasured`).
+
 S-0212 claim 25, table T5: add a row *Building crate beneath (S-0312 claim 20)* with these
 settings: the building's top-left foundation cell as centre, *float* when the centre's land type
 is *water* and *track* otherwise, *normal* movement zone, no reach region, deck mode never, no
@@ -2611,8 +2721,3 @@ play (S-0312 claim 21).
 The former passenger-order question is resolved by applying the existing neutral/special-house
 ruling and the stated exclusion of the team system: claim 25 retains the original's non-team
 *hunt* order. No new project-lead decision is requested.
-
-S-0203 claim 6, whose three passages say a crashing object "stays in play until it hits the
-ground" (citing claims 15 and 16 here): for an object using jumpjet movement, S-0502
-claim 18 says when the crash ends, and a held-up crash can keep it in play indefinitely in the
-original (`quirks.jumpjet_crash_lookahead` on). Those passages can add that cross-reference.

@@ -2,13 +2,13 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 107
+revision: 110
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-30
+approved-on: 2026-11-15
 measurements: [M-0007]
-requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162, Q-1610, Q-1876]
+requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162, Q-1610, Q-1876, Q-3113]
 supersedes: []
 ---
 
@@ -644,6 +644,15 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    repair is on at full health pays one step at the next multiple of *P*<sub>b</sub>, its health
    stays at the strength, and then repair turns off.
 
+   *Being erased (Q-3113).* A building that is being erased (glossary; S-0514) or phasing in
+   after a chrono jump takes no step at a multiple of *P*<sub>b</sub> on which its turn is in
+   that state: nothing is paid and health does not rise, whatever its repair state. That state
+   does not turn repair off. So a repair that was on when the state began is still on when it
+   ends (for a building being erased, at the last release, S-0514 claim 10), unless something
+   else turned it off, and its steps resume at the first multiple of *P*<sub>b</sub> at which its
+   turn is no longer in that state. S-0514 claim 10's unconditional switch-on at the last release
+   concerns the building's power switch, not its repair.
+
    *Automatic repair and sale.* Claims 12 to 15 give the automatic-start rule. It is gated
    by the *house skill level* (glossary): it can apply
    only to a house whose level is at least the game-wide repair-and-sell threshold (Import
@@ -667,8 +676,13 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      Gate passage at 0 and −1 is `measurable` in H13 and H14. The exact absent threshold is
      `unmeasured` for H12's stated limitation: controlled level 0 distinguishes a positive
      threshold from a non-positive one, but not one positive threshold from another.
-   - Confidence: high (periodic repair and the skirmish house levels, S-0412 claim 3); medium
-     (the automatic rule's skill-level comparison)
+     The skipped steps of a building being erased, its kept repair state and the resumption
+     after release are `measurable` (H13 f, its repeat with repair left on). The same skip
+     while phasing in is `unmeasured`, for claim 12's reason: no ordinary input here puts a
+     building into chrono phase-in.
+   - Confidence: high (periodic repair and the skirmish house levels, S-0412 claim 3; the
+     skipped steps, kept repair state and resumption of a building being erased); medium
+     (the automatic rule's skill-level comparison; the skip while phasing in)
 
 ### Self-healing
 
@@ -792,7 +806,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     the repair-start rule (claim 13); below the reserve permits only the sale rule (claim 14).
     Equality belongs to repair. The comparison is signed integer arithmetic, without rounding.
     Passing neither branch's further tests does nothing; failing the sale tests does not try repair.
-    This split does not switch off an existing repair: claim 8 still controls its paid steps.
+    This split does not switch off an existing repair: claim 8 still controls its paid steps,
+    which a building being erased or phasing in does not take (claim 8, *Being erased*).
     - Backing: `measurable` (H13 a to c; H14 a to d; H13 f for erasure). The phase-in exclusion
       is `unmeasured`: no ordinary input here puts a building into chrono phase-in.
     - Confidence: high
@@ -2767,6 +2782,31 @@ input, not an engine modification; the common setup and three repeats apply.
   no automatic restart during erasure, start on the first eligible turn after release. Starting during the excluded
   state or failing afterward falsifies the exclusion; record the state transitions, not merely
   the drawn fading effect. Building phase-in remains unmeasured for claim 12's stated reason.
+  *Repeat with repair left on (claim 8, Q-3113):* in the funded human-owned run, set the
+  automatic repair-and-sell threshold to 1, as in H9 run 1, so that the level-0 human house
+  never starts repair automatically (claim 8's gate) and every change of repair state comes from
+  the order or from claim 8's step outcomes. Keep the house's credits well above the step cost
+  throughout. Give the force-fire shot a named test weapon whose hit removes at least 40 and
+  less than 1000 health, as recorded on the hit tick. After the hit and before the next
+  multiple of 112 (call it *M*₁), give one repair order, which switches repair on (S-0213
+  claim 13), and no other repair order; the order therefore comes before the lock's first
+  tick. Use a single erasing attacker with a named test weapon of raw damage *d* from 1 to 88,
+  so that S-0514 F3 gives ⌈10 × 1000 / *d*⌉ ≥ 114 erasure updates (S-0514 claims 7 and 8,
+  whose scenario E1 (b) uses such named damage variants). Let the lock begin a few ticks after *M*₁. The next
+  multiple, *M*₂, then falls within 112 ticks of the lock's first tick, and at least 114
+  updates leave at least one tick after *M*₂ before erasure could complete. Remove the
+  attacker on such a tick, after *M*₂ and before *M*₃ = *M*₂ + 112, so that the lock spans
+  exactly one multiple and neither the lock's first tick nor the release tick is a multiple of
+  112. From the order to *M*₃ there are then three multiples, *M*₁ to *M*₃, so even with a
+  step at each of them the building is at least 10 below its strength before *M*₃'s step. A
+  run in which the hit removes less than 40 health, erasure completes, or the lock spans no
+  multiple is void. Record credits, health and repair state on each tick from the order to
+  *M*₃.
+  *Expected:* repair is on at every recorded tick from the order to *M*₃, including every tick
+  of the lock; at *M*₁ the house pays 2 and health rises by 10; at *M*₂, inside the lock, no
+  credits are spent and health does not rise; at *M*₃ the house pays 2 and health rises by 10.
+  Repair found off at any recorded tick before *M*₃, a payment or a health rise at *M*₂, or no
+  payment at *M*₃, falsifies claim 8's rule for a building being erased.
 
 **H14: automatic sale and its draw (claims 12 and 14; Q-0341).** Same map and recorder as H13,
 reserve 100, human credits 0, both automatic thresholds 0, red-health threshold 0.5. Use a
@@ -3368,6 +3408,12 @@ The measurement scenario requires a read-only record of the ordered events; end-
 
 
 ## Changes for other specs
+
+- S-0514 claim 17, "Buildings skip ordinary behaviour processing and firing; this spec does not
+  claim that every auxiliary building activity stops", can add a pointer: a building being
+  erased also takes no building-repair step, and the lock does not turn its repair off (S-0314
+  claim 8, *Being erased*). Level and backing: as S-0314 claim 8 rates them (high, `measurable`
+  by H13 f's repeat with repair left on).
 
 - S-0503 claim 10, first sentence: "A hovering vehicle is switched off by the disabling of
   S-0405 claim 13, and switched on again by its re-enabling" becomes "A hovering vehicle is

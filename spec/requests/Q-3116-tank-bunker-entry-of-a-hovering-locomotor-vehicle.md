@@ -3,7 +3,7 @@ id: Q-3116
 title: How a bunker-eligible vehicle with the hovering locomotor reports arrival at a tank bunker and is taken in
 status: open
 related: [S-0606, S-0503, S-0207]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need

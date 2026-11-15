@@ -2,13 +2,13 @@
 id: S-0606
 title: Vehicle bunker
 topic: structures
-revision: 8
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-11-15
 measurements: []
-requests: [Q-1163, Q-1164, Q-1300, Q-1301, Q-1302, Q-1303, Q-1304, Q-1305, Q-1306, Q-1307, Q-1308]
+requests: [Q-1163, Q-1164, Q-1300, Q-1301, Q-1302, Q-1303, Q-1304, Q-1305, Q-1306, Q-1307, Q-1308, Q-3116]
 supersedes: []
 ---
 
@@ -20,7 +20,8 @@ This spec covers vehicle eligibility, approach, entry tracks and wall effects, o
 from a tank bunker in skirmish. Combat modifiers belong to the specs cited in claim 9; network games
 and campaigns are out of scope. Entry permission and timing below describe a bunker without
 another special docking, repair, reload, grinding or absorption role. Claim 20 gives the
-combination with the repair-depot role; other combinations have not been fully traced.
+combination with the repair-depot role; other combinations have not been fully traced. Claim 22
+covers a vehicle with the hovering locomotor.
 
 ## Terms
 
@@ -71,7 +72,9 @@ combination with the repair-depot role; other combinations have not been fully t
    A vehicle that is not bunker-eligible never becomes bunkered. The flag is off by default for
    infantry, aircraft and building types. If data sets it on another kind, claim 2 may still grant
    permission, but such an object is never taken in: claim 6's *no vehicle* row sends the bunker
-   back to *clearing*.
+   back to *clearing*. The test reads the locomotion class, not the locomotor, so a vehicle with
+   the hovering locomotor and another class can pass it (claim 22, which also gives the switch
+   that adds a locomotor test).
    - Backing: `measurable` (scenario K2). Permission for non-vehicle kinds is `unmeasured`:
      no normal order route establishing their entry request has been traced.
    - Confidence: high
@@ -156,6 +159,8 @@ combination with the repair-depot role; other combinations have not been fully t
    vehicle's *enter* processing does not make it. Standing still in the docking cell is
    therefore not arrival. With a 2 × 2 foundation every docking cell is a foundation cell, so a
    vehicle already standing there cannot be ordered in at all: permission row P9 refuses it.
+   For a vehicle with the hovering locomotor, claim 22 gives when the test is made and why, in
+   claim 22's case, it fails at a bunker without the unit-repair flag.
 
    **Destination after arrival (Q-1301).** Arrival ends the route and stops the vehicle, but
    does not clear its destination: the bunker stays its destination (as at a depot, S-0215
@@ -205,7 +210,8 @@ combination with the repair-depot role; other combinations have not been fully t
      the inward diagonal track of T1.
    - **Driving in:** the entry track is chosen from the vehicle's body facing rounded to 1/256
      turns (F2, table T1). It is forced toward the reference point as its track target. It sets
-     both ρₜ and ρ to 1.0.
+     both ρₜ and ρ to 1.0. It does not move a vehicle with the hovering locomotor (claim 22
+     gives and rates that case).
    - **Occupied:** the vehicle becomes bunkered (claim 7).
    - Backing: `measurable` (scenario K1, including K1b for the chosen object, its distance and
      the chosen-only quirk)
@@ -222,7 +228,9 @@ combination with the repair-depot role; other combinations have not been fully t
 
    While bunkered:
    - **Position:** the vehicle stands at the reference point, on a foundation cell, with body
-     facing 32768 (map south) unless a later rule turns it.
+     facing 32768 (map south) unless a later rule turns it. The entry track does not
+     move a vehicle with the hovering locomotor there; where such a vehicle stands and which way it
+     faces are not traced (claim 22, Open question 9).
    - **Behaviour:** it keeps *guard*. S-0215 claim 15 row 12 and claim 26 row 2 return it to
      *guard*.
    - **The bunker:** it stays in *repair*, with no further occupancy-stage effect, until a
@@ -306,7 +314,8 @@ combination with the repair-depot role; other combinations have not been fully t
       sound plays at the bunker's position if one is set, and *special-3* and *special-4* start,
     - the vehicle's link ends, and it is put on the release track (table T2) toward the point
       (−128, +128, 0) leptons from the reference point, with ρₜ and ρ set to 1.0, after
-      switching its locomotion back on if it was off,
+      switching its locomotion back on if it was off (the track does not move a vehicle with
+      the hovering locomotor: claim 22 gives and rates that case),
     - it gets as destination the result of S-0212 claim 25's nearby-cell search, centred on the
       cell one cell along −*x* and one along +*y* from the bunker's top-left foundation cell, with
       the vehicle's locomotion class, movement zone *normal*, no reach region, never in deck mode,
@@ -361,11 +370,14 @@ combination with the repair-depot role; other combinations have not been fully t
 
     Letting out:
     - puts the vehicle on the release track toward the point (−128, +128, 0) from the reference
-      point, with ρₜ and ρ set to 1.0, after switching its locomotion back on if it was off,
+      point, with ρₜ and ρ set to 1.0, after switching its locomotion back on if it was off (the
+      track does not move a vehicle with the hovering locomotor: claim 22 gives and rates that
+      case),
     - ends the bunker link on both sides, and the bunker ends contact with the vehicle.
 
     It has no walls-down effects. The vehicle gets no new behaviour or destination. It keeps
-    *guard* and stops at the release track's end on the bunker's former foundation.
+    *guard* and stops at the release track's end on the bunker's former foundation; the track
+    does not move a vehicle with the hovering locomotor (claim 22 gives and rates that case).
 
     **Destruction ordering.** The contacts that S-0312 claim 17 treats are those the bunker held
     just before the destroying hit, less the bunkered vehicle. So the bunkered vehicle is let out
@@ -397,7 +409,8 @@ combination with the repair-depot role; other combinations have not been fully t
       (S-0601 claim 3), and a parasite cannot latch (S-0614 claim 2). The Psychic Dominator
       can take over a vehicle that its sweep reaches and that passes its remaining eligibility
       conditions (S-0612 claim 13). In a 2 × 2 bunker, the occupant is reached: its position
-      coincides with the foundation centre, and the tied within-cell distance does not let the
+      coincides with the foundation centre (for a vehicle without the hovering locomotor; where a
+      hovering one stands is Open question 9), and the tied within-cell distance does not let the
       bunker hide it from the sweep. The vehicle changes owner without leaving the bunker or
       ending the link. Other foundation sizes retain S-0612 claim 13's conditional reachability.
     - Backing: `measurable` for either side's ownership change (scenario K7 and S-0612
@@ -431,7 +444,8 @@ combination with the repair-depot role; other combinations have not been fully t
 17. **Orders to a bunkered vehicle (Q-1303).** A bunkered vehicle is not tethered either. An order
     applied to it that breaks off untethered contact (claim 16's orders, among them an attack
     order, a stop and the deploy order) ends its contact with the bunker. The bunker link is not
-    affected: the vehicle stays bunkered at the reference point, and the bunker stays *occupied*,
+    affected: the vehicle stays bunkered at the reference point (where a vehicle with the hovering
+    locomotor stands is Open question 9), and the bunker stays *occupied*,
     because the vehicle it takes in is its linked vehicle first (claim 6). Then:
     - **A second vehicle:** the bunker now holds no contact, so a second vehicle can be given the
       bunker as destination and take contact (claim 3). It cannot reach a docking cell while the
@@ -497,7 +511,8 @@ combination with the repair-depot role; other combinations have not been fully t
 21. **Where the tracks end (Q-1306).** Every listed point of T1 and T2 is passed, the last one
     included (S-0207 claim 3). The last point lies on the track target, so S-0207's end
     distance *m* is 0 and its end correction is +7. With ρ = 1.0 a track of *n* points costs
-    exactly 7*n* progress units: 112 for an entry track, 119 for the release track.
+    exactly 7*n* progress units: 112 for an entry track, 119 for the release track. A vehicle
+    with the hovering locomotor follows neither track (claim 22 gives and rates that case).
     - **Entry track:** the vehicle ends exactly on the reference point, with body facing 256 ×
       the row's facing on track (8192, 24576, 40960 or 57344 facing units for E1 to E4). The
       *turning to face south* stage then turns it to 32768.
@@ -505,6 +520,99 @@ combination with the repair-depot role; other combinations have not been fully t
       (map west).
     - Backing: `measurable` (scenario K1 for entry, K4 for release)
     - Confidence: medium (follows S-0207 claim 3's point rule)
+
+22. **A vehicle with the hovering locomotor (Q-3116).** This claim covers a bunker-eligible
+    vehicle whose locomotor is the hovering locomotor (S-0503 Terms, *hovering vehicle*), at a
+    bunker without the unit-repair flag (claim 20 covers that combination). Claims 1 and 2 test
+    its locomotion class, not its locomotor. So such a vehicle with a class other than *hover*
+    is permitted, takes contact and is sent to the docking point
+    (claims 2 to 4).
+    - **Claim 22's case.** The next two parts (no arrival report, and what follows) cover an
+      approach in which all of these hold: when the vehicle takes its contact, the bunker is not
+      in *repair*, has no *repair* queued and has no ready mark set (Open question 9 covers those
+      states); the vehicle's step on each tick until it enters the docking cell (S-0503 claim 4's
+      *d*, the arrival distance of S-0503 F5) is shorter than 128 leptons; it makes no
+      heading-point choice on a moving tick without a heading point (S-0503 claim 5) after it
+      leaves its start cell and before it enters the docking cell; its last stored step enters the docking
+      cell from another cell; its move ends in the docking cell at a height difference below 208 leptons, so that
+      S-0503 claim 7's completion takes place; and at rest it is at a spatial distance of at
+      least 64 leptons from the reference point (claim 5's earlier guard route needs less).
+      Open question 8 lists the other cases.
+    - **No arrival report (`quirks.bunker_hover_no_arrival`).** A hovering vehicle meets
+      claim 5's test only at the cell-arrival updates of S-0503 claim 15, not when it crosses
+      into a cell.
+      - At the choice of the last step's heading point, the update uses the vehicle's position
+        at that moment (S-0503 claim 15). In claim 22's case that choice is made in one of two
+        ways (S-0503 claim 5): when the move is given, in the cell the vehicle starts from; or on
+        its arrival at the previous heading point, the centre of the cell before the docking cell,
+        within *d* of it (S-0503 Terms and claim 7). S-0503 claim 5's third occasion, a choice on
+        a moving tick without a heading point, is excluded from the case once the vehicle has left
+        its start cell; made while it is still in the start cell, it is made there, as the first
+        way is. The start cell is not the docking cell, and with a step shorter than 128 leptons
+        the centre's neighbourhood within *d* lies in the cell before the docking cell. So that
+        position is not in the docking cell, and the test's cell condition fails.
+      - At the arrival at that heading point, the path update comes first and completes the
+        move (S-0503 claims 7 and 15). That completion clears the vehicle's order-level
+        destination as well as the locomotor's destination, before any cell-arrival update on
+        that tick. A cell-arrival update made while the vehicle is in *enter* or *patrol*, in the
+        docking cell of a building with the unit-repair flag that is its contact, first gives that
+        building back as its order-level destination when it has none. That gives the depot as the
+        order-level destination at the arrival test, which S-0314 claim 17 requires for a hovering vehicle's
+        arrival at a repair depot; M-0007 records only that its hovering vehicle reaches *sleep*
+        there. A bunker without that flag gets no such restoration. It is then not the vehicle's order-level destination, so the test fails whether
+        or not S-0503 claim 15 gives an update there.
+    - **What follows.** This approach makes no report. While the vehicle holds the contact, the
+      bunker sets no ready mark from it and does not queue *repair*, so no row of table S1 runs.
+      The vehicle gets no arrival stop: its move ends as S-0503 claim 7 ends it. No stored step is
+      left, and its destination *D* is cleared, so it is left with no heading point (S-0503 claim 15, the
+      rows with no *D*). Its throttle and hover speed after that were not traced (S-0503 claim 7
+      does not promise that they become 0; Open question 8). It keeps its lift, so S-0503 claim 8 goes on
+      setting its hover height. It stays in *enter* where its move ended, with no order-level destination,
+      and keeps the bunker's contact. Its repeated entry requests get claim 3's answer for an actor
+      already in contact: accepted while it is still bunker-eligible, with no new order-level
+      destination. The contact ends by the rules for any vehicle in contact, among them an order
+      that breaks it off (claim 16), a refusal of claim 3 (the bunker switched off, unless the
+      vehicle is tethered, or the vehicle no longer bunker-eligible), a clear report beyond
+      384 leptons (claim 8), and the bunker's death (S-0312 claim 17). Until then the bunker keeps
+      its behaviour, and its stage stays at *clearing*.
+    - **Tracks.** The hovering locomotor follows no track (S-0503 claim 6). So the *driving in*
+      row's entry track (claim 6) and the release tracks of claims 12 and 13 do not move a
+      hovering vehicle, and the entry itself supplies no change of its height. One way a hovering
+      vehicle reaches those rows is by taking the contact of a bunker already in *repair* (claim
+      16's *Another vehicle* rule). Which rows of table S1 then run with it, where it is when it
+      becomes bunkered, and its facing there, were not traced (Open question 9).
+    - **Switch off.** With `quirks.bunker_hover_no_arrival` off, claim 1's test also requires
+      that the vehicle's locomotor is not the hovering locomotor. Such a vehicle is refused
+      (row P8), so no order sends it toward the bunker, and claim 3's repeated request ends any
+      contact it holds.
+    - Backing and confidence:
+      - *Claims 1 and 2 have no locomotor test.* Backing: `measurable` (scenario K2, the
+        hovering-locomotor copy). Confidence: high.
+      - *No arrival report in claim 22's case, the cleared order-level destination, and what
+        follows.* Backing: `measurable` (scenario K2, the hovering-locomotor copy, with the
+        conditions of claim 22's case checked from its record: the step through the largest
+        per-tick displacement from the order until the copy enters the docking cell, the stretch
+        the position argument needs; the absence of a choice on a moving tick without a heading
+        point through a position that changes on every tick of that stretch and a docking cell
+        among the first 24 cells entered; and the position at the last heading-point choice
+        through those and S-0503 claim 7). `unmeasured` for the heading point left after the move ends: K2 records
+        only that the copy stays at rest, which a heading point at its own position would also
+        give. The ways the contact ends are those of claims 3, 8 and 16 and S-0312 claim 17, at
+        their own ratings. Confidence: medium. That the completion clears
+        the order-level destination is this claim's own premise, which the S-0503 hand-off below
+        would add to S-0503 claim 7.
+      - *The restoration at a building with the unit-repair flag, and its absence at a bunker
+        without it.* Backing: `unmeasured` for the restoration itself: a depot arrival with the
+        restoration gives what one with no clearing would give, so no record separates the two.
+        It is what S-0314 claim 17 requires; M-0007 records only that its hovering vehicle reaches
+        *sleep* at a depot, which is consistent with it. `measurable` for its absence at a bunker (K2's order-level destination empty once
+        the copy is at rest in the docking cell). Confidence: medium.
+      - *The tracks do not move a hovering vehicle, and the entry supplies no height change.*
+        Backing: `unmeasured`: no scenario hands an entry under way to a hovering vehicle (K8 a
+        uses one vehicle), and claim 12's release has no known input (claim 11). Confidence:
+        medium, as claim 16's hand-over through which it is reached.
+      - *The switch's off form.* Backing: `unmeasured`: the original has no such test; it is our
+        engine's design choice. Confidence: medium.
 
 ## Formulas
 
@@ -633,6 +741,9 @@ point and no early release point.
 | order to the bunkered vehicle (claim 17) | n/a: the link holds, contact ends | no | the order's | still occupied |
 | either side removed by another route (claim 19) | no | no | none | *clearing*, *guard* if the vehicle was removed; being removed if the bunker was |
 
+A release track does not move a vehicle with the hovering locomotor (claim 22 gives and rates
+that case).
+
 Ordering consequences:
 - In a destroying hit on the bunker, the let-out comes before S-0312 claim 17's treatment of
   contacts, which uses the contacts as they were before the hit, less the bunkered vehicle.
@@ -686,6 +797,18 @@ Ordering consequences:
   is a display defect, so it has no switch.
 - **Depot and bunker on one type** (claim 20). The importer warns. The combined outcome is not
   established.
+- **A vehicle with the hovering locomotor makes no arrival report**
+  (`quirks.bunker_hover_no_arrival`, claim 22). In claim 22's case, a bunker-eligible vehicle
+  with the hovering locomotor is permitted and takes contact, but its move's completion clears
+  its order-level destination before its cell-arrival update, and a bunker without the
+  unit-repair flag does not restore it, so it makes no arrival report. It stays in *enter* where
+  its move ended, holding the bunker's contact until that contact ends (claim 22 lists the
+  ways). With the switch off,
+  claim 1's test also requires a locomotor other than the hovering one, so such a vehicle is
+  refused, and claim 3's repeated request ends any contact it holds.
+  - Backing and confidence: as claim 22's parts (high for the permission, medium for the
+    missing report and what follows, `unmeasured` and medium for the off form)
+  - Default: original behaviour (switch on).
 - **Release under a pulse** (claims 12 and 13). Letting out switches the vehicle's locomotion back
   on without checking for a pulse (S-0405 Terms). Whether other inactivity rules allow movement
   while disabled, or leave locomotion on until the pulse ends, was not traced (Open questions).
@@ -701,6 +824,7 @@ Ordering consequences:
 | Rules, actor type sections | `Bunkerable` | the bunkerable flag (claim 1) | boolean | on for vehicle types; off for infantry, aircraft and building types |
 | Rules, vehicle type sections | `Turret` | the turret flag (claim 1) | boolean | off |
 | Rules, vehicle type sections | `SpeedType` | locomotion class *hover* excludes (claim 1) | S-0211's list | S-0211's default |
+| Rules, vehicle type sections | `Locomotor` | the hovering locomotor (claim 22; a refusal with `quirks.bunker_hover_no_arrival` off) | identifier, as S-0207 claim 14 | as S-0207 |
 | Rules, vehicle type sections | `BalloonHover` | balloon-hover flag (claim 2, row P6) | boolean | off |
 | Rules, building type sections | `NumberOfDocks` | docking-place count *d* (claim 2, row P4) | integer | S-0314 claim 17's |
 | Rules, building and vehicle type sections | `Naval` | naval-match test (claim 2, row P5) | boolean | S-0504's |
@@ -776,14 +900,52 @@ that the computer player gives no orders. Run three recorded seeds per case usin
   evidence. For independent conditions lacking stock witnesses, the named fixture
   `bunker-tests.map` uses copies of the eligible type, each differing only in bunker eligibility,
   turret presence, presence of a turret weapon, hover movement, balloon-hover status or naval
-  status. The same fixture supplies a bunker with a usable power switch. Include a vehicle
-  type whose eligibility flag is omitted to test the default, an elite-only first weapon tested
+  status, and a copy differing only in its locomotor, set to the hovering locomotor with its
+  locomotion class unchanged (the hovering-locomotor copy). The same fixture supplies a bunker
+  with a usable power switch. Include a vehicle type whose eligibility flag is omitted to test the default, an elite-only first weapon tested
   below and at elite rank, and a numbered-weapon type with present and absent current turret
   weapons. *Expected:* claim 1's conjunction
   and the first matching refusal in P1 to P9, with acceptance in P10, including low power alone.
   Acceptance with an isolated disqualifier, refusal of the baseline or low-power-only case,
   or occupancy by a disqualified vehicle falsifies the corresponding claim. Cases where no
   input reaches the permission query remain unmeasured, not confirmed refusals.
+  For the hovering-locomotor copy (claim 22), order it from rest, fewer than 20 cells away, into
+  an empty own bunker on flat ground and record, each tick from the order until 300 ticks after its move ends: its cell, position,
+  height, behaviour, order-level destination and contact, the height of the docking cell's ground, and the
+  bunker's behaviour, queue, ready mark and stage. The copy keeps the eligible type's speed.
+  *Conditions of claim 22's case*, checked from the record: when the copy takes its contact, the
+  bunker is not in *repair*, has no *repair* queued and has no ready mark set; the largest
+  horizontal displacement between consecutive ticks, from the order until the copy enters the
+  docking cell, is below 120 leptons (S-0503 claim 7: on the tick of a heading-point choice the
+  vehicle travels that tick's *d*, so *d* is below 128 leptons even with the rounding of the two
+  coordinates); from the first tick on which its horizontal position changes until it enters the
+  docking cell, the position changes on every tick, and the docking cell is among the first 24
+  cells it enters after the order (in K2, where nothing but the one order moves the copy, S-0503
+  claim 5's choice on a moving tick without a heading point, once the copy has started moving,
+  follows a refused choice or an arrival search that failed or was deferred; a refused
+  choice zeroes the hover speed and, unless the move is given up, stops travel on its tick,
+  S-0503 claims 7 and 12, so the position does not change on that tick; an arrival search needs the stored path
+  used up, and a path keeps at most 24 steps, S-0212 claim 20, whose recomputation at the last
+  step is for the driving and ship locomotors only, so a path used up before the docking cell's step means the copy entered at
+  least 24 cells first); the last cell the copy enters is the docking cell,
+  entered from another cell; on every tick from the one on which it enters the docking cell to
+  the first tick on which its horizontal position stops changing (the same for 30 ticks), its
+  height minus the docking cell's ground height is below 208 leptons (S-0503 claim 7 tests that
+  difference at the start of a tick's travel in the docking cell, so the state it reads is one
+  recorded in that stretch), and at rest its spatial distance from the reference point is at
+  least 64 leptons. A run that misses any of them is
+  recorded as outside claim 22's case (Open questions 8 and 9), not as a result.
+  *Expected* in claim 22's case: the copy is permitted and takes contact. Once it is at rest in
+  the docking cell its order-level destination is empty, and it makes no completion report: the bunker sets
+  no ready mark, does not queue *repair*, and keeps its behaviour with its stage at *clearing*
+  for the 300 ticks. The copy stays in *enter* with the contact and no order-level destination, at its hover
+  height. A permission refusal, an order-level destination still naming the bunker after the copy has been at
+  rest in the docking cell for 30 ticks, a completion report, *repair* queued at the bunker, a
+  stage change of table S1, or the copy bunkered falsifies claim 22. So does any of these, at a
+  later tick of the 300 with no order given to the copy and the bunker switched on: the copy
+  leaving *enter*, losing the contact or having an order-level destination, or its height above
+  the docking cell's ground staying at 0 for 30 consecutive ticks (with its lift kept, S-0503 claim 8 holds
+  it near the hover height field, with a bob of a few leptons).
 - **K3. Capacity (claims 2 and 3).** Order two eligible tanks toward one empty bunker in the
   same tick, then a third toward the occupied bunker. Repeat in `bunker-tests.map` with three
   imported docking places, and repeat with a bunker switched off between contact and arrival.
@@ -918,8 +1080,49 @@ that the computer player gives no orders. Run three recorded seeds per case usin
    until K6 reaches unload.
 7. **Removal by another route (claim 19).** The original's behaviour for a surviving link after such
    a removal is unspecified. Claim 19 records our departure, not the original's outcome.
+8. **A hovering vehicle outside claim 22's case, and its throttle and hover speed.** Whether a
+   vehicle with the hovering locomotor makes the arrival report, or reaches *repair* by claim 5's
+   earlier guard route, was not traced for these cases: its arrival in the docking cell does not
+   complete its move (a height difference of 208 leptons or more); its step is 128 leptons or more on a tick before
+   it enters the docking cell; it makes a heading-point choice on a moving tick without a heading
+   point after it leaves its start cell and before it enters the docking cell (S-0503 claim 5: after a refused choice, or an arrival
+   search that failed or was deferred); its approach has no last stored step entering the docking
+   cell from another cell; or at rest it is less than 64 leptons from the reference point. If it
+   makes the report, the arrival's stop would be S-0503 claim 10's switch-off in *enter*: no
+   draws, a stop request and no lift. A bunker already in *repair*, with *repair* queued or with
+   a ready mark set when the vehicle takes its contact is Open question 9. In claim 22's case, the vehicle's throttle and hover speed after its move ends were
+   not traced: S-0503 claim 7 does not promise that they become 0.
+9. **A hovering vehicle taken in at a stage under way (claim 22).** When a vehicle with the
+   hovering locomotor takes the contact of a bunker already in *repair*, or one with *repair*
+   queued or a ready mark set by an earlier entrant (claims 5 and 16), which rows of table S1
+   run with it depends on the stage and on whether it is still moving (S1's events need it on a
+   foundation cell and not moving). Where it stands and which way it faces when it becomes
+   bunkered, and whether a hand-over at *raising walls* or later skips the turn to the south,
+   were not traced.
 
 ## Questions for the project lead
 
 - If K6 fails to establish the original's click-and-deploy exit route, should glasnost offer an
   explicit exit order invoking claim 12? This spec does not authorise an input departure.
+
+## Changes for other specs
+
+- **S-0503 (approved, revision 28), claim 7.** Its completion at an arrival (the destination
+  cell reached at a height difference below 208 leptons) clears the order-level destination as
+  well as *D*, before any cell-arrival update of claim 15 on that tick. That update, made in the
+  docking cell of a building with the unit-repair flag that is the vehicle's contact while the
+  vehicle is in *enter* or *patrol*, first gives that building back as its order-level
+  destination when it has none. So at a repair depot the depot is again the order-level destination at the
+  arrival test, as S-0314 claim 17 requires (M-0007 records only that a hovering vehicle
+  reaches *sleep* at a depot); at a
+  bunker without that flag it stays cleared (S-0606 claim 22). Medium: the clearing of the
+  order-level destination is S-0606 claim 22's own premise, `measurable` by S-0606 scenario K2's
+  hovering-locomotor copy; the restoration is `unmeasured`.
+- **S-0314 (approved), claim 17.** "Completion alone clears the locomotor point, not the depot's
+  order-level building destination" follows S-0207 claim 25 (driving and ship). For a hovering
+  vehicle the net result at a depot is the same, through the clearing and restoration above
+  (S-0606 claim 22, medium).
+- **S-0215 (approved), claim 29, *Tank bunker* paragraph.** It can add that in S-0606 claim 22's
+  case a vehicle with the hovering locomotor makes no such report at a bunker without the
+  unit-repair flag. That rests on claim 22's premise that its move's completion clears the
+  order-level destination first, with nothing to restore it (S-0606 claim 22, medium).

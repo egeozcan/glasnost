@@ -1,9 +1,9 @@
 ---
 id: Q-3113
 title: Whether a building being erased takes the paid steps of a repair already on
-status: open
+status: answered
 related: [S-0314, S-0514]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need
