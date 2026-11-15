@@ -207,7 +207,9 @@ fn set(w: &mut World, h: HouseId, now: bool) {
 
 /// A house is defeated (S-0414 claim 5): its radar comes on in the tick of
 /// the defeat and stays on (S-0410 claim 1); the map is revealed for it
-/// (S-0409 claim 15). S-0414 calls this.
+/// (S-0409 claim 15). S-0414 calls this. A recheck the defeat's sweep
+/// asked for stays due: it re-evaluates no radar any more, but its
+/// spy-satellite test still runs (S-0409 claim 15).
 pub fn on_defeat(w: &mut World, h: HouseId) {
     crate::econ::shroud::defeat_reveal(w, h);
     if w.houses.get(usize::from(h.0)).is_none() {
@@ -215,7 +217,7 @@ pub fn on_defeat(w: &mut World, h: HouseId) {
     }
     set(w, h, true);
     let r = &mut w.houses[usize::from(h.0)].econ.radar;
-    // spec: S-0410 claim 1 (radar on from the defeat for the rest of the game, without a recheck)
+    // spec: S-0410 claim 1 (radar on from the defeat for the rest of the game, without a recheck of radar)
     r.defeated = true;
-    r.due = false;
+    // spec: S-0409 claim 15 (the spy-satellite test continues after defeat at the recheck moments: the loss of an active satellite at defeat re-covers the map at the next recheck, V9 part F3), so a pending recheck is kept
 }

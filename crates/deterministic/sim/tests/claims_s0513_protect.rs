@@ -153,6 +153,36 @@ fn claim25_quirk_off_keeps_the_longer_time_and_its_kind() {
 }
 
 #[test]
+fn claim25_quirk_off_with_a_duration_at_the_integer_limit() {
+    // spec: S-0513 claim 25 (quirk off: the longer remaining time is kept) and claim 26 (no upper bound on the duration)
+    let mut r = ruleset();
+    r.globals.quirks.protection_restart_replaces = false;
+    let mut w = game(&r);
+    run(&mut w, 3);
+    let cart = spawn(&mut w, "CART", BETA, 0, 0);
+    protect::start(&mut w, cart, ProtectKind::Curtain, i32::MAX);
+    protect::start(&mut w, cart, ProtectKind::ForceShield, 50);
+    assert_eq!(
+        superweapons::protection_kind(&w, cart),
+        Some(ProtectKind::Curtain)
+    );
+}
+
+#[test]
+fn claim29_envelope_with_a_duration_at_the_integer_limit() {
+    // spec: S-0513 claim 26 (protected in every tick t with t₀ ≤ t < t₀ + D, F7) and claim 29 (the envelope's remaining time P in the object's turns)
+    let mut r = ruleset();
+    r.sim.general.superweapons.iron_curtain_duration = Some(i32::MAX);
+    let mut w = game(&r);
+    run(&mut w, 3);
+    let cart = spawn(&mut w, "CART", BETA, 0, 0);
+    protect::curtain(&mut w, Some(ALPHA), at(0, 0), false);
+    assert!(superweapons::protected(&w, cart));
+    run(&mut w, 3);
+    assert!(superweapons::protected(&w, cart));
+}
+
+#[test]
 fn claim25_building_delayed_kill_cancelled() {
     // spec: S-0513 claim 25 (a building: a pending delayed-kill countdown is cancelled)
     let r = ruleset();

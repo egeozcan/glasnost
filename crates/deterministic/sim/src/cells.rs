@@ -593,6 +593,31 @@ impl Cells {
         }
     }
 
+    /// Standing position `p` of a cell layer is cleared when infantry-making
+    /// animation `id` holds it (S-0611 claim 8 and Edge cases,
+    /// `quirks.infantry_animation_occupancy` off: it frees only its own
+    /// mark; claim 15: one standing position at a time); the house-clearing
+    /// rule of an infantry mark applies (S-0209 claim 1).
+    pub fn clear_anim_position(
+        &mut self,
+        c: CellXY,
+        l: Layer,
+        p: u8,
+        id: ObjectId,
+        q: OccupancyQuirks,
+    ) {
+        let Some(o) = self.occ_mut(c, l) else {
+            return;
+        };
+        let Some(m) = o.marks.get_mut(usize::from(p)) else {
+            return;
+        };
+        if matches!(m, Some(Mark { by: Marker::Anim(who, _), .. }) if *who == id) {
+            *m = None;
+            settle_house(o, q);
+        }
+    }
+
     /// Standing position `p` of a cell layer is cleared whoever marked it,
     /// as an infantry unit clears its entry by its actual position (S-0208
     /// claim 19, `quirks.teleport_infantry_ground_reservation`); the

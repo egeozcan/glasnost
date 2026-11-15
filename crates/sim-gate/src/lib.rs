@@ -101,8 +101,13 @@ pub const DUEL_DIAGONAL_SEED: u32 = 8;
 /// infantry): seed 3 then ends at tick 9139 with smallest counter 1
 /// (jumpjet orders); seed 2 plays all its ticks with smallest counter 4,
 /// the most any seed reached, as do eleven other seeds of 1 to 16
-/// (`m6c_seed_sweep`).
-pub const M6C_SEED: u32 = 2;
+/// (`m6c_seed_sweep`). Moved from 2 at sim issues batch S20 (S-0212 r107
+/// claim 19, #305: the congestion marks' 5 x 5 fallback and the non-empty
+/// occupancy record change the play from tick 76 of seed 2 on): seed 2
+/// then ends at tick 11757 with no charger order and no support beam.
+/// Seed 3 is the first of 1 to 16 that plays all its ticks and exercises
+/// every ability (`try_seeds`).
+pub const M6C_SEED: u32 = 3;
 
 /// Ticks of the full run of the M6c duel (shorter than the other duels'
 /// games: every ability is exercised well before it).

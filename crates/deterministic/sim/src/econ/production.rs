@@ -715,13 +715,15 @@ pub fn price(w: &World, house: HouseId, t: TypeRef) -> i32 {
     // spec: S-0404 claim 2 (the pad term (P₁ + P₂) ÷ 2 when the pad deduction applies; a missing entry counts as price 0)
     let pad_term = if pad_term_applies(w, t.index) {
         let pp = |i| pad(w, i).map_or(0, |a| price(w, house, a));
-        (pp(0) + pp(1)) / 2
+        // spec: S-0404 Formulas and S-0205 claim 1 (32-bit arithmetic wraps)
+        pp(0).wrapping_add(pp(1)) / 2
     } else {
         0
     };
     // spec: S-0404 claim 2 (Pₑ, the price of the free unit type for the same house)
     let free = p.free_unit.map_or(0, |f| price(w, house, f));
-    let total = own + pad_term + free;
+    // spec: S-0404 Formulas and S-0205 claim 1 (32-bit arithmetic wraps)
+    let total = own.wrapping_add(pad_term).wrapping_add(free);
     // spec: S-0404 claim 2 (limited below by 0 only when the type names a free unit type)
     if p.free_unit.is_some() {
         total.max(0)

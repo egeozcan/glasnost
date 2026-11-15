@@ -400,6 +400,13 @@ pub struct Quirks {
     // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback)
     #[serde(default = "on")]
     pub corridor_retry_no_fallback: bool,
+    /// Part (ii) of the congestion marks reads each cell of the 5 × 5 block
+    /// from its ground record only; off: a bridge cell of the block reads
+    /// the record of the layer read for the units considered in the cell
+    /// ahead.
+    // spec: S-0212 claim 19 and Edge cases (quirks.path_congestion_ground_record)
+    #[serde(default = "on")]
+    pub path_congestion_ground_record: bool,
     /// Cells of an unusable category belong to the free part.
     // spec: S-0212 claim 13a
     #[serde(default = "on")]
@@ -2185,6 +2192,10 @@ pub struct Quirks {
     // spec: S-0611 claim 8 and Edge cases
     #[serde(default = "on")]
     pub infantry_animation_occupancy: bool,
+    /// An infantry-making animation frees a standing position only at an end attempt, and only the one of its point then: a bouncing one leaves each position it marked in flight taken, a removal that is not a successful end attempt (a landing, the owner's removal, another rule's) frees nothing, and at a point 416 leptons or more above the surface in a cell no high bridge marks the end attempt's free misses the ground mark; off: it frees its earlier mark whenever it marks another standing position, and an end attempt or such a removal frees its last mark, each in the record it was made in.
+    // spec: S-0611 claim 15 and Edge cases
+    #[serde(default = "on")]
+    pub infantry_animation_stale_marks: bool,
     /// A disc laser's detonation names the firer as attacker but no attacking house; off: the attacking house is the firer's owner, as for a projectile's detonation.
     // spec: S-0615 claim 16 and Edge cases
     #[serde(default = "on")]
@@ -2448,6 +2459,7 @@ impl Default for Quirks {
             path_congestion_toggle: true,
             corridor_split_probe: true,
             corridor_retry_no_fallback: true,
+            path_congestion_ground_record: true,
             corridor_free_part_unusable_cells: true,
             corridor_free_part_ignores_height: true,
             substitution_centre_ground_level: true,
@@ -2874,6 +2886,7 @@ impl Default for Quirks {
             mutation_test_ground_record: true,
             refused_mutation_frees_position: true,
             infantry_animation_occupancy: true,
+            infantry_animation_stale_marks: true,
             disc_laser_no_house: true,
             disc_laser_unlimited_range: true,
             railgun_collinear_hits: true,
@@ -3133,6 +3146,10 @@ impl Quirks {
             (
                 "corridor_retry_no_fallback",
                 self.corridor_retry_no_fallback,
+            ),
+            (
+                "path_congestion_ground_record",
+                self.path_congestion_ground_record,
             ),
             (
                 "corridor_free_part_unusable_cells",
@@ -4276,6 +4293,10 @@ impl Quirks {
                 "infantry_animation_occupancy",
                 self.infantry_animation_occupancy,
             ),
+            (
+                "infantry_animation_stale_marks",
+                self.infantry_animation_stale_marks,
+            ),
             ("disc_laser_no_house", self.disc_laser_no_house),
             (
                 "disc_laser_unlimited_range",
@@ -4482,7 +4503,7 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     ),
     (
         "shroud_on_flat_grid",
-        "renderer (render::shroud::Quirks), S-0110 claim 8; S-0410 claim 6 names it for the radar's shroud and gap tests (S-0410 r15, not yet followed by the radar)",
+        "renderer (render::shroud::Quirks), S-0110 claim 8; S-0410 claims 6 and 7 name it for the radar's shroud and gap tests (the radar follows it through econ::minimap::View::on_flat_grid and the _on forms of its listing tests)",
     ),
     ("sequence_value_length_limit", "importer, S-0107 claim 22"),
     ("case_sensitive_direction", "importer, S-0107 claim 22"),

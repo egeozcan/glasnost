@@ -1834,6 +1834,45 @@ pub fn start_cell(w: &World, areas: &StartAreas, centre: CellXY) -> Option<CellX
     preferred.get(w.tick.rem_euclid(n) as usize).copied()
 }
 
+/// The units considered for claim 19's (i), in listing order: those listed
+/// in layer `layer` of the cell ahead `ahead`; when it lists none, the
+/// first unit of the 5 × 5 block around it whose locomotion heads to the
+/// cell ahead, with the objects listed after it in its cell layer (S-0212
+/// claim 19).
+fn considered(w: &World, ahead: CellXY, layer: Layer) -> &[ObjectId] {
+    let listed = w.cells.list(ahead, layer);
+    if !listed.is_empty() {
+        return listed;
+    }
+    // spec: S-0212 claim 19 (H: the cell ahead's height level, plus 4 when its deck was the layer read)
+    let h = level(w, ahead) + if layer == Layer::Deck { 4 } else { 0 };
+    // spec: S-0212 claim 19 (Q at world height H × 104 leptons); S-0511 F2 (104 leptons a level)
+    let z = h * 104;
+    // spec: S-0212 claim 19 (the block's rows by increasing y, each by increasing x)
+    for y in ahead.y - 2..=ahead.y + 2 {
+        for x in ahead.x - 2..=ahead.x + 2 {
+            let c = CellXY::new(x, y);
+            // spec: S-0212 claim 19 (a bridge cell whose height level differs from H by more than 2 is examined on its deck, every other cell on its ground)
+            let l = if is_bridge(w, c) && (level(w, c) - h).abs() > 2 {
+                Layer::Deck
+            } else {
+                Layer::Ground
+            };
+            let list = w.cells.list(c, l);
+            // spec: S-0212 claim 19 (the first unit, in listing order, whose locomotion heads to Q by S-0511 claim 11's test with the cell ahead; an object that is not a unit and the locomotion kinds that test never counts are never found; the blocked unit itself can be)
+            if let Some(i) = list
+                .iter()
+                .position(|&id| crate::bridges::blow::heads_to(w, id, ahead, z))
+            {
+                // spec: S-0212 claim 19 (it is considered with the objects listed after it in the same cell layer)
+                return &list[i..];
+            }
+        }
+    }
+    // spec: S-0212 claim 19 (none found: no unit is considered)
+    &[]
+}
+
 /// The congestion marks of S-0212 claim 19 for a re-path.
 fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
     let o = w.obj(id)?;
@@ -1842,12 +1881,17 @@ fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
     let d = glasnost_num::geom::eight_direction(o.body.value(w.tick));
     let (dx, dy) = STEPS[usize::from(d)];
     let ahead = CellXY::new(here.x + dx, here.y + dy);
-    // spec: S-0212 claims 7 and 19 (the cell ahead is read on the layer of the blocked unit's step into it, from its search pair) and design: interim (Q-3122: units on the other layer of a bridge cell are not counted)
-    let (_, lvl) = start_pair(w, id, here);
-    let ahead_layer = candidate_layer(w, lvl, ahead);
+    // spec: S-0212 claim 19 (the cell ahead's deck when it is a bridge cell and the blocked unit is on a deck or the height levels of its own cell and of the cell ahead differ by more than 3, either way; its ground otherwise; the search pair's level plays no part)
+    let ahead_layer = if is_bridge(w, ahead)
+        && (o.layer == Layer::Deck || (level(w, here) - level(w, ahead)).abs() > 3)
+    {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
     let mut counts: BTreeMap<CellXY, u32> = BTreeMap::new();
     let mut from_paths = 0;
-    for &oid in w.cells.list(ahead, ahead_layer) {
+    for &oid in considered(w, ahead, ahead_layer) {
         let Some(u) = w.obj(oid) else { continue };
         if !matches!(u.kind, Kind::Vehicle | Kind::Infantry) {
             continue;
@@ -1886,6 +1930,7 @@ fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
         // spec: S-0212 claim 19 (mode 1 with no cell from (i): the search runs as mode 0)
         return None;
     }
+    let ground_record = w.rules().quirks.path_congestion_ground_record;
     // spec: S-0212 claim 19 (ii: occupied cells of the 5 × 5 block around the cell ahead, but the unit's own)
     for yy in -2..=2 {
         for xx in -2..=2 {
@@ -1893,8 +1938,14 @@ fn congestion(w: &World, id: ObjectId, mode: Mode) -> Option<BTreeSet<CellXY>> {
             if c == here {
                 continue;
             }
-            // spec: S-0212 claims 7 and 19 (each cell of the block on the layer a step from the unit's search pair would reach in it) and design: interim (Q-3122)
-            if !w.cells.list(c, candidate_layer(w, lvl, c)).is_empty() {
+            let record = if !ground_record && is_bridge(w, c) {
+                // spec: S-0212 Edge cases (quirks.path_congestion_ground_record off: a bridge cell of the block reads the record of the layer read in the cell ahead)
+                ahead_layer
+            } else {
+                // spec: S-0212 claim 19 (ii: occupied when the occupancy record of its ground layer is not empty as a whole; the deck record is not read)
+                Layer::Ground
+            };
+            if w.cells.occ(c, record).is_some_and(|r| !r.empty()) {
                 *counts.entry(c).or_insert(0) += 1;
             }
         }

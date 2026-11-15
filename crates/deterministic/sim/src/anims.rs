@@ -17,7 +17,9 @@
 //! a flight (S-0319, [`crate::bounce`]): its creation places it, and each
 //! of its turns takes the motion step first, ending it at a landing with
 //! the landing's effects; otherwise the trailer of any type that names one
-//! (S-0319 claim 12) and then the stage update follow.
+//! (S-0319 claim 12) and then the stage update follow. Only the mark of an
+//! infantry-making animation comes before the motion step, at its point
+//! from the step before (S-0611 claim 15).
 
 use std::collections::BTreeMap;
 
@@ -98,9 +100,9 @@ pub struct Anim {
     /// #174; [`crate::loops`]).
     #[serde(default)]
     pub looped: bool,
-    /// Its infantry-making state (S-0611 claims 8 to 11, #291): set at its
-    /// creation when its type is infantry-making and it is neither attached
-    /// to an owner nor of a bouncing type (Q-3121).
+    /// Its infantry-making state (S-0611 claims 8 to 11 and 15, #291): set
+    /// at its creation when its type is infantry-making, whether it is
+    /// fixed, attached to an owner or bouncing.
     #[serde(default)]
     pub making: Option<crate::mutation::Making>,
 }
@@ -199,17 +201,9 @@ pub fn spawn_index(w: &mut World, index: Option<u32>, at: Option<Pos>, s: Spawn)
         };
     }
     // spec: S-0611 claim 9 (the rules for every infantry-making animation, whatever its creator, S-0611 Terms: infantry-making at some type of its follow-up chain)
-    // design: interim (Q-3121): an animation attached to an owner or of a bouncing type at its creation is played without claims 8 to 11
-    let making = match at {
-        Some(p)
-            if s.owner.is_none()
-                && flight.is_none()
-                && crate::mutation::makes_infantry(w, index) =>
-        {
-            Some(crate::mutation::Making::at(w, p))
-        }
-        _ => None,
-    };
+    // spec: S-0611 claim 15 (an animation that moves, bouncing or attached to an owner, is one too; claim 9: no owner from its creator)
+    let making = (at.is_some() && crate::mutation::makes_infantry(w, index))
+        .then(crate::mutation::Making::default);
     w.anims.anims.insert(
         id,
         Anim {
@@ -258,8 +252,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let removed = w.anims.anims.remove(&id);
     let present = removed.is_some();
     if let Some(m) = removed.and_then(|a| a.making) {
-        // design: interim (Q-3121): a removal by another rule frees the standing position, as the end does, and makes nothing
-        crate::mutation::free(w, id, &m);
+        // spec: S-0611 claim 15 (a removal by another rule makes no infantry; what it frees follows quirks.infantry_animation_stale_marks)
+        crate::mutation::release(w, id, &m);
     }
     let current = match &mut w.anims.current {
         Some((c, _, gone)) if *c == id => {
@@ -478,9 +472,15 @@ pub fn turn(w: &mut World, id: ObjectId) {
         return;
     };
     let skip = w.rules().quirks.update_order_removal_skip;
+    // spec: S-0611 claim 15 (a bouncing animation's point is its position in play from its last motion step, attached to an owner or not)
+    let flown = a.pos;
     let mut factor = 1;
     if let Some((owner, d)) = a.owner {
         let Some(o) = w.obj(owner) else {
+            if let Some(m) = &a.making {
+                // spec: S-0611 claim 15 and S-0109 claim 22 (the owner's removal makes no infantry; what it frees follows quirks.infantry_animation_stale_marks)
+                crate::mutation::release(w, id, m);
+            }
             // spec: S-0109 claim 22 (an owner removed from the game: deleted at its next update, which does nothing else)
             ended(w, id, &a);
             w.update.leave(id, skip);
@@ -504,12 +504,25 @@ pub fn turn(w: &mut World, id: ObjectId) {
             &missing
         }
     };
+    let bouncing = a.flight.is_some();
+    let follows = a.owner.is_some() && !bouncing;
+    if let Some(m) = a.making.as_mut()
+        && current.make_infantry != -1
+        && let Some(p) = if bouncing { flown } else { a.pos }
+    {
+        // spec: S-0611 claims 8 and 15 (in each of its updates, while its current type makes infantry, the standing position of its point is marked taken; a bouncing animation's before that update's motion step)
+        crate::mutation::update(w, id, m, p, follows);
+    }
     if let (Some(f), Some(p)) = (a.flight.as_mut(), a.pos.as_mut()) {
         // spec: S-0319 claim 4 and State and ordering (the motion step first, in every turn, the first update and a loop delay's included)
         if let Some(landing) = crate::bounce::step(w, f, p, current) {
             let at = *p;
             // spec: S-0319 claims 7 and 8 (the landing's effects at the landing point, then the end in the same turn: no stage advance, trailer or follow-up switch)
             crate::bounce::land(w, current, at, landing, (a.anim, a.looped));
+            if let Some(m) = &a.making {
+                // spec: S-0611 claim 15 (a landing is not an end attempt: no creation, no infantry; what it frees follows quirks.infantry_animation_stale_marks)
+                crate::mutation::release(w, id, m);
+            }
             ended(w, id, &a);
             // spec: S-0319 State and ordering and S-0203 claim 10 (it leaves play: a removal from the update order)
             w.update.leave(id, skip);
@@ -523,12 +536,6 @@ pub fn turn(w: &mut World, id: ObjectId) {
     {
         // spec: S-0319 claim 12 (every animation whose type names a trailer, after its motion step and before its stage update, at its position in play, with S-0109 claim 29's trailer settings)
         crate::combat::effects::trailer_marked(w, &name, p, looped);
-    }
-    if let Some(m) = &a.making
-        && current.make_infantry != -1
-    {
-        // spec: S-0611 claim 8 (in each of its updates, while its current type makes infantry, its position is marked taken)
-        crate::mutation::mark(w, id, m);
     }
     w.anims.current = Some((id, a.role, false));
     let aq = AnimQuirks::from(&w.rules().quirks);
@@ -548,8 +555,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
         // Removed by another rule during its own turn (a drain link ended by its damage, say): its
         // playback stopped there (S-0109 State and ordering).
         if let Some(m) = &a.making {
-            // design: interim (Q-3121): a removal by another rule frees the standing position and makes nothing
-            crate::mutation::free(w, id, m);
+            // spec: S-0611 claim 15 (a removal by another rule makes no infantry; what it frees follows quirks.infantry_animation_stale_marks)
+            crate::mutation::release(w, id, m);
         }
         ended(w, id, &a);
         return;
@@ -559,9 +566,9 @@ pub fn turn(w: &mut World, id: ObjectId) {
         return;
     }
     if let Some(mut m) = a.making {
-        // spec: S-0611 claim 8 (at its end the position is shown free again)
-        crate::mutation::free(w, id, &m);
+        // spec: S-0611 claims 8 and 15 (each end attempt frees before its placement; a bouncing animation's at its point after this update's motion step)
         let pos = a.pos.unwrap_or_default();
+        crate::mutation::free_for_attempt(w, id, &mut m, pos);
         let made = crate::mutation::try_make(w, a.anim, pos, &mut m.owner, &mut |_, _| {});
         a.making = Some(m);
         if matches!(made, crate::mutation::Attempt::Refused) {

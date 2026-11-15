@@ -987,6 +987,36 @@ fn claim_15_satellite_after_defeat() {
     assert!(glasnost_sim::econ::radar::available(&w, A));
 }
 
+// spec: S-0409 claim 15 (the spy-satellite test continues after defeat; loss of an active satellite at defeat re-covers the map at the next recheck, scenario V9 part F3) and S-0410 claim 2 (losing a building is a recheck event)
+#[test]
+fn claim_15_satellite_lost_by_the_defeat_itself() {
+    let mut w = game(&rules());
+    // SAT has no power value: its loss changes neither power total.
+    let sat = spawn(&mut w, Kind::Building, "SAT", 0, -10, -10);
+    spawn(&mut w, Kind::Vehicle, "EYE1", 1, 8, 0);
+    step(&mut w);
+    step(&mut w);
+    assert!(shroud::spy_satellite_active(&w, A));
+    // The defeat's own sweep destroys the satellite before its radar part.
+    glasnost_sim::econ::victory::defeat(&mut w, A);
+    assert!(
+        w.obj(sat).is_none_or(|o| !o.on_map),
+        "the sweep took the satellite"
+    );
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(!shroud::spy_satellite_active(&w, A));
+    assert!(
+        !shroud::explored(&w, A, c(15, 15)),
+        "the whole map re-covered"
+    );
+    assert!(
+        glasnost_sim::econ::radar::available(&w, A),
+        "radar stays on"
+    );
+}
+
 /// Explored cells of house A next to pending ones, the pending ones, and
 /// the world, after a sight-explored patch and a reveal on fire beside it
 /// made between ticks 270 and 360 (regrowth period 90 with rate 0.1).

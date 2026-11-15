@@ -709,7 +709,9 @@ fn destroy_all(w: &mut World, h: HouseId) {
         }
         if owner != Some(h) && crate::mind::controlled_by(w, id).is_some() {
             // spec: S-0414 claim 5 table (of this house, held by another house through a controlling unit: with a civilian-side house in the game, not hit and the first such house takes this house's place as its original house; otherwise hit)
+            // spec: S-0414 Terms (a house removed by unused-house cleanup is no house of the game)
             let civ = (0..w.houses.len())
+                .filter(|&i| !w.houses[i].removed)
                 .map(|i| HouseId(i as u8))
                 .find(|&x| crate::econ::setup::civilian(w, x));
             if let Some(c) = civ {
@@ -855,6 +857,8 @@ fn drop_allied_targets(w: &mut World, house: HouseId) {
         {
             // spec: S-0414 claim 12 (the target of a house A now allies is dropped)
             crate::spawn::clear_own_target(o);
+            // spec: S-0301 claim 4 (when the firer's target is cleared, its burst counter is set to 0)
+            o.combat.burst = 0;
         }
     }
 }

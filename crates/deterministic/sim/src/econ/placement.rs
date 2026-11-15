@@ -965,6 +965,21 @@ pub fn put_on_map_facing(
     by_order: bool,
     facing: glasnost_num::geom::Facing,
 ) {
+    // spec: S-0406 claim 17 and S-0415 claim 6 (the place order's own building enters with the ready mark clear; any other insertion here, a deploy, sets it)
+    put_with(w, id, cell, by_order, !by_order, facing);
+}
+
+/// [`put_on_map_facing`], saying apart whether the building enters as
+/// one a place order names (`by_order`: the wall fill follows) and whether
+/// its ready mark is set at entry (`deployed`, S-0406 claim 17).
+fn put_with(
+    w: &mut World,
+    id: ObjectId,
+    cell: CellXY,
+    by_order: bool,
+    deployed: bool,
+    facing: glasnost_num::geom::Facing,
+) {
     let Some(o) = w.obj(id) else { return };
     let (t, house) = (o.type_index, o.owner);
     let p = place_type(w, t);
@@ -984,9 +999,8 @@ pub fn put_on_map_facing(
     } else {
         // spec: S-0406 claim 1 and F4 (the centre of the cell, (256x + 128, 256y + 128), at the surface height)
         let z = w.surface_at(256 * cell.x + 128, 256 * cell.y + 128);
-        // spec: S-0406 claim 17 and S-0415 claim 6 (the place order's own building enters with the ready mark clear; a deploy sets it)
-        // A filling building of a type that is not a wall type (S-0406 claim 11) is neither: whether and how it enters construction is Q-3128. Interim: it enters as any insertion other than a place order does, with the ready mark set, so it runs its build-up once.
-        begin_construction(w, id, !by_order);
+        // spec: S-0406 claim 17 and S-0415 claim 6 (in its construction state; the ready mark set at entry only for a deploy)
+        begin_construction(w, id, deployed);
         crate::objects::place_with(w, id, Pos::centre(cell, z), facing, by_order);
     }
     if by_order
@@ -1181,7 +1195,8 @@ fn wall_fill(w: &mut World, t: u32, p: &PlaceType, house: HouseId, cell: CellXY,
             // spec: S-0406 claim 11 (each filling wall is a building created under S-0202 claim 10: one creation draw)
             let id = crate::objects::create(w, Kind::Building, t, Some(house));
             // spec: S-0406 claim 11 (a filling building passes no further test; it does not fill further)
-            put_on_map(w, id, c, false);
+            // spec: S-0406 claims 11 and 17 (a filling building of a type that is not a wall type enters in its construction state exactly as the building the place order names: the ready mark clear at entry; quirks.placed_buildup_twice off sets it, Edge cases); S-0406 claim 16 (facing 0)
+            put_with(w, id, c, false, false, 0);
         }
     }
 }

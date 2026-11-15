@@ -200,3 +200,36 @@ fn claim_7_map_wall_building_becomes_its_overlay() {
         "claim 14 (a) runs after and gives the nearest building's owner"
     );
 }
+
+/// spec: S-0112 claim 7 and S-0406 claim 10 (no wall building remains) and S-0611 claim 14 (none of its creation set enters play)
+#[test]
+fn claim_7_map_wall_building_leaves_no_creation_set() {
+    let mut s = wall_scene();
+    s.register("aircraft", "JET");
+    s.ruleset
+        .sim
+        .aircraft
+        .insert("JET".into(), common::unit_type(common::TRACK, 4, 5));
+    let mut wall = BuildingType {
+        strength: Some(100),
+        foundation: Some([1, 1]),
+        ..Default::default()
+    };
+    wall.econ.wall = Some(true);
+    wall.econ.to_overlay = Some("W0".into());
+    wall.combat.spawns = Some("JET".into());
+    wall.combat.spawns_number = Some(2);
+    s.building("WALLB", wall);
+    s.place_structure(0, "WALLB", cell(0, 0));
+    let w = s.build();
+    assert_eq!(
+        w.cells.cell(cell(0, 0)).unwrap().overlay,
+        0,
+        "the wall is placed"
+    );
+    assert!(
+        w.objects.is_empty(),
+        "neither the building nor its slot objects remain"
+    );
+    assert!(w.spawned.launcher.is_empty());
+}

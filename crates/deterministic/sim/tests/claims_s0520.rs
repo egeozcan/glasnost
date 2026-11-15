@@ -400,3 +400,20 @@ fn trigger_crates_store_the_exact_reduction_of_the_number_slot() {
         assert_eq!(w.cells.cell(c).unwrap().overlay_data, want, "slot {slot}");
     }
 }
+
+// spec: S-0520 claim 1 (a placement that finds every place occupied does nothing and takes no draw) and S-0412 claim 10 (the game-start count n, unbounded above): the placements past the last free place are skipped (#374)
+#[test]
+fn claim_1_start_placements_past_the_last_place_are_skipped() {
+    let mut w = world_with(true, |_| {});
+    let mut full = w.clone();
+    crates::place_at_start(&mut full, crates::PLACES as i32);
+    crates::place_at_start(&mut w, i32::MAX);
+    assert_eq!(
+        (
+            w.crates.places.len(),
+            glasnost_sim::save::state_hash(&w) == glasnost_sim::save::state_hash(&full),
+        ),
+        (crates::PLACES, true),
+        "every place taken, nothing else changed"
+    );
+}

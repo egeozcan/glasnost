@@ -713,6 +713,51 @@ fn cell_entered_raises_the_cell_tag() {
     );
 }
 
+/// Whether a unit of house 0, which holds start position B (1), entering
+/// the tagged cell (4, 4) fires a trigger whose entered-by value is `v`,
+/// with `quirks.entered_by_country_only` set to `country_only`.
+fn entered_by_fires(v: i32, country_only: bool) -> bool {
+    let mut t = triggers(
+        vec![trig(vec![ev(1, v)], vec![set(0)])],
+        vec![tag(0, vec![0])],
+    );
+    t.cell_tags = vec![((4, 4), 0)];
+    let mut r = testkit::ruleset();
+    r.globals.quirks.entered_by_country_only = country_only;
+    let mut w = game_rules(t, Arc::new(SimRules::new(&r, "synthetic-test")));
+    w.houses[0].start = Some(1);
+    w.houses[1].start = Some(0);
+    let c = testkit::spawn(
+        &mut w,
+        glasnost_sim::rules::Kind::Vehicle,
+        "CART",
+        0,
+        glasnost_map::CellXY::new(4, 4),
+        0,
+    );
+    triggers::cell_entered(&mut w, c, (4, 4));
+    var(&w, 0)
+}
+
+// spec: S-0011 claim 18 and Edge cases (quirks.entered_by_country_only on: the value is read only as a country index, so a player-position value never matches)
+#[test]
+fn entered_by_player_position_with_the_switch_on() {
+    assert!(!entered_by_fires(4476, true), "position B");
+    assert!(!entered_by_fires(4475, true), "position A");
+    assert!(entered_by_fires(-1, true), "any house");
+}
+
+// spec: S-0011 Edge cases (quirks.entered_by_country_only off: the value is resolved like an action's house value, claim 23, and the event is satisfied when the causing object's owner is that house)
+#[test]
+fn entered_by_player_position_with_the_switch_off() {
+    assert!(
+        entered_by_fires(4476, false),
+        "position B: the owner's house"
+    );
+    assert!(!entered_by_fires(4475, false), "position A: another house");
+    assert!(entered_by_fires(-1, false), "any house");
+}
+
 // spec: S-0011 claim 15 (Q-0269: an effective self-enable action arms the instance again, with its own draws, and its length replaces the satisfaction-caused one; both armings have the firing tick as arming tick)
 #[test]
 fn self_enable_rearms_again() {
@@ -745,4 +790,18 @@ fn self_enable_rearms_again() {
         format!("{a1:?}"),
         "the self-enable arming takes its own draws"
     );
+}
+
+// spec: S-0011 claim 24 (action 14), S-0508 claims 10 to 13 (actions 111 and 6), S-0217 claim 1 (action 6) and S-0520 claim 7 (event 49): the coverage tables count what the engine runs (#370)
+#[test]
+fn coverage_counts_change_owner_eviction_hunt_and_the_crate_event() {
+    use glasnost_sim::mp_triggers::{Coverage, action_coverage, event_coverage};
+    for code in [6, 14, 111] {
+        assert_eq!(
+            action_coverage(code),
+            Coverage::Implemented,
+            "action {code}"
+        );
+    }
+    assert_eq!(event_coverage(49), Coverage::Implemented);
 }

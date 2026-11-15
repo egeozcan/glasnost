@@ -219,8 +219,9 @@ pub fn give(w: &mut World, bases: &[Option<CellXY>], setup: &GameSetup) {
             .is_none_or(|c| c.passive)
     };
     // spec: S-0009 claim 45 (the budget pool: types allowed to start, owned by the country of a house that is not passive, tech level at most the game's, base units left out)
+    // spec: S-0009 claim 45 (a house that the cleanup of claim 28 removed is no longer in the game)
     let live_countries: Vec<u32> = (0..w.houses.len())
-        .filter(|&h| !passive(w, h))
+        .filter(|&h| !w.houses[h].removed && !passive(w, h))
         .map(|h| w.houses[h].country)
         .collect();
     let mut n: i32 = 0;
@@ -282,8 +283,8 @@ pub fn give(w: &mut World, bases: &[Option<CellXY>], setup: &GameSetup) {
                 search(w, b, BASE_RADIUS, false)
             };
             let Some(c) = at else {
-                // spec: S-0009 claim 45 (early stop: the base unit cannot be placed; it is removed again)
-                w.objects.remove(&id);
+                // spec: S-0009 claim 45 (early stop: the base unit cannot be placed; it is removed again) and S-0611 claim 14 (with its creation set: the newest creation, the search creates nothing)
+                objects::discard_unplaced(w, id);
                 return;
             };
             put(w, id, c, crate::cells::position::CENTRE);
@@ -342,8 +343,8 @@ pub fn give(w: &mut World, bases: &[Option<CellXY>], setup: &GameSetup) {
                     left = next;
                 }
                 None => {
-                    // spec: S-0009 claim 45 (a failed placement: the unit is removed, its creation draw stays taken)
-                    w.objects.remove(&id);
+                    // spec: S-0009 claim 45 (a failed placement: the unit is removed, its creation draw stays taken) and S-0611 claim 14 (with its creation set: the newest creation, the search creates nothing)
+                    objects::discard_unplaced(w, id);
                     failures += 1;
                 }
             }

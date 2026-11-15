@@ -21,7 +21,9 @@
 //!    cleanup, gives the starting units (S-0009 claims 45 and 46: the base
 //!    unit, such as the construction vehicle, and the budget units) and then
 //!    calls [`start_game`] for the rest of game start in the order of claim
-//!    14: crates (a seam), the computer-only extra credits of claim 3 (only
+//!    14: the crates, each placed with its own draws from the game's stream
+//!    when the crate setting is on (claim 10; S-0520 claims 2 and 3), the
+//!    computer-only extra credits of claim 3 (only
 //!    for non-passive neutral and special houses in our engine), the start
 //!    alliances of claim 8, the wall-owner rewrite and colour fields of
 //!    S-0413 claims 5 and 6, and the secret labs (S-0407 claim 14) last, before

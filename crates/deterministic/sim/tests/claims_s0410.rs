@@ -502,6 +502,68 @@ fn claims_6_7_8_listing_and_compose() {
     let _ = Rounding::TowardZero;
 }
 
+// spec: S-0410 claims 6 and 7 (the draw-time test of another house's object is claim 6's shroud test of the cell shown at its pixel: with quirks.shroud_on_flat_grid off, S-0110 claim 8's direct cell takes precedence, as for the terrain)
+#[test]
+fn claim_7_draw_time_test_follows_the_flat_grid_switch() {
+    let mut s = common::Scene::new();
+    s.vehicle("TANK", common::unit_type(common::TRACK, 4, 5));
+    // A plateau two levels up: the flat-grid form reads the cell one step back on both axes.
+    for dy in -8..=8 {
+        for dx in -8..=8 {
+            s.set_cell(common::cell(dx, dy), 0, 2);
+        }
+    }
+    for dy in -6..=6 {
+        for dx in -6..=6 {
+            s.place_unit(1, "TANK", common::cell(dx, dy), 0);
+        }
+    }
+    let mut w = s.build();
+    shroud::area_reveal(
+        &mut w,
+        A,
+        glasnost_sim::world::Pos::centre(common::cell(1, 1), 208),
+        3,
+    );
+    let g = grid_of(&w);
+    let img = minimap::image(&g);
+    let mut arr = minimap::Arrivals::default();
+    arr.observe(&w, A, &g, &img);
+    let terrain = vec![[100, 100, 100]; (img.width * img.height) as usize];
+    let colour = |_h: HouseId| [255, 0, 0];
+    let flash = |_id: ObjectId| 0;
+    let view = minimap::View {
+        house: A,
+        house_colour: &colour,
+        neutral: [255, 255, 255],
+        flash: &flash,
+        flash_frame_time: 7,
+        bits: Bits([5, 6, 5]),
+        on_flat_grid: false,
+    };
+    let out = minimap::compose(&w, &view, &arr, &g, &img, &terrain);
+    let shift = w.rules().quirks.radar_pixel_cell_shift;
+    let pixels: std::collections::BTreeSet<(i32, i32)> = arr.at.keys().map(|&(_, px)| px).collect();
+    let mut forms_differ = 0;
+    for &(p, q) in &pixels {
+        let c = minimap::cell_at_pixel(&g, &img, p, q, shift);
+        let direct = minimap::cell_shrouded_on(&w, A, c, false);
+        if direct != minimap::cell_shrouded_on(&w, A, c, true) {
+            forms_differ += 1;
+        }
+        let want = if direct { [0, 0, 0] } else { [31, 0, 0] };
+        assert_eq!(
+            out[(q * img.width + p) as usize],
+            want,
+            "pixel ({p}, {q}), cell {c:?}"
+        );
+    }
+    assert!(
+        forms_differ > 0,
+        "some listed pixel's cell is read differently by the two forms"
+    );
+}
+
 // spec: S-0410 claim 2 (r5: a successful upgrade placement is a recheck event even without a power change; the upgrade's own radar flag grants nothing)
 #[test]
 fn claim_2_upgrade_placement_rechecks() {
