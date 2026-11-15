@@ -193,6 +193,8 @@ fn grant_by_building(w: &mut World, h: HouseId, i: u32, never_suspended: bool) {
     r.granted = true;
     r.ready = false;
     r.one_time = false;
+    // spec: S-0512 claims 7 and 12 (a grant by buildings is an ordinary grant, judged by claims 6 and 7 and lost with its last giving building; a permanent grant sets the flag again after this call, claim 13, #351)
+    r.permanent = false;
     r.silent = false;
     r.remain = ty_charge;
     r.start = t;
