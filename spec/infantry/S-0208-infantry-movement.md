@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 58
+revision: 66
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-08
+approved-on: 2026-11-15
 measurements: [M-0023]
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142]
 supersedes: []
 ---
 
@@ -31,7 +31,8 @@ points to S-0209 and S-0209 decides. This spec owns the infantry scatter from da
 choice for infantry using the teleporting locomotor (claims 19 and 20). S-0207 claim 20 already
 answers Q-0181's jump timing, phasing-in and successive-jump questions; its part c left the
 infantry landing point open. Claims 19 and 20 answer that part. They do not cover a superweapon
-teleport. Q-0235 question 3 was already answered by S-0207 claim 20 e's corrected
+teleport, apart from claim 19's landing choice while a warp is pending and that choice's
+release at the warp's appearance (Q-3142). Q-0235 question 3 was already answered by S-0207 claim 20 e's corrected
 bridge-deck landing rule; claim 19 here makes the position-choice record, reservation
 record and refused replacement explicit for all four questions. S-0417 claim 10 supplies a concrete infantry factory-release tether situation.
 Claim 23 answers Q-0295's walking cell-arrival and clear-report timing. Claims 6 and 22
@@ -1250,6 +1251,80 @@ used by this spec:
       the four behaviours, the cell/object distinction and draws; medium for the search
       choices, post-jump record lifecycle and combined bridge consequences
 
+    **Landing choice while a warp is pending (Q-3142).** Warp-pending immobilization
+    (S-0207 Terms) does not leave an infantry unit's landing point unchanged, unlike the
+    case of S-0207 claim 20 b for other objects. A destination that reaches this
+    landing-point choice while the unit has it is chosen, entry-tested and reserved as
+    above, and replaces an earlier landing point as in the refused-replacement paragraph
+    above. In this state a destination can reach the choice from the warp's acceptance
+    until the unit's leaving stage begins (S-0513 claim 39); from then until the
+    departure, being erased drops it before any choice (S-0207 claim 20 a). In the
+    original the unit does not jump to the chosen point while the warp is pending, and
+    the leaving stage drops its destination (S-0513 claim 48). The reservation is released
+    when the unit appears at the warp's landing point (S-0513 claim 39). With a clean landing
+    that is tick *t*_L + 63 of S-0513 claim 39, so a standing position the unit does not
+    jump to stays taken from its choice until then. If a new choice in this state is
+    refused, the refused-replacement paragraph above releases the earlier reservation at
+    once and the unit then has no remembered landing point. This is
+    `quirks.warp_pending_infantry_landing` (Edge cases).
+
+    **Appearance of a teleporting infantry warp member.** The appearance is the warp's
+    placement, not a jump to a chosen point, so the Post-jump paragraph above does not
+    describe it. For every teleporting infantry warp member, whatever happened while its
+    warp was pending, the appearance takes the standing position at the warp's landing
+    point, and that point becomes the unit's remembered landing point. What the appearance
+    frees is what a later destination choice would free at that moment, by the same old
+    point (S-0207 claim 20 a): its remembered landing point, including one it has already
+    jumped to, with the record the Post-jump paragraph gives for a completed jump. So:
+    - After a choice made while the warp was pending, it frees the standing position at the
+      chosen point.
+    - With the switch off, it frees an earlier landing point that kept its reservation.
+    - For a unit that made no choice while pending and has no earlier landing point still to
+      jump to, it frees the standing position at the place the unit left at its departure, at
+      the height it stood at there, not one at the warp's landing point. For a unit that
+      completed its jump before the warp, this is the entry that the Post-jump paragraph's
+      later choice clears, and a ground mark that the jump left behind under
+      `quirks.teleport_infantry_ground_reservation` stays taken. For a unit with no remembered
+      landing point, for example one that has never chosen a landing point or one whose last
+      new choice was refused (the refused-replacement paragraph above then restored its entry
+      at its present position), this is the entry at its own position.
+    - In the original, a member's own position does not change while it is off the map: it
+      stays at the place it left until the appearance has freed and taken these entries. No
+      other spec gives a rule for this; it is the original's rule.
+    - In the original, for a unit with no remembered landing point, the entry at the place it
+      left is freed when it leaves the map at the departure and taken again when its landing
+      check (S-0513 claim 37) passes. With a clean landing the first check passes at the
+      departure, so the entry stays taken until the appearance, apart from a clearing by
+      another infantry unit that shares the mark (S-0209 claim 1). After a redirected landing
+      the entry is free from the departure until the check passes. No other spec gives a rule
+      for standing positions at a warp's departure or landing check; these are the original's
+      rules for this case.
+    - The appearance frees its entry before it takes the one at the warp's landing point, so
+      when the two are the same entry it ends taken.
+    - Backing: `unmeasured`. A person's orders of one tick come from one input event
+      (S-0213 claim 3), so after a human's launch no order of that human reaches the member
+      before its leaving stage, and no scenario here supplies a destination from another
+      source in that window. The taken position would show through another unit's later
+      entry or position choice in that cell, which no scenario here arranges either. For the
+      appearance of a member that made no choice while pending, no scenario here records the
+      standing positions at a warp's landing point, at its earlier remembered landing point or
+      at the place it left. The member's position while it is off the map, the freeing at the
+      departure and the taking again at a passing landing check, and the order of freeing and
+      taking at the appearance are read from the original: no scenario here records standing
+      positions while a member is off the map or at the tick of its appearance.
+    - Confidence: low for the window in which the choice can happen, the choice and
+      reservation while warp-pending, the refused new choice in that state and the absence of
+      a jump, as S-0513 claim 48 rates each ordinary operation in the first pending
+      turn, and low for what the appearance frees and takes after such a choice, since that
+      reservation is made in that window. Medium for the appearance of a member that made no
+      choice while pending: what it takes, its new remembered landing point and what it frees,
+      no higher than the post-jump record lifecycle above for a unit that completed its jump.
+      Medium for the member's position while it is off the map, for the freeing at the
+      departure and the taking again at a passing landing check, and for the order of freeing
+      and taking at the appearance: rules read from the original that no run here checks
+    - Our engine's rule for a member removed before it appears is under Open questions
+      (provisional)
+
 20. **Placement-time clearing is not owner-dependent.** When placement's fall-back to rest
     supplies a destination to an infantry unit with the teleporting locomotor, the destination
     cell's ground occupants receive a cell-wide scatter request with no threat point, forced
@@ -1556,7 +1631,11 @@ positions are never taken, as claim 3 says).
 | Walking, arrival tick | neither of the above; path steps remain | destination kept; asks for its next walking target on the next tick (claim 6) |
 | Walking, arrival tick | destination height test fails; no path steps remain | destination kept, speed fraction 0; subsequent path computation and give-up follow S-0212 (claim 18) |
 | Walking, destination is its target object | firing check answers *can fire* (claim 17, exception) | loses its destination and stops as its firing sequence starts |
-| Teleporting infantry, destination supplied | first landing choice succeeds | reserves the chosen standing position; jump follows S-0207 claim 20 |
+| Teleporting infantry without warp-pending immobilization, destination supplied | first landing choice succeeds | reserves the chosen standing position; jump follows S-0207 claim 20 |
+| Teleporting infantry with warp-pending immobilization (S-0207 Terms) | landing choice succeeds | reserves the chosen standing position; no jump to it; released when the unit appears at the warp's landing point, whose standing position is then taken (claim 19) |
+| Teleporting infantry warp member (S-0513 claim 39) | appearance | takes the standing position at the warp's landing point, which becomes its remembered landing point; first frees the entry that claim 19 gives for its case (claim 19) |
+| Teleporting infantry warp member with no remembered landing point | departure | in the original, the standing position at its own position is freed, and taken again when its landing check (S-0513 claim 37) passes; the appearance frees it (claim 19) |
+| Teleporting infantry warp member removed before it appears | removal | our engine releases the standing position it reserved while its warp was pending (provisional, Open questions) |
 | Teleporting infantry, first landing choice refused | cell destination | no jump, destination removed |
 | Teleporting infantry, first landing choice refused | object destination | nearby search and second position choice of claim 19; no jump if either finds nothing |
 | Teleporting infantry, earlier landing reserved but not jumped to | replacement landing choice refused, including failed fallback | earlier reservation released, no retained landing point, destination removed, present-position entry restored (claim 19) |
@@ -1734,6 +1813,18 @@ position stops on that same tick and does not ask for a next walking target (sce
   entry. This switch is separate from the vehicle switch because infantry landing
   does not add the vehicle's placement-time occupation mark.
 
+- **Infantry landing choice while a warp is pending**
+  (`quirks.warp_pending_infantry_landing`, default: original). Claim 19's warp-pending
+  infantry chooses and reserves a standing position it does not jump to, and the
+  reservation lasts until its warp appearance. With the switch off, a destination that
+  reaches the landing choice while the unit has warp-pending immobilization is treated
+  as S-0207 claim 20 b treats one for other objects with that immobilization: the landing
+  point stays unchanged, no standing position is chosen or reserved and no draw is taken,
+  an earlier landing point keeps its reservation, and whether the destination is removed
+  follows that part's condition.
+  - Backing: `unmeasured` (the original has no such form; this is an engine design choice)
+  - Confidence: medium
+
 ## Import mapping
 
 | User data | Feeds | Form | Absent |
@@ -1745,7 +1836,7 @@ position stops on that same tick and does not ask for a next walking target (sce
 | Art, image section, `Crawls` | can crawl | boolean | yes (S-0107) |
 | Rules, infantry type section, `Cyborg`, `Fraidycat` | cyborg, fraidycat | boolean | no (S-0107) |
 | Rules, the combat-damage section, `PlayerScatter` | the player-scatter rule (claims 11 and 15) | boolean | no |
-| Rules, infantry type section, `Locomotor` | whether claims 19 and 20 apply, including claim 19's pre- and post-jump record rules and refused-replacement rule | identifier parsed and recognised by S-0207 claim 14 and its Import mapping | keeps the value in force; teleporting locomotor before any layer gives one |
+| Rules, infantry type section, `Locomotor` | whether claims 19 and 20 apply, including claim 19's pre- and post-jump record rules, refused-replacement rule and landing choice while a warp is pending | identifier parsed and recognised by S-0207 claim 14 and its Import mapping | keeps the value in force; teleporting locomotor before any layer gives one |
 | Rules, infantry type section, `SpeedType`, `MovementZone` | landing-search locomotion class and movement zone (claim 19) | named choices parsed by S-0211 Import mapping | S-0211's defaults and layering rules |
 | Rules, land-type sections, `Foot` | the walker speed percentage; only zero matters (claim 9) | percent | owned by S-0211 |
 | Map, `[CellTags]`, `[Tags]`, `[Triggers]`, `[Events]`, `[Actions]` | cell-tag attachment and entered-by event/action eligibility at claim 22's arrival | map records and event/action parameters parsed by S-0009 and S-0011 | no attached tag or trigger when absent, as those specs give; arrival timing is an engine rule, not an imported delay |
@@ -2948,6 +3039,11 @@ cases).**
 - The exception of claim 17 (the target is the destination) was found by reading only. When it
   triggers before the main rule does, and whether a standing walker with that destination ever
   reaches it, were not traced; scenario W10 part c checks only the end state.
+- A warp member of claim 19 that is removed before it appears (killed by the landing check of
+  S-0513 claim 37, or destroyed during its leaving stage): whether
+  the standing position it reserved while the warp was pending is ever released is not
+  established (low). Our engine releases it when the unit is removed, a provisional rule
+  until that is established.
 - No other factor (for example a game-wide speed bias of the movement specs) is known to scale a
   walking infantry unit's speed during a step, and F5 has none; that none exists is not confirmed.
 - The height of a walker between standing positions, while it steps across a slope or onto a bridge
@@ -3031,3 +3127,13 @@ cases).**
   through this claim's condition "*X* is not allied with it". The claim may say with it that a house
   counts as allied with itself (glossary *alliance*), so that a hit by an attacker of the object's
   own house falls under that condition.
+- **S-0207, claim 20 c and d.** Part c's list of what S-0208 claim 19 owns may add the landing
+  choice of an infantry unit with warp-pending immobilization (S-0208 claim 19, *Landing choice
+  while a warp is pending*, revision 66, submitted in the same round). Part d's "It jumps on its first movement update after
+  *L* is fixed" and part a's "until the jump" do not hold for that case: the unit does not jump
+  to that point, and its reservation is released at the warp's appearance.
+- **S-0513, claims 39 and 48.** Claim 39's appearance may point to S-0208 claim 19 (revision 66)
+  for the release, at the appearance, of a standing position that a teleporting infantry member
+  reserved while its warp was pending. Claim 48's row
+  for the first pending turn may note that a teleporting infantry member does not jump to a
+  landing point chosen then (S-0208 claim 19, rated low there as claim 48 rates that turn).
