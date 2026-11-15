@@ -112,6 +112,9 @@ pub fn covers(world: &World, house: HouseId, view: &View, q: &ShroudQuirks) -> V
         }
     };
     let mut out = Vec::new();
+    // spec: S-0110 State and ordering (cells by increasing x + y): v is x + y and, at one v,
+    // x = (u + v) / 2 grows with u, so the loops emit the covers by (x + y, x) without a sort
+    // (design: render (#119))
     for v in v_lo..=v_hi {
         // u and v have the parity of x + y and x − y: equal.
         let u_first = if (u_lo - v).rem_euclid(2) == 0 {
@@ -140,8 +143,6 @@ pub fn covers(world: &World, house: HouseId, view: &View, q: &ShroudQuirks) -> V
             });
         }
     }
-    // spec: S-0110 State and ordering (cells by increasing x + y)
-    out.sort_by_key(|c| (c.cell.0 + c.cell.1, c.cell.0));
     out
 }
 
