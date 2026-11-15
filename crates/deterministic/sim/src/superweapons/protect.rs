@@ -102,7 +102,8 @@ pub fn start(w: &mut World, id: ObjectId, kind: ProtectKind, duration: i32) {
         && in_force
         && old.is_some_and(|p| {
             // spec: S-0513 claim 25 (quirk off: the longer remaining time is kept, with the kind of the effect that gave it)
-            p.start + p.duration - t >= duration
+            // in force: start ≤ t and t − start < duration, so neither step overflows
+            p.duration - (t - p.start) >= duration
         });
     if !keep_old && let Some(ob) = w.obj_mut(id) {
         // spec: S-0513 claim 25 (quirks.protection_restart_replaces: the new timer and kind replace the old ones)
@@ -281,8 +282,8 @@ pub fn tint_turn(w: &mut World, id: ObjectId) {
         // spec: S-0513 claim 29 (expiry before Initial dimming prevents the draw; no turns while unprotected advance the envelope)
         return;
     }
-    // spec: S-0513 claim 29 (P, the remaining protection in integer ticks)
-    let remaining = p.start + p.duration - t;
+    // spec: S-0513 claim 29 (P, the remaining protection in integer ticks; protected: start ≤ t and t − start < duration, so neither step overflows)
+    let remaining = p.duration - (t - p.start);
     // spec: S-0513 claim 29 (at most one phase transition per turn, when t − s ≥ L; the next phase is entered in that turn's tick)
     let next = match p.tint {
         // spec: S-0513 claim 29 (Initial rise starts at q, the first turn while this application protects the object)
