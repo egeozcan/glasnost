@@ -822,6 +822,83 @@ mod tests {
         assert_eq!(line((3, 3), (3, 3), [0; 4]).len(), 1);
     }
 
+    /// design: render (#125) (a line's quads): every line's quads cover
+    /// exactly the pixels of its Bresenham walk, each pixel once (so a
+    /// translucent line blends each pixel once), all of one colour.
+    #[test]
+    fn render_perf_125_line_quads_cover_the_walk_once() {
+        fn walk(from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
+            let (mut x, mut y) = from;
+            let dx = (to.0 - x).abs();
+            let dy = -(to.1 - y).abs();
+            let sx = if x < to.0 { 1 } else { -1 };
+            let sy = if y < to.1 { 1 } else { -1 };
+            let mut err = dx + dy;
+            let mut out = Vec::new();
+            loop {
+                out.push((x, y));
+                if (x, y) == to {
+                    break;
+                }
+                let e2 = 2 * err;
+                if e2 >= dy {
+                    err += dy;
+                    x += sx;
+                }
+                if e2 <= dx {
+                    err += dx;
+                    y += sy;
+                }
+            }
+            out
+        }
+        let ink = [10, 20, 30, 128];
+        let mut ends = Vec::new();
+        for (x, y) in [(0, 0), (5, 3), (-4, 7), (13, -2)] {
+            for (dx, dy) in [
+                (0, 0),
+                (9, 0),
+                (-9, 0),
+                (0, 9),
+                (0, -9),
+                (9, 9),
+                (-9, 9),
+                (9, 4),
+                (4, 9),
+                (-9, -4),
+                (-4, -9),
+                (17, 3),
+                (3, -17),
+                (-40, 13),
+                (1, 1),
+                (2, 1),
+            ] {
+                ends.push(((x, y), (x + dx, y + dy)));
+            }
+        }
+        for (from, to) in ends {
+            let quads = line(from, to, ink);
+            let mut covered = Vec::new();
+            for q in &quads {
+                assert_eq!(*q, Quad::solid(q.dst, ink), "{from:?} to {to:?}");
+                let [x, y, w, h] = q.dst;
+                assert!(w > 0 && h > 0);
+                for py in y..y + h {
+                    for px in x..x + w {
+                        covered.push((px, py));
+                    }
+                }
+            }
+            let n = covered.len();
+            covered.sort_unstable();
+            covered.dedup();
+            assert_eq!(covered.len(), n, "{from:?} to {to:?}: a pixel twice");
+            let mut want = walk(from, to);
+            want.sort_unstable();
+            assert_eq!(covered, want, "{from:?} to {to:?}");
+        }
+    }
+
     #[test]
     fn atlas_packs_shelves_and_reports_full() {
         let mut a = Atlas::new(16);
