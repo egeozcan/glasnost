@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 91
+revision: 93
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-15
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526, Q-2998, Q-3054, Q-3082, Q-3114]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526, Q-2998, Q-3054, Q-3082, Q-3114, Q-3129, Q-3130]
 supersedes: []
 ---
 
@@ -105,7 +105,8 @@ has the trigger action that raises one). From S-0307: *airborne*, *floor-bound*,
   reduction β, which a claim here applies only where it says so. The squares and their sum are
   formed in double precision, so they cannot overflow; *r* is the table square root, and the result
   is truncated toward zero. "Spatial distance" and "planar distance" in this spec mean these unless
-  a claim says otherwise (claim 1 forms its sum in 32-bit integers, claim 4 in single precision).
+  a claim says otherwise (claim 1 forms its sum in 32-bit integers; the flak scatter of claims 4
+  and 9 uses the flak distance of F17).
 - **Gravity** *g*. The game-wide gravity value (leptons per tick per tick, integer), halved for a
   floater projectile: *g*_f = *g* / 2 (double precision).
 - **Shot speed** *s*₁. The speed in leptons per tick that claim 1 gives a shot. The symbol *s*₁
@@ -439,8 +440,7 @@ S-0501 claim 20.
    random direction (F5), with *B* the game-wide ballistic scatter (leptons):
    - not flak-scattering, or invisible: *σ* = R(trunc(*B*/2), *B*),
    - flak-scattering and not invisible: *σ* = trunc(R(0, *B*) × *D* / *R*_W), where *D* is the
-     spatial distance from the fire point to the aim point (computed in single precision,
-     truncated) and *R*_W the
+     flak distance *D*_f (F17) from the fire point to the aim point and *R*_W the
      firer's weapon range of S-0307 (claim 13) for that weapon: the weapon's range without
      bonuses, reduced for an open-topped transport to the smallest of its own range and its
      passengers' current-weapon ranges. A multi-weapon passenger uses its weapon-number slot.
@@ -454,8 +454,13 @@ S-0501 claim 20.
    - Backing: `measurable` (scenario P3, statistical, with the random-state recorder for the draw
      count; its variant f for the open-topped reduction of *R*_W). The multi-weapon current-slot
      and missing-passenger-weapon cases are `unmeasured`, as in S-0307 claim 13: no normal-action
-     fixture establishing these passenger states is known; RG16 there remains pending.
-   - Confidence: high
+     fixture establishing these passenger states is known; RG16 there remains pending. The steps
+     of *D*_f (F17; Q-3129) are `unmeasured`: *D*_f differs from *d*₃ only when a horizontal
+     difference is 2²⁴ leptons or more, and the forms that narrow each square or partial sum
+     differ from it only for sums of 2²⁴ or more whose truncation to 14 significant digits in
+     S-0204 F1 the narrowing changes; no
+     scenario here arranges such a fire point and aim point.
+   - Confidence: high; medium for the steps of *D*_f (F17)
 
 5. **Launch direction.** A projectile with ρ = 0 that is not dropping (straight, arcing or
    vertical) is launched in the direction (S-0204 claim 8, F3) from the fire point towards the
@@ -605,7 +610,7 @@ S-0501 claim 20.
    invisible projectile is moved at once to the point that the table below gives, and its velocity
    becomes 0. When it is both invisible and flak-scattering, *K* is a scattered point: the
    target's reference point moved by a radius trunc(R(0, 2*B*) × *D* / *R*₀) in a random direction
-   (the random-state recorder observes the radius draw before the direction draw, F5), where *D* is the spatial distance from the fire point to
+   (the random-state recorder observes the radius draw before the direction draw, F5), where *D* is the flak distance *D*_f (F17) from the fire point to
    the unscattered point and *R*₀ the weapon range. The table and every later rule use this
    scattered *K*:
 
@@ -619,8 +624,9 @@ S-0501 claim 20.
    replacement of claim 7.
    - Backing: `measurable` (scenario P6; P3 run d for the flak scatter; P22 for the arm time). The
      firestorm point is `unmeasured`: no event of the original turns a house's firestorm on
-     (S-0211, Terms), so it cannot be observed.
-   - Confidence: high; medium for the firestorm point
+     (S-0211, Terms), so it cannot be observed. The steps of *D*_f are `unmeasured`, as in
+     claim 4.
+   - Confidence: high; medium for the firestorm point and for the steps of *D*_f (F17)
 
 ### Flight
 
@@ -1132,8 +1138,11 @@ S-0501 claim 20.
     and a straight or arcing child then also gains downward speed under gravity in each of its
     turns, as claim 10 says for any such projectile. Each child takes one draw R(0, 32) when it
     is made; that draw has no other observable consequence, because the children are launched
-    straight down whatever it gives. A projectile with a shrapnel weapon also launches fragments
-    (S-0318).
+    straight down whatever it gives. Each child is placed as claim 9 says for every projectile,
+    so its arm time is its own projectile type's arm field: its target is a cell, never an
+    aircraft, so the bursting projectile's target, an aircraft included, plays no part in it
+    (Q-3130). For a ranged or steering child the arm time decides when T1's arrival and passed-by
+    rows first apply. A projectile with a shrapnel weapon also launches fragments (S-0318).
     - Backing: `measurable` (scenario P14 for the cluster count, the chain, the nine children's
       common start at the burst point, their launch speed and the draw of each; P14 shows a burst
       above the terrain, and the raise of a start that is not above it is claim 8's, `unmeasured`
@@ -1148,10 +1157,13 @@ S-0501 claim 20.
       detonation (no such case is established) and for loss of attribution through a firer's
       removal by a means other than killing or starting to cloak (S-0302 claim 1 identifies no
       reproducible setup). The cloak and closed-transport cases use S-0302 scenario D24 parts b5
-      and b4 respectively.
-    - Confidence: high for the count, the draw after each detonation and the absence of area
-      damage for a parasite-warhead projectile; medium for the children's common start at the
-      burst point, which rests on P14 alone, for their launch speed and draws, and for the cell
+      and b4 respectively. `measurable` (P14 variant e) for the children's arm time (their own
+      type's arm field), and `unmeasured` for it when the bursting projectile's target is an
+      aircraft: no scenario here fires an airburst projectile at an aircraft.
+    - Confidence: high for the count, the draw after each detonation, the absence of area
+      damage for a parasite-warhead projectile and the children's arm time; medium for the
+      children's arm time when the bursting projectile's target is an aircraft, and for the
+      children's common start at the burst point, which rests on P14 alone, for their launch speed and draws, and for the cell
       each is aimed at, which no scenario records; medium for the order in which the nine
       children are made, which no scenario shows; medium for distance-independent latching and
       killed-firer attribution; low for the cloak and closed-transport attribution, as in S-0302
@@ -2038,6 +2050,28 @@ For each normal *n* of the selected table (single-precision components):
 
 The products and the sum are formed in at least double precision before the comparison and the
 scaling. Since the vectors have unit length, the shade lies from 0 to 16.
+
+**F17. Flak distance** (claims 4 and 9; Q-3129). For the fire point *X* and the aim point or
+unscattered point *Y*, both with integer lepton coordinates, let Δ*x*, Δ*y* and Δ*z* be the
+components of *Y* − *X*, each a 32-bit integer difference (outside the signed 32-bit range it wraps
+modulo 2³²). Then
+
+> *u* = RZ₂₄(Δ*x*), *v* = RZ₂₄(Δ*y*), *n*_f = RZ₅₃(RZ₅₃(RZ₅₃(*u* × *u*) + RZ₅₃(*v* × *v*)) + RZ₅₃(Δ*z* × Δ*z*)),
+> *D*_f = trunc(RZ₂₄(*r*(*n*_f))).
+
+Only the two horizontal differences are narrowed to single precision before they are squared:
+Δ*z* enters double precision exactly. The squares and the two partial sums, added in the order
+shown, are formed in double precision and none of them is narrowed to single precision. RZ₂₄ and
+RZ₅₃ are the rules mode's rounding of S-0205 (claims 4 and 5): with `quirks.chop_rounding` off they
+round as that switch's other mode does. *r* is the table square root of S-0204 F1, the same root
+as for *d*₃, including its own narrowing of its input to single precision (the Formulas preamble).
+*n*_f is always a whole number. *r*(*n*_f) has at most 24 significant binary digits, so the RZ₂₄
+after it changes nothing, and *D*_f is truncated toward zero after the root.
+
+Consequence: when |Δ*x*| and |Δ*y*| are below 2²⁴ leptons and the sum of the three squares is
+below 2⁵³, every step before the root is exact, so *n*_f is the exact sum of squares and *D*_f =
+*d*₃(*X*, *Y*). For example, differences (−6582, 7963, 206) give *n*_f = 106774529 and *D*_f =
+10333, where narrowing each square and each partial sum would give 10332.
 
 ## Constants
 
@@ -3168,6 +3202,38 @@ fire point (S-0313, the fire point's height term in the test file) and check the
     raw value, or a count other than *k* + 1; the cluster-3 run takes only two groups (none after
     the last detonation) or its explosions do not lie at the points the recorded groups give; or
     the cluster-2 run takes other than two groups.
+- Variant e (the children's arm time, claims 9 and 21; Q-3130):
+  - Setup: as the airburst run above on a flat map with no high bridge, the firer and its target
+    cell far from the map's edge and no other object within 4 cells of that cell. The bursting
+    projectile is straight, its type's arm field is 0, it is fired at that empty cell, and the
+    firer stays in play. The airburst weapon's projectile type is straight and ranged; it is not
+    steering, vertical, invisible, airburst, flak-scattering, level, anti-air or subject to cliffs
+    or walls, and has cluster 1. Two runs, with the same scenario seed, differ only in that type's
+    arm field: 0 in run e1 and 1000 in run e2.
+  - Observable: with the recorder, each child's position, velocity and spatial distance *d*₃ to
+    its stored target point *K* in each of its turns, the tick in which it detonates and its
+    height *h*′ above the surface at that detonation.
+  - Runs: 1 each.
+  - Validity, read from the recording: the burst's tick and point are the same in both
+    runs; every child's first velocity has a length of at least 10 leptons per tick, so T1's speed
+    row never applies; in run e1 at least two children other than the one aimed at the burst's own
+    cell detonate while their *h*′ is above −416; and in run e2 every child that does not
+    detonate above that height reaches *h*′ ≤ −416 within 1000 ticks of its placement. A run pair
+    that fails this is void and is repeated with the target cell moved or the airburst weapon's
+    range field larger (its speed *S*_w is claim 1's arc speed of that range, so the children
+    start faster).
+  - Expected: in both runs the child aimed at the burst's own cell detonates by T1's reached row,
+    which has no arm condition (in its first turn when it starts less than 208 leptons above the
+    surface). In run e1 each other child that detonates while *h*′ is above −416 does so by the
+    passed-by row, in a turn after its height has passed that of *K*: falling straight down in
+    the burst's cell, its *d*₃ to *K* does not grow before then. A child whose *d*₃ has reached
+    512 by its first check after that falls on to the deep-fall row instead, so the count of
+    such children is not fixed. In run e2 none of the other eight detonates before *h*′ ≤ −416
+    (deep fall).
+  - Falsified if: in run e2 any child other than the one aimed at the burst's own cell detonates
+    while its *h*′ is above −416. With an arm time of 0 for every child, or the bursting
+    projectile's arm field for every child, run e2 would repeat run e1, whose validity gives at
+    least two such detonations.
 
 **P15. Cliffs (claim 22).**
 - Setup: straight test weapon whose projectile is subject to cliffs; firer and target on two plains
@@ -4274,6 +4340,11 @@ b and 6 a, T1's first row).**
   cell target*) is not established.
 
 ## Changes for other specs
+
+- S-0204 F2 and its Open questions (separations outside the domain in which every square and
+  partial sum is exact). No rule change. S-0306 F17 gives the flak distance's own form for every
+  difference, the wrap of a 32-bit integer difference included, for claims 4 and 9 only; it does
+  not settle the distances of S-0204. Medium, `unmeasured` (claim 4).
 
 - S-0307 Terms (*airborne*, *floor-bound*): an ordinary object not on the map is neither. Claim
   17 here gives an exception for a superweapon warp member between its departure and its
