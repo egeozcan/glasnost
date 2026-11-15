@@ -35,7 +35,7 @@ use super::anims::{self, AnimQuirks, Playback, Player};
 use super::beams;
 use super::build::{
     AnimDraw, Attitude, Buildup, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding,
-    Mobile, Painter, ShadowAnchor, find_type, rule_int,
+    Mobile, Options, Painter, ShadowAnchor, find_type, rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
 use super::pip_scale;
@@ -388,6 +388,18 @@ struct DrawnLines {
     spots: [Vec<glasnost_render::spots::Spot>; 3],
 }
 
+/// One changed overlay cell's drawings, kept with the cell they were drawn
+/// from (design: render (#147)).
+#[derive(Clone, Copy, Debug)]
+struct KeptOverlay {
+    /// The cell as drawn: its overlay, data value, level and slope.
+    cell: glasnost_map::Cell,
+    /// The overlay's body, if drawn.
+    body: Option<Item>,
+    /// The overlay's shadow, if drawn.
+    shadow: Option<Item>,
+}
+
 /// A live sandbox game on a loaded map.
 pub struct Live {
     /// The game state.
@@ -458,6 +470,12 @@ pub struct Live {
     changed_overlays: BTreeMap<CellXY, (u8, u8)>,
     /// The overlay items of the changed cells, as last drawn.
     live_overlays: Vec<Item>,
+    /// Each changed cell's drawings as last drawn, by cell (design: render
+    /// (#147)): a redraw draws again only the cells that changed since. A
+    /// relight, a retint or a change of the view's options empties it.
+    kept_overlays: BTreeMap<CellXY, KeptOverlay>,
+    /// The view's options the kept drawings were drawn with (#147).
+    kept_options: Option<Options>,
     /// How many changed cells the painter has drawn since the view was
     /// made (design: render (#147), for tests).
     overlay_cells_drawn: u64,
@@ -1400,6 +1418,8 @@ impl Live {
             legal_cells,
             changed_overlays: BTreeMap::new(),
             live_overlays: Vec::new(),
+            kept_overlays: BTreeMap::new(),
+            kept_options: None,
             overlay_cells_drawn: 0,
             objects_end: built.scene.items.len(),
             effects_end: built.scene.items.len(),
@@ -3935,19 +3955,55 @@ impl Live {
         // A relight draws the changed overlays again too, so that they take
         // their cells' new light (S-0104 claims 4, 5 and 9, S-0112 claim 1;
         // #152).
+        // design: render (#147): the kept drawings hold while the light, the
+        // house tint and the view's options (its detail among them) stay as
+        // they were drawn with; a change of any draws every changed cell again
+        if relit || retinted || self.kept_options.as_ref() != Some(inputs.options) {
+            self.kept_overlays.clear();
+            self.kept_options = Some(inputs.options.clone());
+        }
         if changed != self.changed_overlays || relit {
+            // design: render (#147): only the changed cells whose whole cell differs from the one
+            // their kept drawings were drawn from, or that have none, are drawn again
+            let grid = &self.world.cells.grid;
+            let kept = &self.kept_overlays;
             let cells: Vec<(CellXY, glasnost_map::Cell)> = changed
                 .keys()
-                .filter_map(|&c| Some((c, *self.world.cells.grid.get(c)?)))
+                .filter_map(|&c| Some((c, *grid.get(c)?)))
+                .filter(|(c, cell)| kept.get(c).is_none_or(|k| k.cell != *cell))
                 .collect();
             self.overlay_cells_drawn += cells.len() as u64;
+            // Every cell asked for is kept, drawn or not (an empty cell, a
+            // type beyond the list), so that it is not asked for again
+            // while it stays as it is.
+            for &(c, cell) in &cells {
+                let empty = KeptOverlay {
+                    cell,
+                    body: None,
+                    shadow: None,
+                };
+                self.kept_overlays.insert(c, empty);
+            }
             let (drawn, notes) = self.painter.live_overlays(inputs, scene, cells);
             self.notes.extend(notes);
+            for d in drawn {
+                if let Some(k) = self.kept_overlays.get_mut(&d.cell) {
+                    k.body = d.body;
+                    k.shadow = d.shadow;
+                }
+            }
+            self.kept_overlays.retain(|c, _| changed.contains_key(c));
+            // The kept drawings in cell order, as drawing every changed cell
+            // gives them.
+            let kept: Vec<&KeptOverlay> = changed
+                .keys()
+                .filter_map(|c| self.kept_overlays.get(c))
+                .collect();
             // spec: S-0102 claim 16 rank 3 (every overlay of the repainted area ranks before every overlay shadow of that area)
-            self.live_overlays = drawn
+            self.live_overlays = kept
                 .iter()
-                .filter_map(|d| d.body)
-                .chain(drawn.iter().filter_map(|d| d.shadow))
+                .filter_map(|k| k.body)
+                .chain(kept.iter().filter_map(|k| k.shadow))
                 .collect();
             self.changed_overlays = changed;
         }
