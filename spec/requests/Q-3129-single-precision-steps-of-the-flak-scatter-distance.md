@@ -1,9 +1,9 @@
 ---
 id: Q-3129
 title: Single-precision steps of the flak scatter distance
-status: open
+status: answered
 related: [S-0306, S-0204]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
