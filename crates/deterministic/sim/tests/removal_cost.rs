@@ -36,7 +36,14 @@ fn world(side: i32) -> (World, Vec<ObjectId>) {
         for dy in 0..side {
             let c = testkit::mid(size, dx - side / 2, dy - side / 2);
             let house = u8::from((dx + dy) % 2 == 1);
-            ids.push(testkit::spawn(&mut w, Kind::Infantry, "WALKER", house, c, 0));
+            ids.push(testkit::spawn(
+                &mut w,
+                Kind::Infantry,
+                "WALKER",
+                house,
+                c,
+                0,
+            ));
         }
     }
     testkit::run(&mut w, 5);

@@ -44,7 +44,14 @@ fn game() -> World {
 }
 
 fn walker(w: &mut World, house: u8, dx: i32) -> ObjectId {
-    testkit::spawn(w, Kind::Infantry, "WALKER", house, testkit::mid(SIZE, dx, 0), 0)
+    testkit::spawn(
+        w,
+        Kind::Infantry,
+        "WALKER",
+        house,
+        testkit::mid(SIZE, dx, 0),
+        0,
+    )
 }
 
 // spec: S-0309 claim 27a (every holder whose override goes on loses the object from its put-aside target and destination) and claim 23 (d) (a remembered target lost turns into a remembered destination at its cell)
@@ -76,7 +83,11 @@ fn one_pass_clears_put_aside_slots_and_converts_memories() {
             How::Killed => glasnost_sim::combat::death::kill(&mut w, gone, &killing_hit()),
         }
         let converted = Some(AttackMoveMemory::Dest(Target::Cell(cell)));
-        assert_eq!(w.obj(a).unwrap().beh.aside, Some((None, elsewhere)), "{how:?}");
+        assert_eq!(
+            w.obj(a).unwrap().beh.aside,
+            Some((None, elsewhere)),
+            "{how:?}"
+        );
         assert_eq!(
             w.obj(b).unwrap().beh.aside,
             Some((Some(Target::Object(other)), None)),
@@ -149,7 +160,10 @@ fn hold(w: &mut World, gone: ObjectId, other: ObjectId) -> Holders {
         target: it,
         ..Default::default()
     });
-    assert!(w.obj(h.plane).unwrap().air.is_some(), "void: PLANE has no aircraft state");
+    assert!(
+        w.obj(h.plane).unwrap().air.is_some(),
+        "void: PLANE has no aircraft state"
+    );
     w.obj_mut(h.plane).unwrap().dest = it;
     h
 }
@@ -169,13 +183,24 @@ fn every_rarer_back_reference_is_dropped_after_a_removal_without_them() {
             How::Removed => glasnost_sim::objects::remove(&mut w, gone),
             How::Killed => glasnost_sim::combat::death::kill(&mut w, gone, &killing_hit()),
         }
-        assert!(w.obj(gone).is_none(), "void: {how:?} left the object in play");
+        assert!(
+            w.obj(gone).is_none(),
+            "void: {how:?} left the object in play"
+        );
         let o = |id: ObjectId| w.obj(id).unwrap();
         assert_eq!(o(h.bomb).combat.bomb.unwrap().planter, None, "{how:?}");
         assert_eq!(o(h.charger).combat.chargers, vec![other], "{how:?}");
         assert_eq!(o(h.dropped).lift.dropper, None, "{how:?}");
-        assert_eq!(o(h.pending).spawn.as_ref().unwrap().pending, None, "{how:?}");
-        assert_eq!(o(h.controller).spawn.as_ref().unwrap().target, None, "{how:?}");
+        assert_eq!(
+            o(h.pending).spawn.as_ref().unwrap().pending,
+            None,
+            "{how:?}"
+        );
+        assert_eq!(
+            o(h.controller).spawn.as_ref().unwrap().target,
+            None,
+            "{how:?}"
+        );
         assert_eq!(o(h.plane).dest, None, "{how:?}");
     }
 }
@@ -194,7 +219,11 @@ fn a_drop_made_inside_the_removal_is_still_undone() {
             && lift_common::height(w, v) > 300),
         "void: the victim was not pulled over the cell"
     );
-    assert_eq!(w.obj(v).unwrap().lift.dropper, None, "void: dropped already");
+    assert_eq!(
+        w.obj(v).unwrap().lift.dropper,
+        None,
+        "void: dropped already"
+    );
     glasnost_sim::objects::remove(&mut w, l);
     assert!(lift::dropped(&w, v), "void: not dropped");
     assert_eq!(w.obj(v).unwrap().lift.dropper, None);
@@ -248,6 +277,12 @@ fn a_save_and_load_between_removals_changes_nothing() {
         glasnost_sim::save::state_hash(&loaded),
         glasnost_sim::save::state_hash(&w)
     );
-    assert_eq!(loaded.obj(h.charger).unwrap().combat.chargers, Vec::<ObjectId>::new());
-    assert_eq!(w.obj(h.charger).unwrap().combat.chargers, Vec::<ObjectId>::new());
+    assert_eq!(
+        loaded.obj(h.charger).unwrap().combat.chargers,
+        Vec::<ObjectId>::new()
+    );
+    assert_eq!(
+        w.obj(h.charger).unwrap().combat.chargers,
+        Vec::<ObjectId>::new()
+    );
 }
