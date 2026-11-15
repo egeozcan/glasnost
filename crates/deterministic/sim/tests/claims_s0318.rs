@@ -1754,3 +1754,33 @@ fn sh1s_run_2_inert_map_still_bursts_and_nothing_loses_health() {
         }
     }
 }
+
+// spec: S-0204 Edge cases (revision 14, Q-3103: with quirks.table_direction off a fragment's launch direction is the Off form's, so a burst point straight above its aim point's reference point, a planar displacement of 0, gives 16384, map east) and S-0318 claims 4 and 6 (a remaining fragment aimed at the burst's own cell) (#294)
+#[test]
+fn issue_294_switch_off_a_fragment_over_its_aim_point_heads_east() {
+    let mut r = with_quirks(&base(12), |q| q.table_direction = false);
+    r.sim.projectiles.get_mut("Bit").unwrap().inviso = None;
+    let own = Target::Cell(cell(0, 0));
+    let seed = (11..60)
+        .find(|&seed| {
+            let s = setup_seed(&r, true, seed);
+            drawn(&s.w, 12).0.contains(&own)
+        })
+        .expect("set-up: a seed whose draws aim a fragment at the burst's own cell");
+    let mut s = setup_seed(&r, true, seed);
+    let pr = shoot_t(&mut s);
+    burst(&mut s, &pr);
+    let f = frags(&s)
+        .into_iter()
+        .find(|f| f.target == Some(own))
+        .expect("a fragment aimed at the burst's own cell");
+    let tp = Pos::centre(cell(0, 0), 0);
+    assert_eq!(
+        (pr.pos.x, pr.pos.y),
+        (tp.x, tp.y),
+        "set-up: the burst point is straight above the cell's target point"
+    );
+    let [x, y, _] = f.vel;
+    assert!(x.gt(glasnost_num::F64::ZERO), "towards +x, map east");
+    assert!(y.to_i32_common().abs() <= 1, "no north-south part");
+}
