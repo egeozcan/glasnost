@@ -116,7 +116,12 @@ pub fn step_with<P: Probe>(w: &mut World, p: &mut P) {
 fn turn_pass<P: Probe>(w: &mut World, p: &mut P) {
     let on = p.on();
     w.update.begin_pass();
+    let one_turn = !w.rules().quirks.update_order_removal_skip;
     while let Some(id) = w.update.next_turn() {
+        // spec: S-0203 claim 11 and claim 10 (quirks.update_order_removal_skip off: no object takes more than one turn per tick, also one that left play and entered it again after its own turn, #365)
+        if one_turn && w.obj(id).is_some_and(|o| o.last_turn == w.tick) {
+            continue;
+        }
         if on {
             p.mark(Phase::Turn(crate::probe::classify(w, id)));
         }
