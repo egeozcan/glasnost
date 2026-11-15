@@ -1225,32 +1225,18 @@ fn start_gap(w: &mut World, id: ObjectId) {
     let (c, _) = centre(w, sight_point(w, id));
     // spec: S-0409 claim 14 (a gap field is applied even when its centre is not a legal cell)
     let cells = gap_cells(w, c, field);
-    let keeps = w.rules().quirks.gap_end_keeps_cover;
-    let mut houses = Vec::new();
-    let mut at_start = Vec::new();
     for h in player_houses(w) {
         // spec: S-0409 claim 11 (every gap field that starts clears H's whole-map-revealed mark)
         if let Some(s) = hs_mut(w, h) {
             s.revealed = false;
         }
-        // spec: S-0409 claim 11 (hostile when the owner is not allied with H, the owner's side, and H is not defeated)
-        if w.allied(owner, Some(h)) || defeated(w, h) {
-            continue;
+    }
+    let houses = hostile_houses(w, owner);
+    let mut at_start = Vec::new();
+    for &h in &houses {
+        if let Some(ex) = gap_apply(w, h, &cells) {
+            at_start.push((h, ex));
         }
-        if let Some(s) = hs_mut(w, h) {
-            if !keeps {
-                let ex: Vec<u32> = cells
-                    .iter()
-                    .copied()
-                    .filter(|&i| s.has(i as usize, EXPLORED))
-                    .collect();
-                at_start.push((h, ex));
-            }
-            for &i in &cells {
-                s.gap_start(i as usize);
-            }
-        }
-        houses.push(h);
     }
     if let Some(o) = w.obj_mut(id) {
         o.econ.sight.gap = Some(Gap {
@@ -1260,6 +1246,65 @@ fn start_gap(w: &mut World, id: ObjectId) {
             explored_at_start: at_start,
         });
     }
+}
+
+/// The player houses a gap field of `owner` is hostile to (claim 11), in
+/// house order.
+fn hostile_houses(w: &World, owner: Option<HouseId>) -> Vec<HouseId> {
+    player_houses(w)
+        .into_iter()
+        // spec: S-0409 claim 11 (hostile when the owner is not allied with H, the owner's side, and H is not defeated)
+        .filter(|&h| !w.allied(owner, Some(h)) && !defeated(w, h))
+        .collect()
+}
+
+/// Applies a gap field's cells for one house it is hostile to (S1 row 3).
+/// Returns, with `quirks.gap_end_keeps_cover` off, the cells that were
+/// explored before.
+fn gap_apply(w: &mut World, h: HouseId, cells: &[u32]) -> Option<Vec<u32>> {
+    let keeps = w.rules().quirks.gap_end_keeps_cover;
+    let s = hs_mut(w, h)?;
+    let ex = (!keeps).then(|| {
+        cells
+            .iter()
+            .copied()
+            .filter(|&i| s.has(i as usize, EXPLORED))
+            .collect()
+    });
+    for &i in cells {
+        s.gap_start(i as usize);
+    }
+    ex
+}
+
+/// Takes a gap field's cells back for one house it was hostile to (S1 row
+/// 5), with the cells that were explored when it was applied (`ex`).
+fn gap_take_back(w: &mut World, h: HouseId, cells: &[u32], ex: Option<&[u32]>) {
+    let mut flipped = BTreeSet::new();
+    if let Some(s) = hs_mut(w, h) {
+        for &i in cells {
+            if s.gap_stop(i as usize) {
+                flipped.insert(i);
+            }
+        }
+        // spec: S-0409 Edge cases (quirks.gap_end_keeps_cover off: cells explored when the field started become explored again)
+        for &i in ex.unwrap_or(&[]) {
+            if !s.has(i as usize, EXPLORED) {
+                s.set(i as usize, EXPLORED | SURROUNDED, true);
+                flipped.insert(i);
+            }
+        }
+    }
+    flipped.remove(&shared(w));
+    discover(w, h, &flipped);
+}
+
+/// The cells explored for `h` when `gap` was applied for it.
+fn explored_at_start(gap: &Gap, h: HouseId) -> Option<&[u32]> {
+    gap.explored_at_start
+        .iter()
+        .find(|(x, _)| *x == h)
+        .map(|(_, e)| e.as_slice())
 }
 
 /// Stops a building's gap field (claim 11).
@@ -1274,25 +1319,63 @@ fn stop_gap(w: &mut World, id: ObjectId) {
         }
     }
     for &h in &gap.houses {
-        let mut flipped = BTreeSet::new();
+        gap_take_back(w, h, &gap.cells, explored_at_start(&gap, h));
+    }
+}
+
+/// A running gap field's houses under the new alliances (S-0409 Edge
+/// cases, *ally reveal and alliance changes*): those it is now hostile to
+/// and was not (`joined`), and the reverse (`left`); `None` when the list
+/// is unchanged. A house in both lists or in neither is not concerned
+/// (#337).
+fn gap_hostility_change(w: &World, id: ObjectId) -> Option<(Vec<HouseId>, Vec<HouseId>)> {
+    let g = w.obj(id)?.econ.sight.gap.as_ref()?;
+    let now = hostile_houses(w, g.owner);
+    let joined: Vec<HouseId> = now.iter().copied().filter(|h| !g.houses.contains(h)).collect();
+    let left: Vec<HouseId> = g.houses.iter().copied().filter(|h| !now.contains(h)).collect();
+    (!joined.is_empty() || !left.is_empty()).then_some((joined, left))
+}
+
+/// Takes a running gap field back for the houses in `left` (S1 row 5);
+/// the field keeps running for the others.
+fn gap_houses_left(w: &mut World, id: ObjectId, left: &[HouseId]) {
+    let Some(mut gap) = w.obj_mut(id).and_then(|o| o.econ.sight.gap.take()) else {
+        return;
+    };
+    for &h in left {
+        // spec: S-0409 claim 11 (a field that stops for H clears H's whole-map-revealed mark)
         if let Some(s) = hs_mut(w, h) {
-            for &i in &gap.cells {
-                if s.gap_stop(i as usize) {
-                    flipped.insert(i);
-                }
-            }
-            // spec: S-0409 Edge cases (quirks.gap_end_keeps_cover off: cells explored when the field started become explored again)
-            if let Some((_, ex)) = gap.explored_at_start.iter().find(|(x, _)| *x == h) {
-                for &i in ex {
-                    if !s.has(i as usize, EXPLORED) {
-                        s.set(i as usize, EXPLORED | SURROUNDED, true);
-                        flipped.insert(i);
-                    }
-                }
-            }
+            s.revealed = false;
         }
-        flipped.remove(&shared(w));
-        discover(w, h, &flipped);
+        gap_take_back(w, h, &gap.cells, explored_at_start(&gap, h));
+    }
+    gap.houses.retain(|h| !left.contains(h));
+    gap.explored_at_start.retain(|(h, _)| !left.contains(h));
+    if let Some(o) = w.obj_mut(id) {
+        o.econ.sight.gap = Some(gap);
+    }
+}
+
+/// Applies a running gap field for the houses in `joined` (S1 row 3).
+fn gap_houses_joined(w: &mut World, id: ObjectId, joined: &[HouseId]) {
+    let Some(mut gap) = w.obj_mut(id).and_then(|o| o.econ.sight.gap.take()) else {
+        return;
+    };
+    for &h in joined {
+        // spec: S-0409 claim 11 (a field that starts for H clears H's whole-map-revealed mark)
+        if let Some(s) = hs_mut(w, h) {
+            s.revealed = false;
+        }
+        if let Some(ex) = gap_apply(w, h, &gap.cells) {
+            gap.explored_at_start.push((h, ex));
+        }
+        gap.houses.push(h);
+    }
+    // design: #337 (the houses kept in house order, as start_gap records them)
+    gap.houses.sort_unstable();
+    gap.explored_at_start.sort_unstable_by_key(|(h, _)| *h);
+    if let Some(o) = w.obj_mut(id) {
+        o.econ.sight.gap = Some(gap);
     }
 }
 
@@ -1617,10 +1700,13 @@ pub fn spy_satellite_check(w: &mut World, h: HouseId) {
 /// changes*): buildings' sights and gap fields are taken back under the old
 /// alliance and applied under the new one; units follow at their next
 /// refresh. Every one is taken back before any is applied again (#336), as
-/// [`whole_map`] does. S-0414's alliance order calls it.
+/// [`whole_map`] does. A gap field is taken back only for the houses it is
+/// no longer hostile to and applied only for those it has become hostile
+/// to (#337). S-0414's alliance order calls it.
 pub fn alliance_changed(w: &mut World) {
+    type Change = (ObjectId, bool, Option<(Vec<HouseId>, Vec<HouseId>)>);
     // spec: S-0409 claim 15 (objects rank in creation order; a gap generator's field just after its own sight)
-    let list: Vec<(ObjectId, bool, bool)> = w
+    let list: Vec<Change> = w
         .objects
         .values()
         .filter_map(|o| {
@@ -1631,25 +1717,25 @@ pub fn alliance_changed(w: &mut World) {
                     .sight
                     .as_ref()
                     .is_some_and(|a| a.houses != sight_houses(w, o.id));
-            let gap = o.econ.sight.gap.is_some();
-            (sight || gap).then_some((o.id, sight, gap))
+            let gap = gap_hostility_change(w, o.id);
+            (sight || gap.is_some()).then_some((o.id, sight, gap))
         })
         .collect();
-    // spec: S-0409 Edge cases (ally reveal and alliance changes: the sights and the gap fields taken back under the old alliance, S1 rows 2 and 5, and applied again under the new one, S1 rows 1 and 3; every one taken back before any is applied, as V15 part A gives in either creation order)
-    for &(id, sight, gap) in &list {
-        if sight {
-            remove_sight(w, id);
+    // spec: S-0409 Edge cases (ally reveal and alliance changes: for the houses concerned the sights and the gap fields taken back under the old alliance, S1 rows 2 and 5, and applied again under the new one, S1 rows 1 and 3; every one taken back before any is applied, as V15 part A gives in either creation order)
+    for (id, sight, gap) in &list {
+        if *sight {
+            remove_sight(w, *id);
         }
-        if gap {
-            stop_gap(w, id);
+        if let Some((_, left)) = gap {
+            gap_houses_left(w, *id, left);
         }
     }
-    for &(id, sight, gap) in &list {
-        if sight {
-            add_sight(w, id);
+    for (id, sight, gap) in &list {
+        if *sight {
+            add_sight(w, *id);
         }
-        if gap {
-            start_gap(w, id);
+        if let Some((joined, _)) = gap {
+            gap_houses_joined(w, *id, joined);
         }
     }
 }
