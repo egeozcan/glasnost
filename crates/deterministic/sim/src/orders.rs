@@ -859,15 +859,8 @@ fn on_vehicle_factory(w: &World, id: ObjectId) -> bool {
 /// Attack-move eligibility (S-0214 claim 5): infantry or a vehicle with a
 /// weapon in its first slot and without the prevent-attack-move flag.
 pub fn attack_move_eligible(w: &World, id: ObjectId) -> bool {
-    let Some(o) = w.obj(id) else { return false };
-    if !matches!(o.kind, Kind::Infantry | Kind::Vehicle) {
-        return false;
-    }
-    // spec: S-0214 claim 5 (a weapon in its first slot, no prevent-attack-move flag)
-    // The type's first-slot field is read here; the input side reads the object's first slot (#357). They differ only where the object's slot 0 is substituted (elite, upgrade, garrison): a seam.
-    w.rules()
-        .unit(o.kind, o.type_index)
-        .is_some_and(|u| u.primary.is_some() && !u.raw.prevent_attack_move.unwrap_or(false))
+    // spec: S-0214 claim 5 (infantry or a vehicle with a weapon in the object's first slot, no prevent-attack-move flag; the application side reads the same first slot as the input side, #357)
+    crate::targeting::eligible(w, id)
 }
 
 fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {

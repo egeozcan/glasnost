@@ -2270,8 +2270,9 @@ pub fn berserk_cursor_arrow(kind: Option<Kind>, berserk: bool, show_action: bool
 }
 
 /// Attack-move eligibility (S-0214 claim 5): the first slot, not the slot
-/// in use (Terms, *armed*: a rule that names the first slot means it).
-fn eligible(w: &World, id: ObjectId) -> bool {
+/// in use (Terms, *armed*: a rule that names the first slot means it). The
+/// input side and the order's application side both read it.
+pub(crate) fn eligible(w: &World, id: ObjectId) -> bool {
     // spec: S-0214 claim 5 (infantry or a vehicle with a weapon in its first slot and no prevent-attack-move flag, #357)
     matches!(kind(w, id), Some(Kind::Infantry | Kind::Vehicle))
         && first_weapon(w, id).is_some()
