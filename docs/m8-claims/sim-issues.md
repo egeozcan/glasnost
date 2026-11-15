@@ -524,7 +524,7 @@ Base main 0d3ed80, not rebased. Save format 152 and AI game format 128 (141aa6e)
 | #354 | Row IC7 ignored its second alternative, a cell out of range of the deployed deployer's first weapon | fixed (8736972) | S-0214 table IC row IC7: `range::in_range` of the first weapon against the cell, as row I21 does for an object | `claims_s0214_ic7_range.rs` |
 | #355 | Row I19 offered *bomb* on a target already carrying one | fixed (209e95a) | S-0214 table I row I19: *bomb* only when the target accepts bombs and `bomb::carries` is false | `claims_s0214_bomb_carrier.rs` |
 | #356 | The guard key gave nothing to an unarmed vehicle that controls slave units | fixed (8250d81) | S-0213 table T2: an own vehicle that is a harvester or a slave master (`seams::is_slave_master`), movable or not | `claims_s0213_guard_slaves.rs` |
-| #357 | The attack-move gesture read the slot in use, so a switching type whose current slot was empty lost it | fixed (0ced81a) | S-0214 claim 5 and Terms (*armed*): `targeting::eligible` and `orders::attack_move_eligible` both read the object's first slot (`weapon::slot_weapon`, slot 0) | `claims_s0214_attack_move_slot.rs` |
+| #357 | The attack-move gesture read the slot in use, so a switching type whose current slot was empty lost it | fixed on the input side (0ced81a); the application side is a seam | S-0214 claim 5 and Terms (*armed*): `targeting::eligible` reads the object's first slot (`weapon::slot_weapon`, slot 0). 0ced81a also moved `orders::attack_move_eligible` to slot 0, which broke `claims_orders::s0213_attack_move` (the plain testkit CART names an undefined weapon, so its slot 0 is empty). b8a4daf puts that half back to the type's first-slot field; 0ced81a's subject ("on both sides") overstates what stayed | `claims_s0214_attack_move_slot.rs` |
 | #358 | Values *x*, *q* and *e* ignored their target-state conditions: a transport phasing in still gave *enter*, a hospital being erased still gave *no-enter* | fixed for *x*, *q* and *e* (2e57803); *n* and the engineer branch are seams | S-0214 tables I and V and Terms: *x* and *q* need a target not being erased and not phasing in, *e* a building not being erased | `claims_s0214_phasing_target.rs` (two tests) |
 | #359 | A jumpjet vehicle in the air was not a free mover, so its move click searched for a cell | fixed (2845a5c) | S-0214 Terms, S-0502 claim 30: `free_mover` counts an infantry or vehicle `weapon::in_air` | `claims_s0214_free_mover_air.rs` |
 | #360 | A jumpjet warp member's departure left its flying registration, landing reservation and hover slot | fixed (e782bbd) | S-0502 claims 4, 15 and 29, S-0513 claim 39: `warp::lift_off` calls `jump::leaving` | `claims_s0513_warp_jump_leaving.rs` (two tests) |
@@ -534,7 +534,7 @@ Base main 0d3ed80, not rebased. Save format 152 and AI game format 128 (141aa6e)
 | #364 | `quirks.warp_naval_road_cell` off has no effect | not done: Q-3141 (b49b3e4) | S-0513 claim 38 does not say which cell is "a road cell that is water" | none |
 | #365 | With `quirks.update_order_removal_skip` off a unit boarding an open-topped transport after its own turn took a second turn | fixed (0e06256) | S-0203 claims 10 and 11: with the switch off the pass skips an object whose `last_turn` is this tick | `claims_s0203_second_turn.rs` (two tests) |
 
-Lanes compare base 0d3ed80 with the batch at 141aa6e.
+Lanes compare base 0d3ed80 with the batch at 141aa6e, and every lane was run again on the final sim at b8a4daf (after #357's orders half was put back) with the same results.
 
 **Oracle arena** (`--record all`, two threads). Every output file is byte-identical to base: M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 and M-0021 10 of 50 failing.
 
@@ -548,6 +548,7 @@ Seams left:
 - Q-3140 (#349), Q-3141 (#364) and Q-3142 (#363's landing choice while warp-pending).
 - #358: the "not being erased" of value *n*'s accepting allied building and of the engineer-friendly building's passive-neutral branch.
 - A teleporting vehicle's pending reservation at a warp launch with the vehicle ground-reservation switch on.
+- #357's application side: `orders::attack_move_eligible` reads the type's first-slot field, so it differs from the input side only where slot 0 is substituted (elite, upgrade, garrison).
 
 No fix makes or moves a rarer back-reference of `World::census` (#402): #360's `jump::leaving` only ends a flight registration.
 
