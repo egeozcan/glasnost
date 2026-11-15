@@ -1,9 +1,9 @@
 ---
 id: Q-3115
 title: How many steps of the new path the refresh at the last stored step drops when that step is a two-cell curve
-status: open
+status: answered
 related: [S-0212, S-0207]
-answered-by: []
+answered-by: [S-0212]
 ---
 
 ## Need
