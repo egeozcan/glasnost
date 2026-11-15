@@ -1017,6 +1017,7 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
         let mut kept = Vec::with_capacity(r.steps.len());
         let (mut from, mut n) = (r.loop_from, r.loop_len);
         let l0 = r.loop_from;
+        let mut inside = false;
         // spec: S-0213 claim 16b, A point that a route holds twice (a point delete removes the point from every place in every route that holds it)
         for (i, s) in r.steps.drain(..).enumerate() {
             if s.point == point {
@@ -1024,7 +1025,10 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
                     // spec: S-0213 claim 16e (a point before the loop's first point: the loop keeps its points)
                     Some(l) if i < l => from = from.map(|f| f - 1),
                     // spec: S-0213 claim 16e (revision 84: deleting any point at or after the loop's first point lowers the loop's number of points by 1, a point after a loop that ends early included)
-                    Some(_) => n = n.map(|n| n.saturating_sub(1)),
+                    Some(_) => {
+                        n = n.map(|n| n.saturating_sub(1));
+                        inside = true;
+                    }
                     None => {}
                 }
                 continue;
@@ -1032,8 +1036,10 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
             kept.push(s);
         }
         r.steps = kept;
-        // spec: S-0213 claim 16e (a loop left with fewer than 3 points is cancelled; the remaining points form an ordinary route) and revision 84 (on a loop that ends early, once its number of points is below 3)
-        let lp = from.zip(n).filter(|&(_, n)| n >= MIN_LOOP);
+        // spec: S-0213 claim 16e (when a deleted point lay inside a loop and the loop is left with fewer than 3 points, the loop is cancelled; the remaining points form an ordinary route) and revision 84 (on a loop that ends early, once its number of points is below 3); a delete that removed no point inside this loop leaves it as it is
+        let lp = from
+            .zip(n)
+            .filter(|&(_, n)| !inside || n >= MIN_LOOP);
         r.set_loop(lp);
     }
     // spec: S-0213 claim 16f (deleting a route's last remaining point ends holding but does not lower the count, under quirks.route_holder_count_drift; off, the count is the holders')
