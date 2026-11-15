@@ -1879,3 +1879,20 @@ The thirteenth batch of the game-logic audit works through issues #249 to #262 (
 **Formats.** No saved or hashed field changes, but what a saved game replays to does (a turn in place given again, the crash death weapon, the power sums, the deck crossings), so the save format goes to 145 and the AI game format to 121, the numbers the main session gave this batch. Wire version 12: no valid order's encoding changes.
 
 **Seams.** Q-3112, Q-3113 and Q-3114 are open, with the interims above.
+
+## Simulation (sim issues S18: five answers, replays, houses, shroud, linked weapons and spawners)
+
+The eighteenth batch of the game-logic audit takes the answers to Q-3112 to Q-3116 and then issues #333 to #346. Each change of behaviour has a test on synthetic data committed before it. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S18*.
+
+**The answered requests.**
+
+- *#263, the refresh as the last stored step begins (S-0212 claim 20 r100, Q-3115).* The recomputation is made in the step check, once the first cell has given *clear*, when exactly one step is stored; a two-cell curve over the last two stored steps makes none, in either switch position. With `quirks.path_refresh_keeps_old_step` on, the stored path becomes the old step followed by the new path from its second step, so the old step and the new second step choose the track as S-0207 claim 7's current and next step; when that curve's second cell gives *moving blocker*, the new path's first step is taken instead, after a turn when the unit does not face it, and nothing is dropped. Off, the new path's first step is taken, after a turn when needed. A search that finds nothing keeps the old step in both positions (a design rule kept from before).
+- *#252, the crash death weapon (S-0312 r81, Q-3112).* `quirks.crash_death_weapon_twice` off now also reaches a crashable balloon-hover vehicle whose death starts its crash (`jump::crash_end_fires`). A vehicle's jumpjet crash end is the new *Vehicle crash end*: put at the surface, a balloon-hover type sets off its death weapon (whether or not it explodes) and any other type shows claim 9's animations; it leaves play, alive or dead, without demolition damage. The *Infantry crash end* (the forced *air-death-end* request) is not implemented: an infantry jumpjet keeps the aircraft rules at its impact, a seam.
+- *#256, erasure and paid repair steps (S-0314 r110, Q-3113).* A building being erased or phasing in takes no claim 8 step; its repair state stays on and the steps resume after.
+- *Q-3114, the steering projectile's deck row (S-0306 r91).* The deck height is that of the cell of *P*′ + 416 when either cell is a high-bridge cell, as for row 1, with the strict crossing.
+- *#272, a hovering-locomotor vehicle at a tank bunker (S-0606 r14 claim 22).* The new switch `quirks.bunker_hover_no_arrival` (on, the current behaviour) makes no change; off, claim 1's eligibility also asks for a locomotor other than the hovering one.
+
+**Replays and setups.**
+
+- *#333, `Replay::run_on` on a loaded save.* Every step empties the pending order lists, so a world that holds pending orders when `run_on` starts was saved after its current tick's recorded orders were issued; `run_on` does not issue them again for that first tick. A world at a tick boundary is unchanged.
+- *#334, more than 256 houses.* A house id is one byte, so `load::new_game` refuses a setup with more than `load::MAX_HOUSES` (256) houses with `LoadError::TooManyHouses`, before any draw. This covers sandbox setups and the setup stored in a replay. It is our own input validation, not a rule of the game.
