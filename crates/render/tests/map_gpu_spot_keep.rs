@@ -221,16 +221,18 @@ fn every_change_of_the_spots_draws_anew() {
     let mut step = |s: &Scene, filter: &Filter, what: &str| {
         let (px, differing, _) = draw(&device, &queue, &mut r, s, origin, filter);
         assert_eq!(differing, 0, "{what}: as the CPU draws it");
-        let changed = px.chunks(4).zip(last.chunks(4)).filter(|(a, b)| a != b).count();
+        let changed = px
+            .chunks(4)
+            .zip(last.chunks(4))
+            .filter(|(a, b)| a != b)
+            .count();
         assert!(changed > 0, "{what}: the change shows");
         last = px;
     };
     // One spot's colour, at the same count and places.
     // (The flash of step k is spot 7k + 6; no later spot of the beam
     // covers it.)
-    s.spots[0].spots[7 * 10 + 6].kind = SpotKind::Flash {
-        rgb: [10, 250, 10],
-    };
+    s.spots[0].spots[7 * 10 + 6].kind = SpotKind::Flash { rgb: [10, 250, 10] };
     step(&s, &shown, "one colour");
     // One spot moved, to a pixel of the ground alone.
     s.spots[0].spots[7 * 30 + 6].y -= 1;

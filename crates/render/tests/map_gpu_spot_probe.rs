@@ -126,7 +126,10 @@ fn probe_beam_pixels() {
     let depth = depth.create_view(&Default::default());
     let filter = Filter::default();
     let q = ComposeQuirks::default();
-    println!("probe: {BEAMS} beams, {spots} spots, view {}x{}", SIZE.0, SIZE.1);
+    println!(
+        "probe: {BEAMS} beams, {spots} spots, view {}x{}",
+        SIZE.0, SIZE.1
+    );
     for kind in ["pan", "tick", "still"] {
         let mut recording = 0.0;
         let mut total = 0.0;
@@ -148,7 +151,16 @@ fn probe_beam_pixels() {
             let start = Instant::now();
             let mut encoder = device.create_command_encoder(&Default::default());
             r.render_lit(
-                &device, &queue, &mut encoder, &color, &depth, &s, &view, &filter, &q, None,
+                &device,
+                &queue,
+                &mut encoder,
+                &color,
+                &depth,
+                &s,
+                &view,
+                &filter,
+                &q,
+                None,
             );
             let recorded = start.elapsed().as_secs_f64() * 1000.0;
             queue.submit([encoder.finish()]);

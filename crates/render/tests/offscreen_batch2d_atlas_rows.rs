@@ -37,7 +37,9 @@ fn palette() -> [u8; 1024] {
 
 /// A `w` × `h` image of varied indices, none transparent.
 fn image(w: u32, h: u32, seed: u32) -> Vec<u8> {
-    (0..w * h).map(|i| ((i * 7 + seed) % 200 + 20) as u8).collect()
+    (0..w * h)
+        .map(|i| ((i * 7 + seed) % 200 + 20) as u8)
+        .collect()
 }
 
 /// Draws `quads` and asserts the picture is the CPU reference's.
@@ -82,18 +84,40 @@ fn an_added_image_uploads_its_rows_alone() {
     batch.set_palettes(&device, &queue, &[palette()]);
     let _ = batch.take_stats();
     batch.upload_atlas(&queue, &mut atlas);
-    assert_eq!(batch.take_stats().upload_bytes, side * side, "the first upload");
+    assert_eq!(
+        batch.take_stats().upload_bytes,
+        side * side,
+        "the first upload"
+    );
     let mut quads = vec![Quad::sprite(2, 2, a, 0)];
-    check(&device, &queue, &mut batch, &atlas, &quads, "the first image");
+    check(
+        &device,
+        &queue,
+        &mut batch,
+        &atlas,
+        &quads,
+        "the first image",
+    );
 
     // On the first shelf, rows 0 to 10.
     let b = atlas.add(12, 10, &image(12, 10, 2)).unwrap();
     assert_eq!((b[1], b[3]), (0, 10));
     let _ = batch.take_stats();
     batch.upload_atlas(&queue, &mut atlas);
-    assert_eq!(batch.take_stats().upload_bytes, 10 * side, "the first shelf's rows");
+    assert_eq!(
+        batch.take_stats().upload_bytes,
+        10 * side,
+        "the first shelf's rows"
+    );
     quads.push(Quad::sprite(20, 4, b, 0));
-    check(&device, &queue, &mut batch, &atlas, &quads, "a sprite on the shelf");
+    check(
+        &device,
+        &queue,
+        &mut batch,
+        &atlas,
+        &quads,
+        "a sprite on the shelf",
+    );
 
     // Too wide for the first shelf: a new shelf from row 11, 5 rows high.
     let wide = atlas.size() - 4;
@@ -101,9 +125,20 @@ fn an_added_image_uploads_its_rows_alone() {
     assert_eq!((c[1], c[3]), (11, 5));
     let _ = batch.take_stats();
     batch.upload_atlas(&queue, &mut atlas);
-    assert_eq!(batch.take_stats().upload_bytes, 5 * side, "the new shelf's rows");
+    assert_eq!(
+        batch.take_stats().upload_bytes,
+        5 * side,
+        "the new shelf's rows"
+    );
     quads.push(Quad::sprite(1, 30, [c[0], c[1], 60, 5], 0));
-    check(&device, &queue, &mut batch, &atlas, &quads, "a sprite on a new shelf");
+    check(
+        &device,
+        &queue,
+        &mut batch,
+        &atlas,
+        &quads,
+        "a sprite on a new shelf",
+    );
 
     // Nothing added: nothing sent.
     let _ = batch.take_stats();
@@ -120,7 +155,14 @@ fn an_added_image_uploads_its_rows_alone() {
     assert_eq!(batch.take_stats().upload_bytes, 10 * side, "rows 11 to 21");
     quads.push(Quad::sprite(40, 20, d, 0));
     quads.push(Quad::sprite(1, 40, [e[0], e[1], 60, 4], 0));
-    check(&device, &queue, &mut batch, &atlas, &quads, "two shelves at once");
+    check(
+        &device,
+        &queue,
+        &mut batch,
+        &atlas,
+        &quads,
+        "two shelves at once",
+    );
 
     // A new device holds nothing: the whole atlas again.
     atlas.touch();

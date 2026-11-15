@@ -146,7 +146,10 @@ fn a_group_beyond_the_view_is_laid_out_when_a_view_meets_it() {
     assert_eq!(stats.upload_bytes, 0, "nothing in the view changed");
     // View x 30 to 94, y 5 to 37: both groups' pixels.
     let (differing, stats) = draw(&device, &queue, &mut r, &s, (30, 5));
-    assert_eq!(differing, 0, "a view meeting both groups: as the CPU draws it");
+    assert_eq!(
+        differing, 0,
+        "a view meeting both groups: as the CPU draws it"
+    );
     assert_eq!(
         stats.upload_bytes,
         64 * 24,
