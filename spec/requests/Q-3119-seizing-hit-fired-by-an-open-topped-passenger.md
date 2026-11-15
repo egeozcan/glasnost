@@ -1,9 +1,9 @@
 ---
 id: Q-3119
 title: Whether a seizing hit fired by a passenger of an open-topped transport seizes
-status: open
+status: answered
 related: [S-0607, S-0507, S-0203]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need
