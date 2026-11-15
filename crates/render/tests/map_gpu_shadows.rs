@@ -37,7 +37,7 @@ fn image(w: u32, h: u32, seed: u32) -> IndexedImage {
     let px = (0..h)
         .flat_map(|y| {
             (0..w).map(move |x| {
-                if (x + 2 * y + seed) % 7 == 0 {
+                if (x + 2 * y + seed).is_multiple_of(7) {
                     0
                 } else {
                     ((seed * 31 + x * 3 + y * 5) % 255 + 1) as u8
