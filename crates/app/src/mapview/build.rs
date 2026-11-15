@@ -2265,13 +2265,20 @@ impl<'a> Builder<'a> {
         let grid = self.cells_loaded.unwrap_or(&self.map.cells);
         let cells: Vec<(CellXY, glasnost_map::Cell)> =
             grid.iter().map(|(c, cell)| (c, *cell)).collect();
-        self.overlays_in(cells, false);
+        self.overlays_in(cells, false, None);
     }
 
     /// The overlays and shadows of `cells`, as [`Builder::overlays`] draws
     /// them; `live` cells (redrawn during play) are not added to the
-    /// object list, so their items name no object.
-    fn overlays_in(&mut self, cells: Vec<(CellXY, glasnost_map::Cell)>, live: bool) {
+    /// object list, so their items name no object. With `per_cell` each
+    /// cell's body and shadow items go there, in cell order, instead of
+    /// into the scene (#147).
+    fn overlays_in(
+        &mut self,
+        cells: Vec<(CellXY, glasnost_map::Cell)>,
+        live: bool,
+        mut per_cell: Option<&mut Vec<OverlayCellItems>>,
+    ) {
         let q = OverlayQuirks::default();
         let k = Kind::Overlays;
         let list_len = self.import.outcome.registries.get(&k).map_or(0, Vec::len);
@@ -2401,6 +2408,7 @@ impl<'a> Builder<'a> {
                     notes: Vec::new(),
                 })
             });
+            let mut body_item = None;
             // spec: S-0112 claim 9 (an image frame beyond the sprite draws nothing)
             if let (Some((sprite, frame)), Some(row)) = (&body, paint_row)
                 && self.sprite_frames(sprite).is_some_and(|n| *frame < n)
@@ -2424,7 +2432,7 @@ impl<'a> Builder<'a> {
                     object,
                 )
             {
-                self.built.scene.items.push(item);
+                body_item = Some(item);
             }
             // spec: S-0112 claim 8 (the shadow: crate N/2; rubble none; otherwise the stored type, d + N/2)
             let shadow: Option<(Vec<u8>, usize)> = if flags.crate_ {
@@ -2451,6 +2459,7 @@ impl<'a> Builder<'a> {
             // never the deck's 4 levels nor the upright −15; flat; writes), S-0112 claim 8
             // (every overlay kind)
             let shadow_bias = -2 - overlay_depth_lift(level);
+            let mut shadow_item = None;
             if let Some((sprite, frame)) = shadow
                 && self.sprite_frames(&sprite).is_some_and(|n| frame < n)
                 && let Some(item) = self.place_sprite(
@@ -2469,7 +2478,17 @@ impl<'a> Builder<'a> {
                     object,
                 )
             {
-                shadows.push(item);
+                shadow_item = Some(item);
+            }
+            if let Some(out) = per_cell.as_deref_mut() {
+                out.push(OverlayCellItems {
+                    cell: c,
+                    body: body_item,
+                    shadow: shadow_item,
+                });
+            } else {
+                self.built.scene.items.extend(body_item);
+                shadows.extend(shadow_item);
             }
         }
         // spec: S-0102 claim 16 rank 3 (every overlay of the repainted area ranks before every overlay
@@ -6554,6 +6573,17 @@ pub struct Inputs<'a> {
     pub cells: Option<&'a CellGrid>,
 }
 
+/// One cell's overlay drawings during play ([`Painter::live_overlays`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OverlayCellItems {
+    /// The cell.
+    pub cell: CellXY,
+    /// The overlay's body, when it draws one.
+    pub body: Option<Item>,
+    /// The overlay's shadow, when it draws one.
+    pub shadow: Option<Item>,
+}
+
 impl Painter {
     /// Whether a type's image cache holds an image for `key` (S-0105
     /// claim 26), for tests.
@@ -7082,14 +7112,16 @@ impl Painter {
         (entries, b.built.notes)
     }
     /// The overlay and overlay-shadow items of `cells` as they stand during
-    /// play (S-0112 claims 1 to 9): every body before every shadow (S-0102
-    /// claim 16 rank 3). The items name no object.
+    /// play (S-0112 claims 1 to 9), cell by cell in the order of `cells`;
+    /// a cell that draws nothing has no entry. Drawn together, every body
+    /// goes before every shadow (S-0102 claim 16 rank 3). The items name no
+    /// object.
     pub fn live_overlays(
         &mut self,
         inputs: &Inputs,
         scene: &mut Scene,
         cells: Vec<(CellXY, glasnost_map::Cell)>,
-    ) -> (Vec<Item>, BTreeSet<String>) {
+    ) -> (Vec<OverlayCellItems>, BTreeSet<String>) {
         let mut b = Builder {
             map: inputs.map,
             rules: inputs.rules,
@@ -7113,9 +7145,8 @@ impl Painter {
             live_slots: None,
             owners_checked: false,
         };
-        let start = b.built.scene.items.len();
-        b.overlays_in(cells, true);
-        let items = b.built.scene.items.split_off(start);
+        let mut items = Vec::new();
+        b.overlays_in(cells, true, Some(&mut items));
         *self = b.p;
         *scene = b.built.scene;
         (items, b.built.notes)

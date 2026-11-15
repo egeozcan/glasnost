@@ -458,6 +458,9 @@ pub struct Live {
     changed_overlays: BTreeMap<CellXY, (u8, u8)>,
     /// The overlay items of the changed cells, as last drawn.
     live_overlays: Vec<Item>,
+    /// How many changed cells the painter has drawn since the view was
+    /// made (design: render (#147), for tests).
+    overlay_cells_drawn: u64,
     /// End of the object pass in the scene's items; the combat tail follows.
     objects_end: usize,
     /// End of the effects in the scene's items; the status extras follow.
@@ -1397,6 +1400,7 @@ impl Live {
             legal_cells,
             changed_overlays: BTreeMap::new(),
             live_overlays: Vec::new(),
+            overlay_cells_drawn: 0,
             objects_end: built.scene.items.len(),
             effects_end: built.scene.items.len(),
             ground: GroundLayer::default(),
@@ -2351,6 +2355,12 @@ impl Live {
             sources.extend(source);
         }
         sources
+    }
+
+    /// How many changed overlay cells the painter has drawn (tests).
+    #[cfg(test)]
+    pub(super) fn overlay_cells_drawn(&self) -> u64 {
+        self.overlay_cells_drawn
     }
 
     /// The light of cell `c` as the view last computed it (tests).
@@ -3930,9 +3940,15 @@ impl Live {
                 .keys()
                 .filter_map(|&c| Some((c, *self.world.cells.grid.get(c)?)))
                 .collect();
-            let (items, notes) = self.painter.live_overlays(inputs, scene, cells);
+            self.overlay_cells_drawn += cells.len() as u64;
+            let (drawn, notes) = self.painter.live_overlays(inputs, scene, cells);
             self.notes.extend(notes);
-            self.live_overlays = items;
+            // spec: S-0102 claim 16 rank 3 (every overlay of the repainted area ranks before every overlay shadow of that area)
+            self.live_overlays = drawn
+                .iter()
+                .filter_map(|d| d.body)
+                .chain(drawn.iter().filter_map(|d| d.shadow))
+                .collect();
             self.changed_overlays = changed;
         }
         for c in self.changed_overlays.keys() {
