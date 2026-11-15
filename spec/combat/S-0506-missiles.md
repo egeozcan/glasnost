@@ -2,14 +2,14 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 43
+revision: 45
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-14
+approved-on: 2026-11-15
 measurements: []
 requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561, Q-2159, Q-2711, Q-2748,
-Q-2749, Q-2811, Q-3044, Q-3066]
+Q-2749, Q-2811, Q-3044, Q-3066, Q-3134]
 supersedes: []
 ---
 
@@ -74,7 +74,7 @@ above the terrain*.
 - **Controller target, pending target.** The controller's own record of what its slots are sent
   against, and the target handed to it by the last shot that has not been adopted yet (claim 3).
   Neither is the spawner's own target.
-- **Launch pass.** One run of the spawn controller (claim 2): every 10 ticks.
+- **Launch pass.** One run of the spawn controller, made in one of the spawner's turns (claim 2), normally every 10 ticks.
 - **Launch spacing.** The minimum time between two launches of the same controller (claim 6).
 - **Launching count.** The number of slots on the rail, plus the number of preparing slots whose
   object is of a missile type and is on the map. The spawner is *launching* while this count is
@@ -133,8 +133,59 @@ above the terrain*.
    passes no slot or controller state changes, except for pending-target changes of claim 3 and the events of claims 9 and 11 to 13, which act at
    once. Every slot timer of this spec (spacing, rail, regeneration, reload) is a countdown in ticks
    but is only looked at in a pass, so a change waits for the first pass at or after its timer's end.
-   - Backing: `measurable` (scenario R2)
-   - Confidence: high
+
+   **Passes and the spawner's turns (Q-3134).** A pass is made in a turn of the spawner, and only
+   in a turn that reaches the spawner's ordinary update. A pass falls due when 20 ticks have passed
+   since the controller's creation (the first pass) or 10 ticks since the tick of the previous pass.
+   A turn that finds a pass due makes it, however long ago it fell due, and the next pass then falls
+   due 10 ticks after the tick of the pass just made. So after a stretch in which the spawner makes
+   no pass, it makes one pass in its first turn at tick *T* that reaches its ordinary update, and
+   the next one at *T* + 10. The passes it missed are not made up, and the earlier phase is not
+   kept. Without such a stretch this is the cadence above. The slot timers keep counting through
+   the stretch and are looked at in the pass at *T*, as above. The stretches this spec gives are:
+   - **Production.** A produced spawner's controller is created when production of the item
+     starts, because that start creates the object (S-0404 claim 11). The object is not in play
+     until it leaves the building that produced it (S-0203 Terms, *enter play*), so it makes no
+     pass before then. When it enters play 20 ticks or more after the start, its first pass comes
+     in its first turn after it enters play.
+   - **A transport that is not open-topped.** Its passenger is out of play (S-0203 Terms), so it
+     makes no pass while inside. After it leaves, its first turn makes a pass if one fell due
+     meanwhile. A passenger of an open-topped transport takes turns while inside (S-0203 claim 3)
+     and makes its passes there by the same rule as on the map.
+   - **Erasure.** An infantry unit, vehicle or aircraft makes no pass in a turn in which it is
+     being erased, and a building makes none while it is being erased (S-0514 claim 17). A vehicle
+     or aircraft that phases in with a beam attached (S-0514 claim 17, its second paragraph) makes
+     no pass in those turns either. Phasing in does not by itself keep an infantry unit, or a
+     vehicle or aircraft with no beam attached, from its passes: it makes a pass in each such turn
+     that reaches its ordinary update, as above.
+   - **A superweapon warp.** A member makes no pass in a turn in which it is still in its leaving
+     stage after its warp update (S-0513 claims 39 and 48). Whether it makes one in its first pending turn, in its
+     turns from its departure until its arrival effects and in its arrival hold is not established
+     in the original, as
+     S-0513 claim 48 leaves the other ordinary work of those turns. Our engine makes no pass in a
+     member's turns from its first pending update through its arrival effects, as for the other
+     ordinary work of S-0513 claim 51 (design rule, decided at the delegated sign-off,
+     2026-11-15). In its arrival hold, a turn that finds a pass due makes it, unless
+     the erasure case above applies.
+   - **A tunnel.** A vehicle or infantry spawner inside a tunnel (S-0213 Terms) makes no pass while
+     inside.
+   - Backing: `measurable` (scenario R2) for the cadence without a stretch. `measurable`
+     (scenario R28) for one consequence on a produced spawner: after it enters play, its passes
+     do not keep the phase of the start of its production. `unmeasured` for the rest of the
+     stretch rule: the pass in the first turn at *T*, the next pass at *T* + 10, the start of
+     the 20-tick count at the production start, and a produced spawner's first pass in its
+     first turn in play. R28 records only the phase of the passes, which these readings share
+     with others, such as a first pass at a later tick of the same phase or a count started at
+     the placement. `unmeasured` for a transport, erasure, phasing in and a tunnel: no scenario
+     here moves a spawner through a transport or a tunnel, or erases or warps a spawner while
+     recording its passes. `unmeasured` for the warp's other turns in the original, for the
+     reason S-0513 claim 48 gives for those turns, and for our engine's rule there, which the
+     original does not settle
+   - Confidence: high for the cadence without a stretch and for a produced spawner's passes not
+     keeping the phase of its production start (R28); medium for the rest of the stretch rule,
+     a transport that is not open-topped, an open-topped transport, erasure, phasing in, the
+     leaving stage of a warp, a tunnel and our engine's warp rule; low for the original's other
+     warp turns, as S-0513 claim 48 rates them
 
 3. **Shots hand over a pending target.** A shot of a spawner weapon (S-0301, Terms) launches no
    projectile. It sets the controller's pending target to the shot's target, unless that target is
@@ -1320,7 +1371,9 @@ applies throughout that area. These are data-only tests, not stock-data measurem
 - **R2. Pass timing and targets (claims 2–5, 8).** In range of a static target, record the spawner's
   creation tick, the actual shot tick *t*₀ (not the attack-order tick), missile appearances, aim
   points and first motion. Expected for a fresh idle controller: appearance at the second pass after
-  the shot, with passes at creation + 20 and every 10 thereafter. Repeat ten times with input timed
+  the shot, with passes at creation + 20 and every 10 thereafter for a spawner in play since its
+  creation. For a produced spawner, the first pass is the one claim 2's production case gives
+  and the later passes come every 10 ticks after it. Repeat ten times with input timed
   on either side of a pass. On a named two-slot map, send a second shot at another in-range target
   between appearances. Expected: the later launch adopts the pending target, while the earlier
   missile keeps its fixed aim. Both slots enter the rail interval together at the final launch pass,
@@ -1844,6 +1897,23 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   that, after such a record, is recorded still on the map at another position; by a detonation whose last record before it gives a nose height above the
   aim point's world height while none of claim 19's other conditions holds; or by a detonation point
   other than the nose point of that last record.
+- **R28. The passes of a produced spawner (claim 2; Q-3134).** A small purpose-made map with the
+  recorder. The human test house builds, by normal input, the structures the stock tech tree
+  requires (S-0407) and then a spawner vehicle at its war factory. A structure of a neutral house
+  stands within the spawner's range of the cell where the spawner stops after leaving the factory.
+  Once the spawner has stopped, it is ordered to fire at that structure by a forced attack, as in
+  R25. The build order is given while the factory's vehicle line is idle, so that it starts the
+  production when it is applied (S-0404 claim 3). Record the tick *C* of the cycle in which the
+  build order is given (S-0203 claim 7), the tick *P* at which the spawner first appears on the
+  map, the shot tick and the tick of every missile launch, until four launches have been
+  recorded. A run in which *P* < *C* + 21, or in which *C* or *C* + 1 leaves the same remainder on
+  division by 10 as *P* or as *P* + 1, is void, since the readings below then predict the same
+  ticks. Expected: every launch tick of the run leaves the same
+  remainder on division by 10, and that remainder is the one of *P* or of *P* + 1 (the tick of the
+  spawner's first turn in play). *Falsified if* a launch tick leaves the remainder of *C* or of
+  *C* + 1 (the phase of the creation kept, or passes made without turns), or two launch ticks of the run leave
+  different remainders (passes not 10 ticks apart after the first one in play), or a launch tick
+  leaves a remainder other than those of *P* and *P* + 1.
 
 ## Open questions
 
@@ -1876,6 +1946,12 @@ applies throughout that area. These are data-only tests, not stock-data measurem
 - (Q-2159 question 1.) How each of the last launchers leaves play in the games of M-0016 that a
   chaos-drone group wins against a missile-launcher group is not established: M-0016 records
   outcomes only. Scenario R24 records it.
+
+## Changes for other specs
+
+- **S-0513, claim 51.** Its list of ordinary work suppressed from the first pending update through
+  the arrival effects may add the launch pass of a spawner member (S-0506 claim 2, revision 45,
+  submitted in the same round). In the arrival hold, a turn that finds a pass due makes it.
 
 ## Questions for the project lead
 
