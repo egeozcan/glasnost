@@ -1374,6 +1374,75 @@ mod tests {
         }
     }
 
+    /// design: render (#121) (the model reads each tab's icons once): the
+    /// shown tab, every tab button and the shown tab's icons as
+    /// [`shown_tab`] and [`entries`] give them, for every current tab, one
+    /// past the tabs included, and for a house the world does not have.
+    #[test]
+    fn render_perf_121_the_model_follows_the_entries() {
+        use glasnost_sim::load;
+        use glasnost_sim::superweapons::charge;
+        let mut w = load::new_game(
+            glasnost_ai::fixture::rules(),
+            &glasnost_ai::fixture::map(),
+            glasnost_ai::fixture::catalogue(),
+            &glasnost_ai::fixture::setup(1),
+        )
+        .unwrap();
+        // Icons on the first and third tabs of house 0, none on the others.
+        for (tab, n) in [(0, 5), (2, 3)] {
+            w.houses[0].econ.tech.icons[tab] = (0..n)
+                .map(|i| glasnost_sim::econ::tech::Icon {
+                    t: TypeRef {
+                        kind: Kind::Vehicle,
+                        index: i,
+                    },
+                    cost: 0,
+                })
+                .collect();
+        }
+        let w = w;
+        let name = |t: TypeRef| format!("{:?}{}", t.kind, t.index);
+        for h in [HouseId(0), HouseId(1), HouseId(200)] {
+            for cur in 0..TABS + 2 {
+                let m = model(&w, h, cur, 7, &name, &|_| None);
+                assert_eq!(m.shown, shown_tab(&w, h, cur), "house {h:?}, tab {cur}");
+                let real = w.houses.get(usize::from(h.0)).is_some();
+                for (i, tv) in m.tabs.iter().enumerate() {
+                    let es = entries(&w, h, i);
+                    let want = if real {
+                        TabView {
+                            count: es.len(),
+                            waiting: i < 2
+                                && es.iter().any(|e| {
+                                    matches!(e, Entry::Type(t) if sidebar::icon_state(&w, h, *t).is_some_and(|s| s.ready))
+                                }),
+                            flash_start: None,
+                            sw_ready: es.iter().any(|e| {
+                                matches!(e, Entry::Superweapon(k) if charge::flashing(&w, h, *k))
+                            }),
+                        }
+                    } else {
+                        TabView::default()
+                    };
+                    assert_eq!(*tv, want, "house {h:?}, tab {cur}, button {i}");
+                }
+                let shown: Vec<Entry> = if real {
+                    entries(&w, h, m.shown)
+                } else {
+                    Vec::new()
+                };
+                let got: Vec<Entry> = m.cameos.iter().map(|c| c.entry).collect();
+                assert_eq!(got, shown, "house {h:?}, tab {cur}");
+                for c in &m.cameos {
+                    if let Entry::Type(t) = c.entry {
+                        assert_eq!(c.name, name(t));
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn view_box_lines_keep_the_edges_on_the_image_and_clip_them() {
         let image = Rect::new(10, 20, 100, 50);
