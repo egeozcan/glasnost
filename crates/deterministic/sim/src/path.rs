@@ -997,6 +997,13 @@ pub enum PathStep {
 /// acceptable cells with at most `limit` threatened ones.
 pub type ShapeOk<'a> = dyn Fn(CellXY, &[u8], u32) -> bool + 'a;
 
+/// The acceptance test of a stretch in [`shorten_at`]: `ok(cur, starts,
+/// first, shape, limit)` is [`ShapeOk`] for the shape taken from
+/// `starts[first]`, also given the path as it then stands (`cur`, removed
+/// places `None`) and the cell each of its places starts from, so that the
+/// test can walk the path before the stretch.
+type StretchOk<'a> = dyn Fn(&[Option<PathStep>], &[CellXY], usize, &[u8], u32) -> bool + 'a;
+
 fn step_of(d: u8) -> (i32, i32) {
     STEPS[usize::from(d % 8)] // spec: S-0212 Terms (step directions 0 to 7)
 }
@@ -1053,7 +1060,7 @@ fn replace_stretch(
     last: usize,
     e: CellXY,
     limit: u32,
-    ok: &ShapeOk<'_>,
+    ok: &StretchOk<'_>,
 ) {
     // The steps that are not removed, σ₁ … σₜ, and their distances dᵢ from e.
     let sig: Vec<usize> = (earliest..=last).filter(|&i| cur[i].is_some()).collect();
@@ -1081,7 +1088,10 @@ fn replace_stretch(
         return;
     }
     // spec: S-0212 claim 18 (the diagonal-first shape when acceptable, else the straight-first one; neither: unchanged)
-    let Some(shape) = shapes(s, e).into_iter().find(|sh| ok(s, sh, limit)) else {
+    let Some(shape) = shapes(s, e)
+        .into_iter()
+        .find(|sh| ok(cur, starts, first, sh, limit))
+    else {
         return;
     };
     // spec: S-0212 claim 18 (the new steps take the first places of the stretch, the rest become removed steps)
@@ -1125,6 +1135,24 @@ pub fn shorten(
     mirrored: bool,
     tunnel_north: bool,
     ok: &ShapeOk<'_>,
+) -> Vec<PathStep> {
+    shorten_at(
+        steps,
+        start,
+        mirrored,
+        tunnel_north,
+        &|_, starts, first, shape, limit| ok(starts[first], shape, limit),
+    )
+}
+
+/// [`shorten`] with an acceptance test that is also given the path as it
+/// stands before each stretch ([`StretchOk`]).
+fn shorten_at(
+    steps: &[PathStep],
+    start: CellXY,
+    mirrored: bool,
+    tunnel_north: bool,
+    ok: &StretchOk<'_>,
 ) -> Vec<PathStep> {
     // spec: S-0212 claim 18 (after a tunnel step: as on a new path from the cell north of the entrance, or from the exit with the switch off)
     let after_tunnel = |entrance: CellXY, exit: CellXY| {
@@ -3094,20 +3122,6 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     };
     // The height level of the start pair (S-0212 claim 7).
     let reference = start_pair(w, id, from).1;
-    // The search layer of each cell the found path passes through (claim 7).
-    let mut layers: BTreeMap<CellXY, Layer> = BTreeMap::new();
-    {
-        let mut c = from;
-        let mut lvl = reference;
-        for &d in &steps {
-            let (sx, sy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
-            c = CellXY::new(c.x + sx, c.y + sy);
-            let l = candidate_layer(w, lvl, c);
-            layers.insert(c, l);
-            lvl = pair_level(w, c, l);
-        }
-    }
-    let deck_at = |c: CellXY| layers.get(&c).copied().unwrap_or(Layer::Ground);
     let mode = r.mode;
     let owner = o.owner;
     // trunc₅₃(t × k) for the threat value t of cell `c` (S-0212 F7): the
@@ -3116,21 +3130,16 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         let t = owner.map_or(0, |h| crate::threat::value(w, h, c));
         F64::from_i64(i64::from(t), mode).mul(k, mode)
     };
-    // Whether the steps `shape` from cell `s` enter only clear cells without
-    // a congestion mark, each passing `threat_ok` (S-0212 claims 17 and 18).
+    // Whether the steps `shape` from cell `s`, whose search pair has height
+    // level `lvl`, enter only clear cells without a congestion mark, each
+    // passing `threat_ok` (S-0212 claims 17 and 18).
     let enters_clear = |s: CellXY,
+                        lvl: i32,
                         shape: &mut dyn Iterator<Item = u8>,
                         threat_ok: &mut dyn FnMut(CellXY) -> bool|
      -> bool {
         let mut prev = s;
-        // The height level of the search pair the shape starts from: the
-        // unit's own at its start cell, else that of the ground or deck the
-        // path reached (S-0212 claim 7).
-        let mut lvl = if s == from {
-            reference
-        } else {
-            pair_level(w, s, deck_at(s))
-        };
+        let mut lvl = lvl;
         for d in shape {
             let (sx, sy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
             let n = CellXY::new(prev.x + sx, prev.y + sy);
@@ -3148,11 +3157,16 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         true
     };
     let ok = |path: &[u8], start: usize, d3: u8, j: usize| -> bool {
-        // The cell where the 2j new steps start.
+        // The cell where the 2j new steps start, and the height level of its
+        // search pair: the path as it now stands walked from the start pair
+        // (S-0212 claim 7).
         let mut c = from;
+        let mut lvl = reference;
         for &s in &path[..start] {
             let (sx, sy) = STEPS[usize::from(s % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
             c = CellXY::new(c.x + sx, c.y + sy);
+            // spec: S-0212 claims 7 and 17 (each step's pair on claim 7's candidate layer from the pair before it)
+            lvl = pair_level(w, c, candidate_layer(w, lvl, c));
         }
         // spec: S-0212 claim 17 (every cell the 2j new steps pass through has threat value × k below 1.0, F7, the value read at the cell where the new steps start; quirks.flatten_threat_start_cell off: each cell's own)
         let mut below = |n: CellXY| {
@@ -3160,12 +3174,30 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
             tk(at).lt(crate::consts::ONE)
         };
         // spec: S-0212 claim 17 (2j new steps)
-        enters_clear(c, &mut std::iter::repeat_n(d3, 2 * j), &mut below)
+        enters_clear(c, lvl, &mut std::iter::repeat_n(d3, 2 * j), &mut below)
     };
     let steps = flatten(&steps, q.flatten_straight_run_v, &ok);
     // spec: S-0212 claim 18 and F7 (threat counted only when k exceeds the binary64 value nearest 0.00001)
     let counts = k.gt(crate::consts::THREAT_COEFFICIENT_MIN);
-    let ok18 = |s: CellXY, shape: &[u8], limit: u32| {
+    let ok18 = |cur: &[Option<PathStep>],
+                starts: &[CellXY],
+                first: usize,
+                shape: &[u8],
+                limit: u32| {
+        let s = starts[first];
+        // The height level of the search pair the stretch starts from: the
+        // path as it now stands walked from the start pair (S-0212 claim 7).
+        let mut lvl = reference;
+        for (k, st) in cur[..first].iter().enumerate() {
+            let n = starts[k + 1];
+            match st {
+                // spec: S-0212 claims 7 and 18 (each step's pair on claim 7's candidate layer from the pair before it)
+                Some(PathStep::Dir(_)) => lvl = pair_level(w, n, candidate_layer(w, lvl, n)),
+                // spec: S-0212 claim 18 (after a tunnel step, as on a new path: from the ground)
+                Some(PathStep::Tunnel { .. }) => lvl = level(w, n),
+                None => {}
+            }
+        }
         let mut n = 0u32;
         let mut within = |c: CellXY| {
             // spec: S-0212 claim 18 (the count of entered cells with threat value × k ≥ the binary64 value nearest 0.01, each cell's own value, stays within the limit)
@@ -3174,11 +3206,11 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
             }
             n <= limit
         };
-        enters_clear(s, &mut shape.iter().copied(), &mut within)
+        enters_clear(s, lvl, &mut shape.iter().copied(), &mut within)
     };
     let received: Vec<PathStep> = steps.iter().map(|&d| PathStep::Dir(d)).collect();
     // spec: S-0212 claim 18 (early detours are shortened, after claim 17)
-    let steps: Vec<u8> = shorten(
+    let steps: Vec<u8> = shorten_at(
         &received,
         from,
         q.detour_mirrored_reference,
