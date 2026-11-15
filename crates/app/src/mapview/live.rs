@@ -3620,7 +3620,7 @@ impl Live {
 
     /// The game ticks object `id` has spent on the map since it was placed
     /// (S-0105 claim 6); 0 for one the view has not yet noted.
-    fn ticks_since_placed(&self, id: ObjectId) -> u32 {
+    pub(crate) fn ticks_since_placed(&self, id: ObjectId) -> u32 {
         let tick = self.world.tick;
         let since = self.placed.get(&id).copied().unwrap_or(tick);
         (tick - since).max(0) as u32
