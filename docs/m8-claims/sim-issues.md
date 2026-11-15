@@ -477,7 +477,7 @@ Issue #402: an ordinary removal walked the whole object table nine times, and a 
 
 With none of those references, a removal now walks the table twice (the holders, and the merged pass), not nine times. Where a reference exists its walk runs as before.
 
-The bench `tests/removal_cost.rs` (ignored, release) removes or kills 64 infantry, one at a time, out of a square of synthetic infantry. It gives the median µs per object over 5 runs. Each pair below is base 4d6e2e3 → final, from interleaved runs (base, after, base, after). The figures cover the whole batch; no walk is timed alone.
+The bench `tests/removal_cost.rs` (ignored, release) removes or kills 64 infantry, one at a time, out of a square of synthetic infantry. It gives the median µs per object over 5 runs. Each pair below is base 4d6e2e3 → a743b6e, from interleaved runs (base, after, base, after). The bench removes only infantry with no aircraft state, so b62a751 does not reach what it measures, and 45ca198 adds only a test. The figures cover the batch's walks together; no walk is timed alone.
 
 | Objects | One removal | One killing hit with its removal |
 |---|---|---|
