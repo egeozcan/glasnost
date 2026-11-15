@@ -1,9 +1,9 @@
 ---
 id: Q-3114
 title: The deck height of a steering projectile's deck crossing when the two cells differ in height
-status: open
+status: answered
 related: [S-0306]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
