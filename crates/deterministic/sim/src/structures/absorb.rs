@@ -145,11 +145,12 @@ pub fn answer(w: &World, b: ObjectId, u: ObjectId) -> Answer {
     if !w.allied(bo.owner, uo.owner) {
         return Answer::Refuses;
     }
-    // spec: S-0605 claim 1 (under construction, being sold or not finished building up)
+    // spec: S-0605 claim 1 (under construction, being sold or not finished building up: the build-up state too, after an owner change took the queued construction away, #347)
     if matches!(
         crate::econ::placement::seen_behaviour(bo),
         Some(Behaviour::Construction | Behaviour::Selling)
     ) || bo.econ.sale.is_some()
+        || bo.econ.construction.building_up
     {
         return Answer::Refuses;
     }
