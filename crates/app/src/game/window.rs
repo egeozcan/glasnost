@@ -711,6 +711,9 @@ struct MapGpu {
     /// the values depend on nothing else in a game, so a frame with the
     /// same covers and view keeps them (M8 step C4).
     light: Option<LightKept>,
+    /// The tags given to the light alpha so far: each new [`LightKept`]
+    /// takes the next (design: render (#119)).
+    light_tags: u64,
 }
 
 /// The game, if any, whose battlefield is composed on the CPU because its
@@ -803,6 +806,9 @@ struct LightKept {
     origin: (i32, i32),
     size: (u32, u32),
     alpha: Vec<u8>,
+    /// The renderer's tag of these values: the same values while it holds
+    /// ([`MapRenderer::render_lit_tagged`], design: render (#119)).
+    tag: u64,
 }
 
 /// The client's frames on a device: the 2D batch, and the battlefield on
@@ -1012,6 +1018,7 @@ impl GpuDraw {
                 size: (0, 0),
                 targets: None,
                 light: None,
+                light_tags: 0,
             });
         }
         let m = self.map.as_mut().ok_or("no map renderer")?;
@@ -1039,17 +1046,19 @@ impl GpuDraw {
             .is_some_and(|l| l.origin == v.origin && l.size == v.size && l.covers == covers);
         if !kept {
             let alpha = s.light_alpha_of(&covers);
+            m.light_tags += 1;
             m.light = Some(LightKept {
                 covers,
                 origin: v.origin,
                 size: v.size,
                 alpha,
+                tag: m.light_tags,
             });
         }
-        let alpha = m.light.as_ref().map(|l| l.alpha.as_slice());
+        let alpha = m.light.as_ref().map(|l| (l.alpha.as_slice(), Some(l.tag)));
         let drawn = lap();
         self.laps.light = drawn - lit;
-        m.renderer.render_lit(
+        m.renderer.render_lit_tagged(
             device,
             queue,
             encoder,

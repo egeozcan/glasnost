@@ -460,6 +460,9 @@ pub struct MapRenderer {
     /// a frame whose values are the same is not uploaded again (M8 step
     /// C4).
     alpha_held: Vec<u8>,
+    /// The caller's tag of `alpha_held` ([`Self::render_lit_tagged`]):
+    /// values given again under the same tag are not compared (#119).
+    alpha_tag: Option<u64>,
     /// The copy of the target's pixels that a translucent drawing blends
     /// with (S-0102 claim 32), of the light-alpha texture's size.
     backdrop: wgpu::Texture,
@@ -739,6 +742,7 @@ impl MapRenderer {
             alpha: (alpha, (1, 1)),
             alpha_default: true,
             alpha_held: Vec::new(),
+            alpha_tag: None,
             backdrop,
             stats: MapStats::default(),
             list: Vec::new(),
@@ -1049,6 +1053,41 @@ impl MapRenderer {
         filter: &Filter,
         q: &ComposeQuirks,
         alpha: Option<&[u8]>,
+    ) -> usize {
+        self.render_lit_tagged(
+            device,
+            queue,
+            encoder,
+            target,
+            depth,
+            scene,
+            view,
+            filter,
+            q,
+            alpha.map(|a| (a, None)),
+        )
+    }
+
+    /// [`Self::render_lit`] with values the caller may tag: values given
+    /// under the tag the renderer holds are taken to be the held ones, not
+    /// compared or uploaded again. A caller gives a new tag whenever the
+    /// values may have changed; untagged values are compared.
+    ///
+    /// design: render (#119): the caller knows when its kept values stay,
+    /// so a frame that keeps them skips a compare of the view-sized buffer.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_lit_tagged(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::Texture,
+        depth: &wgpu::TextureView,
+        scene: &Scene,
+        view: &View,
+        filter: &Filter,
+        q: &ComposeQuirks,
+        alpha: Option<(&[u8], Option<u64>)>,
     ) -> usize {
         self.set_alpha(device, queue, view.size, alpha);
         let uniform = ViewUniform {
@@ -1478,17 +1517,19 @@ fn rgb_word(c: [u8; 3]) -> u32 {
 
 impl MapRenderer {
     /// Makes the light-alpha texture hold `alpha` (or 127 everywhere) for
-    /// a view of `size`.
+    /// a view of `size`; values under the held tag are the held ones.
     fn set_alpha(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: (u32, u32),
-        alpha: Option<&[u8]>,
+        alpha: Option<(&[u8], Option<u64>)>,
     ) {
         let size = (size.0.max(1), size.1.max(1));
         let n = size.0 as usize * size.1 as usize;
-        let alpha = alpha.filter(|a| a.len() == n);
+        let alpha = alpha.filter(|(a, _)| a.len() == n);
+        let tag = alpha.and_then(|(_, t)| t);
+        let alpha = alpha.map(|(a, _)| a);
         if self.alpha.1 != size {
             let t = alpha_texture(device, queue, size);
             let backdrop = backdrop_texture(device, size);
@@ -1504,19 +1545,29 @@ impl MapRenderer {
             self.alpha = (t, size);
             self.backdrop = backdrop;
             self.alpha_default = true;
+            self.alpha_tag = None;
         }
         let bytes = match alpha {
-            Some(a) if !self.alpha_default && self.alpha_held == a => return,
+            Some(_) if !self.alpha_default && tag.is_some() && tag == self.alpha_tag => return,
+            Some(a) if !self.alpha_default && self.alpha_held == a => {
+                self.alpha_tag = tag;
+                return;
+            }
             Some(a) => {
                 self.alpha_default = false;
                 self.alpha_held.clear();
                 self.alpha_held.extend_from_slice(a);
+                self.alpha_tag = tag;
                 std::borrow::Cow::Borrowed(a)
             }
-            None if self.alpha_default => return,
+            None if self.alpha_default => {
+                self.alpha_tag = None;
+                return;
+            }
             None => {
                 self.alpha_default = true;
                 self.alpha_held.clear();
+                self.alpha_tag = None;
                 std::borrow::Cow::Owned(vec![crate::light::DEFAULT_LIGHT_ALPHA as u8; n])
             }
         };

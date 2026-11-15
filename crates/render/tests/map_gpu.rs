@@ -934,6 +934,85 @@ fn gpu_light_alpha_matches_cpu() {
     }
 }
 
+/// design: render (#119): light-alpha values under the tag the renderer
+/// holds are neither compared nor uploaded; a new tag, a new view size or
+/// untagged values are taken as given, so every frame matches the CPU.
+#[test]
+fn render_perf_119_tagged_light_alpha_follows_its_tag() {
+    use glasnost_render::compose::Shade;
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    for item in &mut s.items {
+        item.paint = match item.paint {
+            Paint::Diamond(_) => Paint::LitDiamond(Shade::new(0, 3, 1000)),
+            Paint::Row(_) => Paint::Lit(Shade::new(0, 3, 1000)),
+            p => p,
+        };
+    }
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let filter = Filter::default();
+    let q = ComposeQuirks::default();
+    let values = |size: (u32, u32), step: usize| -> Vec<u8> {
+        (0..(size.0 * size.1) as usize)
+            .map(|i| ((i * step) % 256) as u8)
+            .collect()
+    };
+    let small = (128u32, 72u32);
+    let large = (96u32, 80u32);
+    let (a, b) = (values(small, 1), values(small, 5));
+    let c = values(large, 3);
+    // (values, tag, uploads of the light alpha expected, view size)
+    type Frame<'a> = (&'a [u8], Option<u64>, u64, (u32, u32));
+    let frames: [Frame; 7] = [
+        (&a, Some(1), 1, small),
+        (&a, Some(1), 0, small),
+        (&b, Some(2), 1, small),
+        (&a, None, 1, small),
+        (&a, Some(3), 0, small),
+        (&c, Some(3), 1, large),
+        (&c, Some(3), 0, large),
+    ];
+    for (k, &(alpha, tag, uploads, size)) in frames.iter().enumerate() {
+        let view = View {
+            origin: (-7, 13),
+            size,
+            reference: DEPTH_REFERENCE,
+        };
+        let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+        let _ = r.take_stats();
+        let mut encoder = device.create_command_encoder(&Default::default());
+        r.render_lit_tagged(
+            &device,
+            &queue,
+            &mut encoder,
+            &color,
+            &depth.create_view(&Default::default()),
+            &s,
+            &view,
+            &filter,
+            &q,
+            Some((alpha, tag)),
+        );
+        queue.submit([encoder.finish()]);
+        // Every render also writes its instances once.
+        let st = r.take_stats();
+        assert_eq!(st.uploads as u64, 1 + uploads, "frame {k}: uploads");
+        let cpu = s
+            .compose_lit(&view, &filter, &q, Some(alpha.to_vec()))
+            .to_rgba();
+        let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+        let differing = cpu
+            .chunks(4)
+            .zip(gpu.chunks(4))
+            .filter(|(x, y)| x[..3] != y[..3])
+            .count();
+        assert_eq!(differing, 0, "frame {k}");
+    }
+}
+
 /// spec: S-0616 claim 28 (a pixel particle: one opaque pixel of its own
 /// colour, skipped at light-alpha 0, scaled by a / 128 below 127; a flat
 /// reader with bias −50 − L(z), never writing depth)
