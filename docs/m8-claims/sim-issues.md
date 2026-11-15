@@ -786,7 +786,7 @@ Base main eb5d785, not rebased. Save format 153 and AI game format 129 (1c78a4a)
 | Issue | Finding | Status | Fix | Tests |
 |---|---|---|---|---|
 | #291 | An infantry-making animation marked a fixed spot and layer taken at its start, also when it moved (Q-3121) | fixed (998fba7) | S-0611 r11 claim 15: each update marks the standing position of the animation's point (`mutation::Stand`); with `quirks.infantry_animation_stale_marks` on an earlier mark is not freed and a removal other than a successful end attempt frees nothing; off, the earlier mark is freed in its own record. A bouncing conversion animation flies as an ordinary one | `claims_s0611_moving.rs` (`claim_15_bouncing_marks_stay_and_a_landing_makes_none`, `claim_15_bouncing_marks_freed_with_the_switch_off`, `claim_15_end_attempt_in_flight`, `claim_15_end_attempt_in_flight_switch_off`, `claim_15_attached_follows_its_owner`, `claim_15_owner_removed`, `claim_15_removed_by_another_rule`, `claim_15_high_free_misses_the_ground_mark`, `claim_15_save_load_mid_flight`) |
-| #305 | The congestion marks read the cell ahead and the 5 x 5 block in one layer (Q-3122 interim) | fixed (0f380f6) | S-0212 r107 claim 19: the cell ahead is read on its deck when it is a bridge cell and the blocked unit is on a deck or the levels differ by more than 3; an empty cell ahead considers the first unit of the block heading to it; part (ii) reads the ground record, or with `quirks.path_congestion_ground_record` off the layer read in the cell ahead. The 5 x 5 fallback and (ii)'s non-empty record (`Occ::empty`) also change ordinary ground play, and the switch does not cover them. They make duel-m6c's full run lose the charger orders and support beams (S-0518), and the own AI's land-cell test fail its coverage guard (11016 of 11016 found): 429f6ac passes and 0f380f6 fails | `claims_s0212_congestion_deck.rs` (`deck_blocker_cell_counts_by_the_ground_record`) |
+| #305 | The congestion marks read the cell ahead and the 5 x 5 block in one layer (Q-3122 interim) | fixed (0f380f6) | S-0212 r107 claim 19: the cell ahead is read on its deck when it is a bridge cell and the blocked unit is on a deck or the levels differ by more than 3; an empty cell ahead considers the first unit of the block heading to it; part (ii) reads the ground record, or with `quirks.path_congestion_ground_record` off the layer read in the cell ahead. The 5 x 5 fallback and (ii)'s non-empty record (`Occ::empty`) also change ordinary ground play, and the switch does not cover them. They make duel-m6c's full run on seed 2 lose the charger orders and support beams (S-0518), and the own AI's land-cell test fail its coverage guard (11016 of 11016 found): 429f6ac passes and 0f380f6 fails. At integration, `M6C_SEED` went to 3 (0e616ad) and the land-cell test took four units per house (aaa8328) | `claims_s0212_congestion_deck.rs` (`deck_blocker_cell_counts_by_the_ground_record`) |
 | #310 | A filling building of a type that is not a wall type took the entry of an insertion other than a place order (Q-3128 interim) | fixed (70503c4) | S-0406 r14 claim 11: it enters in its construction state exactly as the placed building, the ready mark clear at entry (`placement::put_with`) | `claims_s0406.rs` (`claim_11_non_wall_fill_enters_as_placed`, `claim_11_non_wall_fill_buildup_twice_off`, `claim_11_non_wall_fill_timings`) |
 | #366 | A map entry dropped for its cell, and a map wall building, left their slot objects, slaves and records | fixed (04d9173) | S-0611 claim 14 with S-0009 claim 38 and S-0112 claim 7: `objects::place_map_objects` calls `objects::discard_unplaced` | `claims_s0009.rs` (`claim_38_dropped_entry_takes_its_creation_set`), `claims_s0112.rs` (`claim_7_map_wall_building_leaves_no_creation_set`) |
 | #367 | The waypoint reveal reached a house with the whole map revealed | fixed (dba38b4); Q-3149 open | S-0011 claim 26 and S-0409 claim 17: `triggers::reveal` skips a player house whose whole-map-revealed mark is set. Whether it reaches one through an ally (S-0409 claim 2) is Q-3149 | `claims_s0409_reveal_action.rs` (`claim_17_reveal_action_skips_a_marked_house`, control `claim_17_reveal_action_reaches_an_unmarked_house`) |
@@ -805,11 +805,28 @@ Base main eb5d785, not rebased. Save format 153 and AI game format 129 (1c78a4a)
 | #380 | The protection's remaining time overflowed for a duration near the 32-bit limit | fixed (054d763) | S-0513 claims 25 and 29: `protect::start` and `tint_turn` compute duration - (t - start) | `claims_s0513_protect.rs` (`claim25_quirk_off_with_a_duration_at_the_integer_limit`, `claim29_envelope_with_a_duration_at_the_integer_limit`) |
 | #381 | Rules-fed sums and products overflowed in the dev profile | fixed (9a3d561) | S-0205 claim 1: wrapping arithmetic at the delayed-kill radius, the walker's frame and expiry, the kill value, the price sums and the flying search's far cells | `claims_s0205_rules_wrap.rs` (`delay_kill_radius_wraps_for_a_huge_spread`, `pad_term_sum_wraps`, `free_unit_sum_wraps`, `walker_frame_wraps_for_huge_running_frames`, `kill_value_wraps_for_a_huge_cost`, `flying_search_far_cell_wraps_for_a_huge_radius`) |
 
-The sim-gate fails on this batch. #305's ground rules (0f380f6) change duel-m6c's play: house 1 collapses and the game ends at tick 11757. The full run then no longer exercises the charger orders or the support beams (S-0518). A bisection gives the cause: 429f6ac passes and 0f380f6 fails.
+#305's ground rules (0f380f6) change duel-m6c's play. On the gate's seed 2, house 1 collapses and the game plays 11758 ticks. The full run then no longer exercises the charger orders or the support beams (S-0518). A bisection gives the cause: 429f6ac passes and 0f380f6 fails.
 
-The goldens could be regenerated only for the six scenarios before duel-m6c, because update mode stops at its exercise check (170b645). The duel-m6c, duel-m7a and duel-m7b goldens are not regenerated. Neither the scenario nor the AI was retuned.
+At first, update mode wrote only the six goldens before duel-m6c (170b645), because it stops at duel-m6c's exercise check. The same change makes the own AI's land-cell test fail its coverage guard (`found < compared`, 11016 of 11016), while all of its equality checks pass.
 
-The same change makes the own AI's land-cell test fail its coverage guard (`found < compared`, 11016 of 11016). All of that test's equality checks pass. Two test-only commits fix clippy in this batch's tests: cc123cc (#374, no thread) and 51a1e68 (#379).
+Two test-only commits fix clippy in this batch's tests: cc123cc (#374, no thread) and 51a1e68 (#379).
+
+At S20's integration, the main session decided the gate and the AI test as in S10:
+- `M6C_SEED` goes from 2 to 3 (0e616ad), the scenario seed changed because #305 changed the play. `try_seeds` was run over seeds 1 to 16, counting ticks played out of 12 000:
+
+  | Seed | Ticks played | Missing abilities |
+  |---|---|---|
+  | 1 | 9297 | radiation exits, charger orders, support beams |
+  | 2 | 11758 | charger orders, support beams |
+  | 3 | 12 000 | none (the first that passes) |
+  | 4, 6 and 8 to 14 | 12 000 | none |
+  | 5 | 7375 | support beams |
+  | 7 | 8193 | none, but the game ends early |
+  | 15 | 12 000 | charger orders |
+  | 16 | 8088 | support beams |
+
+- All nine goldens were written in update mode; duel-m6c, duel-m7a and duel-m7b were committed (7a390e6), and the other six were unchanged.
+- The land-cell test takes the first four units of each house instead of three (aaa8328). The old queries are all still asked, so the new set is a strict superset of them. The equality checks and the guard are unchanged. An earlier try, m6c setup seed 3 with three units, still found a cell in 11016 of 11016 queries, and was not kept.
 
 Lanes. Base is eb5d785. The after-lanes ran at 170b645 and 235c471; the commits after those change only two test files. The final checks ran at 51a1e68. Outputs are in `local-lane/sim-issues/s20/`; contents were compared by exit code only.
 
@@ -829,11 +846,21 @@ Final checks:
 | clippy, fmt, the wasm32 build of glasnost-app, `cargo xtask check` | pass |
 | `cargo xtask gate` | exit 1 at duel-m6c |
 
+After the integration changes (at aaa8328; outputs in `local-lane/sim-issues/s20/`):
+
+| Check | Result |
+|---|---|
+| Sim gate with ignored tests (`sim-gate-seed3.txt`) | exit 0, 17 of 17 |
+| AI suite with ignored tests (`ai-seed3.txt`) | exit 0, 362 of 362 |
+| `cargo xtask gate` (`xtask-gate-seed3.txt`) | exit 0 |
+
+The workspace run was not repeated, because nothing outside the gate, the AI test module and the docs changed. The quirk test stays the one known workspace failure on main.
+
 Seams left:
 - Q-3149 (#367).
 - #291: a bouncing conversion animation is given no infantry-making state; the mech locomotor maps to no layer rule; no path detaches an attached animation while it plays.
 - #305: the 5 x 5 search of `considered` has no test of its own.
-- #305: duel-m6c no longer exercises the charger orders or the support beams. The goldens for duel-m6c, duel-m7a and duel-m7b are not regenerated, and the sim-gate fails. The gate scenario has to be looked at again; this batch does not. For the same reason, `brain::land_cell_tests::the_land_cell_of_the_square_is_the_land_cell_of_the_map` (glasnost-ai) fails its guard `found < compared`. Its equality checks hold.
+- #305: seed 2 of duel-m6c no longer exercises the charger orders or the support beams. The gate now plays seed 3. Of seeds 1 to 16, seeds 1, 2, 5, 7, 15 and 16 fail the gate's check, by ending early or missing an ability.
 - #374's reworked test (cc123cc) has no timeout. If the fix regresses, it runs `i32::MAX` placements and hangs instead of failing.
 - `slaves::civilian_recipient` and `garrison::civilian_house` still range over removed houses.
 - S-0009 claim 29's References rule is not built (#368).
