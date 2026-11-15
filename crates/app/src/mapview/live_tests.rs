@@ -9127,3 +9127,91 @@ fn a_view_animation_draws_its_follow_up_types_art() {
     }
     assert!(seen.contains(&5), "TAILX's art after the switch: {seen:?}");
 }
+
+/// A lit building the game puts on the map lights the cells around it, and
+/// its light follows the events of S-0405 claim 9 (#152).
+/// spec: S-0104 claim 12 (building light sources; added, removed or changed relights the same
+/// tick), S-0405 claim 9 (the light goes out at a switch-off and when the building leaves the map;
+/// it comes on at a switch-on and at every ownership change of a needs-engineer type, even on a
+/// switched-off building)
+#[test]
+fn claim_9_a_building_light_follows_the_game() {
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    // Invented light values for the test's tower.
+    let rules = format!(
+        "{}[TOWER]\nLightIntensity=0.5\nLightVisibility=2048\n",
+        RULES.replace(
+            "[BuildingTypes]\n1=HUTX\n",
+            "[BuildingTypes]\n1=HUTX\n2=TOWER\n"
+        )
+    );
+    let (import, catalogue, _) = context_with(&rules);
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut ruleset = testkit::combat_ruleset();
+    ruleset.sim.buildings.get_mut("TOWER").unwrap().needs_engineer = Some(true);
+    let mut world = testkit::game_with(&ruleset, 24, 3);
+    let at = testkit::mid(24, 0, 0);
+    let tower = testkit::spawn(&mut world, SimKind::Building, "TOWER", 0, at, 0);
+    let rules = world.rules_arc();
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(3), Vec::new()),
+    );
+    let mut scene = built.scene;
+    // The map places no building; the view's first frame (drawn by
+    // `Live::new`) has the tower the game placed light its cell.
+    live.redraw(&inputs, &mut scene);
+    let lit = live.cell_light(at);
+    assert!(
+        lit.is_some_and(|l| l.source_sum > 0),
+        "the tower the game placed lights its cell: {lit:?}"
+    );
+    let mut set = |live: &mut Live, f: &dyn Fn(&mut glasnost_sim::world::Object)| {
+        f(live.world.obj_mut(tower).unwrap());
+        live.redraw(&inputs, &mut scene);
+        live.cell_light(at)
+    };
+    let dark = set(&mut live, &|o| o.econ.building.switched_off = true);
+    assert!(
+        dark.is_some_and(|l| l.source_sum == 0),
+        "out at the switch-off: {dark:?}"
+    );
+    assert_eq!(
+        set(&mut live, &|o| o.econ.building.switched_off = false),
+        lit,
+        "on at the switch-on"
+    );
+    assert_eq!(
+        set(&mut live, &|o| o.econ.building.switched_off = true),
+        dark
+    );
+    assert_eq!(
+        set(&mut live, &|o| {
+            o.owner = Some(HouseId(1));
+            o.econ.building.manned = true;
+        }),
+        lit,
+        "on at a needs-engineer type's ownership change, though switched off"
+    );
+    assert_eq!(
+        set(&mut live, &|o| o.on_map = false),
+        dark,
+        "out when the building leaves the map"
+    );
+}

@@ -1868,35 +1868,8 @@ impl<'a> Builder<'a> {
             if !self.owner_kept(&s.placed.owner) || self.map.cells.get(s.placed.cell).is_none() {
                 continue;
             }
-            let intensity =
-                derived(self.import, Kind::Buildings, i, b"LightIntensity").unwrap_or(0);
-            if intensity == 0 {
-                continue;
-            }
-            let (w, h) = self.foundation(i);
-            // spec: S-0104 claim 12 (an absent tint's default, quirks.building_light_tint_default_1000)
-            let absent = light::building_light_tint_default(&LightQuirks::default());
-            let tint =
-                |k: &[u8]| derived(self.import, Kind::Buildings, i, k).map_or(absent, |v| v as i32);
             let c = s.placed.cell;
-            // spec: S-0104 claim 12 (one light at the building's centre, counting at detail 2)
-            sources.push(LightSource::building(
-                (c.x, c.y),
-                (w, h),
-                rule_int(
-                    self.import,
-                    Kind::Buildings,
-                    i,
-                    b"LightVisibility",
-                    DEFAULT_LIGHT_RADIUS,
-                ),
-                intensity as i32,
-                [
-                    tint(b"LightRedTint"),
-                    tint(b"LightGreenTint"),
-                    tint(b"LightBlueTint"),
-                ],
-            ));
+            sources.extend(self.p.building_light(self.import, i, (c.x, c.y)));
         }
         self.p.sources = sources;
         // spec: S-0104 claim 1 (the map's normal set; current, base and target ambient start equal; tint in hundredths)
@@ -2779,6 +2752,20 @@ impl<'a> Builder<'a> {
 
     /// The foundation W × H of a building (S-0108 Import mapping).
     fn foundation(&self, idx: usize) -> (i32, i32) {
+        self.p.foundation(self.import, idx)
+    }
+
+    fn art_value(&self, kind: Kind, idx: usize, key: &[u8]) -> Option<&[u8]> {
+        let image = self.import.arts.get(&(kind, idx))?.image.clone();
+        let doc: &Document = &self.p.art;
+        doc.value(&image, key)
+    }
+}
+
+impl Painter {
+    /// The foundation W × H of building type `idx` of `import` (S-0108
+    /// Import mapping).
+    pub fn foundation(&self, import: &Import, idx: usize) -> (i32, i32) {
         const WORDS: [(&str, (i32, i32)); 22] = [
             ("1x1", (1, 1)),
             ("2x1", (2, 1)),
@@ -2804,7 +2791,7 @@ impl<'a> Builder<'a> {
             ("0x0", (0, 0)),
         ]; // spec: S-0108 Import mapping (foundation vocabulary)
         let read = |section: &[u8]| {
-            let v = self.p.art.value(section, b"Foundation")?;
+            let v = self.art.value(section, b"Foundation")?;
             // spec: S-0108 Import mapping (text cut to 31 bytes, compared ignoring case)
             let v = value::text(v, 31);
             Some(
@@ -2814,9 +2801,8 @@ impl<'a> Builder<'a> {
                     .map_or((1, 1), |(_, s)| *s),
             )
         };
-        let name = &self.import.outcome.registries[&Kind::Buildings][idx].name;
-        let image = self
-            .import
+        let name = &import.outcome.registries[&Kind::Buildings][idx].name;
+        let image = import
             .arts
             .get(&(Kind::Buildings, idx))
             .map_or(name.clone(), |a| a.image.clone());
@@ -2827,12 +2813,44 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn art_value(&self, kind: Kind, idx: usize, key: &[u8]) -> Option<&[u8]> {
-        let image = self.import.arts.get(&(kind, idx))?.image.clone();
-        let doc: &Document = &self.p.art;
-        doc.value(&image, key)
+    /// The light source of a building of type `idx` of `import` whose
+    /// top-left foundation cell is `cell` (S-0104 claim 12), `None` for a
+    /// type without light intensity.
+    pub fn building_light(
+        &self,
+        import: &Import,
+        idx: usize,
+        cell: (i32, i32),
+    ) -> Option<LightSource> {
+        let intensity = derived(import, Kind::Buildings, idx, b"LightIntensity").unwrap_or(0);
+        if intensity == 0 {
+            return None;
+        }
+        // spec: S-0104 claim 12 (an absent tint's default, quirks.building_light_tint_default_1000)
+        let absent = light::building_light_tint_default(&LightQuirks::default());
+        let tint = |k: &[u8]| derived(import, Kind::Buildings, idx, k).map_or(absent, |v| v as i32);
+        // spec: S-0104 claim 12 (one light at the building's centre, counting at detail 2)
+        Some(LightSource::building(
+            cell,
+            self.foundation(import, idx),
+            rule_int(
+                import,
+                Kind::Buildings,
+                idx,
+                b"LightVisibility",
+                DEFAULT_LIGHT_RADIUS,
+            ),
+            intensity as i32,
+            [
+                tint(b"LightRedTint"),
+                tint(b"LightGreenTint"),
+                tint(b"LightBlueTint"),
+            ],
+        ))
     }
+}
 
+impl<'a> Builder<'a> {
     /// The shared building companion depth image, read once into
     /// [`Scene::signed`] (S-0102 claims 31 and 33, F5). An unavailable
     /// image is warned about once, when it is first needed.
@@ -6981,6 +6999,11 @@ impl Painter {
         }
         self.field_sources = lights;
         true
+    }
+
+    /// The light of cell `c` as last computed, `None` outside the map.
+    pub fn cell_light(&self, c: CellXY) -> Option<light::CellLight> {
+        self.lights.get(c).copied()
     }
 
     /// The voxel buffer, for the next game of the program (S-0105 claim

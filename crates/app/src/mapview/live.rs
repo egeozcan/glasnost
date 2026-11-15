@@ -2294,6 +2294,12 @@ impl Live {
         self.protection_look(self.world.obj(id)?)
     }
 
+    /// The light of cell `c` as the view last computed it (tests).
+    #[cfg(test)]
+    pub(super) fn cell_light(&self, c: CellXY) -> Option<glasnost_render::light::CellLight> {
+        self.painter.cell_light(c)
+    }
+
     /// The shadowed cells the last redraw lit its mobiles by (tests).
     #[cfg(test)]
     pub(super) fn shadowed_cells(&self) -> BTreeSet<glasnost_map::CellXY> {
