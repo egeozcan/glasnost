@@ -414,8 +414,11 @@ impl ApplicationHandler<GameEvent> for GameApp {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: GameEvent) {
         match event {
             GameEvent::Graphics(result) => match *result {
-                Ok(gfx) => {
+                Ok(mut gfx) => {
                     log::info!("game rendering with {}", gfx.backend);
+                    // #150: a resize that came while the graphics were being
+                    // made found none to resize; the window's size now holds.
+                    gfx.follow_window();
                     // The battlefield is drawn on the GPU from here on.
                     self.client.cpu_map = false;
                     // design: render (#100): a new device (the first, or a rebuilt one) gets every upload again
@@ -1266,6 +1269,21 @@ impl Gfx {
         self.refit |= (self.config.width, self.config.height) != before;
     }
 
+    /// Configures the surface at the window's size now if that differs
+    /// from its own (#150: a resize while the graphics were being made).
+    fn follow_window(&mut self) {
+        let max = self.device.limits().max_texture_dimension_2d;
+        let inner = self.window.inner_size();
+        let size = reconfigured_size(
+            (self.config.width, self.config.height),
+            (inner.width, inner.height),
+            max,
+        );
+        if size != (self.config.width, self.config.height) {
+            self.resize(size.0, size.1);
+        }
+    }
+
     /// Draws the client's frame; `timing` numbers a benchmark frame, whose
     /// times come back, with what came of the try (#99).
     fn render(
@@ -1500,10 +1518,12 @@ enum SurfaceStep {
 }
 
 /// The frame's step for surface state `s`, and whether the surface is
-/// configured again after it (#150).
+/// configured again after it (#150): a suboptimal surface still draws, and
+/// is configured again once its frame is presented.
 fn surface_step(s: SurfaceState) -> (SurfaceStep, bool) {
     match s {
-        SurfaceState::Success | SurfaceState::Suboptimal => (SurfaceStep::Draw, false),
+        SurfaceState::Success => (SurfaceStep::Draw, false),
+        SurfaceState::Suboptimal => (SurfaceStep::Draw, true),
         SurfaceState::Timeout => (SurfaceStep::Again, false),
         SurfaceState::Occluded => (SurfaceStep::Hidden, false),
         SurfaceState::Outdated => (SurfaceStep::Again, true),
@@ -1519,37 +1539,49 @@ fn surface_size(inner: (u32, u32), max: u32) -> (u32, u32) {
 }
 
 /// The size a surface configured at `configured` is configured again at,
-/// for a window of `inner` on a device of `max` (#150).
-fn reconfigured_size(configured: (u32, u32), _inner: (u32, u32), _max: u32) -> (u32, u32) {
-    configured
+/// for a window of `inner` on a device of `max` (#150): the window's size
+/// now, so that a resize the window had while no surface existed (or
+/// before the surface noticed) is not lost.
+fn reconfigured_size(_configured: (u32, u32), inner: (u32, u32), max: u32) -> (u32, u32) {
+    surface_size(inner, max)
 }
 
 /// A host position `p` in the window's physical pixels, as a position on
-/// a surface of `surface` pixels for a window of `window` (#150).
-fn surface_point(p: (f64, f64), _window: (u32, u32), _surface: (u32, u32)) -> (f64, f64) {
-    p
+/// a surface of `surface` pixels for a window of `window` (#150): scaled
+/// on each axis where the device limit made the surface smaller than the
+/// window, unchanged where they agree.
+fn surface_point(p: (f64, f64), window: (u32, u32), surface: (u32, u32)) -> (f64, f64) {
+    let axis = |v: f64, window: u32, surface: u32| {
+        if window == 0 || window == surface {
+            v
+        } else {
+            v * f64::from(surface) / f64::from(window)
+        }
+    };
+    (axis(p.0, window.0, surface.0), axis(p.1, window.1, surface.1))
 }
 
 /// Whether a frame that came to `drawn` with `presented` frames presented
-/// so far publishes `Status::Presented` (#150).
-fn publishes_presented(_drawn: Drawn, presented: u64) -> bool {
-    presented == 1
+/// so far publishes `Status::Presented` (#150): the frame that presented
+/// the first, not the frames after it that drew nothing.
+fn publishes_presented(drawn: Drawn, presented: u64) -> bool {
+    drawn == Drawn::Yes && presented == 1
 }
 
 /// The surface's format and the format the frame is drawn in, from the
 /// surface's `formats` and its default `default` (#150): the batch blends
 /// in gamma space, as the CPU reference does, so a non-sRGB target keeps
-/// its colours exact.
+/// its colours exact. A surface with only sRGB formats keeps its default
+/// and is drawn through a view of its non-sRGB form, so the bytes are not
+/// encoded twice.
 fn surface_formats(
     formats: &[wgpu::TextureFormat],
     default: wgpu::TextureFormat,
 ) -> (wgpu::TextureFormat, wgpu::TextureFormat) {
-    let format = formats
-        .iter()
-        .copied()
-        .find(|f| !f.is_srgb())
-        .unwrap_or(default);
-    (format, format)
+    match formats.iter().copied().find(|f| !f.is_srgb()) {
+        Some(linear) => (linear, linear),
+        None => (default, default.remove_srgb_suffix()),
+    }
 }
 
 #[cfg(test)]
