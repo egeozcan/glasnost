@@ -40,6 +40,15 @@ fn the_crate_rules_keys() {
     assert_eq!(e.wood_crate_img.as_deref(), Some("Wood"));
     assert_eq!(e.water_crate_img.as_deref(), Some("Sea"));
     assert_eq!(e.flame_damage.as_deref(), Some("Burn"));
+    assert_eq!(e.crate_img, None);
+}
+
+// spec: S-0520 Import mapping (CrateImg names the campaign crate overlay; absent: none)
+#[test]
+fn the_campaign_crate_overlay_key() {
+    let text = "[CrateRules]\nCrateImg=Camp\n[OverlayTypes]\n1=Camp\n[Camp]\nCrate=yes\n";
+    let e = sim(text).general.economy;
+    assert_eq!(e.crate_img.as_deref(), Some("Camp"));
 }
 
 // spec: S-0520 Import mapping (the power-up list: weight, animation, water flag, argument; a key absent while the section exists: weight 0 and no animation; a short list keeps the water flag and argument)

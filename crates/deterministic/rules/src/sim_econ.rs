@@ -1205,6 +1205,12 @@ pub struct EconGeneral {
     /// `[CrateRules] WaterCrateImg`, an overlay type key (S-0520 claim 3).
     #[serde(default)]
     pub water_crate_img: Option<String>,
+    /// `[CrateRules] CrateImg`, an overlay type key: the campaign crate
+    /// overlay, a named crate overlay (S-0520 Terms and Import mapping);
+    /// absent: none.
+    // spec: S-0520 Import mapping (CrateImg; absent: no overlay is the campaign crate overlay)
+    #[serde(default)]
+    pub crate_img: Option<String>,
     /// `[CombatDamage] FlameDamage`, a warhead key (S-0520 claim 17).
     #[serde(default)]
     pub flame_damage: Option<String>,

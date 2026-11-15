@@ -196,14 +196,17 @@ fn berserk_member_gets_no_order() {
     assert_eq!(key(&w, &[a, b]), orders_for(&[b]));
 }
 
-// spec: S-0213 the deploy rule with S-0214 Terms (deploy check: a disabled vehicle fails it; S-0405 claim 20) and deploy readiness (a vehicle needs a deploy kind; an infantry unit with an undeploy delay has none while deploying, deployed or undeploying)
+// spec: S-0213 the deploy rule with S-0214 Terms (deploy check: a disabled vehicle fails it; a vehicle deactivated by the loss of its control centre, S-0405 claim 20, is not disabled and passes it, but is neither movable nor able to fire, so the deploy rule gives it no order) and deploy readiness (a vehicle needs a deploy kind; an infantry unit with an undeploy delay has none while deploying, deployed or undeploying)
 #[test]
 fn deploy_check_and_readiness() {
     let mut w = world();
     let ok = put(&mut w, "TANK", Kind::Vehicle, 0, 0, 0);
     let off = put(&mut w, "TANK", Kind::Vehicle, 0, 4, 0);
     w.obj_mut(off).unwrap().econ.building.unit_disabled = true;
-    assert!(!targeting::deploy_check(&w, off));
+    assert!(
+        targeting::deploy_check(&w, off),
+        "deactivated is not disabled"
+    );
     assert!(targeting::deploy_check(&w, ok));
     assert_eq!(key(&w, &[ok, off]), orders_for(&[ok]));
     // A plain vehicle with no way to deploy has no deploy readiness.

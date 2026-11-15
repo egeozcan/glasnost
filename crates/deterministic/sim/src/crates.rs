@@ -9,7 +9,7 @@
 //! (a map-placed one) never expires. Sounds and announcements are local-player
 //! feedback and not state (claim 26).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -83,6 +83,14 @@ pub struct CrateWorld {
     pub places: BTreeMap<u16, Place>,
     /// The scenario's any-crate-picked-up mark (claim 7, event 50).
     pub any_picked: bool,
+    /// The place each crate that a placement put on a cell belongs to, by
+    /// that cell (claim 29, `quirks.crate_place_by_cell` off). An entry
+    /// ends when the cell's overlay is placed or removed.
+    pub owners: BTreeMap<CellXY, u16>,
+    /// The cells holding a map's own crate (claim 11, kept with
+    /// `quirks.skirmish_drops_map_crates` off). An entry ends when the
+    /// cell's overlay is placed or removed.
+    pub map_crates: BTreeSet<CellXY>,
 }
 
 /// The crate rules of a ruleset (S-0520 Import mapping).
@@ -106,6 +114,8 @@ pub struct CrateRules {
     pub wood: Option<u8>,
     /// The water-crate overlay.
     pub water_overlay: Option<u8>,
+    /// The campaign crate overlay (S-0520 Terms, Import mapping `CrateImg`).
+    pub campaign: Option<u8>,
     /// The flame warhead.
     pub flame: Option<WarheadId>,
     /// The gas warhead (the one named `GAS`; the table always holds one).
@@ -192,6 +202,8 @@ impl CrateRules {
             unit_type: g.unit_crate_type.as_ref().and_then(vehicle),
             wood: overlay(&g.wood_crate_img),
             water_overlay: overlay(&g.water_crate_img),
+            // spec: S-0520 Import mapping (CrateImg names the campaign crate overlay; absent: none)
+            campaign: overlay(&g.crate_img),
             flame: warhead(&g.flame_damage),
             // spec: S-0520 Edge cases (the gas warhead is the one registered under the fixed name; the table adds a default one when none exists)
             gas: combat
@@ -267,6 +279,27 @@ pub fn is_crate(w: &World, c: CellXY) -> bool {
                 .get(usize::from(x.overlay))
                 .is_some_and(|o| o.crate_)
     })
+}
+
+/// Whether overlay `o` is a named crate overlay (S-0520 Terms): the
+/// wooden-crate, water-crate or campaign crate overlay that the rules name.
+pub fn named(w: &World, o: u8) -> bool {
+    let r = &w.rules().crates;
+    // spec: S-0520 Terms and Import mapping (the named crate overlays: WoodCrateImg, WaterCrateImg and CrateImg; a name that is absent names none)
+    o != NO_OVERLAY && [r.wood, r.water_overlay, r.campaign].contains(&Some(o))
+}
+
+/// The overlay of cell `c` is placed or removed: the crate on it, if any,
+/// no longer belongs to a place and is no map's own crate.
+pub(crate) fn overlay_changed(w: &mut World, c: CellXY) {
+    w.crates.owners.remove(&c);
+    w.crates.map_crates.remove(&c);
+}
+
+/// A map's own crate is put on `c` (S-0009 claim 12): it holds no place
+/// (S-0520 claim 11).
+pub(crate) fn map_crate_placed(w: &mut World, c: CellXY) {
+    w.crates.map_crates.insert(c);
 }
 
 /// The lowest free crate place (claim 1).
@@ -362,6 +395,8 @@ fn put(w: &mut World, c: CellXY, contents: u8, trigger: bool) -> bool {
             trigger,
         },
     );
+    // spec: S-0520 claim 29 (with quirks.crate_place_by_cell off each place belongs to the crate it placed)
+    w.crates.owners.insert(c, place);
     true
 }
 
@@ -457,10 +492,33 @@ pub fn place_at_start(w: &mut World, n: i32) {
     }
 }
 
-/// Removes the crate of a cell with its place.
-fn remove_crate(w: &mut World, c: CellXY) {
-    w.crates.places.retain(|_, p| p.cell != c);
-    crate::crush::remove_overlay(w, c);
+/// A continuing pickup of the crate on `c` frees a place and removes the
+/// crate (claims 11 and 29).
+fn free_and_remove(w: &mut World, c: CellXY) {
+    let map_crate = w.crates.map_crates.contains(&c);
+    let freed = if w.rules().quirks.crate_place_by_cell {
+        // spec: S-0520 claim 11 (revision 12: the occupied place with the lowest priority number among those whose cell is the crate's cell, if there is one; a map's own crate frees it too, claim 11's design rule)
+        w.crates
+            .places
+            .iter()
+            .find(|(_, p)| p.cell == c)
+            .map(|(&k, _)| k)
+    } else {
+        // spec: S-0520 claim 29 and Edge cases (quirks.crate_place_by_cell off: the place the collected crate belongs to; a map's own crate, or an overlay of another type, belongs to none)
+        w.crates
+            .owners
+            .get(&c)
+            .copied()
+            .filter(|k| w.crates.places.contains_key(k))
+    };
+    if let Some(k) = freed {
+        w.crates.places.remove(&k);
+    }
+    let o = w.cells.cell(c).map_or(NO_OVERLAY, |x| x.overlay);
+    // spec: S-0520 claim 11 (revision 12: freeing the place removes the crate when its overlay is a named crate overlay; a crate of another overlay type stays, Edge cases, unsafe data; a map's own crate is removed whatever its overlay type). Q-3152 (interim: a named crate overlay is removed by its pickup whether or not the pickup freed a place, as before revision 12)
+    if map_crate || named(w, o) {
+        crate::crush::remove_overlay(w, c);
+    }
 }
 
 /// The crate-update part of the tick (claim 4, S-0203 claim 1 row 16):
@@ -482,11 +540,18 @@ pub fn update(w: &mut World) {
         .map(|(&k, &p)| (k, p))
         .filter(|(_, p)| on || (p.trigger && !keep_trigger))
         .collect();
+    let by_cell = w.rules().quirks.crate_place_by_cell;
     for (k, p) in due {
-        // spec: S-0520 claim 4 (each expiry frees its place and its crate; the replacement sees it free)
+        // spec: S-0520 claim 4 (each expiry frees its place; the replacement sees it free)
         w.crates.places.remove(&k);
-        // spec: S-0520 Terms (a crate is a cell holding a crate overlay) and claim 4 (an expiry removes one crate: an overlay that is not a crate is left alone); Q-3118 (interim: a place whose crate another rule removed stays occupied until its lifetime ends and still makes its replacement placement) (#284)
-        if is_crate(w, p.cell) {
+        // spec: S-0520 claim 29 (quirks.crate_place_by_cell off: the place's own crate is the one it placed, while that crate is on the cell)
+        let own = w.crates.owners.get(&p.cell) == Some(&k);
+        if own {
+            w.crates.owners.remove(&p.cell);
+        }
+        // spec: S-0520 claims 4 and 29 (revision 12, Q-3118: the expiry removes the cell's overlay only when it is a named crate overlay, any other overlay staying with its data value; with quirks.crate_place_by_cell on whatever named crate overlay is there, a newer crate included; off only the place's own crate) (#284)
+        let o = w.cells.cell(p.cell).map_or(NO_OVERLAY, |x| x.overlay);
+        if named(w, o) && (by_cell || own) {
             crate::crush::remove_overlay(w, p.cell);
         }
         if on {
@@ -533,8 +598,8 @@ pub fn pickup(w: &mut World, collector: ObjectId, cell: CellXY) -> bool {
     let contents = w.cells.cell(cell).map_or(RANDOM, |c| c.overlay_data);
     let (mut p, forced) = choose(w, contents, collector, house, cell);
     p = convert(w, p, collector, house, cell);
-    // spec: S-0520 claim 11 (the crate is removed and its place freed; with crates on one random replacement is placed before any effect draw)
-    remove_crate(w, cell);
+    free_and_remove(w, cell);
+    // spec: S-0520 claim 11 (with crates on one random replacement is placed before any effect draw)
     if crate::econ::setup::crates(w) {
         place_random(w);
     }

@@ -736,6 +736,13 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         "S-0520",
     ),
     (
+        "crate_img",
+        CRATE_RULES,
+        "CrateImg",
+        Ref(Kind::Overlays),
+        "S-0520",
+    ),
+    (
         "flame_damage",
         COMBAT_DAMAGE,
         "FlameDamage",

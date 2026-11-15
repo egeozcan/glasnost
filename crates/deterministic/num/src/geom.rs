@@ -365,23 +365,58 @@ pub fn direction_real(x: F64, y: F64, mode: Rounding) -> Facing {
 
 /// [`direction_real`] with `quirks.table_direction` at `table`: off, the
 /// exact direction of S-0204 Edge cases for X and Y narrowed to single
-/// precision by `mode` (S-0306 Formulas). A zero displacement, both
-/// arguments zero of either sign after the narrowing, is 16384 off (S-0306
-/// Formulas, revision 90). An argument that is not finite in single
-/// precision keeps the table path: no spec gives an off value for it.
+/// precision by `mode` (S-0306 Formulas), with the Off form's rules for
+/// arguments that are not finite or both zero (S-0204 Edge cases, revision
+/// 14): not a number counts as zero; if an argument is then infinite, each
+/// infinite one counts as ±1 by its sign and each finite one as 0; two
+/// zero arguments, of either sign, give 16384.
 // spec: S-0204 Edge cases (quirks.table_direction off: the exact angle), S-0306 Formulas (both arguments narrowed to single precision)
 pub fn direction_real_b(x: F64, y: F64, table: bool, mode: Rounding) -> Facing {
-    if !table
-        && let (Some((nx, mx, kx)), Some((ny, my, ky))) =
-            (single_parts(x.to_f32(mode)), single_parts(y.to_f32(mode)))
-    {
-        if mx == 0 && my == 0 {
-            // spec: S-0306 Formulas (revision 90: a zero displacement, both arguments zero of either sign after the narrowing, is 16384 with quirks.table_direction off)
-            return 16384;
-        }
-        return angle_of_parts(nx && mx != 0, (mx, kx), ny && my != 0, (my, ky));
+    if table {
+        return direction_real(x, y, mode);
     }
-    direction_real(x, y, mode)
+    let (px, py) = (off_part(x.to_f32(mode)), off_part(y.to_f32(mode)));
+    // spec: S-0204 Edge cases (revision 14, Q-3103: an argument that is not a number counts as zero)
+    let zero = (false, 0, 0);
+    let finite = |p: OffPart| match p {
+        OffPart::Finite(n, m, k) => (n, m, k),
+        OffPart::Infinite(_) | OffPart::NotANumber => zero,
+    };
+    let any_infinite = matches!(px, OffPart::Infinite(_)) || matches!(py, OffPart::Infinite(_));
+    let unit = |p: OffPart| match p {
+        // spec: S-0204 Edge cases (revision 14: if an argument is then infinite, each infinite argument counts as +1 or −1 by its sign and each finite one as 0)
+        OffPart::Infinite(n) => (n, 1, 0),
+        OffPart::Finite(..) | OffPart::NotANumber => zero,
+    };
+    let ((nx, mx, kx), (ny, my, ky)) = if any_infinite {
+        (unit(px), unit(py))
+    } else {
+        (finite(px), finite(py))
+    };
+    if mx == 0 && my == 0 {
+        // spec: S-0204 Edge cases (revision 14: if both arguments are then zero, of either sign, the direction is 16384, map east on the exact scale) and S-0306 Formulas (revision 90)
+        return 16384;
+    }
+    angle_of_parts(nx && mx != 0, (mx, kx), ny && my != 0, (my, ky))
+}
+
+/// A single-precision argument of the Off form of the direction (S-0204
+/// Edge cases): finite as (negative, M, k) with value ±M × 2^k, infinite
+/// with its sign, or not a number.
+#[derive(Clone, Copy)]
+enum OffPart {
+    Finite(bool, u64, i32),
+    Infinite(bool),
+    NotANumber,
+}
+
+// nocite: binary32 field layout (an all-ones exponent field: an infinity with a zero fraction, not a number otherwise)
+fn off_part(s: F32) -> OffPart {
+    match single_parts(s) {
+        Some((n, m, k)) => OffPart::Finite(n, m, k),
+        None if s.0 & 0x7f_ffff == 0 => OffPart::Infinite(s.0 >> 31 == 1),
+        None => OffPart::NotANumber,
+    }
 }
 
 /// A finite single as (negative, M, k) with value ±M × 2^k; `None` for an
@@ -411,7 +446,8 @@ pub fn direction_constants() -> (F64, F64) {
 // spec: S-0204 Edge cases (exact direction with `quirks.table_direction` off)
 fn exact_direction(x: i64, y: i64) -> Facing {
     if x == 0 && y == 0 {
-        return 0;
+        // spec: S-0204 Edge cases (revision 14, Q-3103: two zero arguments give 16384, map east on the exact scale, wherever a rule takes a direction by F3 with quirks.table_direction off)
+        return 16384;
     }
     angle_of_parts(x < 0, (x.unsigned_abs(), 0), y < 0, (y.unsigned_abs(), 0))
 }

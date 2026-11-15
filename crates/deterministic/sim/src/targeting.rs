@@ -8,21 +8,22 @@
 //! keeps it and passes it in, in selection order. Call these functions
 //! between ticks (they read the regions that every tick leaves current).
 //!
-//! The tables are implemented row by row. Rows whose conditions need state
-//! our engine does not have yet evaluate as that state makes them: nothing is
-//! berserk, melee-linked, being erased, phasing in, disabled,
-//! disguised, bomb-carrying or a loaner; there is no shroud or fog of war
-//! (route mode's clicks are `crate::routes::click`); no docking answer is given (no contact exchange exists yet,
-//! so the answer is neither); weapon ranges, damage and warhead flags are
-//! weapon choice, ranges, healing weapons, veterancy abilities and the
-//! firing rules' legality answer come from the combat module (M4), with its
-//! own seams (garrison occupants, upgrades); the weapon cursor flags of rows
-//! I17 and I18 are not imported; the vehicle in-place rows V2, V3, VC4 and VC5
-//! are not built yet; the factory kinds of rows B9 to B12 are not applied yet; a carrier carries nothing. The rows that read these states are in place
-//! behind small predicates, so that the states plug in when their topics
-//! arrive. The nearby-cell search of claim 11 always uses the actor's reach
-//! region and own zone (S-0212 table T5's rows for a free mover's no-move
-//! and for zone *fly* on an object are not in `path::nearby` yet).
+//! The tables are implemented row by row. The states the rows read come
+//! from the modules that own them: berserk (`crate::psychic`), being erased
+//! (`crate::superweapons`), phasing in (`crate::teleport`), deactivated
+//! (`crate::econ::power`), disguise (`crate::cloak`), bombs (`crate::bomb`),
+//! docking answers (`crate::transport`, `crate::structures::absorb`),
+//! garrisons (`crate::structures::garrison`); weapon choice, ranges, healing
+//! weapons, veterancy abilities and the firing rules' legality answer come
+//! from the combat module. Route mode's clicks are `crate::routes::click`.
+//! The seams that remain answer as the state is never present: nothing is
+//! melee-linked, paralysed, playing a vehicle death sequence or a loaner;
+//! there is no shroud or fog of war; a carrier carries nothing. Rows not
+//! built yet: the weapon cursor flags of rows I17 and I18 are not imported;
+//! the vehicle in-place rows V2, V3, VC4 and VC5 are not built; the factory
+//! kinds of rows B9 to B12 are not applied. The rows that read seams are in
+//! place behind small predicates, so that the states plug in when their
+//! topics arrive.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -238,7 +239,8 @@ fn other_house(w: &World, actor: ObjectId, target: ObjectId) -> bool {
 /// a unit or building in play on the map whose type's selection flag
 /// permits it, but not a building whose type is invisible in the game.
 /// Zero health does not exclude a building still in play (awaiting
-/// removal, S-0214 claim 16); being erased does (no erasing weapon yet).
+/// removal, S-0214 claim 16); being erased does (the superweapon warp and
+/// the temporal beam, `being_erased`).
 /// Whether a unit below the surface can be selected is an open question of
 /// S-0214; such units count as selectable. The viewer-dependent cloak and
 /// scenery exclusions are [`selectable_by`].
@@ -285,9 +287,11 @@ pub fn clickable_by(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
 }
 
 /// A vehicle-like building: it undeploys into a vehicle and has a 1 × 1
-/// foundation (S-0214 Terms).
+/// foundation (S-0214 Terms); `econ::sell::vehicle_like`, which reads the
+/// undeploy name through S-0415's Import mapping (#417).
 pub(crate) fn vehicle_like(w: &World, id: ObjectId) -> bool {
-    building(w, id).is_some_and(|b| b.raw.undeploys_into.is_some() && b.foundation == (1, 1))
+    // spec: S-0214 Terms (vehicle-like building) and S-0415 Import mapping (UndeploysInto: a name that matches no vehicle type makes no packing building)
+    crate::econ::sell::vehicle_like(w, id)
 }
 
 /// Whether an ordinary band box can add the object to house `house`'s
@@ -307,8 +311,8 @@ pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: Objec
     };
     // spec: S-0214 claim 19 (a unit tethered to a building is excluded while its cell holds that building)
     let tether = crate::econ::power::tethered_in_own_cell(w, id);
-    // spec: S-0214 claim 19 and S-0405 claim 20 (an ordinary band box does not take a disabled vehicle)
-    let deactivated = disabled(w, id);
+    // spec: S-0214 claim 19 and S-0405 claim 20 (an ordinary band box does not take a deactivated vehicle)
+    let deactivated = deactivated(w, id);
     // spec: S-0214 claim 19 and S-0606 claim 11 (a bunkered vehicle and an occupied bunker are excluded from the ordinary band box)
     let bunker = crate::structures::bunker::bunkered(w, id)
         || (crate::structures::bunker::is_bunker(w, id)
@@ -341,11 +345,8 @@ pub fn tap_types(w: &World, selection: &[ObjectId]) -> Vec<(Kind, u32)> {
         let Some(o) = w.obj(id) else { continue };
         // spec: S-0214 claim 32 (the tap's types: the types of the objects then selected)
         push((o.kind, o.type_index));
-        // spec: S-0214 claim 32 and Import mapping (DeploysInto: together with the building type each of them deploys into)
-        if let Some(b) = unit(w, id)
-            .and_then(|u| u.raw.deploys_into.as_deref())
-            .and_then(|n| w.rules().index_of(Kind::Building, n))
-        {
+        // spec: S-0214 claim 32 and Import mapping (DeploysInto, read for vehicle types: together with the building type each of them deploys into) (#418)
+        if let Some(b) = crate::econ::deploy::deploys_into(w, o.kind, o.type_index) {
             push((Kind::Building, b));
         }
     }
@@ -512,20 +513,25 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
     // spec: S-0214 Terms (revision 62: falling is part of neither movable nor able to fire; a falling unit takes orders and carries them out once landed, S-0522 claim 17)
     match kind(w, id) {
         // spec: S-0214 Terms (movable mobile object: not disabled, not a spawned aircraft type, not a slave unit, …)
+        // spec: S-0214 Terms (revision 83: a movable mobile object is not deactivated, S-0405 claims 13 and 20)
         // spec: S-0214 Terms and S-0614 claim 8 (not held)
         // spec: S-0214 Terms and S-0606 claim 11 (not held inside a tank bunker)
         // spec: S-0214 Terms (movable: not phasing in) and claim 6 (d) (r78: a phasing-in actor is not movable, so part (d) asks that the target be in range of the weapon it would use)
         // spec: S-0214 Terms (movable mobile object: it is not being erased, and it is not a slave unit, S-0402 claim 14's slave with a master) (#209)
         Some(Kind::Infantry | Kind::Vehicle) => {
             !disabled(w, id)
+                && !deactivated(w, id)
                 && !being_erased(w, id)
                 && !crate::econ::slaves::is_slave(w, id)
                 && !phasing_in(w, id)
                 && !crate::parasite::held(w, id)
                 && !crate::structures::bunker::bunkered(w, id)
         }
+        // spec: S-0214 Terms (revision 83: a movable mobile object, an aircraft too, is neither disabled nor deactivated)
         Some(Kind::Aircraft) => {
-            !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false))
+            !disabled(w, id)
+                && !deactivated(w, id)
+                && !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false))
                 && !being_erased(w, id)
                 && !crate::econ::slaves::is_slave(w, id)
                 && !phasing_in(w, id)
@@ -535,15 +541,21 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
         Some(Kind::Building) => {
             let b = building(w, id);
             let yard = b.is_some_and(|b| b.raw.construction_yard.unwrap_or(false));
-            rally_capable(w, id) || (b.is_some_and(|b| b.raw.undeploys_into.is_some()) && !yard)
+            // spec: S-0214 Terms (a building is movable when it is not paralysed and either …)
+            // spec: S-0214 Terms (its type undeploys into a vehicle) and S-0415 Import mapping (a name that matches no vehicle type does not) (#417)
+            let packs = w
+                .obj(id)
+                .is_some_and(|o| crate::econ::deploy::undeploys_into(w, o.type_index).is_some());
+            !disabled(w, id) && (rally_capable(w, id) || (packs && !yard))
         }
         _ => false,
     }
 }
 
 /// Armed (S-0214 Terms): a weapon in the weapon slot it currently uses
-/// (S-0308's choice with no target). Garrison occupants that may fire from
-/// inside are a seam (no garrisons yet).
+/// (S-0308's choice with no target). For a garrisoned building whose
+/// occupants may fire from inside, the slot lookup gives the occupant's
+/// weapon (S-0308 claim 13, `combat::weapon`).
 pub fn armed(w: &World, id: ObjectId) -> bool {
     match kind(w, id) {
         Some(Kind::Terrain) | None => false,
@@ -596,12 +608,13 @@ pub fn first_may_move_into_shroud(w: &World, selection: &[ObjectId]) -> bool {
         .is_some_and(|u| u.move_to_shroud)
 }
 
-/// Able to fire (S-0214 Terms): own, armed, not disabled. A falling
-/// unit is able to fire: it takes the order and fires once landed (S-0522
-/// claim 17; S-0511 claim 10 and S-0203 keep it from firing in the air).
+/// Able to fire (S-0214 Terms): own, armed, not disabled and not
+/// deactivated. A falling unit is able to fire: it takes the order and
+/// fires once landed (S-0522 claim 17; S-0511 claim 10 and S-0203 keep it
+/// from firing in the air).
 pub fn able_to_fire(w: &World, house: HouseId, id: ObjectId) -> bool {
-    // spec: S-0214 Terms (revision 62: able to fire is armed, not disabled and not deactivated; falling is no part of it)
-    own(w, house, id) && armed(w, id) && !disabled(w, id)
+    // spec: S-0214 Terms (revisions 62 and 83: able to fire is armed, not disabled and not deactivated, S-0405 claims 13 and 20; falling is no part of it)
+    own(w, house, id) && armed(w, id) && !disabled(w, id) && !deactivated(w, id)
 }
 
 /// A healing actor (S-0214 Terms): an armed object whose default weapon
@@ -632,9 +645,9 @@ fn infiltrator_entry(w: &World, actor: ObjectId, t: ObjectId) -> bool {
         || (charges && b.raw.can_c4.unwrap_or(true))
 }
 
-// The states below have no place in our engine before combat (M4) and the
-// special-abilities topics: these seams keep the rows that read them in
-// place, and evaluate as the state is never present.
+// The states below are read from the modules that own them. `melee_held`
+// alone is still a seam (no melee link yet) and answers as the state is
+// never present; `disabled` further down reads the pulse seam.
 
 /// Berserk (S-0213 Terms; S-0610 claims 4 and 5).
 fn berserk(w: &World, id: ObjectId) -> bool {
@@ -739,10 +752,23 @@ fn planted_bomb(w: &World, house: HouseId, id: ObjectId) -> bool {
     crate::bomb::visible(w, house, id)
 }
 
-/// Disabled (S-0214 Terms): paralysed, or a vehicle playing its death
-/// sequence; neither exists before M4.
+/// Disabled (S-0214 Terms): paralysed (the pulse disable of S-0405,
+/// `econ::power::under_pulse`, still a seam that answers "no"), or a
+/// vehicle playing its death sequence (a seam: no such sequence yet). A
+/// vehicle deactivated by the loss of its control centre is not disabled
+/// ([`deactivated`]).
 fn disabled(w: &World, id: ObjectId) -> bool {
-    // spec: S-0405 claim 20 (a vehicle disabled by the loss of its control centre is neither movable nor able to fire in S-0214's sense)
+    // spec: S-0214 Terms (revision 83, disabled: paralysed, or, for a vehicle, playing its death sequence) and glossary (*hold*: paralysed is the electromagnetic-pulse disable)
+    crate::econ::power::under_pulse(w, id)
+}
+
+/// Deactivated (S-0214 Terms, S-0405 claims 13 and 20): a vehicle
+/// disabled by the loss of its control centre. A separate term from
+/// [`disabled`]: it takes away *movable* and *able to fire* (and the
+/// ordinary band box, claim 19), not the deploy check, deploy readiness or
+/// table R's rank.
+fn deactivated(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 Terms (revision 83: movable and able to fire ask not disabled and not deactivated, S-0405 claims 13 and 20)
     crate::econ::power::unit_disabled(w, id)
 }
 
@@ -947,6 +973,20 @@ pub fn deploy_readiness(w: &World, id: ObjectId) -> bool {
         // spec: S-0214 Terms (a building never has deploy readiness)
         Kind::Building | Kind::Terrain => false,
     }
+}
+
+/// Whether an infantry unit's deploy weapon fires over an area (S-0214
+/// table I row v3): the deploy weapon of S-0215 claim 30 and Terms, the
+/// secondary weapon or, for a type with the spray-attack flag, the primary.
+fn deploy_weapon_area_fire(w: &World, id: ObjectId) -> bool {
+    // spec: S-0215 claim 30 and Terms (the deploy weapon: the secondary, or the primary for a type with the spray-attack flag)
+    let slot = if uflag(w, id, |u| u.raw.spray_attack.unwrap_or(false)) {
+        0
+    } else {
+        1
+    };
+    // spec: S-0214 Import mapping (Weapon AreaFire: deploy weapon fires over an area, value v of table I)
+    weapon::slot_weapon(w, id, slot).is_some_and(|x| w.rules().combat.weapon(x).area_fire)
 }
 
 fn has_undeploy_delay(w: &World, id: ObjectId) -> bool {
@@ -1312,9 +1352,12 @@ fn infantry_on(
     .then_some(Action::NoEnter);
     // spec: S-0214 table I (g₁ = e where defined, else g)
     let g1 = e.unwrap_or(g);
-    // spec: S-0214 table I value v (deploy: area attack, deploys in place, else nothing)
+    // spec: S-0214 table I value v (deploy: area attack, deploys in place, else nothing; row v2, route mode, is applied by `in_route_mode`)
     let v = if g1 != Action::Deploy {
         g1
+    } else if deploy_weapon_area_fire(w, actor) {
+        // spec: S-0214 table I row v3 (the actor's deploy weapon fires over an area: area attack) (#412)
+        Action::AreaAttack
     } else if uflag(w, actor, |u| u.deployer) {
         Action::Deploy
     } else {
@@ -1526,11 +1569,8 @@ fn infantry_on(
 
 /// A vehicle clicked on itself (S-0214 table VD).
 fn vehicle_deploy(w: &World, actor: ObjectId) -> Action {
-    let on_tunnel = w
-        .obj(actor)
-        .is_some_and(|o| crate::transport::tunnel_cell(w, o.pos.cell()));
-    // spec: S-0214 Terms (deploy readiness: never on a tunnel cell, the tunnel-marked or edge predicate of S-0507 claim 7)
-    let ready = !on_tunnel;
+    // spec: S-0214 table VD rows VD3 and VD5 (deploy if it has deploy readiness, Terms, the whole of it: never on a tunnel cell, not disabled, not inside a tunnel, and a transport's S-0507 claim 7 unload exclusions) (#416)
+    let ready = deploy_readiness(w, actor);
     let deploy_weapon = uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false));
     // S-0214 table VD row VD1 (route mode held: no-deploy) is applied by `in_route_mode`: route mode is the client's input state, and its clicks are `crate::routes::click`
     // spec: S-0214 table VD row VD2 (deploys into a building: deploy if the building could be placed where the vehicle stands, the vehicle not counting as an obstacle and a wide foundation anchored by the deploy anchor step S-0415 F3, and the vehicle has deploy readiness; else no-deploy). The placement test is the deploy order's own (econ::deploy::fits)
@@ -1691,6 +1731,10 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
     // spec: S-0214 table V row V4
     if q == Action::Nothing {
         return fallback_move(w, house, actor, t);
+    }
+    // spec: S-0214 table V row V5 (q is attack and the vehicle fails the deploy check: nothing) (#413)
+    if q == Action::Attack && !deploy_check(w, actor) {
+        return Action::Nothing;
     }
     // spec: S-0214 table V row V6
     if q == Action::Attack && immune(w, t) {
@@ -1978,6 +2022,10 @@ fn cell_action(
             {
                 return Action::Harvest;
             }
+            // spec: S-0214 table VC row VC6 (c′ is attack and the vehicle fails the deploy check: nothing) (#413)
+            if g == Action::Attack && !deploy_check(w, actor) {
+                return Action::Nothing;
+            }
             // spec: S-0214 table VC row VC7
             g
         }
@@ -2071,15 +2119,15 @@ pub fn action_of(
 
 /// An action as it stands while route mode is held (S-0214 table I value v
 /// row v2, row I22 and table VD row VD1: route mode held gives no-deploy
-/// where the action would be deploy). Route mode is the client's input
+/// where the action would be deploy, or area attack, row v3). Route mode is the client's input
 /// state, so its rows are applied to the action the tables give without it.
 /// A building's deploy action stays deploy (S-0213 claim 16b, revision 87).
 pub fn in_route_mode(w: &World, sel: &[ObjectId], on: ClickOn, a: Action) -> Action {
     // spec: S-0213 claim 16b (revision 87: a building's deploy action is not refused in route mode) and S-0214 table G row G5 (a building's deploy is a click on itself, its only selected object)
     let buildings_own = matches!((sel, on), ([s], ClickOn::Object(t)) if *s == t
         && w.obj(t).is_some_and(|o| o.kind == Kind::Building));
-    // spec: S-0214 table I row v2, row I22 and table VD row VD1 (route mode held: no-deploy)
-    if a == Action::Deploy && !buildings_own {
+    // spec: S-0214 table I row v2, row I22 and table VD row VD1 (route mode held: no-deploy); row v2 comes before row v3, so area attack becomes no-deploy too (#412)
+    if matches!(a, Action::Deploy | Action::AreaAttack) && !buildings_own {
         Action::NoDeploy
     } else {
         a
@@ -2656,8 +2704,9 @@ impl CheerMemory {
     /// when the rate limit lets it through. An accepted press is recorded
     /// even if the pending list then drops the order.
     pub fn cheer(&mut self, w: &World) -> Option<Order> {
-        // spec: S-0213 Formulas (accepted ⇔ t > L + R)
-        if w.tick > self.last.wrapping_add(w.rules().general.cheer_rate) {
+        // spec: S-0213 Formulas (accepted ⇔ t > L + R; the sum and the comparison are exact integer operations, so they are taken in 64 bits) (#419)
+        let bound = i64::from(self.last) + i64::from(w.rules().general.cheer_rate);
+        if i64::from(w.tick) > bound {
             self.last = w.tick;
             Some(Order::Cheer)
         } else {

@@ -38,12 +38,10 @@ fn capturable(w: &World, b: ObjectId) -> bool {
 }
 
 /// A vehicle-like building (S-0214 Terms): its type undeploys into a
-/// vehicle and has a 1 × 1 foundation.
+/// vehicle and has a 1 × 1 foundation (`econ::sell::vehicle_like`).
 pub fn vehicle_like(w: &World, b: ObjectId) -> bool {
-    w.obj(b)
-        .and_then(|o| w.rules().buildings.get(o.type_index as usize))
-        // spec: S-0214 Terms (a building whose type undeploys into a vehicle and has a 1 × 1 foundation)
-        .is_some_and(|t| t.raw.undeploys_into.is_some() && t.foundation == (1, 1))
+    // spec: S-0214 Terms (a building whose type undeploys into a vehicle and has a 1 × 1 foundation) and S-0415 Import mapping (UndeploysInto: a name that matches no vehicle type makes no packing building) (#417)
+    crate::econ::sell::vehicle_like(w, b)
 }
 
 /// An arrival-friendly building for an entering engineer (S-0509 Terms):

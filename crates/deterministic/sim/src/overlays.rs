@@ -132,6 +132,10 @@ pub fn place_stream(w: &mut World, map: &Map, stream: &[(CellXY, u8, u8)]) {
             continue;
         }
         place_overlay(w, c, o);
+        if t.crate_ {
+            // spec: S-0520 claim 11 (revision 12: a map's own crate holds no place of its own, and its pickup removes it whatever its overlay type)
+            crate::crates::map_crate_placed(w, c);
+        }
     }
     if map.has_overlay_data {
         // spec: S-0009 claim 13 (the data stream's values are final with respect to overlay creation; an immediate crater request made during placement acted before this overwrite, and the overwrite restores no overlay type it removed)
@@ -146,6 +150,8 @@ pub fn place_stream(w: &mut World, map: &Map, stream: &[(CellXY, u8, u8)]) {
 /// One overlay of the map's overlay list is created in `c` with its
 /// placement effects (S-0009 claim 12; S-0202 claim 10).
 pub(crate) fn place_overlay(w: &mut World, c: CellXY, o: u8) {
+    // spec: S-0520 claims 11 and 29 (a crate whose overlay is replaced no longer belongs to its place, nor is it a map's own crate)
+    crate::crates::overlay_changed(w, c);
     if let Some(m) = marker(o) {
         // spec: S-0009 claim 12 and S-0202 claim 14 (a low-bridge end marker, its end-row writes and its piece writes start no cell animation; their recalculations can start tile animations)
         if end_marker(w, c, m) {

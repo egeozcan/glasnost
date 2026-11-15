@@ -258,6 +258,8 @@ pub fn remove_overlay(w: &mut World, c: CellXY) {
         .cells
         .cell(c)
         .is_some_and(|x| crate::walls::is_wall(w, x.overlay));
+    // spec: S-0520 claim 29 (a crate removed by any rule no longer belongs to its place, whose state is otherwise unchanged)
+    crate::crates::overlay_changed(w, c);
     if let Some(cell) = w.cells.grid.get_mut(c) {
         cell.overlay = NO_OVERLAY;
         cell.overlay_data = 0;
