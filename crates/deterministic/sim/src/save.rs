@@ -243,7 +243,10 @@ impl Replay {
         self.orders.insert(at, (tick, house, order));
     }
 
-    /// Issues the orders recorded for the world's current tick.
+    /// Issues the orders recorded for the world's current tick. A world
+    /// that already holds them as pending (a save taken after they were
+    /// issued) gets them a second time; [`Replay::run_on`] tells that case
+    /// apart.
     pub fn issue_due(&self, w: &mut World) {
         let from = self.orders.partition_point(|o| o.0 < w.tick);
         for (t, h, o) in &self.orders[from..] {
@@ -279,11 +282,17 @@ impl Replay {
     /// after every tick. No tick runs after the final one (S-0414 claim 8).
     /// `each` sees the effects of its tick only: the replay takes them
     /// afterwards, as a drawing driver would (they are presentation, neither
-    /// saved nor hashed; #398).
+    /// saved nor hashed; #398). Every step empties the pending order lists,
+    /// so a world that holds pending orders was saved after the orders of
+    /// its current tick were issued: those are not issued again (#333).
     pub fn run_on(&self, w: &mut World, until: i32, mut each: impl FnMut(&World)) {
+        // design: #333 (a pending list is emptied by every step, so pending orders at the start were issued in the world's current tick, from this replay)
+        let mut held = w.houses.iter().any(|h| !h.pending.is_empty());
         // spec: S-0201 claim 1 and S-0414 claim 8 (the final tick leaves the tick number at itself; no tick runs after it)
         while crate::tick::ticks_run(w) < until && !w.econ.end.finished {
-            self.issue_due(w);
+            if !std::mem::take(&mut held) {
+                self.issue_due(w);
+            }
             crate::tick::step(w);
             each(w);
             w.effects.clear();
