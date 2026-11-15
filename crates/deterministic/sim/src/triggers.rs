@@ -1240,7 +1240,8 @@ fn set_variable(w: &mut World, v: i32, on: bool) {
 }
 
 /// Reveal around a waypoint (S-0011 claim 26, F6), for every player house
-/// (our engine's departure).
+/// whose whole-map-revealed mark is clear (our engine's departure; S-0409
+/// claim 17).
 fn reveal(w: &mut World, wp: i32) {
     if !(0..=LAST_WAYPOINT).contains(&wp) {
         // spec: S-0011 claim 33 (a reveal waypoint outside 0 … 701: no effect, a departure)
@@ -1263,10 +1264,12 @@ fn reveal(w: &mut World, wp: i32) {
     let h = if bridge { h0 + BRIDGE_LIFT } else { h0 };
     let k = h / 2; // spec: S-0011 F6 (k = h quo 2)
     let p = Pos::new(256 * (c.x - k) + 128, 256 * (c.y - k) + 128, LEVEL * h); // spec: S-0011 F6 (256 × (x − k) + 128, 256 × (y − k) + 128, 104 × h)
-    // spec: S-0011 claim 26 (our engine applies the reveal to every player house, a departure)
+    // spec: S-0011 claim 26 (our engine applies the reveal to every player house that has not had the whole map revealed, a departure) and S-0409 claim 17 (the mark tested separately for each house)
+    // The reveal made for a house still counts for its allies by S-0409 claim 2, a marked ally included (Q-3149).
     let houses: Vec<HouseId> = (0..w.houses.len())
         .filter(|&i| w.houses[i].role == HouseRole::Player && !w.houses[i].removed)
         .map(|i| HouseId(i as u8))
+        .filter(|&h| !crate::econ::shroud::whole_map_revealed(w, h))
         .collect();
     for h in houses {
         crate::econ::shroud::area_reveal(w, h, p, r);
