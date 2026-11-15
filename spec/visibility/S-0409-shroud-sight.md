@@ -2,13 +2,13 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-11-15
 measurements: []
-requests: [Q-0110, Q-0111, Q-0460, Q-0649]
+requests: [Q-0110, Q-0111, Q-0460, Q-0649, Q-3149]
 supersedes: []
 ---
 
@@ -125,7 +125,8 @@ S-0101 claim 3. In addition:
 2. **Whose sight counts for H.** A sight and the area reveals of claim 17 count for house *H* when
    the house they are made for is *H*, or when that house is allied with *H* and ally reveal is on.
    A reveal on fire counts only for the house that owns the target (claim 16), never for its
-   allies. An object whose owner's country is marked passive for multiplayer (Import mapping) reveals
+   allies. A waypoint reveal does not count for an ally whose whole-map-revealed mark is set
+   (claim 17 gives this design rule, its backing and its rating). An object whose owner's country is marked passive for multiplayer (Import mapping) reveals
    nothing for anyone, and this takes precedence over the reveal-to-all flag of claim 8: a
    reveal-to-all building of a passive country reveals nothing.
    - Backing: `measurable` (scenario V3 for the owner, the allied rule, ally reveal off and the
@@ -521,11 +522,22 @@ S-0101 claim 3. In addition:
     claim 36's drop-zone reveal does not. This exception is tested separately for each house,
     not against the local player's mark for all houses.
     The all-player-house scope is a design rule, not an observation of the original.
+    A waypoint reveal made for a house whose mark is clear does not count for a house whose
+    mark is set, even when that house is allied with it and ally reveal is on: for the waypoint
+    reveal this replaces claim 2's ally rule for a marked house, so a marked house gets nothing
+    from it. Only a marked house is left out. Each player house whose mark is clear still has
+    the reveal made for itself, whether or not it is allied with a marked house. This keeps the
+    original's network result, in which each machine tests only its own local player's mark
+    and reveals only for that player (S-0011 claim 26) (design rule, decided at the delegated
+    sign-off, 2026-11-15).
     - Backing: `measurable` (scenario V14 for the expiry inside a hostile field and the permanence
       outside; the area and the centre are S-0011's scenarios T16 and T21, which observe the disc
       and its centre but not the expiry; S-0610 scenario P7 tests the psychic reveal's exemption
-      from height blocking and its recipients)
-    - Confidence: medium; high for the psychic reveal's exemption from height blocking
+      from height blocking and its recipients); `unmeasured` for the all-player-house scope and
+      for the waypoint reveal not counting for a marked ally, design rules that the original's
+      skirmish, with its single local player, has no form of
+    - Confidence: medium; high for the psychic reveal's exemption from height blocking; medium
+      for the waypoint reveal not counting for a marked ally
 
 18. **Optional regrowth.** With the rules' shroud-regrowth flag on (off when absent) and a
     regrowth rate other than 0, a regrowth step runs every trunc(rate × 900) ticks (F5; the first
