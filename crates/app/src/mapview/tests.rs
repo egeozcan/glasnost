@@ -875,6 +875,120 @@ fn a_terrain_object_on_a_slope_stands_on_the_surface() {
     }
 }
 
+/// The test map of `text` with each listed cell set to its (level, slope
+/// shape).
+fn map_with_cells(text: &[u8], cells: &[((i32, i32), (i8, u8))]) -> glasnost_map::Map {
+    let (_, catalogue, _) = context();
+    let doc = Document::parse(text, Quirks::default(), &mut Vec::new());
+    let mut map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    for &((x, y), (level, slope)) in cells {
+        let cell = map
+            .cells
+            .get_mut(glasnost_map::CellXY::new(x, y))
+            .expect("a legal cell");
+        cell.level = level;
+        cell.slope = slope;
+    }
+    map
+}
+
+/// Builds `map` in the test context, with `loaded` as the cells after
+/// loading when given (S-0010 claim 12).
+fn build_loaded(map: &glasnost_map::Map, loaded: Option<&glasnost_map::CellGrid>) -> Built {
+    let (import, catalogue, assets) = context();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = super::build::Inputs {
+        map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: loaded,
+    };
+    super::build::build_parts(&inputs, false).0
+}
+
+/// The first drawing of `kind` that is not a shadow.
+fn body_of(b: &Built, kind: &str) -> Item {
+    *items_of(b, kind)
+        .iter()
+        .find(|i| i.paint != Paint::Shadow)
+        .expect("a body")
+}
+
+/// spec: S-0102 claim 23 and S-0106 claim 2, F1 (a terrain object stands at the surface height of
+/// its cell), S-0010 claims 6 and 12 (the cell's slope shape is the one its terrain recalculation
+/// at map load gives)
+///
+/// With a game set up, the terrain object stands on the loaded cells'
+/// surface, the grid its tiles are drawn from, not on the stored map's
+/// (#152).
+#[test]
+fn a_terrain_object_stands_on_the_loaded_surface() {
+    let text: &[u8] = b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Terrain]\n9006=TREEX\n";
+    let flat = map_with_cells(text, &[((6, 9), (1, 0))]);
+    let sloped = map_with_cells(text, &[((6, 9), (1, 1))]);
+    let key = |i: Item| (i.x, i.y, bias(&i));
+    let on_flat = key(body_of(&build_loaded(&flat, None), "terrain object"));
+    let on_slope = key(body_of(&build_loaded(&sloped, None), "terrain object"));
+    assert_ne!(on_flat, on_slope, "the slope raises it");
+    assert_eq!(
+        key(body_of(
+            &build_loaded(&flat, Some(&sloped.cells)),
+            "terrain object"
+        )),
+        on_slope,
+        "stored flat, loaded sloped"
+    );
+    assert_eq!(
+        key(body_of(
+            &build_loaded(&sloped, Some(&flat.cells)),
+            "terrain object"
+        )),
+        on_flat,
+        "stored sloped, loaded flat"
+    );
+}
+
+/// spec: S-0102 claim 14 (a cell is high when more than 3 levels above the unit's cell; the cliff
+/// factor and fudge), S-0010 claim 12 (the cells after map load)
+///
+/// With a game set up, a vehicle's cliff fudge is judged on the loaded
+/// cells, the grid its tiles are drawn from, not on the stored map's
+/// (#152).
+#[test]
+fn a_vehicle_by_a_cliff_judges_the_loaded_cells() {
+    let text: &[u8] = b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Units]\n0=Neutral,CARX,256,6,9,64\n";
+    let open = map_with_cells(text, &[]);
+    let cliff = map_with_cells(text, &[((7, 10), (5, 0)), ((8, 11), (5, 0))]);
+    let key = |i: Item| (i.x, i.y, bias(&i));
+    let in_open = key(body_of(&build_loaded(&open, None), "vehicle"));
+    let by_cliff = key(body_of(&build_loaded(&cliff, None), "vehicle"));
+    assert_ne!(in_open, by_cliff, "the cliff fudge moves its depth");
+    assert_eq!(
+        key(body_of(&build_loaded(&open, Some(&cliff.cells)), "vehicle")),
+        by_cliff,
+        "stored open, loaded by a cliff"
+    );
+    assert_eq!(
+        key(body_of(&build_loaded(&cliff, Some(&open.cells)), "vehicle")),
+        in_open,
+        "stored by a cliff, loaded open"
+    );
+}
+
 /// spec: S-0102 claims 21 and 22 (a sprite vehicle's facing part and frame; its own shadow right after it)
 #[test]
 fn sprite_vehicle_frame_and_shadow() {
