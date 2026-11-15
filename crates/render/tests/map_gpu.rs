@@ -934,6 +934,81 @@ fn gpu_light_alpha_matches_cpu() {
     }
 }
 
+/// spec: S-0104 claim 15, S-0110 claim 5 (each pixel of a shaded drawing takes the row its
+/// light-alpha value gives)
+///
+/// design: render (#152): a view of a new size with light-alpha values
+/// writes them once, as a view of the same size does, not a 127 fill and
+/// then the values; it still draws as the CPU reference draws it.
+#[test]
+fn a_resized_view_writes_its_light_alpha_once() {
+    use glasnost_render::compose::Shade;
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    for (k, item) in s.items.iter_mut().enumerate() {
+        let shade = Shade::new(0, 3, [400, 1000, 2000][k % 3]);
+        item.paint = match item.paint {
+            Paint::Diamond(_) => Paint::LitDiamond(shade),
+            Paint::Row(_) => Paint::Lit(shade),
+            p => p,
+        };
+    }
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let filter = Filter::default();
+    let q = ComposeQuirks::default();
+    // One frame of `size` with the gradient of `step`: its stats and
+    // how many pixels differ from the CPU's.
+    let mut frame = |size: (u32, u32), step: usize| {
+        let view = View {
+            origin: (0, 0),
+            size,
+            reference: DEPTH_REFERENCE,
+        };
+        let alpha: Vec<u8> = (0..(size.0 * size.1) as usize)
+            .map(|i| ((i * step) % 256) as u8)
+            .collect();
+        let cpu = s
+            .compose_lit(&view, &filter, &q, Some(alpha.clone()))
+            .to_rgba();
+        let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+        r.take_stats();
+        let mut encoder = device.create_command_encoder(&Default::default());
+        r.render_lit(
+            &device,
+            &queue,
+            &mut encoder,
+            &color,
+            &depth.create_view(&Default::default()),
+            &s,
+            &view,
+            &filter,
+            &q,
+            Some(&alpha),
+        );
+        let stats = r.take_stats();
+        queue.submit([encoder.finish()]);
+        let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+        let differing = cpu
+            .chunks(4)
+            .zip(gpu.chunks(4))
+            .filter(|(a, b)| a[..3] != b[..3])
+            .count();
+        (stats, differing)
+    };
+    let (_, first) = frame((96, 64), 1);
+    let (resized, at_resize) = frame((128, 72), 3);
+    let (same, at_same) = frame((128, 72), 5);
+    assert_eq!((first, at_resize, at_same), (0, 0, 0));
+    assert_eq!(
+        (resized.uploads, resized.upload_bytes),
+        (same.uploads, same.upload_bytes),
+        "a resized view's uploads against a same-size view's"
+    );
+}
+
 /// spec: S-0616 claim 28 (a pixel particle: one opaque pixel of its own
 /// colour, skipped at light-alpha 0, scaled by a / 128 below 127; a flat
 /// reader with bias −50 − L(z), never writing depth)
