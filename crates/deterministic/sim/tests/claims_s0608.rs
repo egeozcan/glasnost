@@ -577,7 +577,7 @@ fn issue_342_relink_keeps_one_drain_animation_both_positions() {
     }
 }
 
-// spec: S-0608 claim 5 (at the attempt that forms a link:the building's house is due to work out its power, a controller building releases all its victims, the drain animation starts on the drainer with its creation draw; with no drain animation nothing is shown; a failed attempt releases nothing)
+// spec: S-0608 claim 5 (at the attempt that forms a link: the building's house is due to work out its power, a controller building releases all its victims, the drain animation starts on the drainer with its creation draw; with no drain animation nothing is shown; a failed attempt releases nothing)
 #[test]
 fn claim_5_when_the_link_forms() {
     let mut w = game();
