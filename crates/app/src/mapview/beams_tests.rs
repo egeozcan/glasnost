@@ -615,6 +615,78 @@ fn wave_pixels() {
     );
 }
 
+/// `wave_spots` as it scanned before #141: every pixel of the bounding box,
+/// the ripple found afresh for each band pixel.
+fn wave_spots_scanned(e1: Pos, e2: Pos, dir: (i8, i8), c: i32, mode: Rounding) -> Vec<Spot> {
+    let corners = wave_corners(e1, e2).map(|p| project_lifted(p.x, p.y, p.z));
+    let doubled = corners.map(|(x, y)| (2 * i64::from(x), 2 * i64::from(y)));
+    let (x0, y0) = project_lifted(e1.x, e1.y, e1.z);
+    let bias = -height_lift(e1.z) - NEARNESS;
+    let left = corners.iter().map(|c| c.0).min().unwrap_or(0);
+    let right = corners.iter().map(|c| c.0).max().unwrap_or(0);
+    let top = corners.iter().map(|c| c.1).min().unwrap_or(0);
+    let bottom = corners.iter().map(|c| c.1).max().unwrap_or(0);
+    let mut out = Vec::new();
+    for y in top..=bottom {
+        for x in left..=right {
+            if !inside(&doubled, (2 * i64::from(x) + 1, 2 * i64::from(y) + 1)) {
+                continue;
+            }
+            let (dx, dy) = (i64::from(x - x0), i64::from(y - y0));
+            let (s, k) = ripple((dx * dx + dy * dy) as u64, c, mode);
+            out.push(Spot {
+                x,
+                y,
+                bias,
+                kind: SpotKind::Wave {
+                    shift: (dir.0 * s as i8, dir.1 * s as i8),
+                    k,
+                },
+            });
+        }
+    }
+    out
+}
+
+/// Equivalence test (design: render (#141); passes before and after the
+/// change): the row-span scan with the ripple found once per distance gives
+/// exactly the spots, in the same order, of the whole-box scan, for bands in
+/// every direction, steep, flat, short, degenerate and raised.
+#[test]
+fn wave_spots_match_the_box_scan() {
+    let mut ends = vec![
+        (pos(0, 0, 0), pos(0, 0, 0)),
+        (pos(0, 0, 0), pos(1, 0, 0)),
+        (pos(0, 0, 0), pos(0, 1, 0)),
+        (pos(0, 0, 104), pos(1024, 0, 104)),
+        (pos(0, 0, 0), pos(0, 0, 900)),
+        (pos(500, 500, 0), pos(500, 500, 300)),
+        (pos(10000, 10000, 0), pos(11414, 11414, 0)),
+        (pos(10000, 10000, 0), pos(12000, 10000, 200)),
+        (pos(10000, 10000, 0), pos(10000, 12000, 0)),
+        (pos(10000, 10000, 400), pos(8000, 9000, 0)),
+    ];
+    // A spread of directions and lengths, some very short and some steep.
+    for i in 0..48 {
+        let a = i * 7 % 48;
+        let len = [3, 17, 140, 700, 2100][i as usize % 5];
+        let (dx, dy) = ((a % 13 - 6) * len / 6, (a % 11 - 5) * len / 5);
+        ends.push((
+            pos(4000, 6000, 52 * (i % 3)),
+            pos(4000 + dx, 6000 + dy, 30 * (i % 4)),
+        ));
+    }
+    for (n, (e1, e2)) in ends.into_iter().enumerate() {
+        for (dir, c) in [((1, 0), 100), ((0, -1), 63), ((-1, 0), 20)] {
+            assert_eq!(
+                wave_spots(e1, e2, dir, c, RZ),
+                wave_spots_scanned(e1, e2, dir, c, RZ),
+                "case {n}: {e1:?} to {e2:?}"
+            );
+        }
+    }
+}
+
 /// spec: S-0615 claims 15 and 16 (revision 4: arc beams D = 8 − k with S = 1, E = 0.5, the last drawn
 /// tick at 0.5 + 0.5/D, not 0.5; the final beam S = 1, E = 0, the last drawn tick at 1/D, no
 /// zero-intensity tick, no beam for D ≤ 0; ordinary drawing, fading on and blinking off, even with
