@@ -43,12 +43,13 @@ fn reference_angle(neg_x: bool, ax: &BigUint, neg_y: bool, ay: &BigUint) -> u16 
     u64::try_from(rounded % 65536u32).unwrap() as u16
 }
 
-/// `direction(dx, dy, false)` before #393.
-// spec: S-0204 F3 (Y = y_P − y_Q grows towards map north), S-0204 Edge cases
+/// `direction(dx, dy, false)` before #393, with the zero displacement of
+/// S-0204 revision 14.
+// spec: S-0204 F3 (Y = y_P − y_Q grows towards map north), S-0204 Edge cases (revision 14, Q-3103: two zero arguments give 16384)
 fn reference_direction(dx: i64, dy: i64) -> u16 {
     let (x, y) = (dx, -dy);
     if x == 0 && y == 0 {
-        return 0;
+        return 16384;
     }
     reference_angle(
         x < 0,
