@@ -129,7 +129,11 @@ fn issue_352_a_cloud_made_after_the_turn_pass_with_delay_1() {
     assert_eq!(c % 8, 0, "set-up: a house-raise tick");
     step(&mut w);
     assert_eq!(w.triggers.fired, 2, "set-up");
-    assert_eq!(w.sw.clouds.len(), 1, "set-up: S fired in the house raise of tick c");
+    assert_eq!(
+        w.sw.clouds.len(),
+        1,
+        "set-up: S fired in the house raise of tick c"
+    );
     assert_eq!((w.sw.clouds[0].created, w.sw.clouds[0].delay), (c, 1));
     assert_eq!(strike_and_gone(&mut w), (Some(c + 6), Some(c + 8)));
 }

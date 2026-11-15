@@ -41,7 +41,9 @@ fn issue_350_drain_mode_missile_type_launches_through_its_silo() {
         .use_charge_drain = Some(true);
     let mut w = game(&r);
     let silo = spawn(&mut w, "SILO", ALPHA, -6, -6);
-    until(&mut w, 200, |w| rec(w, ALPHA, STRIKE).drain == DrainState::Ready);
+    until(&mut w, 200, |w| {
+        rec(w, ALPHA, STRIKE).drain == DrainState::Ready
+    });
     assert!(!rec(&w, ALPHA, STRIKE).one_time);
     assert_eq!(nuke::silo_choice(&w, ALPHA, STRIKE), Some(silo));
     assert!(nuke::accepts(&w, silo));

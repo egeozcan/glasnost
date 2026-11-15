@@ -51,7 +51,11 @@ fn issue_353_control_reset_without_a_pick_announces_and_sets_the_ready_tick() {
     let (said, done) = recharge(&mut w);
     assert_eq!(done, l + T);
     assert!(said, "control: announcement");
-    assert_eq!(rec(&w, ALPHA, SOURCE).ready_tick, done, "control: ready tick");
+    assert_eq!(
+        rec(&w, ALPHA, SOURCE).ready_tick,
+        done,
+        "control: ready tick"
+    );
 }
 
 // spec: S-0512 claim 10 (only the pick's own re-completion is silent), claim 15 (the reset) and claim 5 (becoming ready requests the announcement; the tick is the ready tick)
@@ -63,10 +67,16 @@ fn issue_353_reset_after_a_source_pick_announces_the_full_recharge() {
     let l = w.tick;
     charge::reset(&mut w, ALPHA, SOURCE);
     let x = rec(&w, ALPHA, SOURCE);
-    assert!(!x.ready && x.running && x.remain == T && x.start == l, "set-up");
+    assert!(
+        !x.ready && x.running && x.remain == T && x.start == l,
+        "set-up"
+    );
     let (said, done) = recharge(&mut w);
     assert_eq!(done, l + T, "a full charge of T ticks");
-    assert!(said, "S-0512 claim 5: the full recharge requests its announcement");
+    assert!(
+        said,
+        "S-0512 claim 5: the full recharge requests its announcement"
+    );
     assert_eq!(
         rec(&w, ALPHA, SOURCE).ready_tick,
         done,
@@ -81,9 +91,15 @@ fn issue_353_set_charge_after_a_source_pick_announces_the_completion() {
     let first = rec(&w, ALPHA, SOURCE).ready_tick;
     charge::set_charge(&mut w, ALPHA, SOURCE, 50);
     let x = rec(&w, ALPHA, SOURCE);
-    assert!(!x.ready && x.running && x.remain > 0, "set-up: charging again");
+    assert!(
+        !x.ready && x.running && x.remain > 0,
+        "set-up: charging again"
+    );
     let (said, done) = recharge(&mut w);
-    assert!(said, "S-0512 claim 14: the completion requests its announcement");
+    assert!(
+        said,
+        "S-0512 claim 14: the completion requests its announcement"
+    );
     assert_eq!(
         rec(&w, ALPHA, SOURCE).ready_tick,
         done,

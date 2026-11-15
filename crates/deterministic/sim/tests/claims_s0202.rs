@@ -328,8 +328,16 @@ fn issue_348_a_blocked_marker_takes_no_draw_in_the_overlay_stream_group() {
         let s = blocked_marker_scene(animated);
         let w = s.build();
         assert_eq!(overlay(&w, cell(0, -4)).0, 7, "set-up");
-        assert_eq!(overlay(&w, cell(0, -3)).0, NO_OVERLAY, "the blocked marker wrote nothing");
-        assert_eq!(overlay(&w, cell(0, -2)).0, NO_OVERLAY, "the blocked marker wrote nothing");
+        assert_eq!(
+            overlay(&w, cell(0, -3)).0,
+            NO_OVERLAY,
+            "the blocked marker wrote nothing"
+        );
+        assert_eq!(
+            overlay(&w, cell(0, -2)).0,
+            NO_OVERLAY,
+            "the blocked marker wrote nothing"
+        );
         let mut r = Rng::new(s.setup.seed);
         let mut want = Vec::new();
         for _ in 0..9 {
@@ -341,7 +349,10 @@ fn issue_348_a_blocked_marker_takes_no_draw_in_the_overlay_stream_group() {
                 got.push(overlay(&w, cell(dx, dy)).0);
             }
         }
-        assert_eq!(got, want, "the nine pieces, animated tile under the blocked marker: {animated}");
+        assert_eq!(
+            got, want,
+            "the nine pieces, animated tile under the blocked marker: {animated}"
+        );
         if animated {
             // The first recalculation pass, then the second pass.
             let _ = r.ranged(450, 900, true);

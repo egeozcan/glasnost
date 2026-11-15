@@ -84,11 +84,18 @@ fn issue_363_a_join_after_a_fixed_landing_point_leaves_no_mark_there() {
     move_order(&mut w, b, l);
     fire(&mut w, BETA, WARP, at(5, 5));
     step(&mut w);
-    assert!(w.obj(b).unwrap().sw.warp.is_some(), "set-up: the unit joined the warp");
+    assert!(
+        w.obj(b).unwrap().sw.warp.is_some(),
+        "set-up: the unit joined the warp"
+    );
     run(&mut w, 200);
     let o = w.obj(b).unwrap();
     assert!(o.sw.warp.is_none(), "set-up: the warp is over");
-    assert_eq!(o.pos.cell(), at(5, 5), "set-up: it landed at the warp destination");
+    assert_eq!(
+        o.pos.cell(),
+        at(5, 5),
+        "set-up: it landed at the warp destination"
+    );
     assert!(
         !marks_of(&w, b).iter().any(|&(c, _)| c == l),
         "the standing position reserved at the never-used landing cell is still marked: {:?}",
@@ -107,7 +114,10 @@ fn issue_363_a_move_order_to_a_pending_member_leaves_no_mark_there() {
     fire_now(&mut w, ALPHA, SOURCE, at(0, 0));
     fire(&mut w, ALPHA, WARP, at(5, 5));
     step(&mut w);
-    assert!(w.obj(b).unwrap().sw.warp.is_some(), "set-up: the unit joined");
+    assert!(
+        w.obj(b).unwrap().sw.warp.is_some(),
+        "set-up: the unit joined"
+    );
     run(&mut w, 5);
     move_order(&mut w, b, l);
     run(&mut w, 201);

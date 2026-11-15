@@ -40,8 +40,15 @@ fn of(w: &World, h: u8, kind: Kind, type_index: u32) -> Vec<ObjectId> {
 }
 
 fn all_attack_moves(o: &[Order]) -> bool {
-    o.iter()
-        .all(|o| matches!(o, Order::Behaviour { attack_move: true, .. }))
+    o.iter().all(|o| {
+        matches!(
+            o,
+            Order::Behaviour {
+                attack_move: true,
+                ..
+            }
+        )
+    })
 }
 
 // spec: S-0214 claim 5 (eligible: infantry or a vehicle with a weapon in its first slot and no prevent-attack-move flag) and Terms (armed: a rule that names the first slot means the first slot)

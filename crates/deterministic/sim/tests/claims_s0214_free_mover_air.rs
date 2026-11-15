@@ -49,7 +49,11 @@ fn issue_359_a_jumpjet_vehicle_in_the_air_is_a_free_mover() {
     for dy in -1..=1 {
         for dx in -1..=1 {
             if (dx, dy) != (0, 0) {
-                s.set_cell(CellXY::new(enclosed.x + dx, enclosed.y + dy), code_tile(7), 0);
+                s.set_cell(
+                    CellXY::new(enclosed.x + dx, enclosed.y + dy),
+                    code_tile(7),
+                    0,
+                );
             }
         }
     }
@@ -70,7 +74,11 @@ fn issue_359_a_jumpjet_vehicle_in_the_air_is_a_free_mover() {
         "control"
     );
     let r = targeting::click(&w, ALPHA, &[man], on, Modifiers::default());
-    assert_eq!(dest(&r), Some(Target::Cell(enclosed)), "control: jumpjet infantry");
+    assert_eq!(
+        dest(&r),
+        Some(Target::Cell(enclosed)),
+        "control: jumpjet infantry"
+    );
     assert_eq!(
         targeting::action(&w, ALPHA, car, on, Modifiers::default()),
         Action::Move,

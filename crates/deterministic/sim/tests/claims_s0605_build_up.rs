@@ -106,9 +106,30 @@ fn handed_over() -> Scene {
     let grind = placed(&mut w, "GRIND", 6, -6);
     let depot = placed(&mut w, "DEPOT", -8, 4);
     let pad = placed(&mut w, "PAD", 6, 4);
-    let foot = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, testkit::mid(SIZE, -8, -2), 0);
-    let car = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, testkit::mid(SIZE, 0, 0), 0);
-    let fly = testkit::spawn(&mut w, Kind::Aircraft, "FLYER", 1, testkit::mid(SIZE, 2, 9), 0);
+    let foot = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        1,
+        testkit::mid(SIZE, -8, -2),
+        0,
+    );
+    let car = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        1,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
+    let fly = testkit::spawn(
+        &mut w,
+        Kind::Aircraft,
+        "FLYER",
+        1,
+        testkit::mid(SIZE, 2, 9),
+        0,
+    );
     tick::step(&mut w);
     for b in [bio, grind, depot, pad] {
         assert_eq!(

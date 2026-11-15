@@ -53,14 +53,41 @@ fn ruleset(skip: bool) -> Ruleset {
 fn infantry_turns_in_the_boarding_tick(skip: bool, bystander: bool) -> u32 {
     let r = ruleset(skip);
     let mut w = testkit::game_with(&r, SIZE, 7);
-    let t = testkit::spawn(&mut w, Kind::Vehicle, "OPEN", 0, testkit::mid(SIZE, 0, 0), 0);
-    let p = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, testkit::mid(SIZE, 3, 0), 0);
+    let t = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "OPEN",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
+    let p = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        0,
+        testkit::mid(SIZE, 3, 0),
+        0,
+    );
     if bystander {
         // With the switch on it is the one that loses its turn to the passenger's removal (S-0203 claim 10).
-        testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, testkit::mid(SIZE, -8, -8), 0);
+        testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "BUGGY",
+            0,
+            testkit::mid(SIZE, -8, -8),
+            0,
+        );
     }
     testkit::run(&mut w, 5);
-    let c = targeting::click(&w, HouseId(0), &[p], ClickOn::Object(t), Modifiers::default());
+    let c = targeting::click(
+        &w,
+        HouseId(0),
+        &[p],
+        ClickOn::Object(t),
+        Modifiers::default(),
+    );
     for o in c.orders {
         orders::issue(&mut w, HouseId(0), o);
     }
