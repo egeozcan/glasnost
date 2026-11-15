@@ -1616,4 +1616,78 @@ mod tests {
         assert!(lost_under_us(wgpu::DeviceLostReason::Unknown));
         assert!(!lost_under_us(wgpu::DeviceLostReason::Destroyed));
     }
+
+    /// #150: a suboptimal surface is drawn and then configured again; an
+    /// outdated one is configured again before the next try; the others
+    /// are not.
+    #[test]
+    fn a_suboptimal_or_outdated_surface_is_configured_again() {
+        use SurfaceState as S;
+        assert_eq!(surface_step(S::Success), (SurfaceStep::Draw, false));
+        assert_eq!(surface_step(S::Suboptimal), (SurfaceStep::Draw, true));
+        assert_eq!(surface_step(S::Outdated), (SurfaceStep::Again, true));
+        assert_eq!(surface_step(S::Timeout), (SurfaceStep::Again, false));
+        assert_eq!(surface_step(S::Occluded), (SurfaceStep::Hidden, false));
+        assert_eq!(surface_step(S::Lost), (SurfaceStep::Lost, false));
+        assert_eq!(surface_step(S::Validation), (SurfaceStep::Invalid, false));
+    }
+
+    /// #150: the surface is configured again at the window's size now, as
+    /// the device allows, not at the size it had (a resize that came
+    /// before the graphics existed is not lost).
+    #[test]
+    fn a_surface_is_configured_again_at_the_windows_size() {
+        assert_eq!(reconfigured_size((800, 600), (1024, 768), 8192), (1024, 768));
+        assert_eq!(reconfigured_size((800, 600), (800, 600), 8192), (800, 600));
+        assert_eq!(reconfigured_size((800, 600), (5000, 0), 4096), (4096, 1));
+        assert_eq!(surface_size((5000, 3000), 4096), (4096, 3000));
+    }
+
+    /// #150: on a surface the device limit made smaller than the window, a
+    /// host position is scaled to the surface; otherwise it is unchanged.
+    #[test]
+    fn a_pointer_on_a_clamped_surface_is_scaled_to_it() {
+        assert_eq!(
+            surface_point((100.5, 40.0), (1920, 1080), (1920, 1080)),
+            (100.5, 40.0)
+        );
+        assert_eq!(
+            surface_point((6000.0, 1000.0), (8000, 2000), (4096, 2000)),
+            (3072.0, 1000.0)
+        );
+        assert_eq!(
+            surface_point((7999.0, 1999.0), (8000, 8000), (4096, 4096)),
+            (7999.0 * 4096.0 / 8000.0, 1999.0 * 4096.0 / 8000.0)
+        );
+        // A window without size leaves the position alone.
+        assert_eq!(surface_point((3.0, 4.0), (0, 0), (1, 1)), (3.0, 4.0));
+    }
+
+    /// #150: `Status::Presented` is published once, for the first frame
+    /// presented, not again for the frames that were not drawn after it.
+    #[test]
+    fn presented_is_published_once() {
+        assert!(!publishes_presented(Drawn::Again, 0));
+        assert!(publishes_presented(Drawn::Yes, 1));
+        assert!(!publishes_presented(Drawn::Again, 1));
+        assert!(!publishes_presented(Drawn::Hidden, 1));
+        assert!(!publishes_presented(Drawn::Yes, 2));
+    }
+
+    /// #150: the batch draws gamma-space bytes into a non-sRGB format: the
+    /// surface's own when it offers one, otherwise the non-sRGB form of its
+    /// sRGB format as the view the frame is drawn through.
+    #[test]
+    fn the_frame_is_drawn_in_a_non_srgb_format() {
+        use wgpu::TextureFormat as F;
+        assert_eq!(
+            surface_formats(&[F::Bgra8UnormSrgb, F::Bgra8Unorm], F::Bgra8UnormSrgb),
+            (F::Bgra8Unorm, F::Bgra8Unorm)
+        );
+        assert_eq!(
+            surface_formats(&[F::Rgba8UnormSrgb], F::Rgba8UnormSrgb),
+            (F::Rgba8UnormSrgb, F::Rgba8Unorm)
+        );
+        assert_eq!(surface_formats(&[], F::Rgba8Unorm), (F::Rgba8Unorm, F::Rgba8Unorm));
+    }
 }
