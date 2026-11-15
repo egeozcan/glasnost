@@ -597,19 +597,34 @@ fn crashing_outcome(w: &mut World, id: ObjectId) {
     }
 }
 
-/// The impact of an ordinary crash (S-0312 claim 16): a shot-down jumpjet's
-/// death weapon goes off at the impact point and it leaves play; one that
-/// still lives is destroyed by damage equal to its health, with the
-/// demolition warhead, ignoring defences, with the no-escape marker and no
-/// attacker.
+/// The impact of an ordinary crash (S-0312 claim 16). A vehicle's is the
+/// *Vehicle crash end*: a balloon-hover type sets off its death weapon at
+/// its position, any other type shows claim 9's animations, and it leaves
+/// play, alive or dead. For another kind (seam: the *Infantry crash end*
+/// is not implemented yet) a shot-down jumpjet's death weapon goes off at
+/// the impact point and it leaves play; one that still lives is destroyed
+/// by damage equal to its health, with the demolition warhead, ignoring
+/// defences, with the no-escape marker and no attacker.
 pub fn impact(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
-    // spec: S-0312 claim 16 (the impact is on the ground: the unit is at the surface under it, which also ends the crash for a unit that a deck crossing stopped above the terrain)
+    // spec: S-0312 claim 16 (the impact is on the ground: the unit is at the surface under it, which also ends the crash for a unit that a deck crossing stopped above the terrain; the height in a high-bridge cell is an Open question)
     let surface = w.surface_at(o.pos.x, o.pos.y);
     if let Some(ob) = w.obj_mut(id) {
         ob.pos.z = surface;
     }
     let at = Pos::new(o.pos.x, o.pos.y, surface);
+    if o.kind == Kind::Vehicle {
+        if balloon_vehicle(w, id) {
+            // spec: S-0312 claim 16 (Vehicle crash end: a balloon-hover type first sets off its death weapon at its position, chosen and computed as in claim 6, whether or not it has the explodes flag, and shows none of claim 9's animations)
+            crate::combat::death::impact_death_weapon(w, id, at);
+        } else if let Some(now) = w.obj(id).cloned() {
+            // spec: S-0312 claim 16 (Vehicle crash end: a type of any other kind sets off no death weapon and shows the animations of claim 9, with their list picks)
+            crate::combat::death::vehicle_animations(w, id, &now);
+        }
+        // spec: S-0312 claim 16 (Vehicle crash end: it leaves play, the same whether it is alive or dead, with no demolition damage)
+        crate::combat::death::leave_play(w, id);
+        return;
+    }
     if damage::dead(&o) {
         // spec: S-0312 claim 16 (shot down: its death weapon goes off at the impact point, and it leaves play)
         crate::combat::death::impact_death_weapon(w, id, at);
@@ -636,6 +651,22 @@ pub fn impact(w: &mut World, id: ObjectId) {
         // spec: S-0312 claim 16 (the explosion for that amount, S-0303 F5, and a detonation with no source object or house at the impact point)
         crate::combat::projectile::detonate_area(w, h, amount, at, None, None, true);
     }
+}
+
+/// Whether the death of `id` starts, or comes during, a crash whose end
+/// sets off a death weapon: a crashable vehicle of a balloon-hover type
+/// using jumpjet movement that is crashing, or that is above the surface
+/// and not seized, so that [`start_crash`] starts its fall (S-0312 claim 16,
+/// *Vehicle crash end*, and Edge cases, `quirks.crash_death_weapon_twice`).
+pub fn crash_end_fires(w: &World, id: ObjectId) -> bool {
+    let crashable = w
+        .obj(id)
+        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+        .is_some_and(|u| u.vehicle.crashable);
+    crashable
+        && is_jumpjet(w, id)
+        && balloon_vehicle(w, id)
+        && (crashing(w, id) || (height_above(w, id) > 0 && !seized(w, id)))
 }
 
 /// A jumpjet above the surface that has been killed, or a crash started
