@@ -147,14 +147,15 @@ pub fn shot(w: &mut World, firer: ObjectId, weapon: WeaponId, target: Target, da
     });
 }
 
-/// Whether an object is still held by a disc laser (claim 14): it exists,
-/// is on the map, is not inside a building and is not destroyed. A
-/// bunkered vehicle stays on the map (S-0606) and is held.
+/// Whether an object is still held by a disc laser (claim 14): it exists
+/// and is not destroyed. Leaving the map (a transport or a building
+/// garrison) is an event that [`object_lost`] records when it happens
+/// (`objects::take_inside`), not a state re-tested here: a passenger of an
+/// open-topped transport that fires from inside has not left the map since
+/// the shot. A bunkered vehicle stays on the map (S-0606) and is held.
 fn in_play(w: &World, x: ObjectId) -> bool {
-    // spec: S-0615 claim 14 (lost when destroyed, the hit that brings its health to 0 at once even when it stays in play; when it leaves the map, a building garrison included; when it is removed; a bunkered vehicle is not lost)
-    w.obj(x).is_some_and(|o| {
-        o.on_map && o.structure.inside.is_none() && !crate::combat::damage::dead(o)
-    })
+    // spec: S-0615 claim 14 (lost when destroyed, the hit that brings its health to 0 at once even when it stays in play; when it leaves the map, a building garrison included; when it is removed; a bunkered vehicle is not lost; loss is an event, with no later re-test)
+    w.obj(x).is_some_and(|o| !crate::combat::damage::dead(o))
 }
 
 /// Whether the firer or the target has been lost (claim 14): at some
