@@ -4228,7 +4228,7 @@ fn drawn_images(l: &Lane, b: ObjectId) -> Vec<u32> {
         .map(|(c, _)| *c);
     let sim = glasnost_app::mapview::live::sim_code(b);
     let mut v: Vec<u32> = s
-        .scene
+        .scene()
         .items
         .iter()
         .filter(|i| i.object == Some(sim) || (code.is_some() && i.object == code))

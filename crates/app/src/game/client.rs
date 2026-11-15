@@ -1801,3 +1801,7 @@ mod display_tests;
 #[cfg(test)]
 #[path = "client_render_perf_tests.rs"]
 mod render_perf_tests;
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "client_gpu_frame_tests.rs"]
+mod gpu_frame_tests;

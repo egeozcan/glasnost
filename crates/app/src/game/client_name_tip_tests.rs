@@ -843,10 +843,10 @@ fn draw_base_unit_at_middle(c: &mut Client) -> Point {
     let v = s.view();
     let (x, y) = (v.origin.0 + p.x - m.x, v.origin.1 + p.y - m.y);
     let image = s
-        .scene
+        .scene_mut()
         .add_image(glasnost_fmt::image::IndexedImage::new(8, 8, vec![1; 64]).unwrap());
-    let row = s.scene.add_row([0xFFFF; 256]);
-    s.scene.items.push(Item {
+    let row = s.scene_mut().add_row([0xFFFF; 256]);
+    s.scene_mut().items.push(Item {
         image,
         x: x - 4,
         y: y - 4,
@@ -896,7 +896,7 @@ fn render_perf_120_a_pick_lives_only_within_its_frame() {
     // The scene changes under the resting pointer without a tick: no item
     // names an object any more.
     let s = session_mut(&mut c);
-    for item in &mut s.scene.items {
+    for item in &mut s.scene_mut().items {
         item.object = None;
     }
     assert_eq!(s.under(p).1, None, "a pick outside a frame is made again");

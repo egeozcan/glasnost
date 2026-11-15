@@ -997,9 +997,10 @@ fn render_perf_119_tagged_light_alpha_follows_its_tag() {
             Some((alpha, tag)),
         );
         queue.submit([encoder.finish()]);
-        // Every render also writes its instances once.
+        // The instances are written only when they change (#113), so the
+        // light-alpha writes are counted on their own.
         let st = r.take_stats();
-        assert_eq!(st.uploads as u64, 1 + uploads, "frame {k}: uploads");
+        assert_eq!(st.light_uploads as u64, uploads, "frame {k}: uploads");
         let cpu = s
             .compose_lit(&view, &filter, &q, Some(alpha.to_vec()))
             .to_rgba();

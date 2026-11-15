@@ -8,8 +8,10 @@
 //! the pipelines that store depth. Items are drawn in scene order, batched
 //! into runs that share a pipeline, so the result matches
 //! [`Scene::compose`] pixel for pixel. The one exception is shadows: the GPU
-//! halves the expanded 8-bit channels by blending, rounded down (the blend
-//! constant `SHADOW_FACTOR`), so a shadowed pixel packs to the CPU's 5-6-5
+//! halves the expanded 8-bit channels by blending, rounded down (a shadow's
+//! source alpha `SHADOW_FACTOR` in the shader, the opaque pipelines blending
+//! source + target × source alpha so bodies and their shadows share a
+//! pipeline and a draw), so a shadowed pixel packs to the CPU's 5-6-5
 //! halving and a later translucent drawing reads the same backdrop, but its
 //! low display bits can differ from the CPU's re-expanded channels (S-0102
 //! claim 26, F7: an engine that keeps 8-bit channels packs to the same
@@ -30,16 +32,6 @@ pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 /// Colour format of the map pass target.
 pub const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-
-/// The blend constant a shadow multiplies the target's 8-bit channels by.
-/// With *c* = 127/255, round(*v*·*c*) = ⌊*v*/2⌋ for every *v* in 0 … 255
-/// (*v*/2 − *v*/510 is within ½ − 1/510 of ⌊*v*/2⌋), and 127/255 is exact
-/// in an 8-bit fixed-point blend unit. ⌊*v*/2⌋ keeps the top 5 (6) bits of
-/// a halved expanded channel equal to the halved 5-bit (6-bit) channel, at
-/// every repeat, so `packed` reads the CPU's pixel.
-// spec: S-0102 claim 26, F7 (each channel halved, rounded down)
-// design: render (#79) (a factor under one half, so the blend's rounding to nearest gives the floor)
-const SHADOW_FACTOR: f64 = 127.0 / 255.0;
 
 const NO_IMAGE: u32 = u32::MAX;
 
@@ -331,15 +323,14 @@ fn row_side(device: &wgpu::Device) -> u32 {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Role {
     Tile,
+    /// Writer, reader and a drawing that ignores depth (neither reads nor
+    /// writes it, S-0102 claim 25): opaque drawings and shadows alike, a
+    /// shadow darkening what is under it by the blend (design: render
+    /// (#114)); a shadow that stores its depth where it darkens (S-0102
+    /// claim 27) is a writer.
     Writer,
     Reader,
-    Shadow,
-    /// Neither reads nor writes depth (S-0102 claim 25).
     Ignore,
-    /// A shadow that stores its depth where it darkens (S-0102 claim 27).
-    ShadowWriter,
-    /// A shadow that neither reads nor writes depth (S-0102 claim 25).
-    ShadowIgnore,
     /// Translucent drawings (S-0102 claim 32, F8) with the depth tests of
     /// a tile, a writer, a reader and a drawing that ignores depth: the
     /// shader blends with a copy of the target.
@@ -353,14 +344,11 @@ enum Role {
 }
 
 /// Every role, in pipeline order.
-const ROLES: [Role; 12] = [
+const ROLES: [Role; 9] = [
     Role::Tile,
     Role::Writer,
     Role::Reader,
-    Role::Shadow,
     Role::Ignore,
-    Role::ShadowWriter,
-    Role::ShadowIgnore,
     Role::BlendTile,
     Role::BlendWriter,
     Role::BlendReader,
@@ -393,7 +381,9 @@ impl Role {
 /// starts counting again.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MapStats {
-    /// Scene items (stack copies counted) looked at by the last render.
+    /// Scene items (stack copies counted) looked at by the last render: the
+    /// cell pass's items near the view and every item of the object pass
+    /// (design: render (#113)).
     pub items: usize,
     /// Instances drawn (each a six-vertex quad).
     pub instances: usize,
@@ -409,6 +399,8 @@ pub struct MapStats {
     pub uploads: usize,
     /// Bytes those writes moved.
     pub upload_bytes: u64,
+    /// The light-alpha writes among `uploads` (design: render (#119)).
+    pub light_uploads: usize,
 }
 
 /// How full the atlas and the palette-row texture are: the benchmark's
@@ -470,10 +462,173 @@ pub struct MapRenderer {
     backdrop: wgpu::Texture,
     /// The counters since the last [`MapRenderer::take_stats`].
     stats: MapStats,
-    /// The last frame's instance list and their view rectangles, kept for
-    /// their room.
+    /// The last frame's instance list, as the instance buffer holds it, and
+    /// their view rectangles, kept for their room.
     list: Vec<Instance>,
     rects: Vec<[u32; 4]>,
+    /// The list before the last, kept for its room.
+    spare: Vec<Instance>,
+    /// Whether the instance buffer holds `list` (false for a new buffer).
+    list_held: bool,
+    /// The cell pass's items by place, kept while the cell pass stays
+    /// (design: render (#113)).
+    cull: Option<CellCull>,
+    /// Images rewritten at another size since the last render.
+    resized: Vec<u32>,
+    /// A frame's cell-pass items near the view, kept for its room.
+    near: Vec<u32>,
+    /// The view's pixels marked for laying out spot groups (design: render
+    /// (#115, #116)).
+    spot_stamps: SpotStamps,
+}
+
+/// The side of a [`CellCull`] bucket in world pixels (design: render
+/// (#113): about a cell's width, so that the buckets a view meets hold few
+/// items outside it; a 1920 × 1080 view meets about 560).
+const CULL_BUCKET: i32 = 64; // design: render (#113)
+
+/// The most buckets an item is filed in; a larger item is looked at in
+/// every frame (design: render (#113)).
+const CULL_SPAN: i64 = 256; // design: render (#113)
+
+/// The items of a cell pass filed by the world buckets their rectangles
+/// meet (design: render (#113)), so that a frame looks only at those near
+/// its view. It holds while the scene's [`Scene::cell_pass_rev`] and
+/// [`Scene::cell_pass_len`] are those it was made for and none of the
+/// images its items draw changed size.
+struct CellCull {
+    rev: u64,
+    len: usize,
+    /// Whether the cell pass draws image `i`.
+    images: Vec<bool>,
+    /// The bucket of the grid's first column and row.
+    origin: (i32, i32),
+    /// The grid's columns and rows.
+    dims: (i32, i32),
+    /// Each bucket's items, in scene order, row by row.
+    buckets: Vec<Vec<u32>>,
+    /// Items looked at in every frame: a stack (its copies depend on the
+    /// view) or an item larger than [`CULL_SPAN`] buckets.
+    always: Vec<u32>,
+}
+
+impl CellCull {
+    /// Files the cell pass of `scene`.
+    fn new(scene: &Scene) -> Self {
+        let len = scene.cell_pass_len.min(scene.items.len());
+        let mut images = vec![false; scene.images.len()];
+        let mut always = Vec::new();
+        let mut filed: Vec<(u32, (i32, i32, i32, i32))> = Vec::new();
+        let (mut lo, mut hi) = ((i32::MAX, i32::MAX), (i32::MIN, i32::MIN));
+        for (n, item) in scene.items[..len].iter().enumerate() {
+            let Some(seen) = images.get_mut(item.image as usize) else {
+                always.push(n as u32);
+                continue;
+            };
+            *seen = true;
+            let (l, t, r, b) = scene.bounds(item);
+            if r <= l || b <= t {
+                // Draws no pixel anywhere; looked at so that its count stays.
+                always.push(n as u32);
+                continue;
+            }
+            let span = (
+                l.div_euclid(CULL_BUCKET),
+                t.div_euclid(CULL_BUCKET),
+                (r - 1).div_euclid(CULL_BUCKET),
+                (b - 1).div_euclid(CULL_BUCKET),
+            );
+            let count = (i64::from(span.2) - i64::from(span.0) + 1)
+                * (i64::from(span.3) - i64::from(span.1) + 1);
+            if item.stack.is_some() || count > CULL_SPAN {
+                always.push(n as u32);
+                continue;
+            }
+            lo = (lo.0.min(span.0), lo.1.min(span.1));
+            hi = (hi.0.max(span.2), hi.1.max(span.3));
+            filed.push((n as u32, span));
+        }
+        let dims = if filed.is_empty() {
+            (0, 0)
+        } else {
+            (hi.0 - lo.0 + 1, hi.1 - lo.1 + 1)
+        };
+        let mut buckets = vec![Vec::new(); (dims.0 as usize) * (dims.1 as usize)];
+        for (n, (x0, y0, x1, y1)) in filed {
+            for by in y0..=y1 {
+                for bx in x0..=x1 {
+                    let at = (by - lo.1) as usize * dims.0 as usize + (bx - lo.0) as usize;
+                    buckets[at].push(n);
+                }
+            }
+        }
+        Self {
+            rev: scene.cell_pass_rev,
+            len: scene.cell_pass_len,
+            images,
+            origin: lo,
+            dims,
+            buckets,
+            always,
+        }
+    }
+
+    /// Whether the cull holds for `scene`, whose images `resized` changed
+    /// size since it was last asked.
+    fn holds(&self, scene: &Scene, resized: &[u32]) -> bool {
+        self.rev == scene.cell_pass_rev
+            && self.len == scene.cell_pass_len
+            && scene.items.len() >= self.len
+            && !resized
+                .iter()
+                .any(|&i| self.images.get(i as usize).copied().unwrap_or(false))
+    }
+
+    /// Puts into `out`, in scene order, the cell-pass items whose rectangle
+    /// may meet the view of `origin` and `size`: every one that does.
+    fn near(&self, origin: (i32, i32), size: (i32, i32), out: &mut Vec<u32>) {
+        out.clear();
+        out.extend_from_slice(&self.always);
+        if size.0 > 0 && size.1 > 0 && self.dims.0 > 0 {
+            let x0 = (origin.0.div_euclid(CULL_BUCKET) - self.origin.0).max(0);
+            let y0 = (origin.1.div_euclid(CULL_BUCKET) - self.origin.1).max(0);
+            let x1 = ((origin.0 + size.0 - 1).div_euclid(CULL_BUCKET) - self.origin.0)
+                .min(self.dims.0 - 1);
+            let y1 = ((origin.1 + size.1 - 1).div_euclid(CULL_BUCKET) - self.origin.1)
+                .min(self.dims.1 - 1);
+            for by in y0..=y1 {
+                for bx in x0..=x1 {
+                    out.extend_from_slice(&self.buckets[(by * self.dims.0 + bx) as usize]);
+                }
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+    }
+}
+
+/// Checks that `near` holds every cell-pass item of `scene` whose rectangle
+/// meets `view` (debug builds: a cell pass changed without a new
+/// [`Scene::cell_pass_rev`] shows here).
+#[cfg(debug_assertions)]
+fn check_near(scene: &Scene, view: &View, near: &[u32]) {
+    let (ox, oy) = view.origin;
+    let (w, h) = (view.size.0 as i32, view.size.1 as i32);
+    for (n, item) in scene.items[..scene.cell_pass_len.min(scene.items.len())]
+        .iter()
+        .enumerate()
+    {
+        if item.stack.is_some() || item.image as usize >= scene.images.len() {
+            continue;
+        }
+        let (l, t, r, b) = scene.bounds(item);
+        let meets = r > ox && b > oy && l < ox + w && t < oy + h;
+        assert!(
+            !meets || near.binary_search(&(n as u32)).is_ok(),
+            "cell-pass item {n} meets the view but the kept cull left it out: the cell pass \
+             changed without a new Scene::cell_pass_rev (design: render (#113))"
+        );
+    }
 }
 
 /// Why the scene could not be uploaded.
@@ -652,11 +807,9 @@ impl MapRenderer {
             let (compare, write) = match role {
                 Role::Tile => (wgpu::CompareFunction::LessEqual, true),
                 Role::Writer => (wgpu::CompareFunction::Less, true),
-                Role::Reader | Role::Shadow => (wgpu::CompareFunction::Less, false),
-                Role::Ignore => (wgpu::CompareFunction::Always, false),
-                Role::ShadowWriter => (wgpu::CompareFunction::Less, true),
+                Role::Reader => (wgpu::CompareFunction::Less, false),
                 // spec: S-0102 claim 25 (a drawing with no depth test neither reads nor writes depth)
-                Role::ShadowIgnore => (wgpu::CompareFunction::Always, false),
+                Role::Ignore => (wgpu::CompareFunction::Always, false),
                 Role::BlendTile => (wgpu::CompareFunction::LessEqual, true),
                 Role::BlendWriter => (wgpu::CompareFunction::Less, true),
                 Role::BlendReader => (wgpu::CompareFunction::Less, false),
@@ -664,15 +817,19 @@ impl MapRenderer {
                 // spec: S-0518 claim 20 (a beam reads depth and never writes it; strictly less passes)
                 Role::Spot => (wgpu::CompareFunction::Less, false),
             };
-            let blend = matches!(role, Role::Shadow | Role::ShadowWriter | Role::ShadowIgnore)
-                .then_some(wgpu::BlendState {
+            // design: render (#114): source + target × source alpha; `fs_main` gives an opaque
+            // drawing alpha 0 (its own colour) and a shadow black with alpha `SHADOW_FACTOR`
+            // (the target darkened), so bodies and shadows share a pipeline and a draw
+            let blend = matches!(role, Role::Writer | Role::Reader | Role::Ignore).then_some(
+                wgpu::BlendState {
                     color: wgpu::BlendComponent {
-                        src_factor: wgpu::BlendFactor::Zero,
-                        dst_factor: wgpu::BlendFactor::Constant,
+                        src_factor: wgpu::BlendFactor::One,
+                        dst_factor: wgpu::BlendFactor::SrcAlpha,
                         operation: wgpu::BlendOperation::Add,
                     },
                     alpha: wgpu::BlendComponent::OVER,
-                });
+                },
+            );
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("map"),
                 layout: Some(&pipeline_layout),
@@ -749,6 +906,12 @@ impl MapRenderer {
             stats: MapStats::default(),
             list: Vec::new(),
             rects: Vec::new(),
+            spare: Vec::new(),
+            list_held: false,
+            cull: None,
+            resized: Vec::new(),
+            near: Vec::new(),
+            spot_stamps: SpotStamps::default(),
         })
     }
 
@@ -809,6 +972,8 @@ impl MapRenderer {
                 }
                 self.slots[i] = Slot::ABSENT;
                 self.sizes[i] = size;
+                // design: render (#113): the items that draw it may cover other buckets now
+                self.resized.push(id);
                 let slot = self.place(device, queue, scene, size)?;
                 self.slots[i] = slot;
                 self.write(queue, slot, size.0, size.1, img.pixels());
@@ -1137,9 +1302,9 @@ impl MapRenderer {
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&uniform));
         let (ox, oy) = view.origin;
         let (w, h) = (view.size.0 as i32, view.size.1 as i32);
-        // The buffers of the last frame, emptied, so that a frame does not
-        // grow them again.
-        let mut list: Vec<Instance> = std::mem::take(&mut self.list);
+        // The buffers of the frame before the last, emptied, so that a frame
+        // does not grow them again; the last frame's list stays, to compare.
+        let mut list: Vec<Instance> = std::mem::take(&mut self.spare);
         list.clear();
         // The view rectangle each instance draws into, for placing the
         // backdrop copies (`passes`).
@@ -1155,8 +1320,32 @@ impl MapRenderer {
         // run of its own, with the view rectangle it covers.
         let mut batches: Vec<Batch> = Vec::new();
         let mut spot_groups = scene.spots.iter().peekable();
+        // design: render (#113): the cell pass's items that may meet the view, from the cull
+        // kept while the cell pass stays, then every item of the object pass; an item left out
+        // would draw no pixel, so the instances and their order are those of every item
+        let cell_len = scene.cell_pass_len.min(scene.items.len());
+        if !self
+            .cull
+            .as_ref()
+            .is_some_and(|c| c.holds(scene, &self.resized))
+        {
+            self.cull = (cell_len > 0).then(|| CellCull::new(scene));
+        }
+        self.resized.clear();
+        let mut near = std::mem::take(&mut self.near);
+        match &self.cull {
+            Some(c) => c.near(view.origin, (w, h), &mut near),
+            None => near.clear(),
+        }
+        #[cfg(debug_assertions)]
+        check_near(scene, view, &near);
+        let order = near
+            .iter()
+            .map(|&n| n as usize)
+            .chain(cell_len..scene.items.len());
         // spec: S-0109 claim 27 (a stack's copies, lowest first, as many as the view's top row allows)
-        let copies = scene.items.iter().enumerate().flat_map(|(n, i)| {
+        let copies = order.flat_map(|n| {
+            let i = &scene.items[n];
             let count = i.stack.map_or(1, |s| s.copies(oy));
             (0..count).map(move |j| (n, i, j))
         });
@@ -1164,7 +1353,7 @@ impl MapRenderer {
             self.stats.items += 1;
             while let Some(g) = spot_groups.next_if(|g| g.at <= n) {
                 if filter.shows_spots(g) {
-                    spot_instances(g, view, &mut list, &mut batches);
+                    spot_instances(g, view, &mut self.spot_stamps, &mut list, &mut batches);
                     spot_rects(&list, &mut rects);
                 }
             }
@@ -1234,11 +1423,12 @@ impl MapRenderer {
                     let role = match (item.paint, item.test) {
                         // spec: S-0102 claim 27 (a cell-pass shadow stores its depth, quirks.cell_pass_shadows_write_depth)
                         (Paint::Shadow, DepthTest::Writer) if q.cell_pass_shadows_write_depth => {
-                            Role::ShadowWriter
+                            Role::Writer
                         }
                         // spec: S-0102 claim 25 (no depth test: drawn whatever the stored depth), S-0111 claim 16 (the self-heal marker)
-                        (Paint::Shadow, DepthTest::Ignore) => Role::ShadowIgnore,
-                        (Paint::Shadow, _) => Role::Shadow,
+                        (Paint::Shadow, DepthTest::Ignore) => Role::Ignore,
+                        // A shadow otherwise reads depth and stores none.
+                        (Paint::Shadow, _) => Role::Reader,
                         (Paint::Translucent(..), DepthTest::Reader) => Role::BlendReader,
                         (Paint::Translucent(..), DepthTest::Tile) => Role::BlendTile,
                         (Paint::Translucent(..), DepthTest::Writer) => Role::BlendWriter,
@@ -1252,7 +1442,8 @@ impl MapRenderer {
                 }
             };
             // `diamond` holds the diamond flag in bit 0, the translucency
-            // code in bits 1 and 2 and the protection colour mask in bits 16
+            // code in bits 1 and 2, the pixel-particle flag in bit 3, the
+            // shadow flag in bit 4 and the protection colour mask in bits 16
             // to 31.
             let (row, diamond, shade_rows, rho) = match item.paint {
                 Paint::Row(r) => (r as u32, 0, 0, 0),
@@ -1275,7 +1466,8 @@ impl MapRenderer {
                 Paint::Translucent(s, t) => {
                     (s.base, t.code() << 1, u32::from(s.rows), u32::from(s.rho))
                 }
-                Paint::Shadow => (0, 0, 0, 0),
+                // design: render (#114): bit 4 marks a shadow
+                Paint::Shadow => (0, 1 << 4, 0, 0),
                 // spec: S-0616 claim 28 (a pixel particle's own colour, flagged by bit 3)
                 Paint::Pixel(c) => (
                     (u32::from(c.r) << 16) | (u32::from(c.g) << 8) | u32::from(c.b),
@@ -1331,9 +1523,10 @@ impl MapRenderer {
             }
         }
         for g in spot_groups.filter(|g| filter.shows_spots(g)) {
-            spot_instances(g, view, &mut list, &mut batches);
+            spot_instances(g, view, &mut self.spot_stamps, &mut list, &mut batches);
             spot_rects(&list, &mut rects);
         }
+        self.near = near;
         if list.len() > self.instance_capacity {
             self.instance_capacity = list.len().next_power_of_two();
             self.instances = device.create_buffer(&wgpu::BufferDescriptor {
@@ -1342,12 +1535,25 @@ impl MapRenderer {
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
+            self.list_held = false;
         }
-        if !list.is_empty() {
-            queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(&list));
+        // design: render (#113): the instances the buffer already holds at their places (the
+        // last frame's, up to the first that differs) are not written again
+        let same = if self.list_held {
+            list.iter()
+                .zip(&self.list)
+                .take_while(|(a, b)| bytemuck::bytes_of(*a) == bytemuck::bytes_of(*b))
+                .count()
+        } else {
+            0
+        };
+        if same < list.len() {
+            let at = (same * std::mem::size_of::<Instance>()) as u64;
+            queue.write_buffer(&self.instances, at, bytemuck::cast_slice(&list[same..]));
             self.stats.uploads += 1;
-            self.stats.upload_bytes += std::mem::size_of_val(list.as_slice()) as u64;
+            self.stats.upload_bytes += std::mem::size_of_val(&list[same..]) as u64;
         }
+        self.list_held = true;
         self.stats.instances += list.len();
         let begin = |encoder: &mut wgpu::CommandEncoder, first: bool| {
             let mut pass = encoder
@@ -1386,12 +1592,6 @@ impl MapRenderer {
                 .forget_lifetime();
             pass.set_bind_group(0, &self.bind_group, &[]);
             pass.set_vertex_buffer(0, self.instances.slice(..));
-            pass.set_blend_constant(wgpu::Color {
-                r: SHADOW_FACTOR,
-                g: SHADOW_FACTOR,
-                b: SHADOW_FACTOR,
-                a: 1.0,
-            });
             pass
         };
         self.stats.draws += batches.len();
@@ -1431,7 +1631,7 @@ impl MapRenderer {
             }
         }
         let drawn = list.len();
-        self.list = list;
+        self.spare = std::mem::replace(&mut self.list, list);
         self.rects = rects;
         drawn
     }
@@ -1484,7 +1684,25 @@ fn passes(batches: Vec<Batch>, rects: &[[u32; 4]]) -> Vec<(Vec<[u32; 4]>, Vec<Ba
 /// already holds: overlapping spots then apply in order, as on the CPU
 /// ([`crate::spots::apply`]). A magnetic wave's spots never repeat a pixel
 /// and read the copy around them (S-0607 claim 25).
-fn spot_instances(g: &SpotGroup, view: &View, list: &mut Vec<Instance>, batches: &mut Vec<Batch>) {
+///
+/// A group with no magnetic wave is laid out by [`layered_spot_instances`]
+/// instead (design: render (#115, #116)).
+fn spot_instances(
+    g: &SpotGroup,
+    view: &View,
+    stamps: &mut SpotStamps,
+    list: &mut Vec<Instance>,
+    batches: &mut Vec<Batch>,
+) {
+    if g.spots.len() < SpotStamps::LAYERS as usize
+        && !g
+            .spots
+            .iter()
+            .any(|s| matches!(s.kind, SpotKind::Wave { .. }))
+    {
+        layered_spot_instances(g, view, stamps, list, batches);
+        return;
+    }
     let (ox, oy) = view.origin;
     let (w, h) = (view.size.0 as i32, view.size.1 as i32);
     let mut held: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
@@ -1559,6 +1777,178 @@ fn spot_instances(g: &SpotGroup, view: &View, list: &mut Vec<Instance>, batches:
     close(list, start, rect, batches);
 }
 
+/// The view's pixels marked for laying out one spot group, kept for their
+/// room (design: render (#115, #116)): a word a pixel, the group's
+/// generation in the top 8 bits and the layer of the last spot at the pixel
+/// in the low 24, so that a new group needs no clearing.
+#[derive(Default)]
+struct SpotStamps {
+    cells: Vec<u32>,
+    /// The generation of the group being laid out, 1 to 255 (0 marks
+    /// nothing).
+    generation: u32,
+    /// Each in-view spot's layer, in group order.
+    layers: Vec<u32>,
+    /// Each layer's spot count, then where its spots go.
+    counts: Vec<u32>,
+    /// Each layer's rectangle of reading spots (x0, y0, x1, y1).
+    reads: Vec<Option<[i32; 4]>>,
+    /// The group's instances in layer order.
+    sorted: Vec<Instance>,
+}
+
+impl SpotStamps {
+    /// The layers a word holds; a group with as many spots or more is laid
+    /// out spot by spot.
+    const LAYERS: u32 = 1 << 24;
+
+    /// Starts a group over a view of `n` pixels.
+    fn begin(&mut self, n: usize) {
+        if self.cells.len() != n {
+            self.cells.clear();
+            self.cells.resize(n, 0);
+            self.generation = 0;
+        }
+        self.generation += 1;
+        if self.generation > 255 {
+            self.cells.fill(0);
+            self.generation = 1;
+        }
+    }
+
+    /// The layer of the group's last spot at pixel `i`, if one is there.
+    fn get(&self, i: usize) -> Option<u32> {
+        let c = self.cells[i];
+        (c >> 24 == self.generation).then_some(c & (Self::LAYERS - 1))
+    }
+
+    fn set(&mut self, i: usize, layer: u32) {
+        self.cells[i] = (self.generation << 24) | layer;
+    }
+}
+
+/// Appends the instances of spot group `g`, which holds no magnetic wave,
+/// and their batches, one batch a layer (design: render (#115, #116)).
+///
+/// A spot that reads the target (additive and blended, S-0518 F7 and F8)
+/// reads the copy taken before its batch, which must hold every earlier
+/// spot at its pixel; one that does not (opaque, S-0518 claim 23; a beam
+/// flash, S-0514 claim 25) only replaces the pixel. So the first spot at a
+/// pixel is in layer 0, and a later one in the layer of the spot before it
+/// there, one higher if it reads. The layers are drawn in turn, each spot
+/// after every earlier spot at its pixel, and within a layer in group
+/// order, which the draw keeps; spots read and write no depth (S-0518 claim
+/// 20), so none changes whether another is drawn. A layer's batch covers
+/// the pixels its reading spots read, and a layer without one takes no
+/// copy: the pixels are those [`crate::spots::apply`] gives, with a copy
+/// and a pass for each depth of repetition instead of each repeat.
+fn layered_spot_instances(
+    g: &SpotGroup,
+    view: &View,
+    stamps: &mut SpotStamps,
+    list: &mut Vec<Instance>,
+    batches: &mut Vec<Batch>,
+) {
+    let (ox, oy) = view.origin;
+    let (w, h) = (view.size.0 as i32, view.size.1 as i32);
+    stamps.begin(view.size.0 as usize * view.size.1 as usize);
+    stamps.layers.clear();
+    stamps.reads.clear();
+    let start = list.len();
+    let mut top = 0;
+    for s in &g.spots {
+        let (x, y) = (s.x - ox, s.y - oy);
+        if x < 0 || y < 0 || x >= w || y >= h {
+            continue;
+        }
+        let (kind, colour, weights, alpha_from, reads) = match s.kind {
+            SpotKind::Opaque { colour } => (0u32, u32::from(colour), 0u32, (0, 0), false),
+            SpotKind::Additive { rgb } => (1, rgb_word(rgb), 0, (0, 0), true),
+            SpotKind::Blended {
+                rgb,
+                line,
+                screen,
+                alpha_from,
+            } => (
+                2,
+                rgb_word(rgb),
+                u32::from(line) | (u32::from(screen) << 16),
+                alpha_from,
+                true,
+            ),
+            SpotKind::Flash { rgb } => (3, rgb_word(rgb), 0, (0, 0), false),
+            SpotKind::Wave { .. } => continue,
+        };
+        let i = y as usize * view.size.0 as usize + x as usize;
+        let layer = stamps.get(i).map_or(0, |l| l + u32::from(reads));
+        stamps.set(i, layer);
+        stamps.layers.push(layer);
+        top = top.max(layer);
+        if reads {
+            // A blended spot's `alpha_from` reads the light-alpha values, not the target.
+            let l = layer as usize;
+            if stamps.reads.len() <= l {
+                stamps.reads.resize(l + 1, None);
+            }
+            let r = stamps.reads[l].get_or_insert([x, y, x + 1, y + 1]);
+            r[0] = r[0].min(x);
+            r[1] = r[1].min(y);
+            r[2] = r[2].max(x + 1);
+            r[3] = r[3].max(y + 1);
+        }
+        list.push(Instance {
+            image: [0, 0, NO_IMAGE, 1 | (1 << 16)],
+            place: [s.x, s.y, s.bias, 0],
+            depth: [0, 0, NO_IMAGE, 0],
+            paint: [kind, colour, weights, 0],
+            companion: [i32::from(alpha_from.0), i32::from(alpha_from.1), 0, 0],
+        });
+    }
+    if list.len() == start {
+        return;
+    }
+    let layers = top as usize + 1;
+    stamps.counts.clear();
+    stamps.counts.resize(layers, 0);
+    for &l in &stamps.layers {
+        stamps.counts[l as usize] += 1;
+    }
+    if layers > 1 {
+        // A stable counting sort by layer.
+        let mut at = 0;
+        for c in &mut stamps.counts {
+            let n = *c;
+            *c = at;
+            at += n;
+        }
+        stamps.sorted.clear();
+        stamps.sorted.resize(list.len() - start, Instance::zeroed());
+        for (k, inst) in list[start..].iter().enumerate() {
+            let slot = &mut stamps.counts[stamps.layers[k] as usize];
+            stamps.sorted[*slot as usize] = *inst;
+            *slot += 1;
+        }
+        list[start..].copy_from_slice(&stamps.sorted);
+    }
+    // `counts` now holds each layer's end (or, for one layer, its count).
+    let mut from = start as u32;
+    for l in 0..layers {
+        let end = if layers > 1 {
+            start as u32 + stamps.counts[l]
+        } else {
+            list.len() as u32
+        };
+        let rect = stamps
+            .reads
+            .get(l)
+            .copied()
+            .flatten()
+            .map(|[x0, y0, x1, y1]| [x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32]);
+        batches.push((Role::Spot, from..end, rect));
+        from = end;
+    }
+}
+
 /// Three 8-bit channels in one word, red lowest.
 fn rgb_word(c: [u8; 3]) -> u32 {
     u32::from(c[0]) | (u32::from(c[1]) << 8) | (u32::from(c[2]) << 16)
@@ -1593,6 +1983,7 @@ impl MapRenderer {
             if filled {
                 // design: render (#152): the texture's first fill is an upload too
                 self.stats.uploads += 1;
+                self.stats.light_uploads += 1;
                 self.stats.upload_bytes += n as u64;
             }
             let backdrop = backdrop_texture(device, size);
@@ -1639,6 +2030,7 @@ impl MapRenderer {
         };
         self.stats.uploads += 1;
         self.stats.upload_bytes += bytes.len() as u64;
+        self.stats.light_uploads += 1;
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.alpha.0,

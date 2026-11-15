@@ -248,7 +248,7 @@ impl Lane {
             .session
             .as_ref()
             .unwrap()
-            .scene
+            .scene()
             .items
             .iter()
             .filter(|it| it.object == Some(code))

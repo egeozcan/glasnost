@@ -133,13 +133,13 @@ fn draw_lit_ground(s: &mut Session) {
     use glasnost_render::scene::{Group, Item, ItemDepth};
     let v = s.view();
     let (w, h) = (v.size.0 * 2, v.size.1 * 2);
-    let image = s.scene.add_image(
+    let image = s.scene_mut().add_image(
         glasnost_fmt::image::IndexedImage::new(w, h, vec![1; (w * h) as usize]).unwrap(),
     );
-    let base = s.scene.add_row([0x001F; 256]);
-    assert_eq!(s.scene.add_row([0x07E0; 256]), base + 1);
-    assert_eq!(s.scene.add_row([0xF800; 256]), base + 2);
-    s.scene.items.push(Item {
+    let base = s.scene_mut().add_row([0x001F; 256]);
+    assert_eq!(s.scene_mut().add_row([0x07E0; 256]), base + 1);
+    assert_eq!(s.scene_mut().add_row([0xF800; 256]), base + 2);
+    s.scene_mut().items.push(Item {
         image,
         x: v.origin.0 - v.size.0 as i32 / 2,
         y: v.origin.1 - v.size.1 as i32 / 2,

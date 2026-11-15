@@ -3961,6 +3961,8 @@ impl Live {
             );
             self.cell_pass_len = scene.items.len();
             scene.cell_pass_len = self.cell_pass_len;
+            // design: render (#113): the cell pass is new
+            scene.cell_pass_rev += 1;
             self.gone = gone;
         }
         scene.items.truncate(self.cell_pass_len);

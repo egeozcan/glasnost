@@ -113,6 +113,17 @@ fn in_diamond(c: i32, r: i32) -> bool {
     return c >= f && c < f + n;
 }
 
+// The source alpha a shadow multiplies the target's 8-bit channels by. With
+// c = 127/255, round(v c) = floor(v / 2) for every v in 0 ... 255 (v / 2 -
+// v / 510 is within 1/2 - 1/510 of floor(v / 2)), and 127/255 is exact in an
+// 8-bit fixed-point blend unit. floor(v / 2) keeps the top 5 (6) bits of a
+// halved expanded channel equal to the halved 5-bit (6-bit) channel, at every
+// repeat, so `packed` reads the CPU's pixel.
+// spec: S-0102 claim 26, F7 (each channel halved, rounded down)
+// design: render (#79) (a factor under one half, so the blend's rounding to nearest gives the floor)
+// design: render (#114) (the factor is the shadow's source alpha, not a blend constant)
+const SHADOW_FACTOR: f32 = 127.0 / 255.0;
+
 struct Fragment {
     @location(0) color: vec4<f32>,
     @builtin(frag_depth) depth: f32,
@@ -183,6 +194,15 @@ fn fs_main(in: Varyings) -> Fragment {
     // part only for a depth below 0: the CPU stores it modulo 65536 and
     // draws it over a stored 0, the GPU stores 0 and does not.
     depth = clamp(depth, 0, 65535);
+    // The opaque pipelines blend source + target x source alpha (design: render
+    // (#114)): a drawing gives alpha 0 and so its own colour, a shadow gives
+    // black with alpha SHADOW_FACTOR and so the target darkened by it.
+    if (in.paint.y & 16u) != 0u {
+        var shade: Fragment;
+        shade.color = vec4<f32>(0.0, 0.0, 0.0, SHADOW_FACTOR);
+        shade.depth = f32(depth) / 65536.0;
+        return shade;
+    }
     if (in.paint.y & 8u) != 0u {
         // S-0616 claim 28: a pixel particle's own colour (x = R << 16 |
         // G << 8 | B), not drawn at light-alpha 0, each channel times a / 128
@@ -196,7 +216,7 @@ fn fs_main(in: Varyings) -> Fragment {
             c = (c * a) / 128u;
         }
         var pix: Fragment;
-        pix.color = vec4<f32>(expand(c.r >> 3u, 5u), expand(c.g >> 2u, 6u), expand(c.b >> 3u, 5u), 1.0);
+        pix.color = vec4<f32>(expand(c.r >> 3u, 5u), expand(c.g >> 2u, 6u), expand(c.b >> 3u, 5u), 0.0);
         pix.depth = f32(depth) / 65536.0;
         return pix;
     }
@@ -227,7 +247,7 @@ fn fs_main(in: Varyings) -> Fragment {
             expand((u >> 11u) & 31u, 5u),
             expand((u >> 5u) & 63u, 6u),
             expand(u & 31u, 5u),
-            1.0,
+            0.0,
         );
     }
     if code != 0u {
@@ -242,6 +262,9 @@ fn fs_main(in: Varyings) -> Fragment {
             1.0,
         );
     }
+    // Alpha 0 keeps an opaque drawing's own colour under the blend (design:
+    // render (#114)); the translucent pipelines do not blend.
+    out.color.a = 0.0;
     out.depth = f32(depth) / 65536.0;
     return out;
 }

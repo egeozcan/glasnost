@@ -232,7 +232,7 @@ fn body_images(c: &Client, id: ObjectId) -> Vec<u32> {
     c.session
         .as_ref()
         .unwrap()
-        .scene
+        .scene()
         .items
         .iter()
         .filter(|it| it.object == Some(code) && it.group != glasnost_render::scene::Group::Shadows)

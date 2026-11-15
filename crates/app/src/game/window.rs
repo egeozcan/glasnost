@@ -744,6 +744,9 @@ struct MapGpu {
     /// The tags given to the light alpha so far: each new [`LightKept`]
     /// takes the next (design: render (#119)).
     light_tags: u64,
+    /// What the target holds: the battlefield drawn last, from what. None
+    /// when the target holds no battlefield drawn by this renderer.
+    drawn: Option<MapDrawn>,
 }
 
 /// The battlefield's colour target and depth buffer with their views,
@@ -755,6 +758,17 @@ struct MapTargets {
     /// Kept with its view, which it backs.
     _depth: wgpu::Texture,
     depth_view: wgpu::TextureView,
+}
+
+/// What a battlefield in the map target was drawn from (design: render
+/// (#112)): the drawing reads only the scene, the view, the filter and the
+/// light alpha, so a frame with the same scene (its stamp,
+/// [`Session::scene_stamp`]), view, filter and kept light shows the target
+/// as it is.
+struct MapDrawn {
+    stamp: u64,
+    view: glasnost_render::scene::View,
+    filter: glasnost_render::scene::Filter,
 }
 
 /// The game, if any, whose battlefield is composed on the CPU because its
@@ -867,6 +881,10 @@ pub struct GpuDraw {
     /// The last prepare's laps, when [`GpuDraw::lap_clock`] is set.
     pub laps: DrawLaps,
     rebuilds: usize,
+    /// Frames since the last [`GpuDraw::take_stats`] that showed the
+    /// battlefield drawn before without recording it (design: render
+    /// (#112)).
+    kept: usize,
     /// The last prepare's size in view pixels.
     size: (u32, u32),
     /// Screen pixels per view pixel and the target's size in screen
@@ -901,6 +919,9 @@ pub struct DrawStats {
     /// Battlefield renderers made anew (a new game, or a full atlas), each
     /// uploading the whole scene.
     pub rebuilds: usize,
+    /// Frames that kept the battlefield drawn before: nothing it is drawn
+    /// from changed (design: render (#112)).
+    pub kept: usize,
     /// How full the battlefield's atlas is now (no renderer: all zero).
     pub atlas: glasnost_render::map_gpu::AtlasUse,
 }
@@ -915,6 +936,7 @@ impl GpuDraw {
             lap_clock: None,
             laps: DrawLaps::default(),
             rebuilds: 0,
+            kept: 0,
             size: (1, 1),
             screen: (1, (1, 1)),
         }
@@ -939,6 +961,7 @@ impl GpuDraw {
                 .unwrap_or_default(),
             batch: self.batch.take_stats(),
             rebuilds: std::mem::take(&mut self.rebuilds),
+            kept: std::mem::take(&mut self.kept),
             atlas: self
                 .map
                 .as_ref()
@@ -985,8 +1008,12 @@ impl GpuDraw {
             hud: self.lap() - start,
             ..DrawLaps::default()
         };
-        if !client.cpu_map
-            && client.shell.screen == Screen::Game
+        let on_gpu = !client.cpu_map && client.shell.screen == Screen::Game;
+        if !on_gpu && let Some(m) = self.map.as_mut() {
+            // design: render (#112): the target is not drawn this frame (and the CPU picture may stand in for it), so the next frame on the GPU draws it
+            m.drawn = None;
+        }
+        if on_gpu
             && let Some(s) = client.session.as_ref()
             && let Err(e) = self.render_map(device, queue, s, serial, encoder)
         {
@@ -1043,7 +1070,7 @@ impl GpuDraw {
         // device's limit (design: render (#105)).
         let start = self.lap();
         let synced = match self.map.as_mut() {
-            Some(m) if m.serial == serial => m.renderer.sync(device, queue, &s.scene).is_ok(),
+            Some(m) if m.serial == serial => m.renderer.sync(device, queue, s.scene()).is_ok(),
             _ => false,
         };
         if !synced {
@@ -1051,7 +1078,7 @@ impl GpuDraw {
             // design: render (#102): the old renderer and its target go before the new one is built, so the two atlases never exist at once
             self.map = None;
             self.batch.remove_image(MAP_IMAGE);
-            let renderer = MapRenderer::new(device, queue, &s.scene, COLOR_FORMAT)
+            let renderer = MapRenderer::new(device, queue, s.scene(), COLOR_FORMAT)
                 .map_err(|e| e.to_string())?;
             self.map = Some(MapGpu {
                 serial,
@@ -1060,12 +1087,15 @@ impl GpuDraw {
                 targets: None,
                 light: None,
                 light_tags: 0,
+                drawn: None,
             });
         }
         let m = self.map.as_mut().ok_or("no map renderer")?;
         let v = s.view();
         if remake_targets(m.targets.as_ref().map(|_| m.size), v.size) {
             // design: render (#130): the targets' views are made with them, not every frame
+            // design: render (#112): a new target holds no battlefield
+            m.drawn = None;
             let (color, depth) = targets(device, v.size, COLOR_FORMAT);
             let color_view = color.create_view(&Default::default());
             let depth_view = depth.create_view(&Default::default());
@@ -1103,18 +1133,34 @@ impl GpuDraw {
         let alpha = m.light.as_ref().map(|l| (l.alpha.as_slice(), Some(l.tag)));
         let drawn = lap();
         self.laps.light = drawn - lit;
+        let stamp = s.scene_stamp();
+        // design: render (#112): nothing the drawing reads changed since the target was drawn, so it shows as it is
+        if kept
+            && m.drawn
+                .as_ref()
+                .is_some_and(|d| d.stamp == stamp && d.view == v && d.filter == *s.filter())
+        {
+            self.kept += 1;
+            self.laps.map = lap() - drawn;
+            return Ok(());
+        }
         m.renderer.render_lit_into(
             device,
             queue,
             encoder,
             (&t.color, &t.color_view),
             &t.depth_view,
-            &s.scene,
+            s.scene(),
             &v,
             s.filter(),
             &glasnost_render::compose::ComposeQuirks::default(),
             alpha,
         );
+        m.drawn = Some(MapDrawn {
+            stamp,
+            view: v,
+            filter: s.filter().clone(),
+        });
         self.laps.map = lap() - drawn;
         Ok(())
     }
