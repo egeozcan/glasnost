@@ -245,6 +245,32 @@ fn fractions_carry_between_events() {
     assert_eq!(c.take((0.0, 0.0)), (0, 0));
 }
 
+/// A delta beyond the 32-bit range gives the most pixels whose negative
+/// is a pixel count too (#153), so a pan against it cannot overflow.
+#[test]
+fn an_extreme_delta_is_held_to_a_negatable_count() {
+    let mut c = Carry::default();
+    assert_eq!(c.take((-1e12, 1e12)), (-i32::MAX, i32::MAX));
+    let mut c = Carry::default();
+    assert_eq!(c.take((f64::MIN, f64::MAX)), (-i32::MAX, i32::MAX));
+    // Only the fraction is carried past a held delta, not the pixels beyond the count.
+    let mut c = Carry::default();
+    assert_eq!(c.take((-1e12 - 0.5, 1e12 + 0.25)), (-i32::MAX, i32::MAX));
+    assert_eq!(c.take((0.5, 0.75)), (0, 1));
+}
+
+/// A drag between points at the ends of the 32-bit range pans by the most
+/// pixels a count holds (#153).
+#[test]
+fn an_extreme_drag_does_not_overflow() {
+    let mut t = Touches::new();
+    ev(&mut t, Phase::Start, 1, at(i32::MIN, i32::MAX), 0, Region::Map);
+    assert_eq!(
+        ev(&mut t, Phase::Move, 1, at(i32::MAX, i32::MIN), 5, Region::Map),
+        Some(Gesture::Pan((-i32::MAX, i32::MAX)))
+    );
+}
+
 /// Two fingers down and up together within the slop and 300 ms: a right
 /// click at the midpoint of their touch points.
 #[test]

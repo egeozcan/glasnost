@@ -172,6 +172,11 @@ pub enum Passenger {
     Other,
 }
 
+/// The most pips a row is built with: a longer row is cut here. 1024 pips
+/// are at least 4096 pixels, wider than the views we draw; no stock row
+/// comes near.
+pub const PIP_ROW_LIMIT: i32 = 1024; // design: render (#153)
+
 /// The empty pip (S-0111 T1).
 const EMPTY: usize = 0; // spec: S-0111 T1 (image frame 0: empty pip)
 /// A passenger's extra pip (S-0111 claim 12).
@@ -615,6 +620,60 @@ mod tests {
         assert_eq!(ammo_row(6, 0, 2), [(0, 14), (1, 14)]);
         // ⌊A / w⌋ = 0: no λ qualifies.
         assert_eq!(ammo_row(1, 1, 2), [(0, 14), (1, 14)]);
+    }
+
+    /// design: render (#153) (a pip row is built with at most PIP_ROW_LIMIT pips); spec: S-0111
+    /// claims 11 to 15 (the pips within the bound as before; the overload pip at index M)
+    #[test]
+    fn a_pip_row_is_cut_at_its_bound() {
+        let n = PIP_ROW_LIMIT as usize;
+        let long = PIP_ROW_LIMIT + 4000;
+        assert_eq!(passenger_row(long, &[], RZ).len(), n);
+        assert_eq!(absorbed_row(long, &[]).len(), n);
+        assert_eq!(occupant_row(long, &[]).len(), n);
+        assert_eq!(spawn_row(&vec![true; n + 4000]).len(), n);
+        assert_eq!(mind_row(long, 3, None).len(), n);
+        let overloaded = mind_row(long, 3, Some(false));
+        assert_eq!(overloaded.len(), n + 1);
+        assert_eq!(overloaded.last(), Some(&(long, 4)));
+        assert_eq!(ammo_row(long, long, 0).len(), n);
+        assert_eq!(ammo_row(long, long, long).len(), n);
+        // At the bound nothing is cut.
+        assert_eq!(mind_row(PIP_ROW_LIMIT, 0, None).len(), n);
+        assert_eq!(ammo_row(PIP_ROW_LIMIT, PIP_ROW_LIMIT, 0).len(), n);
+    }
+
+    /// spec: S-0111 F3 (the largest λ in 0 … ⌊A / w⌋ − 1 with λ·w + j < a gives 15 + λ; none
+    /// gives 14) — exact at the ends of the 32-bit range (#153)
+    #[test]
+    fn extreme_ammunition_does_not_overflow() {
+        // a = −2³¹: no λ qualifies for any pip.
+        assert_eq!(
+            ammo_row(i32::MAX, i32::MIN, 3),
+            [(0, 14), (1, 14), (2, 14)]
+        );
+        // w = 1, A = a = 2³¹ − 1: pip 0's λ is 2³¹ − 2, an image frame past any sprite.
+        assert_eq!(
+            ammo_row(i32::MAX, i32::MAX, 1),
+            [(0, 15 + (i32::MAX as usize - 1))]
+        );
+    }
+
+    /// spec: S-0111 claim 12 (blocks from pip Z − 1 downwards; only pips 0 ≤ j < R drawn) — a block
+    /// far beyond the row costs no more than the row (#153). Not run against the code before the
+    /// fix, which walks every pip of such a block.
+    #[test]
+    fn a_huge_passenger_block_is_met_with_the_row_only() {
+        // One vehicle of size 2⁴⁰: its block runs from pip 0 to pip 2⁴⁰ − 1.
+        let huge = (Passenger::Vehicle, F64::from_i64(1 << 40, RZ));
+        assert_eq!(passenger_row(4, &[huge], RZ), [5, 3, 3, 3]);
+        // Then a vehicle of size 1 on top: Z = 2⁴⁰ + 1, its block at pip 2⁴⁰, above the row.
+        let one = (Passenger::Vehicle, F64::from_i64(1, RZ));
+        assert_eq!(passenger_row(4, &[huge, one], RZ), [5, 3, 3, 3]);
+        // Two of 3 · 2⁶¹: their total leaves the 64-bit range and truncates to 0 (as `trunc`
+        // does), so both blocks lie below pip 0, the second's lowest pip below −2⁶³.
+        let big = (Passenger::Vehicle, F64::from_i64(3 << 61, RZ));
+        assert_eq!(passenger_row(4, &[big, big], RZ), [0, 0, 0, 0]);
     }
 
     /// spec: S-0111 claim 16 (image frame by ability, place by kind, the shadow blink while damaged and t mod |T| ≤ 5; T = 0 never blinks)

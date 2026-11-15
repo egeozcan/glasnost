@@ -5257,6 +5257,34 @@ mod tests {
         assert_eq!((voxels(false), voxels(true)), (260, 261));
     }
 
+    /// spec: S-0105 claim 35 and Edge cases (with quirks.voxel_topdown_column_origin off: cells
+    /// 0 … Nz − 1 only, a top-down mode-0 column anchored to its decoded total height) — the
+    /// cells are counted exactly past 2³² empty cells (#153)
+    #[test]
+    fn fixed_origin_counts_past_the_32_bit_range() {
+        let fixed = VoxelQuirks {
+            voxel_topdown_column_origin: false,
+            voxel_mode0_misread: true,
+            ..q()
+        };
+        // 255 · 16 843 010 empty cells are more than 2³² − 1.
+        let runs = 16_843_010;
+        let empty: Vec<u8> = std::iter::repeat_n([255, 0, 0], runs).flatten().collect();
+        // Bottom-up, two values a voxel: a voxel after the runs lies far above cell Nz − 1.
+        let mut up = empty.clone();
+        up.extend([0, 1, 7, 3, 0]);
+        let voxels = column_steps(&up, 4, false, 1, false, &fixed)
+            .into_iter()
+            .filter(|s| matches!(s, Step::Voxel { .. }))
+            .count();
+        assert_eq!(voxels, 0);
+        // Top-down, one value a voxel: the voxel read last is the column's lowest, cell 0,
+        // however many empty cells lie above it.
+        let mut down = vec![0, 0, 7, 1];
+        down.extend(empty);
+        assert_eq!(mode0_cells(&down, 4, true, false, &fixed), [(0, 7)]);
+    }
+
     /// spec: S-0105 claim 35 (with quirks.voxel_topdown_column_origin off a top-down mode-0
     /// column is anchored to its decoded total height: MS-19 (b), a well-formed column, is
     /// drawn as with the switch on)

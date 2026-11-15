@@ -109,6 +109,10 @@ pub const LEVEL_HEIGHT: i32 = 104; // spec: S-0111 Constants (height of one leve
 /// The art height field's absent-key default, in levels (S-0111 Import
 /// mapping).
 pub const DEFAULT_ART_HEIGHT: i32 = 2; // spec: S-0111 Import mapping (building art Height absent: 2)
+/// The most levels a building box rises or sinks: an art height field
+/// beyond it is held to it. 128 levels are 1920 pixels of box, taller than
+/// the views we draw; no building art comes near.
+pub const LEVEL_LIMIT: i32 = 128; // design: render (#153)
 
 /// A health colour (S-0111 claim 5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1550,6 +1554,38 @@ mod tests {
         let mut no_x = raw;
         no_x.map_unit(88, None);
         assert_eq!(GroupFont::new(&no_x), None);
+    }
+
+    /// spec: S-0519 F3 (frame = min(11, 2⌊(n − t) / q⌋ + b), b = 1 when (n mod 2F) ≥ F) — exact
+    /// at a flicker rate above 2³⁰ and for n − t beyond the 32-bit range (#153)
+    #[test]
+    fn bomb_frames_at_extreme_values() {
+        // 2F = 2³¹: n mod 2F is n, so b = 1 from n = F on.
+        assert_eq!(bomb_frame(1 << 30, 0, 600, 1 << 30), 11);
+        assert_eq!(bomb_frame(5, 0, 6, i32::MAX), 10);
+        assert_eq!(bomb_frame(0, 0, 6, i32::MAX), 0);
+        // n − t = 2³² − 1 and its negative.
+        assert_eq!(bomb_frame(i32::MAX, i32::MIN, 6, 0), 11);
+        assert_eq!(bomb_frame(i32::MIN, i32::MAX, 6, 0), 0);
+        // The ordinary range as before.
+        assert_eq!(bomb_frame(16, 10, 12, 3), 2 * 3 + 1);
+        assert_eq!(bomb_frame(14, 10, 12, 3), 2 * 2);
+    }
+
+    /// design: render (#153) (an art height field beyond LEVEL_LIMIT levels is held to it); spec:
+    /// S-0111 claims 7 and 8 (the box, its bar and its corner brackets as before within it)
+    #[test]
+    fn an_extreme_art_height_is_held_to_the_level_bound() {
+        let v = |levels: i32| levels * LEVEL_HEIGHT;
+        let corners = |v| corner_image(1, 1, v, CORNER_INDEX);
+        assert_eq!(corners(v(32 * LEVEL_LIMIT)), corners(v(LEVEL_LIMIT)));
+        assert_eq!(corners(v(-32 * LEVEL_LIMIT)), corners(v(-LEVEL_LIMIT)));
+        assert_ne!(corners(v(LEVEL_LIMIT)), corners(v(LEVEL_LIMIT - 1)));
+        let r = ratios("0.5", "0.25");
+        let bar = |levels| building_bar(2, 2, levels, 10, 10, &r);
+        assert_eq!(bar(i32::MAX), bar(LEVEL_LIMIT));
+        assert_eq!(bar(i32::MIN), bar(-LEVEL_LIMIT));
+        assert_ne!(bar(LEVEL_LIMIT), bar(LEVEL_LIMIT - 1));
     }
 
     /// Our placeholder lifetimes and burst sizes.

@@ -149,6 +149,38 @@ fn a_touchpad_swipe_over_the_map_pans() {
     assert_eq!(session(&c).play.scroll, 0, "the strip stays");
 }
 
+/// spec: S-0101 claim 8 (every request is limited by F5) — a swipe or pan
+/// beyond the 32-bit range ends where F5 puts a far request (#153).
+#[test]
+fn an_extreme_swipe_ends_at_the_limits() {
+    let mut c = panning();
+    let limit = |c: &mut Client, to: (i32, i32)| {
+        let s = session_mut(c);
+        let now = s.centre();
+        s.set_centre(to);
+        let limited = s.centre();
+        s.set_centre(now);
+        limited
+    };
+    let (low, high) = (
+        limit(&mut c, (-1_000_000, -1_000_000)),
+        limit(&mut c, (1_000_000, 1_000_000)),
+    );
+    c.pointer_moved(session(&c).map_rect().centre());
+    // The content moves up and left by far more than a count holds: the centre goes down and right.
+    c.pixel_wheel((-1e12, -1e12));
+    assert_eq!(session(&c).centre(), high);
+    c.pixel_wheel((1e12, 1e12));
+    assert_eq!(session(&c).centre(), low);
+    // A pan from the far edge by the most pixels a count holds.
+    assert!(session_mut(&mut c).pan((i32::MIN, i32::MIN)));
+    assert_eq!(session(&c).centre(), low);
+    assert!(session_mut(&mut c).pan((i32::MAX, i32::MAX)));
+    assert_eq!(session(&c).centre(), high);
+    assert!(session_mut(&mut c).pan((i32::MAX, i32::MAX)));
+    assert_eq!(session(&c).centre(), high);
+}
+
 /// Pads the shown tab's strip with copies of its first icon until it
 /// overflows, as `page_requests_and_wheel_on_an_overflowing_strip` does.
 fn long_strip(c: &mut Client) {
