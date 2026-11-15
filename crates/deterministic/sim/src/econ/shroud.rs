@@ -1616,21 +1616,39 @@ pub fn spy_satellite_check(w: &mut World, h: HouseId) {
 /// Alliance changes (S-0409 Edge cases, *ally reveal and alliance
 /// changes*): buildings' sights and gap fields are taken back under the old
 /// alliance and applied under the new one; units follow at their next
-/// refresh. S-0414's alliance order calls it.
+/// refresh. Every one is taken back before any is applied again (#336), as
+/// [`whole_map`] does. S-0414's alliance order calls it.
 pub fn alliance_changed(w: &mut World) {
-    let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
-    for id in ids {
-        let Some(o) = w.obj(id) else { continue };
-        let building = o.kind == Kind::Building;
-        if building && let Some(a) = o.econ.sight.sight.clone() {
-            let now = sight_houses(w, id);
-            if now != a.houses {
-                remove_sight(w, id);
-                add_sight(w, id);
-            }
+    // spec: S-0409 claim 15 (objects rank in creation order; a gap generator's field just after its own sight)
+    let list: Vec<(ObjectId, bool, bool)> = w
+        .objects
+        .values()
+        .filter_map(|o| {
+            let sight = o.kind == Kind::Building
+                && o
+                    .econ
+                    .sight
+                    .sight
+                    .as_ref()
+                    .is_some_and(|a| a.houses != sight_houses(w, o.id));
+            let gap = o.econ.sight.gap.is_some();
+            (sight || gap).then_some((o.id, sight, gap))
+        })
+        .collect();
+    // spec: S-0409 Edge cases (ally reveal and alliance changes: the sights and the gap fields taken back under the old alliance, S1 rows 2 and 5, and applied again under the new one, S1 rows 1 and 3; every one taken back before any is applied, as V15 part A gives in either creation order)
+    for &(id, sight, gap) in &list {
+        if sight {
+            remove_sight(w, id);
         }
-        if w.obj(id).is_some_and(|o| o.econ.sight.gap.is_some()) {
+        if gap {
             stop_gap(w, id);
+        }
+    }
+    for &(id, sight, gap) in &list {
+        if sight {
+            add_sight(w, id);
+        }
+        if gap {
             start_gap(w, id);
         }
     }
