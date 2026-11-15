@@ -4,14 +4,15 @@
 //!
 //! The first walk of every removal, the drop of the object as a held
 //! target ([`crate::combat::held::holders_drop`]), also notes whether any
-//! object at all is an aircraft or holds an aircraft's state, a spawn
-//! controller, a planted bomb, a charger list or a dropper. A later walk of
-//! the same removal that looks only at such objects is skipped when the
-//! census says none exists. Such a reference is made only at a few places:
-//! an object's creation, a spawn controller's, a bomb's planting, a
+//! object at all is an aircraft, or holds a spawn controller, a planted
+//! bomb, a charger list or a dropper. A later walk of the same removal that
+//! looks only at such objects is skipped when the census says none exists.
+//! Such a reference is made only at a few places: an object's creation (an
+//! object's kind never changes), a spawn controller's, a bomb's planting, a
 //! charger's registration, a drop, and the put-back of a removed object for
 //! a read. Each of them forgets the census, so the walks after it run as
-//! before. The census lives only inside one removal (or inside one drop of
+//! before. Aircraft state is not noted: it is made on demand, on objects of
+//! other kinds too, so a walk of it is never skipped. The census lives only inside one removal (or inside one drop of
 //! a held target at a killing hit or a departure from the map): it is
 //! empty between actions, and neither saved nor hashed.
 
@@ -31,8 +32,7 @@ pub struct Census {
 /// The kinds of reference the census notes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Held {
-    /// An aircraft, or any object with an aircraft's state (a destination
-    /// that is an object, a recorded heading pad).
+    /// An object of the aircraft kind (its destination object).
     Aircraft,
     /// A spawn controller (its clear request, pending and controller
     /// targets).
@@ -48,7 +48,7 @@ pub(crate) enum Held {
 /// Whether object `o` holds a reference of kind `h`.
 fn holds(o: &Object, h: Held) -> bool {
     match h {
-        Held::Aircraft => o.kind == Kind::Aircraft || o.air.is_some(),
+        Held::Aircraft => o.kind == Kind::Aircraft,
         Held::Spawner => o.spawn.is_some(),
         Held::Bomb => o.combat.bomb.is_some(),
         Held::Chargers => !o.combat.chargers.is_empty(),
