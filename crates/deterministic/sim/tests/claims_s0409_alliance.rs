@@ -141,3 +141,81 @@ fn issue_336_generator_first_cells_unexplored_on_the_break_tick() {
         "V15 part A: unexplored on the break tick, without waiting for a sweep"
     );
 }
+
+/// Steps until the tick number is 1 … 100 past a multiple of 120, so that
+/// no sweep comes within the next 19 ticks.
+fn away_from_a_sweep(w: &mut World) {
+    while w.tick % 120 == 0 || w.tick % 120 > 100 {
+        step(w);
+    }
+}
+
+// spec: S-0409 claim 13 and Edge cases (a cell left by sight inside a hostile field stays visible until the next sweep; an alliance change concerns the houses whose alliance changed)
+#[test]
+fn issue_337_pending_cell_of_an_uninvolved_house_survives_an_alliance_order() {
+    let mut w = four_houses();
+    spawn(&mut w, Kind::Building, "GAP", 1, 0, 0);
+    step(&mut w);
+    step(&mut w);
+    let e = spawn(&mut w, Kind::Vehicle, "EYE1", 0, 1, 0);
+    step(&mut w);
+    away_from_a_sweep(&mut w);
+    glasnost_sim::objects::remove(&mut w, e);
+    assert!(shroud::pending(&w, H, c(1, 0)));
+    assert!(shroud::explored(&w, H, c(1, 0)));
+    assert_eq!(shroud::counts(&w, H, c(1, 0)), Some((1, 1)));
+    // P allies Q: neither H nor the field's owner B is concerned.
+    victory::alliance(&mut w, P, Q);
+    assert!(w.allied(Some(P), Some(Q)));
+    assert!(!w.allied(Some(B), Some(H)));
+    assert_eq!(shroud::counts(&w, H, c(1, 0)), Some((1, 1)));
+    assert!(
+        shroud::explored(&w, H, c(1, 0)),
+        "H's pending cell stays explored until the sweep"
+    );
+}
+
+// spec: S-0409 S1 rows 2, 3 and 5 and Edge cases (an alliance change takes back and applies only what changed for the houses concerned)
+#[test]
+fn issue_337_satellite_owner_count_is_not_changed_by_an_unrelated_alliance_order() {
+    let mut w = four_houses();
+    spawn(&mut w, Kind::Building, "GAP", 1, 8, 8);
+    step(&mut w);
+    step(&mut w);
+    spawn(&mut w, Kind::Building, "SAT", 0, -10, -10);
+    step(&mut w);
+    step(&mut w);
+    assert!(shroud::spy_satellite_active(&w, H));
+    let e = spawn(&mut w, Kind::Vehicle, "EYE1", 0, 9, 8);
+    step(&mut w);
+    away_from_a_sweep(&mut w);
+    assert_eq!(shroud::counts(&w, H, c(9, 8)), Some((-1, 1)));
+    victory::alliance(&mut w, P, Q);
+    assert!(w.allied(Some(P), Some(Q)));
+    let after = shroud::counts(&w, H, c(9, 8));
+    // The vehicle leaves: S1 row 2 from k = -1 gives k = 1 and the pending mark.
+    glasnost_sim::objects::remove(&mut w, e);
+    let pending = shroud::pending(&w, H, c(9, 8));
+    while w.tick % 120 != 0 {
+        step(&mut w);
+    }
+    step(&mut w);
+    let explored = shroud::explored(&w, H, c(9, 8));
+    assert_eq!(
+        (after, pending, explored),
+        (Some((-1, 1)), true, false),
+        "(counts after the order, pending after the sight left, explored after the sweep)"
+    );
+}
+
+// spec: S-0409 Edge cases (ally reveal and alliance changes) and scenario V15 part B (a one-way alliance of H with B changes neither B's sight nor its field for H)
+#[test]
+fn issue_337_one_way_alliance_leaves_the_cells_unexplored() {
+    let (mut w, cell) = v15_part_a(true);
+    step(&mut w);
+    victory::alliance(&mut w, H, B);
+    assert!(w.allied(Some(H), Some(B)));
+    assert!(!w.allied(Some(B), Some(H)));
+    assert!(!shroud::explored(&w, H, cell));
+    assert_eq!(shroud::counts(&w, H, cell), Some((1, 1)));
+}
