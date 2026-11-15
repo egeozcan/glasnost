@@ -668,6 +668,33 @@ fn claim_6_negative_refund() {
     assert!(item(&w, 0, grunt).unwrap().progress > p);
 }
 
+// spec: S-0404 claim 6 and Formulas (the refund is added with no upper limit, in signed 32-bit arithmetic that wraps as S-0205 claim 1 states)
+#[test]
+fn issue_311_refund_at_the_top_of_the_range_wraps() {
+    let (mut w, tank) = started(&ruleset());
+    run_progress(&mut w, tank, 20);
+    let it = item(&w, 0, tank).unwrap();
+    let paid = it.start_price - it.owed;
+    assert!(paid > 1);
+    set_credits(&mut w, 0, i32::MAX - 1);
+    assert!(issue(&mut w, 0, Order::Cancel { what: tank }));
+    step(&mut w);
+    assert_eq!(credits(&w, 0), (i32::MAX - 1).wrapping_add(paid));
+    assert!(credits(&w, 0) < 0, "the balance wraps below 0");
+}
+
+// spec: S-0404 claim 4 and Formulas (a paid step reduces the credit balance by its payment, with no lower limit, in signed 32-bit arithmetic that wraps as S-0205 claim 1 states; a negative payment, Edge cases "Negative own part", gives credits)
+#[test]
+fn issue_311_step_payment_wraps_at_the_range_ends() {
+    let mut w = game(&ruleset());
+    set_credits(&mut w, 0, i32::MAX);
+    production::pay(&mut w, HouseId(0), -1);
+    assert_eq!(credits(&w, 0), i32::MIN, "a negative payment at the top wraps");
+    set_credits(&mut w, 0, i32::MIN);
+    production::pay(&mut w, HouseId(0), 1);
+    assert_eq!(credits(&w, 0), i32::MAX, "a payment at the bottom wraps");
+}
+
 // spec: S-0404 claim 7 (P7: the later-acquired factory releases without a primary mark, the primary one with it)
 #[test]
 fn claim_7_releasing_building() {
