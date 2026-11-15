@@ -2,15 +2,15 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 39
+revision: 50
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-04
+approved-on: 2026-11-15
 measurements: []
 requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330,
 Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342,
-Q-1343, Q-1344, Q-1522, Q-2035, Q-2113, Q-2151, Q-2160]
+Q-1343, Q-1344, Q-1522, Q-2035, Q-2113, Q-2151, Q-2160, Q-3119]
 supersedes: []
 ---
 
@@ -131,14 +131,31 @@ New terms:
 
 2. **When a hit seizes nothing.**
    - The hit does nothing at all when any of these holds:
-     - the firer has left play,
+     - the firer has been killed since the shot (S-0302 claim 1, Terms), even if it stays in
+       play for a time,
+     - the firer has left play since the shot, even if it entered play again since, as a unit
+       that boards an open-topped transport does (S-0203 claim 3),
+     - the firer has started to cloak or, with tunnelling movement, dug in since the shot,
      - the firer already grips this very target,
      - the firer is itself seized.
+   - A firer that was already a passenger of an open-topped transport when it fired is in play
+     while it rides (S-0507 claim 14), so riding does not void its hit: the hit is tested as any
+     other.
    - Otherwise, before the target is tested, the firer's current grip ends as claim 13 says. A
      dropped unit falls. The firer keeps its target. This happens even when the target then
      turns out to be immune.
-   - Backing: `measurable` (scenario L9 parts c and e)
-   - Confidence: high
+   - Backing: `measurable` (scenario L9 parts c and e; part e's boarding variants for a firer
+     that has left play by boarding, whether or not it entered play again; part h for the
+     passenger's hit). A firer killed but kept in play for a time is `unmeasured`: part e's
+     destroyed firer is a vehicle, which leaves play at once (S-0203 claim 6a), and no scenario
+     here kills a firer that stays in play while its projectile flies. A firer that has started
+     to cloak or dug in is `unmeasured`: no scenario here tells "since the shot" from "at the
+     hit", since no run has the firer uncloak or resurface before the hit.
+   - Confidence: high (a firer destroyed while the projectile flies, a firer gripping this
+     target or seized; a walking passenger's hit); medium (another passenger's hit; a firer
+     killed but kept in play for a time, as S-0302 claim 1 rates it; a firer that has left play
+     since the shot, by boarding or by other means, whether or not it entered play again; one
+     that has cloaked or dug in)
 
 3. **Which targets can be seized.** The target is seized only when all of these hold:
    - it is a vehicle or an aircraft. Infantry and buildings are never seized,
@@ -272,11 +289,19 @@ New terms:
    absent-key defaults of its own type (S-0502 Import mapping).
    - **Its movement point is fixed at the seize.** The unit rises and cruises towards the point
      produced by applying S-0502 claim 16 to the lifter's point at the moment of seizure:
-     - the lifter's point is its heading point when the lifter is mobile (a lifter standing
-       still gives its own position), and the centre of its foundation when it is a building.
+     - the lifter's point is its heading point when the lifter is mobile and outside any
+       transport (a lifter standing still gives its own position), and the centre of its
+       foundation when it is a building.
        A building gives its docking point instead only when its type has the pad flag, the
        repair-depot flag or the vehicle-bunker flag (Import mapping). Every other building,
        a refinery included, gives the centre of its foundation.
+     - **A riding lifter.** A lifter that is a passenger of an open-topped transport gives its
+       own position. That lies in the transport's cell, and becomes the transport's position
+       whenever the transport moves (S-0507 claim 15). For a walking lifter this is
+       the original's result. For a driving lifter
+       it is our engine's rule (design rule, decided at the delegated sign-off, 2026-11-15):
+       the original may still give a heading point kept from before the boarding (Open
+       questions).
      - **The docking point** is the one the building would give the seized unit itself, chosen
        in this order of precedence:
        - with the obsolete-unloading flag, the fixed point of S-0314 claim 18 (the centre of
@@ -325,11 +350,14 @@ New terms:
      that height is not in the air for combat, although the flying-object search can find it.
    - Backing: `measurable` (scenario L2 for the path, facing and the movement point beside the
      lifter; scenario L12 for a lifter that moves during the pull; scenario L15 for registration
-     and the combat height test). The no-cell take-off exception is `unmeasured`: no ordinary
-     setup establishing that initial search failure is supplied here.
+     and the combat height test; scenario L9 part h for a walking lifter riding an open-topped
+     transport). The no-cell take-off exception is `unmeasured`: no ordinary
+     setup establishing that initial search failure is supplied here. The riding driving
+     lifter's point is `unmeasured`: it is our engine's rule, which the original may not follow.
    - Confidence: high (the fixed point, the search, no refresh, which building types give a
      docking point and its precedence, registration and the combat height test),
-     medium (the observed cell for a building lifter)
+     medium (the observed cell for a building lifter; a riding lifter's point, walking or
+     driving)
 
 8. **Arrival drops the unit beside its lifter.** When a gripped unit arrives (S-0502 claim 12: its
    horizontal distance from its movement point is strictly less than 20 leptons), these happen in
@@ -629,8 +657,10 @@ New terms:
       a part h approach or makes its gripped unit's cell unreachable while the unit is out of range.
       Exact precedence between refusal reasons with identical observable effects is `unmeasured`:
       those scenarios do not distinguish their rank. An infantry lifter's answers ahead of the
-      gripped-unit *rearming* and the drop they cause are `unmeasured`: no scenario of this spec
-      gives a lifter an infantry type.
+      gripped-unit *rearming* and the drop they cause are `unmeasured`: the only infantry lifter
+      here is part h's walking lifter, whose weapon is not a healer's, and no run of part h links
+      its gripped unit to another object or starts a dying or falling sequence of the lifter, so
+      none of those answers arises.
     - Confidence: high (the conditions, the gripped-unit answer and its precedence); low (an
       infantry lifter's answers ahead of the gripped-unit *rearming* and the drop they cause, as
       S-0301 claim 9 rates them); medium (no
@@ -650,7 +680,7 @@ New terms:
     | The lifter is a building that is destroyed | yes |
     | The lifter's seizing projectile detonates again at any target (claim 2) | no |
     | The lifter seizes another unit (claim 5) | no |
-    | The lifter leaves play | not applicable |
+    | The lifter leaves play | yes, unless it is destroyed or removed (then not applicable) |
     | The gripped unit leaves play | yes |
     | The gripped unit is given no destination (claim 9) | no |
     | The gripped unit's drop-pod stand-in ends (claim 23) | yes |
@@ -659,12 +689,53 @@ New terms:
     (claim 24 for other stand-ins).
     - A lifter whose grip ended without clearing its target may fire at the same unit again. That
       unit is still seized, so the hit seizes nothing (claim 3) and does no damage (claim 1).
+    - **The lifter leaves play without being destroyed or removed.** The leaving-play row also
+      covers a lifter that leaves play while it grips by other means, for example by going
+      inside a transport: the grip ends at that moment, the lifter's target is cleared, and a
+      dropped unit keeps the lifter as its dropper (claim 14).
+    - **Lifters and transports.**
+      - A lifter riding in an open-topped transport is in play (S-0507 claim 14), and its grip
+        follows this table as any lifter's does. Riding, and the transport's movement, are not
+        events of the table: the grip lasts while the transport moves, until an event of the
+        table, and the gripped unit keeps flying to the movement point fixed at the seize
+        (claim 7).
+      - While it rides, the transport can give the lifter a target or take its target away
+        (S-0507 claim 15). This table has no row for a change of target, so such a change does
+        not end the grip by itself (claim 11). Claim 21 says when it ends a live wave of the
+        lifter.
+      - Getting out gives the lifter a move with a destination (S-0507 claim 10). A lifter that
+        accepts it ends its grip by the table's second row.
+      - A lifter that gets out of its destroyed transport (S-0312 claim 12) keeps its grip until
+        an event of the table. A scatter request that gives it a destination is such an event
+        (the second row).
+      - A lifter killed with its transport, or as a passenger of a removed transport (S-0312
+        claims 5 and 12, S-0507 claim 16), leaves play as a destroyed lifter does (claim 14).
+      - A lifter boards a vehicle transport, open-topped or not, only as S-0507 claim 6 gives,
+        which needs the transport as its destination. Accepting that destination ends a grip it
+        holds by the second row, before it boards. If a lifter whose
+        grip began after it took that destination boards while it grips, the grip ends at the
+        boarding by the leaving-play row, since boarding is leaving play (S-0203 claim 3).
     - Backing: `measurable` (L2 arrival, L3 accepted destinations and rest, L7 leaving play,
-      L8 building rows, L9 new hits, L13 part c for the drop-pod row in the original). The
+      L8 building rows, L9 new hits, L13 part c for the drop-pod row in the original; L9 part h
+      for riding, the transport's movement, getting out and the order to board). A riding
+      lifter's change of target is `unmeasured`: part h gives the lifter its target only before
+      the seize, by the transport's attack order, and after the seize orders the transport only
+      to move and to unload, which give it no target, so no run here changes it while it
+      grips. The
       no-destination row retains claim 9's `unmeasured` backing for orders; L13 part b observes
-      it through the teleporting stand-in's jump (claim 23).
-    - Confidence: high (arrival, orders, a new seizing hit, leaving play); medium (falling back
-      to rest, building rows)
+      it through the teleporting stand-in's jump (claim 23). A passenger lifter killed with its
+      transport, and one that gets out of its destroyed transport, are `unmeasured` beyond L7's
+      destroyed lifter: no scenario here sets up that destruction. A lifter removed from the
+      game without being destroyed is `unmeasured`: no scenario here removes one. The
+      leaving-play row for a lifter that is neither destroyed nor removed is `unmeasured`:
+      whether ordinary play reaches it while the lifter grips is not established (Open
+      questions).
+    - Confidence: high (arrival, orders, a new seizing hit, a destroyed lifter leaving play),
+      medium (falling back to rest, building rows, riding, the transport's movement, a riding
+      lifter's change of target, getting out,
+      a passenger killed with its transport or getting out of it, the order to board, a lifter
+      removed without being destroyed, a lifter that leaves play without being destroyed or
+      removed)
 
 13. **Drop or set down.** When a grip ends:
     - **Height above the surface 1 lepton or more:** the unit is dropped.
@@ -786,10 +857,26 @@ New terms:
 
 14. **A dropper that leaves play.** When a dropper leaves play before its dropped unit lands, the
     unit no longer has a dropper, but keeps its dropper house. Credit under claims 16 to 18 then
-    goes to that house.
-    - A mobile lifter that leaves play while it grips drops the unit (claim 12) just before.
-    - Backing: `measurable` (scenario L7)
-    - Confidence: medium
+    goes to that house. This does not hold for the leaving of the exception below.
+    - A mobile lifter that is destroyed or removed while it grips ends the grip (claim 12) just
+      before it leaves play, and the unit is dropped or set down as claim 13 says. When it is
+      dropped, the first sentence applies to that leaving.
+    - **The exception.** A lifter that leaves play while it grips without being destroyed or
+      removed ends the grip as it leaves, and the unit is dropped or set down as claim 13 says.
+      That leaving does not end the lifter's place as dropper: a unit dropped this way keeps it
+      as its dropper. This is the original's rule. The first sentence applies to that dropper
+      only if, before the unit lands, it leaves play again or is destroyed or removed while out
+      of play, as when it is killed with the closed transport it boarded (S-0507 claim 16,
+      S-0312 claim 5). This is the original's rule too.
+    - Backing: `measurable` (scenario L7) for the first sentence and a destroyed lifter. A
+      lifter removed without being destroyed is `unmeasured`: no scenario here removes one. The
+      exception is `unmeasured`: no scenario here makes a gripping lifter leave play without
+      being destroyed or removed, and whether ordinary play reaches that case is not
+      established (claim 12); the same holds for such a dropper's later leaving, destruction or
+      removal.
+    - Confidence: medium (the first sentence, a destroyed lifter, a removed lifter, the
+      exception, and the exception's dropper leaving play again or destroyed or removed out of
+      play)
 
 ### The fall and the impact
 
@@ -1066,12 +1153,29 @@ New terms:
       play, or when its firer's target is no longer the wave's target. The wave's distance limit
       applies to sonic waves only. Leaving play includes going inside a transport, a bunker or a
       building: a target or firer that does so ends the wave at the wave's next update, even
-      though it is not destroyed.
+      though it is not destroyed. For an open-topped transport this holds although the
+      passenger enters play again at once (S-0203 claim 3).
+    - **A riding firer.** A firer that is already a passenger of an open-topped transport when it
+      fires creates a wave as any other firer does, and the conditions above end it.
     - **When it updates.** The wave joins the update order when it is created, appended after
       every object already in play (S-0203 claims 2 and 3). It has one update at creation; the
-      same tick's pass may reach it again under S-0203's rules. Each later tick it updates in its
-      own turn, after its firer's turn. Its end test reads its firer's target as it stands at
-      that turn, so a retarget made in the firer's turn of the same tick is seen at once.
+      same tick's pass may reach it again under S-0203's rules. In each later tick in which it
+      takes its turn, while its firer has not left play since the wave was created, the wave
+      updates in that turn, after its firer's turn. Its end test reads its firer's target as it
+      stands at that turn, so a retarget made in the firer's own turn of a tick in which the wave
+      takes its turn is seen in the wave's turn of that tick. A retarget by an order given in the
+      cycle that runs tick *n* takes effect after every turn of tick *n* (S-0203 claim 7), so the
+      wave first sees it in its first turn after tick *n*: its turn of tick *n* + 1, unless it
+      misses that turn (below).
+      With `quirks.update_order_removal_skip` on, a counting removal can make the wave miss its
+      turn in a tick (S-0203 claim 10). In such a tick the wave does not update: it does not test
+      its end, step its fade (F4), move its visual countdown (F4) or set its ends (claim 25), and a
+      retarget made in that tick is
+      seen at its next turn. A firer that has left
+      play since then, even for a moment as when it boards an open-topped transport, has ended
+      the wave by the wave's next update (Ending, above), and it ends whatever that firer's
+      target is. Its turn, once it is in play again, comes after the wave's (S-0203 claim 3), and
+      no later retarget affects the wave.
     - **Its points.** F3 is evaluated once, at creation, from the shot's firing and impact points
       as computed when the shot is fired. Later movement of firer or target does not re-test it.
     - **Fade-out.** After it ends it fades out (F4) and stays alive until the fade-out finishes,
@@ -1079,11 +1183,32 @@ New terms:
     - **No damage.** A magnetic wave deals no damage of its own.
     - **Not tied to the grip.** The grip does not depend on the wave. The wave can end while the
       grip lasts (claim 11), and a grip can begin with no wave.
-    - Backing: `measurable` (scenario L10) for creation, lifetime, update turn, damage and fade
-      timing. The exact accumulator precision and table-root choice in F3 and F4 are `unmeasured`:
+    - Backing: `measurable` (scenario L10) for creation, the ending conditions, no fixed expiry
+      and damage; L10 for a target that boards an open-topped transport; L9 part h for a riding
+      firer's wave. A firer that boards an open-topped transport is `unmeasured`: the order that
+      sends a firer in can also take its target, which ends the wave by itself (for a gripping
+      firer it does, claim 12), and no scenario here separates the two. The same reason covers
+      the wave of a firer that has left play since the wave was created, whose turn then comes
+      after the wave's. The update timing is `unmeasured`: the wave's place in the update order,
+      its update at creation and any second update in that tick, the wave's turn after its
+      firer's, a retarget made in the firer's own turn being seen in the wave's turn of that
+      tick, an order's retarget first seen in the wave's first turn after tick *n*, a tick in
+      which the wave misses its turn, and the fade-out's length in ticks after a full or a
+      partial fade-in (F4; after a partial fade-in its count of fade-in updates also depends on
+      the creation tick's updates and on missed turns). No scenario here observes the wave's
+      place in the update
+      order or counts its updates in the tick of its creation; no scenario here fixes the tick
+      in which an order is applied, since a recorder cannot see in which tick an input was
+      taken (S-0213 claim 1); no run here retargets the firer during its own turn; no scenario
+      here ends a wave in a tick a recorder can see and counts the ticks to its removal; and no
+      scenario here makes a counting removal cost the wave its turn. The exact
+      accumulator precision
+      and table-root choice in F3 and F4 are `unmeasured`:
       no setup here distinguishes alternative arithmetic with the same visible thresholds.
-    - Confidence: high (no damage, end conditions, numeric rules, update turn); medium
-      (observable fade timing)
+    - Confidence: high (no damage, end conditions, no fixed expiry, F3's threshold); medium
+      (every part of the update timing listed in the Backing, the fade-out's length included; a target or
+      firer that boards an open-topped transport; the wave of a firer that has left play since it
+      was created; a riding firer's wave)
 
 ### Other locomotors
 
@@ -1203,8 +1328,9 @@ New terms:
       - **Driving and ship at an exact point.** S-0207 claim 26's guard row removes the
         destination when the unit, at rest in *guard* (claim 5), stands exactly on its locomotor
         destination point in all three coordinates. The lifter's point is normally the heading
-        point or position of a mobile lifter, which the lifter itself occupies, or a building's
-        foundation centre or docking point with that building's height, so this is rare. When it
+        point or position of a mobile lifter, which the lifter itself (or the transport it
+        rides in) occupies, or a building's foundation centre or docking point with that
+        building's height, so this is rare. When it
         happens, the grip ends and the lifter keeps its target.
       - S-0207 claim 25's give-up row is another example.
     - **A landed aircraft** (claim 3) seized with a ground stand-in receives the lifter's point
@@ -1292,13 +1418,18 @@ New terms:
       result is concentric rings around the first end, about 31 pixels apart, clipped to the band.
       Most of each ring gets the 2-pixel displacement and the strongest boost; only thin rings
       near the zero crossings keep the pixel in place.
-    - **Ring motion.** The countdown falls by 1 per tick, so the rings move outward by 1 pixel per
-      tick. The countdown starts at 100. When an update finds it at 19 it restarts at 64 (F4), so
-      the next drawn value is 63. The ring phase therefore jumps back by 44 steps 82 ticks after
-      creation and every 45 ticks after that: the pattern drawn 82 ticks after creation is the one
-      drawn 38 ticks after it, and from then on it repeats every 45 ticks. Because the rings repeat
-      about every 31 pixels, the jump looks like a step of about 13 pixels inward. S-0203's extra update in the creation tick can
-      shift this count by one tick.
+    - **Ring motion.** The countdown is 100 after the update at creation, which does not change
+      it, and falls by 1 at each later update (F4), so the rings move outward by 1 pixel per tick
+      in which the wave takes its turn. A later update that finds it at 19 leaves it at 63
+      instead of 18 (F4). The ring phase therefore jumps back by 44 steps at the 82nd update
+      after the one at creation and at every 45th update after that. The pattern drawn just after
+      a jump is the one drawn 45 updates before it, and from then on it repeats every 45 updates.
+      Because the rings repeat about every 31 pixels, the jump looks like a step of about 13
+      pixels inward. In ticks, the first jump comes in the 82nd tick after the creation tick when
+      the creation tick holds no second update and the wave misses no turn. S-0203's second
+      update in the creation tick brings every jump one tick earlier, and each tick in which the
+      wave misses its turn (claim 21) holds the rings still and delays what follows by one
+      tick.
     - **Shift direction.** The shift direction is chosen once, when the wave is created, from the
       shot's firing and impact points. It is right or left when the band's screen line from the
       firing point is within 45° of horizontal, and up or down otherwise (F5). It does not follow
@@ -1335,9 +1466,16 @@ New terms:
       the fog rule. Exact corner rounding, the table-derived ripple values pixel by pixel and the
       fill rule on the band's edge pixels are `unmeasured`: a capture cannot separate them from
       the screen projection's own rounding. The fixed artefacts are `unmeasured` because they are
-      design choices.
+      design choices. The still rings and delay of a tick in which the wave misses its turn are
+      `unmeasured`: no scenario here makes a counting removal cost the wave its turn. That the
+      update at creation leaves the countdown unchanged is `unmeasured`: L16 part (a)'s
+      tolerance for the first jump's tick does not separate it from an update at creation that
+      lowers the countdown.
     - Confidence: high (the band's shape and width, the colour rule, the ripple formula, the
-      absence of fade, the shift direction rule, the depth bias); medium (the swap of ends for a
+      absence of fade, the shift direction rule, the depth bias, the 44-step jump and the
+      45-update cycle); medium (the still rings and delay of a tick in which the wave misses its
+      turn, as claim 21 rates that tick; the countdown left unchanged by the update at creation,
+      and with it the jump's exact tick; the swap of ends for a
       vehicle target and the first-weapon fire point, read from argument order rather than
       observed; the fog rule; which pixels on the band's boundary are filled)
 
@@ -1411,11 +1549,14 @@ above the double-precision engine threshold 8827055269646172 / 9007199254740992 
 0.98) becomes exactly 1. Once the wave has ended, each update with
 *b* ≤ RZ₅₃(*a* + RZ₅₃(*q* × 0.5)) gives *b* the value RZ₅₃(*b* + *q*). It is removed in that
 update if the new *b* ≥ *a*. This also applies if the wave ends during fade-in: *a* stops growing
-and *b* catches up to that retained value. There is one update at creation as well as the
-subsequent per-tick updates.
+and *b* catches up to that retained value. There is one update at creation as well as one in
+each later tick in which the wave takes its turn (claim 21).
 
-A visual integer countdown starts at 100 ticks, decreases by 1 each tick and is reset to 64
-when an update finds it at trunc(1 / *q*) = 19 ticks. It never ends a magnetic wave. It sets
+A visual integer countdown is 100 after the update at creation, which does not change it.
+Every later update, a second update in the creation tick included (claim 21), first sets it to
+64 if it finds it at trunc(1 / *q*) = 19 and then decreases it by 1. So it falls by 1 at each
+later update and goes from 19 to 63. In a tick in which the wave misses its turn it neither
+falls nor is reset. It never ends a magnetic wave. It sets
 the ripple phase of the picture (claim 25, F5); *a* and *b* have no effect on the picture.
 
 **F5 Wave picture (claim 25).**
@@ -1476,7 +1617,7 @@ brightens blue and red where they exist, and adds no colour to pure black or pur
 | wave fade step | 13421773 / 268435456 | per update, dimensionless | F4; single-precision constant, double-precision accumulator |
 | wave full-strength threshold | 8827055269646172 / 9007199254740992 | dimensionless | F4; approximately 0.98 |
 | wave fade-out margin | half the wave fade step | dimensionless | F4 |
-| wave visual counter start, reset trigger, reset value | 100, 19, 64 | ticks | F4; no game effect, sets the ring phase (F5) |
+| wave visual counter start, reset trigger, reset value | 100, 19, 64 | countdown steps, one per wave update | F4; no game effect, sets the ring phase (F5) |
 | wave second-end lift | 50 | leptons, vertical | claim 25, F5 |
 | wave band half-width | 50 | leptons, horizontal | claim 25, F5 |
 | ripple phase step | 0.1 | radians per pixel of distance and per countdown step | F5; double precision |
@@ -1829,7 +1970,7 @@ establish a qualifying condition; a run lacking the required observations is inc
   - Expected: a drop and cleared building target in both runs; record release in the same tick
     as the loss of operation/removal. A retained grip or target, or release only when the wave
     subsequently disappears, falsifies claim 12.
-- **L9 Refusals and the building attack (claims 2, 9, 10, 11).**
+- **L9 Refusals and the building attack (claims 2, 7, 9, 10, 11, 12, 21).**
   - Part a is conditional: give the friendly victim move or stop orders, one click after
     another, while the seizing projectile flies, so that one may be given in the seize's own
     tick (claim 9). Record whether an order actually reaches destination handling after the
@@ -1875,27 +2016,61 @@ establish a qualifying condition; a run lacking the required observations is inc
     still gripping that very target when its delayed projectile arrives: expect no new seize
     and no release from that hit. Only use states reached through ordinary play. A contrary
     release/seize with the recorded guards falsifies claim 2; an unreachable variant remains
-    unmeasured rather than confirmed.
+    unmeasured rather than confirmed. With no grip held, repeat with a firer that, while the
+    projectile flies, boards a transport (closed and, separately, open-topped, with part h's
+    data), at a target eligible under claims 3 and 4. Record the tick of the boarding and of
+    the hit: expect no seize when the boarding's tick comes before the hit's tick. A seize of
+    that target in such a run falsifies claim 2. A projectile that arrives in or before the
+    boarding's tick makes that variant void.
+  - Part h (claims 2, 7, 12 and 21; Q-3119): named L9 data gives an infantry type the
+    magnetic-beam weapon and seizing warhead and lets it ride an open-topped transport (the
+    walking lifter), and gives the target vehicle's type a slow jumpjet speed so that the pull
+    lasts. The target stays eligible (claims 3, 4). Load the lifter, move the transport at least
+    four cells from the boarding cell over open ground and stop it. With no live wave of the
+    lifter, order the transport to attack the target: S-0213 table T3, part (f), gives the
+    lifter, its passenger, the same target. Named data sets the weapon's range field above
+    three cells and removes its minimum range, as L10's map does. Place the target at least three cells from the transport's cell and within
+    that range field of the lifter's position. Record the transport's cell at the hit. A run in
+    which the lifter does not fire within 100 ticks of the order, or the target leaves play
+    before the hit, is void.
+    - Run 1: record the hit, the seize, the wave, the cell of the movement point and the shot's
+      actual firing and impact coordinates, as L10 does. Expect a seize, a wave, and a movement
+      point in a free cell next to the transport's cell at the hit. Falsified by a hit that
+      seizes nothing, no wave, or a movement point next to the boarding cell. A run in which the
+      transport's cell at the hit is within three cells of the boarding cell is void for the
+      movement point. A run whose recorded points fail
+      F3 is void for the wave.
+    - Run 2: after run 1's seize, move the transport, and record the lifter's target each tick.
+      Expect the grip to last, whether or not that target changes, and the unit to
+      keep flying to the point fixed at the seize. Falsified by a release before the unit
+      arrives (claim 8) with no other event of claim 12, or a movement point that follows the
+      transport.
+    - Run 3: after run 1's seize, order the transport to unload. Record the tick at which the
+      lifter gets out, its destination, the tick at which it accepts that destination (S-0507
+      claim 10 queues the move) and the release. Expect the release in the tick at which the
+      lifter accepts that destination. Falsified by a grip that lasts past that tick, or a
+      release before it with no other event of claim 12. An arrival (claim 8) before the lifter
+      gets out makes the run void.
+    - Run 4: let the walking lifter seize from outside the transport, then order it into the
+      transport. Expect the release in the tick at which it accepts the transport as its
+      destination. Falsified by a grip that lasts past that tick. An arrival (claim 8) before
+      the order makes the run void.
 - **L10 Wave lifetime (claim 21, F3).**
   - Named L10 map: remove the weapon's minimum range. Record actual firing/impact coordinates,
     not unit-centre distances. Test point separations below, exactly at and above 240 leptons
     according to F3, including a diagonal separation at which the table and exact roots differ.
     Expect seizure even without a wave at a sub-threshold separation.
-  - Let a wave reach full strength, retarget and count its remaining updates: expect 20 fade
-    updates by F4. Repeat retargeting after several different fade-in lengths, including the
-    first available tick; F4 predicts the shorter lifetime from the retained strength.
     Separately remove target and firer to test both ending conditions. With stationary
     participants and unchanged targeting, observe well past 100 ticks: no fixed expiry.
-  - Update turn: retarget the firer and record the tick in which the wave begins fading; expect
-    the same tick. Separately, let the wave's target enter a transport or a bunker; expect the
+  - Target boarding: let the wave's target enter a transport (closed and, separately,
+    an open-topped one that named data lets it board) or a bunker; expect the
     wave to begin fading in the next update, while the target is unharmed. A named L10 map may
     place the firer and target so that the squared horizontal distance wraps negative; expect
     creation exactly as F3's mirrored root predicts, if such a separation is reachable.
   - For no-damage testing, keep a non-seizing magnetic shot's ordinary impact outside nearby
     test units and record their health along the wave path: the wave alone must not hurt them.
   - Falsified by: wave creation below F3's threshold, missing creation at/above it with a free
-    slot, failure to seize solely because no wave exists, a lifetime inconsistent with F4,
-    fixed expiry with unchanged targeting, or health loss attributable only to the wave.
+    slot, failure to seize solely because no wave exists, fixed expiry with unchanged targeting, or health loss attributable only to the wave.
 - **L11 Restoration and computer houses (claims 6, 20; parts c to f for claim 20's later
   bullets).**
   - Part a: after L3, record the tick the unit first accepts a move order. Expect the first
@@ -2130,8 +2305,15 @@ establish a qualifying condition; a run lacking the required observations is inc
   - (a) Vehicle target. A lifter seizes a parked vehicle whose screen line from the lifter is
     nearly horizontal; repeat with a nearly vertical line. Expected: a band 100 leptons wide under
     S-0101 F1, with no outline and no colour of its own. Its rings are centred on the vehicle, about
-    31 pixels apart, and move outward 1 pixel per tick. The pattern 82 ticks after the shot (±1)
-    matches the one 38 ticks after it, and it repeats every 45 ticks from then on. Inside the band the terrain is displaced by 0, 1
+    31 pixels apart, and move outward 1 pixel per tick. Record every tick in which an object that
+    was in play when the wave was created leaves play: in each such tick the rings may stand
+    still, delaying what follows by one tick (claim 25). With *r* such ticks before it, expect
+    the first jump back of the rings 82 + *k* ticks after the shot, for some *k* with −2 ≤ *k* ≤
+    1 + *r* (the creation tick's second update, and whether a tick's picture is drawn before or
+    after its updates, which no scenario here observes, each move it by up to one tick). The
+    pattern just after each jump matches the one drawn 45 + *j* ticks before it, and each later
+    jump comes 45 + *j* ticks after the one before, where *j* is at least 0 and at most the
+    number of such ticks in between. Inside the band the terrain is displaced by 0, 1
     or 2 pixels: sideways in the horizontal run and up or down in the vertical one. On terrain of
     known colour, the band pixels match F5 for some strength from 0 to 9, with green unchanged.
     While the vehicle is pulled and lifted, the band follows it tick by tick.
@@ -2152,7 +2334,8 @@ establish a qualifying condition; a run lacking the required observations is inc
     target, repeat (a) that way. Expected: the rings are centred on the lifter's first-weapon fire
     point. If no such shot is possible, record that the case is unreachable in stock data.
   - Falsified by: a drawn colour or outline of its own, rings centred on the lifter in (a) or on
-    the target in (e), a gradual fade, ring spacing or motion inconsistent with F5, a band that
+    the target in (e), a gradual fade, ring spacing or motion inconsistent with F5 and the allowance for recorded
+    removal ticks above, a band that
     keeps following after the end, a later air-layer object, a laser or a health bar tinted by
     the band, or a band drawn while both ends are unseen under fog.
 - **S-0502 carry items.** L2, L3 and L4 together give the held body facing (S-0502 claim 10), the
@@ -2376,6 +2559,16 @@ establish a qualifying condition; a run lacking the required observations is inc
   unit phasing in after a chrono move. Claim 20 states the test for every other turn.
 - Whether a landed aircraft that is being erased is tested at the end of its turns (claim 20,
   *Units being erased*).
+- (Q-3119.) Whether the original gives a driving lifter that rides an open-topped transport a
+  heading point kept from before the boarding, and where that point lies (claim 7). Boarding
+  is not known to clear a driving unit's heading point. Claim 7 gives our engine's rule.
+- (Q-3119.) Whether ordinary play reaches a lifter that leaves play while it grips without being
+  destroyed or removed, such as a lifter whose grip began after it took a transport as its
+  destination and which then boards (claims 12 and 14). The outcome is stated.
+- (Q-3119.) Whether a lifter that starts to cloak or, with tunnelling movement, digs in while it
+  grips ends the grip as a lifter leaving play does, and whether a dropper that does so loses
+  its place as dropper as claim 14 says of one leaving play. Claims 12 and 14 do not list these
+  events, and no run has been made.
 
 ## Changes for other specs
 
@@ -2433,3 +2626,11 @@ establish a qualifying condition; a run lacking the required observations is inc
   a tick is found at the end of the unit's turn in that tick when the freeing comes before
   that turn in the update order, and otherwise at its next retry. Both
   are design rules for the switch-off setting; the original destroys the unit instead.
+- **S-0302, claim 1, and S-0306, Terms (*A projectile's firer; no firer*) (Q-3119).** Claim 2
+  here voids a seizing hit whose firer has left play since the shot, even if it entered play
+  again (as boarding an open-topped transport does), or has started to cloak or dug in since
+  then. Medium; `measurable` for leaving play by boarding (scenario L9 part e's boarding
+  variants here), `unmeasured` for cloaking or digging in (claim 2 gives the reason). This
+  entry is about the seize only; this spec does not settle the detonation's attacker. S-0302
+  claim 1 and the S-0306 Terms sentence may want to re-check a firer that leaves play after the
+  shot.
