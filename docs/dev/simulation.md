@@ -1896,3 +1896,24 @@ The eighteenth batch of the game-logic audit takes the answers to Q-3112 to Q-31
 
 - *#333, `Replay::run_on` on a loaded save.* Every step empties the pending order lists, so a world that holds pending orders when `run_on` starts was saved after its current tick's recorded orders were issued; `run_on` does not issue them again for that first tick. A world at a tick boundary is unchanged.
 - *#334, more than 256 houses.* A house id is one byte, so `load::new_game` refuses a setup with more than `load::MAX_HOUSES` (256) houses with `LoadError::TooManyHouses`, before any draw. This covers sandbox setups and the setup stored in a replay. It is our own input validation, not a rule of the game.
+- *#335, load.rs doc comments.* Five comments are brought in line with the code; no behaviour changes.
+
+**The shroud.**
+
+- *#336, an alliance change in two passes.* `shroud::alliance_changed` takes back every building sight whose house list changed and every gap field concerned first (S1 rows 2 and 5), and only then applies them again (rows 1 and 3), as `whole_map` does. The result no longer depends on whether the gap generator or the building that saw the cells was created first (S-0409 scenario V15 part A).
+- *#337, only the houses concerned.* For a running gap field, the houses it is hostile to under the new alliances are compared with the ones it recorded. Row 5 runs for a house that left the list (with the `quirks.gap_end_keeps_cover` restore and the discovery of the cells that flip), row 3 for a house that joined it (recording its explored cells when the switch is off); each such house's whole-map-revealed mark is cleared. A house in both lists, or in neither, is left alone, and so is a field whose list did not change. Leavers are taken back in the first pass, joiners applied in the second. The building sights keep their rule: a sight whose house list changed is taken back and applied for all its houses, which leaves the counts of a house in both lists as they were.
+- *#338, wide counts and a bounded radius.* The cover and hostile gap counts are `i32`: the shared state of the cells that are not legal takes one change per field cell (S-0409 claim 21), which a radius of about 102 drives past 16 bits. The postcard encoding of an `i16` and an `i32` in range is the same, so a save's bytes do not change. With `quirks.gap_radius_wrap` off, `gap_cells` clamps the radius to `MAX_GAP_RADIUS` (255; our own input validation, far above any field the game data uses) and computes the squares in 64 bits. The counts stay saturating.
+
+**Linked weapons.**
+
+- *#339, the beam of a supporter before its master.* `linked::recruit` dates the support beam max(*d* − 1, 0) ticks ahead for a supporter after the master in the update order and one tick more for one before it (S-0518 claim 6).
+- *#340, a charger that goes inside.* `objects::take_inside` calls `linked::leaving`: going inside something is leaving play (S-0203), an open-topped transport's passenger included, so the charger leaves every charger list at once (S-0518 claim 12).
+- *#341, a pending delayed shot.* `linked::eligible` refuses a building whose own delayed shot is pending under the same condition as a pending beam (S-0518 claim 2: the countdown must be 0).
+- *#345.* The doc comment of `linked::break_off` loses the return value it no longer has.
+
+**Drain, spawners, absorbers.**
+
+- *#342, one drain animation per drainer.* A second link removes the drainer's drain animation before the new one starts in both positions of `quirks.drain_relink_strands_previous` (S-0608 Edge cases: the old animation staying is a display defect our engine removes). The end of a stranded first link (switch on) removes the drainer's animation only while that building is still its partner, so the second link keeps its own.
+- *#343.* The launch pass after turns not taken is asked in Q-3134; the code is unchanged meanwhile.
+- *#344, a bound on created counts.* `spawn::MAX_CREATED_COUNT` (100; our own input validation) caps the slot list of a spawner and the slaves a slave master gets at creation; the importer adds a warning to the missile warnings for every type above it. Nested spawners still multiply, a seam.
+- *#346, an absorber entered from a bridge deck.* `absorb::go_in` no longer puts the entrant on the ground layer before `objects::take_inside`; the claims are released in the layer of its position (S-0209 claim 1) and the entrant leaves the deck after (S-0605 claim 8).
