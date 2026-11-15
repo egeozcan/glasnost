@@ -848,6 +848,43 @@ fn edge_illegal_apron() {
     }
 }
 
+// spec: S-0417 Edge cases (an apron that is not a legal map cell: u reports clear at once, as on a cell-arrival update with no destination; claim 8's reply then applies) and claim 8 (the saved guard spot becomes the destination; otherwise a forced scatter request)
+#[test]
+fn issue_308_illegal_apron_gives_the_run_away_reply() {
+    for rally in [true, false] {
+        let mut r = ruleset_with([2, 1]);
+        r.globals.quirks.factory_apron_short_list = true;
+        let mut w = game(&r);
+        let k = building(&mut w, "VF", 0, 0, 0);
+        assert!(!w.cells.footprint().is_legal(release::apron(&w, k).unwrap()));
+        let tl = w.obj(k).unwrap().pos.cell();
+        let spot = Target::Cell(CellXY::new(tl.x + 6, tl.y + 6));
+        if rally {
+            w.obj_mut(k).unwrap().guard_spot = Some(spot);
+        }
+        let tank = new_unit(&mut w, Kind::Vehicle, "TANK");
+        assert_eq!(release::release(&mut w, k, tank), Outcome::Released);
+        let mut cleared = false;
+        for _ in 0..200 {
+            step(&mut w);
+            if w.obj(tank).unwrap().contact.is_none() {
+                cleared = true;
+                break;
+            }
+        }
+        assert!(cleared, "the clear report (rally {rally})");
+        let dest = w.obj(tank).unwrap().dest;
+        if rally {
+            assert_eq!(dest, Some(spot), "the saved guard spot is the destination");
+        } else {
+            assert!(
+                dest.is_some(),
+                "the forced scatter request gives a destination off the foundation"
+            );
+        }
+    }
+}
+
 // spec: S-0417 claim 5 (a hovering vehicle gets the destination (x0 + 4, y0 + 1) and moves by its own locomotor); S-0503 claim 4 (ρ = ½ after the exit instruction, kept until a listed reset); S-0503 claim 15 (a clear heading-point choice is a cell-arrival update at the actual position, so the factory gets its clear report and closes; Q-0693 answered)
 #[test]
 fn hover_exit_reports_clear_and_factory_closes() {
