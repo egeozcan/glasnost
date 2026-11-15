@@ -1172,6 +1172,43 @@ fn claim13_failed_placement_returns_occupants_facing_zero() {
     assert_eq!(facing_of(&w, cart), 0);
 }
 
+// spec: S-0524 claim 9 (a blocking building or other placement failure leaves no replacement) and S-0611 claim 14 (none of a refused creation set, nor the controllers it carries, enters play; its draws and numbers stay taken)
+#[test]
+fn claim9_failed_replacement_leaves_none_of_its_creation_set() {
+    let mut r = ruleset();
+    let wide_type = r.sim.buildings.get_mut("WIDE").unwrap();
+    // A spawner building: two slot objects of the synthetic aircraft SPYP.
+    wide_type.combat.spawns = Some("SPYP".into());
+    wide_type.combat.spawns_number = Some(2);
+    let mut w = game(&r, triggers(vec![], 0), &[], &[("Alpha", "WIDE", at(0, 0))]);
+    let aircraft = |w: &World| {
+        w.objects
+            .values()
+            .filter(|o| o.kind == Kind::Aircraft)
+            .count()
+    };
+    assert_eq!(aircraft(&w), 2, "the starting spawner has its slot objects");
+    for id in wide(&w) {
+        glasnost_sim::objects::remove(&mut w, id);
+    }
+    assert_eq!(aircraft(&w), 0);
+    assert!(w.spawned.launcher.is_empty());
+    // Another building blocks one foundation cell.
+    testkit::spawn(&mut w, Kind::Building, "PLANT", 1, at(1, 0), 0);
+    let objects = w.objects.len();
+    let a = country(&w, "Alphaland");
+    let next = w.next_id;
+    for _ in 0..3 {
+        mp_triggers::restore_starting_buildings(&mut w, a, None);
+    }
+    assert!(wide(&w).is_empty(), "no replacement remains");
+    assert_eq!(aircraft(&w), 0, "no slot object of a discarded replacement");
+    assert!(w.spawned.launcher.is_empty(), "no launcher record");
+    assert_eq!(w.objects.len(), objects);
+    // Each refused set kept its three creation numbers.
+    assert_eq!(w.next_id, next + 9);
+}
+
 // --- Claims 10 to 12 -------------------------------------------------------------
 
 /// Tags: 0 ENT (entered-by any house), 1 DIE (destroyed by anything,

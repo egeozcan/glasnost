@@ -367,6 +367,43 @@ fn claims_36_38_dropped_entries_draws() {
     assert_eq!(w.rng, reference.rng);
 }
 
+/// spec: S-0009 claim 38 (a non-legal cell: the creation draw is taken, the object dropped) and S-0611 claim 14 (none of a refused creation set enters play; its draws and numbers stay taken)
+#[test]
+fn claim_38_dropped_entry_takes_its_creation_set() {
+    let set = |legal: bool| {
+        let mut s = scene();
+        let tank = s.ruleset.sim.vehicles.get_mut("TANK").unwrap();
+        tank.combat.spawns = Some("JET".into());
+        tank.combat.spawns_number = Some(2);
+        tank.econ.enslaves = Some("MAN".into());
+        tank.econ.slaves_number = Some(3);
+        let at = if legal {
+            cell(0, 0)
+        } else {
+            glasnost_map::CellXY::new(0, 0)
+        };
+        s.map.objects.units.push(Unit {
+            placed: placed("Alpha", "TANK", at, 256, 0),
+        });
+        s.build()
+    };
+    let kept = set(true);
+    assert_eq!(
+        kept.objects.len(),
+        6,
+        "the vehicle, two slot objects and three slaves"
+    );
+    let w = set(false);
+    assert!(
+        w.objects.is_empty(),
+        "none of the dropped entry's set remains"
+    );
+    assert!(w.spawned.launcher.is_empty());
+    assert!(w.mind.controllers.is_empty());
+    assert_eq!(w.rng, kept.rng, "the six creation draws stay taken");
+    assert_eq!(w.next_id, kept.next_id, "and the six creation numbers");
+}
+
 /// spec: S-0009 claims 42 and 43 (terrain objects first at their cell centre; then vehicles, aircraft, infantry, buildings)
 #[test]
 fn claims_42_43_placement_order() {
@@ -529,6 +566,56 @@ fn claim_45_early_stop() {
     s.setup.bases = false;
     let full = load(&s).expect("loads");
     assert!(!full.objects.is_empty());
+}
+
+/// The world of [`starting_scene`] with MCV and TANK each creating two
+/// JET slot objects and three MAN slaves, and the starting units of
+/// `setup` given again on a cell grid without one legal cell, so that
+/// every placement fails; the real grid is put back after.
+fn failed_starts(bases: bool) -> (World, u32) {
+    let mut s = starting_scene();
+    for name in ["MCV", "TANK"] {
+        let t = s.ruleset.sim.vehicles.get_mut(name).unwrap();
+        t.combat.spawns = Some("JET".into());
+        t.combat.spawns_number = Some(2);
+        t.econ.enslaves = Some("MAN".into());
+        t.econ.slaves_number = Some(3);
+    }
+    s.setup.unit_count = 0;
+    s.setup.bases = false;
+    let mut w = load(&s).expect("loads");
+    assert!(w.objects.is_empty(), "no starting unit at load");
+    let real = w.cells.clone();
+    // A footprint of size 0 has no legal cell (S-0009 claim 1).
+    w.cells = glasnost_sim::cells::Cells::new(glasnost_map::CellGrid::new(
+        glasnost_map::Footprint::new(0, 0, [0, 0, 0, 0]),
+    ));
+    let mut setup = s.setup.clone();
+    setup.unit_count = 1;
+    setup.bases = bases;
+    let starts = [Some(glasnost_map::CellXY::new(40, 40)), None];
+    let first = w.next_id;
+    glasnost_sim::starting::give(&mut w, &starts, &setup);
+    w.cells = real;
+    (w, first)
+}
+
+/// spec: S-0009 claim 45 (a failed placement: the unit is removed again, its creation draw stays taken; the base unit's: the step stops) and S-0611 claim 14 (none of a refused creation set, nor the controllers it carries, enters play; its numbers stay taken)
+#[test]
+fn claim_45_failed_start_leaves_no_creation_set() {
+    for bases in [true, false] {
+        let (w, first) = failed_starts(bases);
+        assert!(
+            w.objects.is_empty(),
+            "bases {bases}: nothing of a failed unit's set remains"
+        );
+        assert!(w.spawned.launcher.is_empty(), "bases {bases}");
+        assert!(w.mind.controllers.is_empty(), "bases {bases}");
+        assert!(
+            w.next_id > first,
+            "bases {bases}: the creation numbers stay taken"
+        );
+    }
 }
 
 /// spec: S-0009 claim 41 (follow values make placed vehicles follower cars of the placed vehicle they name)
