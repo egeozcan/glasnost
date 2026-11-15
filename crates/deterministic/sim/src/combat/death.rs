@@ -429,7 +429,12 @@ fn leave_play_before_crate(w: &mut World, id: ObjectId) -> Option<(glasnost_map:
 /// raises fire, and it shows no death effects of its own and takes no
 /// draws for them; it is then removed.
 pub fn passenger_death(w: &mut World, id: ObjectId, hit: &Hit) {
-    if w.obj(id).is_none() {
+    let Some(o) = w.obj(id) else {
+        return;
+    };
+    if crate::combat::damage::dead(o) {
+        // spec: S-0414 claim 15 (a passenger already killed receives no second death: no second killing mark, credit or raises; a dead passenger is never left listed in its carrier, so it is only removed)
+        crate::objects::remove(w, id);
         return;
     }
     if let Some(ob) = w.obj_mut(id) {
@@ -440,6 +445,25 @@ pub fn passenger_death(w: &mut World, id: ObjectId, hit: &Hit) {
     crate::combat::damage::credit(w, id, hit);
     // spec: S-0312 claim 5 (tagged passengers still receive destruction notifications; their actions complete before that passenger is removed)
     destruction_raises(w, id, hit);
+    // spec: S-0312 claim 5 (no death effects of their own and no draws for them; the passenger is removed)
+    crate::objects::remove(w, id);
+}
+
+/// A killing hit that reaches a passenger or an occupant inside its carrier
+/// (S-0508 claim 19; S-0414 claims 5 and 15; S-0605 claim 15): the hit has
+/// registered the destruction already (S-0414 claim 21), so it is not
+/// credited again; it makes the destruction raises (unless `raises` is
+/// off, S-0302 claim 16) and leaves the game at once, with no death effects
+/// of its own (Q-3158, interim).
+fn passenger_removed(w: &mut World, id: ObjectId, hit: &Hit, raises: bool) {
+    if let Some(ob) = w.obj_mut(id) {
+        ob.health = 0;
+    }
+    mark_killed(w, id);
+    if raises {
+        // spec: S-0312 claim 5 (tagged passengers still receive destruction notifications; their actions complete before that passenger is removed)
+        destruction_raises(w, id, hit);
+    }
     // spec: S-0312 claim 5 (no death effects of their own and no draws for them; the passenger is removed)
     crate::objects::remove(w, id);
 }
@@ -591,9 +615,14 @@ pub(crate) fn kill_in(
     let Some(o) = w.obj(id).cloned() else {
         return Flow::Done(());
     };
-    if o.structure.inside.is_some() {
+    if o.structure.inside.is_some()
+        || crate::transport::riding(w, id).is_some()
+        || crate::structures::absorb::absorbed_in(w, id).is_some()
+    {
         // spec: S-0508 claim 19 (an occupant killed inside a building by its own house's defeat: individual killing hits, no eviction; our engine then removes the place and repairs the index under claim 23, `garrison::removing`; like a passenger it shows no death effects)
-        passenger_death(w, id, hit);
+        // spec: S-0414 claims 5 and 15 and S-0605 claim 15 (a passenger hit at its own place inside a transport or an absorbing building leaves the game there: the carrier's count drops at once and the carrier's own death gives it no second one); Q-3158 (interim: what it shows is not specified; it gets the occupant's treatment, no death effects of its own and no draws for them)
+        // spec: S-0414 claim 21 (one loss per destruction: the killing hit has registered it, so no second credit here)
+        passenger_removed(w, id, hit, raises);
         return Flow::Done(());
     }
     mark_killed(w, id);
