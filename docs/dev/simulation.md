@@ -1844,3 +1844,45 @@ The fourteenth batch of the game-logic audit works through issues #263 to #277. 
 **Formats.** #274 adds a saved field: the save format goes to 146 and the AI game format to 122, the numbers the main session gave this batch. Wire version 12: no order's encoding changes.
 
 **Seams.** Q-3115 (the curve case of #263) and Q-3116 (#272) wait for answers. The train refresh of S-0212 claim 20 is not built. The unguarded overlay lookups in `combat::area`, `econ::placement` and `cloak::disguise`, and the assign-then-clear order in `depot`, `structures::bunker` and `structures::absorb`, are not changed.
+
+## Simulation (sim issues S17: area search, factory release, credits, disc lasers, projectiles and entry outcomes)
+
+The seventeenth batch of the game-logic audit takes #245, whose request Q-3109 S-0309 r144 answers, and #308 to #322. Each change of behaviour has a test on synthetic data committed before it. Three questions the specs leave open are filed as requests: Q-3128 (#310), Q-3129 (#317) and Q-3130 (the arm time of an airburst child, met while fixing #315). The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S17*.
+
+**Target acquisition (S-0309 r144).**
+
+- *#245, the zone row (table C row "zone", claims 7 and 11).* The zone row applies only in the ground-layer pass of a map-wide search by a mobile searcher that is not an aircraft. An area search passed it as well, testing the offered object's cell in the object's layer; claim 11's skip of a visited cell (read for its deck when a bridge cell) is now the only region test there. The row reads the cell that holds the object's reference point (`World::reference_point`): for a building, the foundation centre without the bib, so the larger-coordinate cell on an edge of even length, instead of the cell of its position.
+
+**Factories, deploying and production (S-0417, S-0517, S-0406, S-0404, S-0411).**
+
+- *#308, an illegal apron (S-0417 Edge cases, claim 8).* A released vehicle whose apron is not a legal map cell gave the clear report and stopped there. It now goes on as a cell-arrival update with no destination does: claim 8's reply (the run-away reply when the release came from a vehicle factory), then the arrival fallback. The fallback is the same function `arrival` uses. Infantry keep the report alone.
+- *#309, the landing-first deploy sound (S-0517 claim 12).* With `quirks.deploy_sound_repeats` off the sound is requested once per deploy. A landing-first deployer requested it at the landing step and again when the ground rows began after touchdown. The deploy state now records that this deploy has requested the sound (`DeployState::sound_requested`); the ground rows request it only when the record is clear. Every deploy order resets the state, so a later deploy requests it again.
+- *#310, a filling building of a type that is not a wall type (S-0406 claim 11).* No behaviour change. The comment in `put_on_map_facing` said that a wall fill is placed; it now states the interim of Q-3128 (the filling building enters as any insertion other than a place order does, with the ready mark set), and the ledger row of claim 11 says the same.
+- *#311, credits wrap (S-0404, S-0205 claim 1).* Step payments and cancel refunds saturated the balance at the 32-bit limits. They now wrap, as every other credit path does.
+- *#312, a busy building or defence line (S-0411 claim 6, S-0404 claim 7).* Two build orders for one building or defence line issued in the same tick both passed legality, and the second was queued behind the first. A building or defence line that already has an item now takes no starting or queuing order, also when the item was started earlier in the same tick.
+
+**Disc lasers (S-0615 claim 14).**
+
+- *#313, the loss at the killing hit.* The loss was read from the object's health at the disc laser's next update, so a vessel that sinks (its health set back to 1 in that hit) was not lost. `death::mark_killed` now calls `disc::object_lost`, so the loss is recorded at the killing hit, as the claim says, wherever in the tick it falls. A second call at removal changes nothing.
+- *#314, a passenger of an open-topped transport.* The update re-tested "on the map and not inside", so a disc laser fired from inside an open-topped transport was cancelled at its first update. Leaving the map is an event that `objects::take_inside` already reports; the update now tests only that the object exists and is not destroyed, and an object that boards or is garrisoned after the shot still cancels through that event. `claims_s0615::loss_and_crash_cancel` now takes its firer inside through `take_inside`, as play does, instead of clearing its on-map flag by hand (a test commit of its own).
+
+**Projectiles and bombs (S-0306, S-0519, S-0511).**
+
+- *#315, an airburst child's Ω (S-0306 T1, claims 8 and 21).* The children started with Ω = 0, so a ranged or steering child read as having passed its target and detonated in its first turn. Ω at placement is now *d*₃ from the child's position to its stored target point, as for every placed projectile. Every child keeps an arm time of 0; whether it takes its type's arm field is Q-3130.
+- *#316, a hut destroyed by its own bomb (S-0511 claim 16, S-0519 claims 5 and 22).* The demolition after the bomb's detonation needed the hut object to survive the blast. `bomb::detonate` now reads the hut's cell before the detonation and demolishes from that cell (`bridges::hut::demolish_from`) whether the hut survived or not.
+- *#317, the flak scatter distance (S-0306 claim 4).* Not built: the spec does not give the single-precision steps (Q-3129). *D* stays *d*₃.
+- *#318, a firer killed by an earlier detonation (S-0306 claim 21, S-0302 claim 1).* `explode` works on a copy of the projectile taken at the start of its turn. When the first detonation of a cluster killed the firer, `mark_killed` cleared the stored projectile's firer and house, but the copy kept them for the later detonations, the shrapnel bursts and the airburst children. The copy now takes the stored projectile's firer and house again before each of them.
+
+**Scatter and routes (S-0207, S-0213).**
+
+- *#319, a deployed vehicle (S-0207 claim 16 (f)).* The refusal for a vehicle that is deployed, deploying or undeploying was hard-coded false. It now reads the in-place deploy state.
+- *#320, a delete outside the loop (S-0213 claim 16 (e)).* Any point delete cancelled every loop of fewer than 3 points in the world. A loop is now cancelled for being short only when the delete removed a point inside it; a delete in another route or another house's route leaves it.
+
+**Entry outcomes (S-0209 Terms *Armed*, claim 5).**
+
+- *#321, elite weapons.* The armed and primary-weapon tests read the ordinary primary and secondary weapons. At the elite rank they now read the elite weapon of each slot when the type gives one (`occupancy::slot_name`), in the walker's mean damage, the primary-weapon test, the wall, wood and ground-target questions, the vehicle's armed test and rows VO4 and VR9. The weapon names are read as before, so a unit below elite rank gets the same answers. A multi-turret type's selected weapon is not built (a seam): its slots are read as any other type's. Row VP29's weapon "the vehicle would use against the terrain object" is not built either (a seam): the row still reads the primary weapon's wood flag, now at the current rank.
+- *#322, row VP3 above VP5.* A vehicle in contact with the absorbing building it enters got row VP5's override on a foundation cell that is not a blocking cell. Row VP3 (none) is now tested first, as part 5d's order from the top asks.
+
+**Formats.** #309 adds a saved field: the save format goes to 150 and the AI game format to 126, the numbers the main session gave this batch. Wire version 12: no order's encoding changes.
+
+**Seams.** Q-3128 (#310), Q-3129 (#317) and Q-3130 (the arm time of an airburst child) wait for answers. A multi-turret type's selected weapon in the armed test (#321) and row VP29's weapon against the terrain object are not built.
