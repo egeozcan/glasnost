@@ -463,3 +463,55 @@ The checks all ran on the final tree.
 - The workspace tests pass except main's `quirks::tests::every_spec_quirk_has_a_switch`, which fails on `gas_through_bridge_deck` only. The new switch `crate_beneath_overlay_refusal` is read.
 
 Seams left (also in the design section): Q-3109 (#245's zone row in an area search). A building's guard range is read as S-0309's Import mapping gives it (single-precision decimal × 256, truncated), while a mobile type's still reads S-0215's (the double × 256, truncated). The two can differ for a value that a single cannot hold exactly; whether they are one read is not settled here. Rubble beneath a building (S-0312 claim 20) is still not modelled. A seeking slave miner slave holds its own master as target with the attack flag set, on base and in the batch. Whether a spec gives that has not been checked.
+
+## Batch S16: domination, infantry-making animations, owner changes, particle systems and re-paths
+
+The base is main fd702c6, not rebased. The batch covers thirteen issues: #290, #291, #292 and #298 to #307. The formats are save 148 and AI game 124 (8e4188f). The animation's new `making` record (#291) is the only new saved field, and it has a serde default. The wire version is unchanged (12).
+
+All the failing tests are committed first, c246473 to 8a87929, one commit per issue. On the last of those commits, 8a87929, each new test fails and each control passes. The fixes follow, one commit per issue, and no fix commit changes a test.
+
+Requests Q-3121 (bffdeb6) and Q-3122 (a5af347) are filed; Q-3123 is unused. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S16: domination, infantry-making animations, particle systems and re-paths)* (e83a0a2). The C7 ledger's *Resume* sentence follows #300 (5a0dc0d).
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #290 | A drain-mode domination order in ready was accepted while a domination was in force | fixed (f70ad38) | S-0612 claims 3 and 7, S-0512 claims 8 and 19: `superweapons::launch::drain`'s ready branch refuses a dominator-kind order while `domination::in_force` | `claims_s0612_drain.rs` (`claim_3_drain_type_second_launch_by_another_house_is_refused`, `claim_3_drain_type_relaunch_by_the_same_house_is_refused`; control `claim_3_ordinary_type_second_launch_is_refused`) |
+| #291 | An infantry-making animation made infantry only when made by the control effects | partly (268c55e); Q-3121 (bffdeb6) | S-0611 claims 8, 9 and 11: an unattached, non-bouncing animation with no owner whose type makes infantry carries a `mutation::Making` record. While its frame makes infantry it marks its position, and it frees the position when it goes. At its natural end it makes its infantry through `mutation::try_make`; a refused attempt steps back and retries. Attached or bouncing animations are Q-3121, and they keep the old path | `claims_s0611_creators.rs` (trailer, plain, reverse, marking, refusal and save/load tests; control `claim_9_control_effects_anim_makes_its_unit`) |
+| #292 | With the switch off, a controller's victims were released after its owner was written, so each release's fate decision read the new house | fixed (2f23adf); schema text 91817e3 | S-0601 claim 11 and Edge cases. `mind::owner_changing` releases all victims before the owner is written. It is called from `mind::set_owner_by`, `ownership::change_by` (after the same-owner test), the contact hand-over and the slave hand-over. `mind::owner_changed` goes | `claims_s0601_release_first.rs::switch_off_release_reads_the_house_the_controller_had_before_its_change` (control `switch_on_keeps_the_victims`) |
+| #298 | The per-tick approach and the rally-cell reads read the reach regions out of date | fixed (12e03e1) | `regions::ensure` before `approach::reaches` in `approach::per_tick`, and before each of the three `orders::rally_cell` reads in `econ::release` | `claims_s0212_regions_fresh.rs` (2), `claims_s0417_rally_fresh.rs::rally_spread_after_a_category_change` |
+| #299 | A deploy order to a building in its construction state replaced the queued construction | fixed (6e49e86) | S-0213 claim 10, S-0406 claim 17: the deploy arm of `orders::apply_other` ignores an actor still being built up, or whose seen behaviour is construction or selling | `claims_s0213_deploy_construction.rs::deploy_order_to_a_building_under_construction` |
+| #300 | Any order naming a unit ended its giving way, even one that failed its checks | fixed (949e046); docs 5a0dc0d | C7-P5 design: `path::order_given` moves from `apply_pending`'s up-front loop into the stop, scatter and deploy arms, after their checks, and into `apply_behaviour`, after claim 4 and table T3 (a) | `pathing_c7p5_yield_orders.rs::a_failed_order_leaves_a_unit_giving_way_its_move` |
+| #301 | A trigger-made system aimed at the world origin | fixed (f5d6920) | S-0616 claim 1: `emitters::trigger_create` sets the target to the creation point | `claims_s0616_trigger_target.rs::trigger_made_railgun_system_has_its_own_position_as_target` |
+| #302 | An effect weapon's smoke emitter jumped onto its firer | fixed (2d5e64e) | S-0616 claims 1 and 5: `emitters::effect_weapon_emitter` sets the owner offset to the creation point less the firer's position, with wrapping | `claims_s0616_weapon_smoke.rs::smoke_kind_weapon_emitter_keeps_its_creation_displacement` |
+| #303 | A fire system with spawn interval 0 never emitted | fixed (9cbc2ef) | S-0616 claim 20, S-0205 claim 3: `particles::fire_turn` takes the interval test for 0 too, so it passes at tick 0 only | `claims_s0616_fire_interval_zero.rs::fire_interval_zero_emits_at_tick_zero` |
+| #304 | A heading at the integer limits, and a split with spawn radius −1, overflowed | fixed (be68623) | S-0205 claim 1: `particles::heading` uses `wrapping_sub`; `split_and_remove` uses `wrapping_mul` | `claims_s0616_wrapping.rs` (`heading_from_a_position_at_the_range_edge_wraps`, `smoke_emission_with_spawn_radius_minus_one`) |
+| #305 | Congestion marks for a unit on a deck read the ground under it | partly (18ae9a5); Q-3122 (a5af347) | S-0212 claims 7 and 19: `path::congestion` reads the cell ahead and each 5 × 5 cell on the layer that a step from the unit's start pair reaches (`candidate_layer`). Whether the other layer counts as well is Q-3122; it does not, as an interim | `claims_s0212_congestion_deck.rs::the_same_on_a_bridge_deck` (control `control_on_the_ground`) |
+| #306 | A mode-1 search whose counts were all even ran as mode 0 | fixed (e804de4) | S-0212 claim 19: `compute_once` downgrades to mode 0 only when `congestion` answers none, meaning part (i) counted no cell. The doc of `trace::What::Search::mode` follows | `claims_s0212_mode_one_even.rs::mode_one_with_a_counted_path_cell_stays_mode_one` |
+| #307 | A straightening shape's start level came from a per-cell table of the found path | fixed (78264ea) | S-0212 claims 7, 17 and 18: `flatten`'s test and the new internal `shorten_at` (the public `shorten` keeps its form) walk the current path from the start pair with `candidate_layer`. After a tunnel step the walk is on the ground | `claims_s0212_straighten_deck.rs::a_unit_under_the_deck_changes_the_straightened_deck_path` |
+
+Lanes compare base fd702c6 (the binary built there) with the batch at 8e4188f.
+- The oracle arena (`--record all`) prints exactly what base prints, apart from timings and paths.
+- The M6c, M7a and M7b sweeps over seeds 1–16 print exactly what base prints.
+
+The AI quick lane plays seeds 7–10 on maps 0, 2 and 8, 36 games in all. 22 games change. Per seed, the changed games are:
+- seed 7: games 1–6;
+- seed 8: games 1–6 and 8;
+- seed 9: games 1–3, 5 and 6;
+- seed 10: games 1–4.
+
+Map 8 changes least. Ten of the changed games make no infantry-making animation on base or in the batch, so #291 alone does not explain the changes. The pathing and order fixes (#298, #300, #305 to #307) and #302 are the likely other sources; this was not traced.
+
+One game changes winner: seed 8, map 2, sides 1 and 2. On base house 0 wins after 68650 ticks; in the batch house 1 wins after 79998. Its mutation animations go from 9 to 16. The trace stopped at the first step: a hash-every-500 run of each build was made, and the guard refused the command that would read the hash lines. So the cause of the flip is not traced. The two runs are kept in the lane directory.
+
+The checks all ran on the final tree.
+- The sim gate with its ignored tests passes 17. The goldens were regenerated after the format bump. duel-m7b moves in 13 isolated sample hashes, each returning to the old value; this is not traced, and a transient particle-system state (#302) is a guess. No other golden moved.
+- The AI suite with its ignored tests passes 362, 0 failed.
+- The workspace tests pass. The first run failed the committed-schema test: #292's doc comment flows into the schema description. The schema was regenerated (91817e3).
+- `cargo clippy --workspace --all-targets -- -D warnings` is clean. `cargo fmt --check` is clean after the rustfmt commit 281060c.
+- The wasm32 build of `glasnost-app` succeeds.
+- `xtask check` passes. `xtask gate` passes, and on wasm32 it matches all nine goldens.
+
+Seams left (also in the design section):
+- Q-3121: an attached or bouncing infantry-making animation.
+- Q-3122: the other cell layer in the congestion marks.
+- An ordinary infantry-making animation has no owner colour and makes no maker presentation events.
+- The stop arm's construction and tunnel checks are still only its construction-or-selling return.
