@@ -219,7 +219,9 @@ pub struct Built {
     pub layered: Vec<(slots::Layer, GroundEntry)>,
     /// Each drawn cell's shown tile image: its file and the tile cell's
     /// index there (S-0010 claims 13 and 24), for the tile radar colour.
-    pub shown_tiles: BTreeMap<CellXY, (Vec<u8>, usize)>,
+    /// The upper-case file name is shared by all cells that show the file
+    /// (design: render (#149)).
+    pub shown_tiles: BTreeMap<CellXY, (Rc<[u8]>, usize)>,
 }
 
 /// The fixed house names of S-0009 Import mapping (claim 27).
@@ -1378,8 +1380,15 @@ pub struct Painter {
     // design: render (#135)
     masks: Option<super::protection::Masks>,
     extra_light: Option<light::ExtraLight>,
-    /// Tile files decoded once, by upper-case name.
-    tile_files: BTreeMap<Vec<u8>, Option<TileFile>>,
+    /// Tile files decoded once, by upper-case name, and shared. A file's
+    /// bytes do not change during a game ([`Assets`] changes only when it
+    /// is loaded), so nothing invalidates them.
+    // design: render (#149)
+    tile_files: BTreeMap<Vec<u8>, Option<Rc<TileFile>>>,
+    /// The same tile files by the name as the catalogue spells it, so that
+    /// a cell's lookup needs no upper-case copy of the name.
+    // design: render (#149)
+    tile_spellings: BTreeMap<Vec<u8>, Option<Rc<TileFile>>>,
     /// The shared building companion depth image (S-0102 claims 31 and
     /// 33), once read.
     companion: Option<Companion>,
@@ -1522,9 +1531,13 @@ struct BuildingContext {
 /// draw point (S-0105 claim 25, F6).
 pub(super) type PlacedPart = (u32, [i32; 2]);
 
-/// A decoded tile file: its size in cells and its tile cells, row by row.
+/// A decoded tile file: its upper-case name, its size in cells and its
+/// tile cells, row by row.
 #[derive(Clone, Debug)]
 struct TileFile {
+    /// Shared by every cell's [`Built::shown_tiles`] entry that shows it.
+    // design: render (#149)
+    name: Rc<[u8]>,
     width: i32,
     height: i32,
     cells: Vec<Option<TileImages>>,
@@ -2020,12 +2033,28 @@ impl<'a> Builder<'a> {
     }
 
     /// A tile file decoded once: its size in cells and its tile cells.
-    fn tile_file(&mut self, file: &[u8]) -> Option<TileFile> {
-        let key = upper(file);
-        if let Some(t) = self.p.tile_files.get(&key) {
+    fn tile_file(&mut self, file: &[u8]) -> Option<Rc<TileFile>> {
+        // design: render (#149) (a hit is a shared handle: no copy of the file's cells or of its name)
+        if let Some(t) = self.p.tile_spellings.get(file) {
             return t.clone();
         }
-        let decoded = self.assets.get(&key).and_then(|bytes| {
+        let key = upper(file);
+        let decoded = match self.p.tile_files.get(&key) {
+            Some(t) => t.clone(),
+            None => {
+                let d = self.decode_tile_file(&key).map(Rc::new);
+                self.p.tile_files.insert(key, d.clone());
+                d
+            }
+        };
+        self.p.tile_spellings.insert(file.to_vec(), decoded.clone());
+        decoded
+    }
+
+    /// Decodes the tile file of upper-case name `key`, adding its images to
+    /// the scene.
+    fn decode_tile_file(&mut self, key: &[u8]) -> Option<TileFile> {
+        self.assets.get(key).and_then(|bytes| {
             let tmp = Tmp::parse(bytes).ok()?;
             let mut cells = Vec::new();
             for i in 0..tmp.tiles.len() {
@@ -2048,14 +2077,13 @@ impl<'a> Builder<'a> {
                 .map(|t| t.as_ref().map_or(0, |t| t.flags))
                 .collect();
             Some(TileFile {
+                name: Rc::from(key),
                 width: tmp.cells_x as i32,
                 height: tmp.cells_y as i32,
                 cells,
                 flags,
             })
-        });
-        self.p.tile_files.insert(key, decoded.clone());
-        decoded
+        })
     }
 
     /// Terrain tiles (S-0010 claims 13, 22 to 24; S-0101 claim 4; S-0102
@@ -2088,18 +2116,19 @@ impl<'a> Builder<'a> {
         let count = self.catalogue.tile_count;
         let assets = self.assets;
         let exists = |n: &[u8]| assets.get(n).is_some();
-        let mut images: BTreeMap<i32, glasnost_convert::theater::TileImages> = BTreeMap::new();
+        // design: render (#149) (each tile's file names found once and shared, not copied per cell)
+        let mut images: BTreeMap<i32, Rc<glasnost_convert::theater::TileImages>> = BTreeMap::new();
         for (c, cell) in all {
             let (t, s) = (cell.tile, i32::from(cell.sub_tile));
             let mut files = |b: &mut Self, t: i32| {
                 images
                     .entry(t)
-                    .or_insert_with(|| b.catalogue.tile_images(t, &exists))
+                    .or_insert_with(|| Rc::new(b.catalogue.tile_images(t, &exists)))
                     .clone()
             };
             // spec: S-0010 claims 7 and 24 (the tile case paints the cell's tile; the no-tile case, a stray
             // or a negative number paint position 0 of the clear tile, at the cell's own coordinates)
-            let mut shown: Option<(i32, i32, glasnost_convert::theater::TileImages)> = None;
+            let mut shown: Option<(i32, i32, Rc<glasnost_convert::theater::TileImages>)> = None;
             if (0..count).contains(&t) {
                 let f = files(self, t);
                 let plain = f.plain.as_ref().and_then(|p| self.tile_file(p));
@@ -2149,11 +2178,11 @@ impl<'a> Builder<'a> {
                 marked,
             );
             let file = if v == 0 {
-                f.plain.clone()
+                f.plain.as_deref()
             } else {
-                f.variants.get(v - 1).cloned()
+                f.variants.get(v - 1).map(Vec::as_slice)
             };
-            let Some((image, name)) = file.and_then(|n| Some((self.tile_file(&n)?, n))) else {
+            let Some(image) = file.and_then(|n| self.tile_file(n)) else {
                 self.drop_object("cell drawn blank: its tile file is missing or unreadable");
                 continue;
             };
@@ -2161,7 +2190,9 @@ impl<'a> Builder<'a> {
             let n_s = (image.width * image.height).max(1);
             let index = s.rem_euclid(n_s) as usize;
             // spec: S-0010 claim 20 (the radar's tile colour comes from the image variant the cell shows)
-            self.built.shown_tiles.insert(c, (upper(&name), index));
+            self.built
+                .shown_tiles
+                .insert(c, (Rc::clone(&image.name), index));
             let cell_images = match image.cells.get(index).copied().flatten() {
                 Some(i) => i,
                 // spec: S-0010 claim 24 (missing tile cells: the plain image's tile cell at t mod (w × h) instead, our engine's correction with no switch; none there either: nothing painted)
@@ -6660,6 +6691,7 @@ impl Painter {
             masks: None,
             extra_light: None,
             tile_files: BTreeMap::new(),
+            tile_spellings: BTreeMap::new(),
             companion: None,
             oversized: BTreeSet::new(),
             sources: Vec::new(),
@@ -7767,14 +7799,14 @@ pub fn minimap(map: &Map, colours: &BTreeMap<CellXY, [u8; 3]>) -> (u32, u32, Vec
 /// tile cell its shown image holds (S-0010 claim 20; the second colour has
 /// no effect on the radar), for the cells whose tile file was found.
 pub fn tile_radar_colours(
-    shown: &BTreeMap<CellXY, (Vec<u8>, usize)>,
+    shown: &BTreeMap<CellXY, (Rc<[u8]>, usize)>,
     assets: &Assets,
 ) -> BTreeMap<CellXY, [u8; 3]> {
     let mut files: BTreeMap<&[u8], Option<Tmp>> = BTreeMap::new();
     let mut out = BTreeMap::new();
     for (&c, (file, index)) in shown {
         let tmp = files
-            .entry(file.as_slice())
+            .entry(&**file)
             .or_insert_with(|| assets.get(file).and_then(|b| Tmp::parse(b).ok()));
         if let Some(tile) = tmp
             .as_ref()
