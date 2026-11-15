@@ -1749,8 +1749,8 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             target: Some(Target::Cell(cell)),
             stored,
             placed_at: at,
-            // spec: S-0306 claims 9 and 21 (whether a child takes its type's arm field is not stated, Q-3130; interim: every child is armed at once)
-            arm: 0,
+            // spec: S-0306 r93 claims 9 and 21 (Q-3130: a child is placed as claim 9 says, so its arm time is its own projectile type's arm field; its target is a cell, so the bursting projectile's aircraft target plays no part)
+            arm: rules.combat.projectile_of(aw).map_or(0, |p| p.arm),
             placed: w.tick,
             damage: rules.combat.weapon(aw).damage,
             omega,
