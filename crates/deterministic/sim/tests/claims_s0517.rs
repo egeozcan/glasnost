@@ -430,6 +430,39 @@ fn claim_12_sound_requests() {
     }
 }
 
+// spec: S-0517 claim 12, Edge cases and P1 (S) (switch off: the deploy sound is requested once, at the first deploy step that starts landing; landing-first deployment makes no second request at touchdown)
+#[test]
+fn issue_309_landing_first_deploy_requests_the_sound_once_with_the_switch_off() {
+    for name in ["DLANDA", "DLAND0"] {
+        let mut w = game();
+        quirk(&mut w, |q| q.deploy_sound_repeats = false);
+        let v = tank(&mut w, name, 0, 0);
+        go(&mut w, v, at(0, 0));
+        jump::start_in_flight(&mut w, v, Phase::Hovering, 300);
+        commit_here(&mut w, v);
+        for _ in 0..30 {
+            step(&mut w);
+        }
+        assert_eq!(phase(&w, v), Phase::Hovering);
+        w.effects.clear();
+        deploy(&mut w, v);
+        assert!(until(&mut w, 40, |w| jump::landing_requested(w, v)));
+        let count = |w: &World| sounds(w).iter().filter(|s| **s == Sound::Deploy).count();
+        assert_eq!(count(&w), 1, "{name}: one request at the landing step");
+        assert!(until(&mut w, 200, |w| phase(w, v) == Phase::Grounded));
+        assert_eq!(count(&w), 1, "{name}: none during the descent");
+        assert!(until(&mut w, 60, |w| form(w, v) == Form::Deployed));
+        assert_eq!(count(&w), 1, "{name}: no second request at touchdown");
+        // A later deployment requests the sound again, once.
+        deploy(&mut w, v);
+        assert!(until(&mut w, 60, |w| form(w, v) == Form::Mobile));
+        w.effects.clear();
+        deploy(&mut w, v);
+        assert!(until(&mut w, 300, |w| form(w, v) == Form::Deployed));
+        assert_eq!(count(&w), 1, "{name}: the next deployment requests it once");
+    }
+}
+
 // spec: S-0517 claim 7, F1, F2 and P1 C (the exact completion: t0 + (E - 1) d + 1 for a deploy and t0 + (E - 2) d + 1 for an undeploy, 5 and 4 ticks for d = 1 and E = 5, 9 and 7 for d = 2, whatever the start tick, and the count uses the base delay, not the game-speed-normalised playback delay)
 #[test]
 fn claim_7_exact_completion_and_the_base_delay() {
