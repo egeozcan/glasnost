@@ -485,7 +485,10 @@ pub fn update(w: &mut World) {
     for (k, p) in due {
         // spec: S-0520 claim 4 (each expiry frees its place and its crate; the replacement sees it free)
         w.crates.places.remove(&k);
-        crate::crush::remove_overlay(w, p.cell);
+        // spec: S-0520 Terms (a crate is a cell holding a crate overlay) and claim 4 (an expiry removes one crate: an overlay that is not a crate is left alone); Q-3118 (interim: a place whose crate another rule removed stays occupied until its lifetime ends and still makes its replacement placement) (#284)
+        if is_crate(w, p.cell) {
+            crate::crush::remove_overlay(w, p.cell);
+        }
         if on {
             // spec: S-0520 claim 4 (one random placement per expiry, which can fail)
             place_random(w);
@@ -519,9 +522,9 @@ pub fn pickup(w: &mut World, collector: ObjectId, cell: CellXY) -> bool {
         .get(usize::from(overlay))
         .is_some_and(|o| o.crate_trigger);
     if trigger_flag {
-        // spec: S-0520 claim 7 (a collector with a tag raises event 49 with itself as the causing object; a collector that no longer exists afterwards: the crate stays and a ground step is blocked)
+        // spec: S-0520 claim 7 (a collector with a tag raises event 49 with itself as the causing object; if the collector is no longer alive afterwards, nothing more happens: the crate stays, the any-crate mark is unchanged and a ground step is blocked; one in its death sequence is no longer alive) (#281)
         crate::triggers::crate_picked_up(w, collector);
-        if w.obj(collector).is_none() {
+        if w.obj(collector).is_none_or(damage::dead) {
             return true;
         }
         // spec: S-0520 claim 7 (the pickup continues: the any-crate mark is set)
@@ -904,16 +907,20 @@ fn harvester_rule(w: &World, house: HouseId) -> Option<u32> {
 }
 
 /// The random vehicle of claim 13: requests R(0, n − 1) until a type with the
-/// crate-goodie flag is accepted (a base-unit type is refused with the bases
-/// setting off).
-fn random_vehicle(w: &mut World, _house: HouseId, half: bool) -> Option<u32> {
+/// crate-goodie flag is accepted. A base-unit-list type is refused with the
+/// bases setting off, and also with it on for a collecting house that is not
+/// human-controlled (the neutral and special houses and the test-only
+/// computer-controlled player houses); every player house accepts it then.
+fn random_vehicle(w: &mut World, house: HouseId, half: bool) -> Option<u32> {
     let r = w.rules_arc();
     let n = r.vehicles.len() as i32;
     let bases = crate::econ::setup::bases(w);
+    // spec: S-0520 claim 13 (In our engine: every player house accepts a base-unit-list type with the bases setting on; neutral and special houses retain the original's non-human restriction) and the glossary (AI house: Player houses only and Test setups, the test-only computer-controlled player houses keep it too)
+    let human = w.houses.get(usize::from(house.0)).is_some_and(|h| h.human);
     // spec: S-0520 Edge cases (no vehicle type can ever be accepted: the original never stops redrawing; our engine gives money after a bounded search with no draw)
     let acceptable = |i: usize| {
         r.crates.goodie.get(i).copied().unwrap_or(false)
-            && (bases || !r.base_units.contains(&(i as u32)))
+            && ((bases && human) || !r.base_units.contains(&(i as u32)))
     };
     if n <= 0 || !(0..n as usize).any(acceptable) {
         w.note("S-0520 Edge cases: no vehicle type is accepted by the unit power-up: the crate gives money");
@@ -1000,17 +1007,18 @@ fn explosion(w: &mut World, collector: ObjectId, p: Pos, d: i32, half: bool) {
 
 /// Claim 17: napalm.
 fn napalm(w: &mut World, collector: ObjectId, p: Pos, d: i32) {
-    let Some(flame) = w.rules().crates.flame else {
-        w.note("S-0520 Edge cases: no flame warhead: napalm skips its hit and its area damage");
-        return;
-    };
     let c = w.reference_point(collector);
     // spec: S-0520 F6 (the midpoint, each coordinate truncated toward zero)
     let m = Pos::new((p.x + c.x) / 2, (p.y + c.y) / 2, (p.z + c.z) / 2);
-    // spec: S-0520 claim 17 (the animation at position 0 of the animation list appears at the midpoint, before the hits)
+    // spec: S-0520 claim 17 (the animation at position 0 of the animation list appears at the midpoint, before the hits; it does not depend on the warhead) (#283)
     if let Some(name) = w.rules().animations.first().map(|a| a.name.clone()) {
         crate::combat::effects::anim(w, &name, m);
     }
+    let Some(flame) = w.rules().crates.flame else {
+        // spec: S-0520 Edge cases (a missing flame warhead for napalm: our engine skips the hit and the area damage)
+        w.note("S-0520 Edge cases: no flame warhead: napalm skips its hit and its area damage");
+        return;
+    };
     damage::apply(
         w,
         collector,

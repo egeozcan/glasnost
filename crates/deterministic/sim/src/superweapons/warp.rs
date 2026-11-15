@@ -866,6 +866,10 @@ fn place(w: &mut World, id: ObjectId, m: Member) {
     // spec: S-0513 claim 39 (appears at its landing point in its next update)
     // spec: S-0513 r115 claim 38 (the placement at its landing point is an appearance at the height of claim 36, not S-0501 claim 1's rule: `air::placed` reads the member state, which still holds here)
     crate::objects::place(w, id, m.landing, facing);
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0105 r50 claim 6 (When the turn starts: a chronosphere warp's appearance at the landing point keeps the elevation, so the tick of the last placement is kept)
+        ob.placed_tick = o.placed_tick;
+    }
     // spec: S-0507 claim 15 (its passengers' positions become its position at once)
     crate::transport::sync(w, id);
     set_member(

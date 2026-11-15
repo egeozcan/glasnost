@@ -826,7 +826,6 @@ fn claim39a_l3_an_infantry_firer_in_its_attack_state_stays_in_it_while_the_membe
     // its fire frame and is not frozen, as after a shot.
     let t = w.tick;
     let o = w.obj_mut(f).unwrap();
-    o.combat.last_shot_target = Some(Target::Object(m));
     let s = o.infantry.as_mut().unwrap();
     s.attack = true;
     s.seq_delay = 10_000;

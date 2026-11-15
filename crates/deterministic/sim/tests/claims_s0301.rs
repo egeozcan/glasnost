@@ -1901,7 +1901,6 @@ fn attacking(f: i32, stage: i32) -> (World, ObjectId, ObjectId) {
     w.tick = 100;
     let t = w.tick;
     let o = w.obj_mut(a).unwrap();
-    o.combat.last_shot_target = o.target;
     o.combat.rearm_until = t + 50;
     let held = o.target;
     let st = o.infantry.as_mut().unwrap();

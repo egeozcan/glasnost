@@ -621,8 +621,9 @@ pub struct Quirks {
     // spec: S-0215 claim 10
     #[serde(default = "on")]
     pub refused_override_retargets: bool,
-    /// The deploy area-fire rule singles out one infantry type by name. Not consulted: the
-    /// area-fire part of S-0215 claim 30 is not built (`process.rs`) (#327).
+    /// The deploy area-fire rule singles out one infantry type by name, the type that carries
+    /// the named area-fire deployer flag. Off: the flag is ignored and that type takes its own
+    /// cell like any other. Consulted in `process.rs`, *unload* for infantry (#232).
     // spec: S-0215 claim 30
     #[serde(default = "on")]
     pub named_deploy_area_fire: bool,

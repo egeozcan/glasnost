@@ -239,7 +239,7 @@ pub fn seize_hit(
     damage: i32,
     warhead: crate::combat::data::WarheadId,
 ) {
-    // spec: S-0607 claim 2 (the hit does nothing at all when the firer has left play)
+    // spec: S-0607 claim 2 (the hit does nothing at all when the firer has left play); Q-3119 (interim: an open-topped transport's passenger, off the map, counts as having left play, as claim 21 counts going inside a transport, so its seizing hit does nothing; the glossary keeps such a passenger in play) (#285)
     let Some(f) = firer.filter(|&f| w.obj(f).is_some_and(|o| o.on_map)) else {
         return;
     };
@@ -592,6 +592,11 @@ fn drop_pod_ends(w: &mut World, lifter: ObjectId, x: ObjectId) {
     }
     upd(w, x, |s| s.lifter = None);
     set_down_here(w, x);
+    let t = w.tick;
+    if let Some(o) = w.obj_mut(x) {
+        // spec: S-0105 r50 claim 6 (When the turn starts: our engine ends a drop-pod stand-in at once at the seize, leaving the unit on the map, and that end sets the elevation level and starts its turn at the tick number current then, design)
+        o.placed_tick = t;
+    }
 }
 
 /// The lifter's point at the seize (S-0607 claim 7): a mobile lifter's

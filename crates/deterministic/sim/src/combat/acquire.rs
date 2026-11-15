@@ -1707,12 +1707,14 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
             search(w, a, SearchKind::Range, ctx);
+            // spec: S-0309 r142 claim 23 (a) (the queued attack becomes current only at a start at which S-0215 claim 11 finds the object ready, the immediate start of S-0215 claim 7; Q-3102) (#229)
+            let ready = crate::process::ready(w, a);
             if w.obj(a).is_some_and(|x| x.target.is_some())
                 && let Some(ob) = w.obj_mut(a)
             {
-                // spec: S-0309 claim 23 (a target: queues attack with an immediate start and counts as engaged); interim, Q-3102 (#229): attack starts at once, whether or not the object is ready, since S-0215 claims 7 and 11 would keep a moving vehicle's attack queued until its arrival, against S-0309 scenario A6 part g
+                // spec: S-0309 claim 23 (a target: queues attack with an immediate start and counts as engaged; the search changes neither the destination nor the route)
                 ob.beh
-                    .queue_and_start_at_once(Behaviour::Attack, tick, stale);
+                    .queue_and_start(Some(Behaviour::Attack), ready, tick, stale);
                 ob.combat.engaged = true;
             } else {
                 // spec: S-0215 r118 claim 11 (the attack-move rule discards a target without the change-of-target ending: where its search finds no other, the attack state lasts to the no-target ending in the firing turn)
@@ -1731,11 +1733,13 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
             }
             search(w, a, SearchKind::Range, SearchContext::AttackMoveFresh);
             let found = w.obj(a).is_some_and(|x| x.target.is_some());
+            // spec: S-0309 r142 claim 23 (a) (S-0215 claim 7's readiness-dependent start, as in the destination row; Q-3102) (#229)
+            let ready = crate::process::ready(w, a);
             if let Some(ob) = w.obj_mut(a) {
                 if found {
-                    // spec: S-0309 claim 23 (a target: queues attack with an immediate start and counts as engaged); interim, Q-3102 (#229): at once, whether or not the object is ready, as in the destination row
+                    // spec: S-0309 claim 23 (a target: queues attack with an immediate start and counts as engaged)
                     ob.beh
-                        .queue_and_start_at_once(Behaviour::Attack, tick, stale);
+                        .queue_and_start(Some(Behaviour::Attack), ready, tick, stale);
                     ob.combat.engaged = true;
                 } else {
                     // spec: S-0309 claim 23 (nothing found: the memory's target again)

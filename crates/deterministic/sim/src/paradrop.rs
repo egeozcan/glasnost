@@ -5,11 +5,10 @@
 //! their paratroopers (S-0522 claims 1 to 3 and 16), is
 //! `superweapons::planes`; the fall itself is [`crate::fall`].
 //!
-//! Seams: the parachute's own playback, which could end it before the
-//! landing (S-0522 claim 13), needs an animation clock the simulation does
-//! not keep (S-0109 claim 28), so the parachute stays attached until the
-//! landing; the outcome of a dead "not human" paratrooper is S-0107 claim
-//! 17's open question.
+//! The parachute's own playback is run by `crate::anims`; its end, which
+//! can come before the landing (S-0522 claim 13), clears `fall.chute`, and
+//! the fall goes on without it. Seam: the outcome of a dead "not human"
+//! paratrooper is S-0107 claim 17's open question.
 
 use glasnost_map::CellXY;
 

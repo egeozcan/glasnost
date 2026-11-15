@@ -10,11 +10,10 @@
 //! processed as a behaviour without a processing rule; that is recorded as
 //! a note on the world.
 //!
-//! Not built: the hover-attack cell of claim 23's general *attack* rules
-//! and claim 24's *guard* table, by which a hover-attack type at no height
-//! above its surface takes a nearby cell as its destination. No spec gives
-//! that cell (Q-3101, issue #234), so a hover-attack type is processed like
-//! any other type in *attack* and *guard*.
+//! The hover-attack cell of claim 23's general *attack* rules and claim 24's
+//! *guard* table (r139, Q-3101): a hover-attack type at no height above its
+//! surface takes a nearby cell around its own cell (S-0212 claim 25) as its
+//! destination (`hover_attack_cell`).
 //!
 //! Gates (claim 35): a gate's *open* runs its stages here, the door moves at
 //! every turn of the gate before its per-tick start and processing (claim
@@ -1197,14 +1196,30 @@ fn process_unload_infantry(w: &mut World, id: ObjectId) -> i32 {
         let slot = if spray { 0 } else { 1 };
         let area = crate::combat::weapon::slot_weapon(w, id, slot)
             .is_some_and(|x| w.rules().combat.weapon(x).area_fire);
-        if area && let Some(ob) = w.obj_mut(id) {
-            // spec: S-0215 claim 30 (a deploy weapon with the area-fire flag: a unit of any type but the one singled out by name takes its own cell as its target); Q-3100 (interim: no type is singled out, in both positions of quirks.named_deploy_area_fire, so the named type's rows are not built) (#232)
+        // spec: S-0215 r139 claim 30, Terms and Import mapping (the type singled out by name carries the named area-fire deployer flag; quirks.named_deploy_area_fire off ignores it, Edge cases and quirks; Q-3100) (#232)
+        let named = w.rules().quirks.named_deploy_area_fire
+            && w.rules()
+                .unit(o.kind, o.type_index)
+                .is_some_and(|u| u.raw.named_area_fire_deployer.unwrap_or(false));
+        if area
+            && !named
+            && let Some(ob) = w.obj_mut(id)
+        {
+            // spec: S-0215 claim 30 (a deploy weapon with the area-fire flag: a unit of the type singled out by name aims at nothing new, a unit of any other type takes its own cell as its target)
             crate::spawn::set_own_target(ob, Some(Target::Cell(o.pos.cell())));
             // spec: S-0301 claim 5, Moment of a retarget's let-go (at the change of the firer's target)
             crate::emitters::retarget_let_go(w, id);
         }
-        // spec: S-0215 claim 30 (undeployed: the undeploy delay when 0 or more, else 450 ticks)
-        if delay >= 0 { delay } else { NO_RULE_DELAY }
+        if delay >= 0 {
+            // spec: S-0215 claim 30 (undeployed, undeploy delay 0 or more: that delay, in ticks)
+            delay
+        } else if area && named {
+            // spec: S-0215 claim 30 (undeployed, negative undeploy delay, area-fire deploy weapon, the type singled out by name: the frame count of its deploy sequence + 1)
+            frame_count(w, id, Seq::Deploy).wrapping_add(1)
+        } else {
+            // spec: S-0215 claim 30 (undeployed, negative undeploy delay, any other case: 450 ticks)
+            NO_RULE_DELAY
+        }
     };
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0215 claim 30 (in every case it forces guard and clears its destination)
@@ -1302,6 +1317,42 @@ fn charges_building(w: &World, id: ObjectId, b: ObjectId) -> bool {
     charges && t.building.can_c4 && !t.invisible
 }
 
+/// The hover-attack cell of S-0215 claims 23 and 24: an actor whose type has
+/// the hover-attack flag and whose height above the surface is 0 takes the
+/// result of S-0212 claim 25's nearby-cell search around its own cell as its
+/// destination, assigned as an order assigns it; no behaviour is queued.
+fn hover_attack_cell(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0215 r139 claim 23 (the actor's type is a hover-attack type, the imported flag, absent no; Q-3101)
+    let hover = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.raw.hover_attack.unwrap_or(false));
+    // spec: S-0215 r139 claim 23 (its height above the surface is 0, glossary)
+    if !hover || w.height_above_surface(id) != 0 {
+        return;
+    }
+    // spec: S-0215 r139 claim 23 (the centre is the actor's own cell)
+    let centre = o.pos.cell();
+    let before = o.dest;
+    crate::regions::ensure(w);
+    // spec: S-0215 r139 claim 23 (the actor's locomotion class with winged counted as track, its own movement zone, the reach region of the centre cell for that zone read for its deck, deck mode on a bridge deck; no height condition, further test, reference cell or no-overlay condition; bridge cells allowed; N the processing tick; no draw; no target or range test)
+    let Some(settings) = crate::path::NearbySettings::own_class(w, id, centre) else {
+        return;
+    };
+    let found = crate::path::nearby(w, centre, crate::path::NearbyUse::Settings(settings));
+    // spec: S-0215 r139 claim 23 (with no qualifying cell the placeholder at map cell (0, 0) is still assigned)
+    let c = found.unwrap_or(CellXY { x: 0, y: 0 });
+    // spec: S-0215 r139 claim 23 (the assignment is the one an order makes: for a vehicle S-0207 claim 27's unchanged-destination rejection applies; the result replaces a held destination; no behaviour is queued)
+    crate::econ::assign_destination(w, id, Some(Target::Cell(c)));
+    if let Some(ob) = w.obj_mut(id)
+        && ob.dest != before
+    {
+        // design: a changed destination drops the stored route, as a move order's does; an unchanged one keeps the route it is following (docs/dev/simulation.md, sim issues S15)
+        ob.path.steps.clear();
+    }
+}
+
 /// Attack (S-0215 claim 23).
 fn process_attack(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id).cloned() else {
@@ -1337,6 +1388,8 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
             return standard_delay(w, id);
         }
     }
+    // spec: S-0215 r139 claim 23 (the hover-attack cell is taken first among the general rules, before the break-off search, the approach and the fall-back, with or without a target; an infantry row that applies excludes it; Q-3101) (#234)
+    hover_attack_cell(w, id);
     // spec: S-0518 claim 15 (an infantry unit whose charging mark is set first runs an automatic range search, without the timer gate)
     crate::linked::break_off(w, id);
     // spec: S-0304 r6 claim 2 (This holds for every actor, whatever its owner) and S-0309 r94's Changes for S-0304 claim 2 (Q-2263 answered: claim 29 covers every holder of every owner, so a unit drops an illegal target at that claim's periodic check, a healer also at its firing step's reply; the attack processing's drop is a building's only, S-0215 claim 32, for every owner)
@@ -1375,6 +1428,10 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
         crate::structures::absorb::instruction_turn(w, id);
         // spec: S-0215 claim 24 (D_r with no draw, the rate of the behaviour being processed: enter is queued without a start)
         return rate_delay(w, id);
+    }
+    if o.target.is_some() {
+        // spec: S-0215 r139 claim 24 (Other actors, a target when the processing began: a hover-attack type whose height above the surface is 0 takes the hover-attack cell of claim 23, by the same search and assignment; Q-3101) (#234)
+        hover_attack_cell(w, id);
     }
     // spec: S-0518 claim 14 (a charger with no target in guard looks at the cells next to it; when it takes a building its idle action does not run, but the delay selection of the table below still does, with the rate of guard; Q-0985 answered by revision 3)
     let charging = o.target.is_none() && crate::linked::start_charging(w, id);

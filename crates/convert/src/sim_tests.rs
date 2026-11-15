@@ -1833,3 +1833,15 @@ fn colour_list_switch_in_the_import() {
     assert!(warned(&w, "particle Shift: ColorList is not a clean list"));
     assert!(!warned(&w, "particle Clean: ColorList"));
 }
+
+/// spec: S-0215 Import mapping (the infantry type whose identifier matches the fixed name without regard to case carries the named area-fire deployer flag; no other type does) and Terms (#232)
+#[test]
+fn named_area_fire_deployer_flag() {
+    let base = "[InfantryTypes]\n1=Walker\n2=deso\n[Walker]\nX=1\n[deso]\nX=1\n";
+    let (s, _) = sim(base, "", "");
+    assert_eq!(s.infantry["deso"].named_area_fire_deployer, Some(true));
+    assert_eq!(s.infantry["Walker"].named_area_fire_deployer, None);
+    // A vehicle type of that name is not singled out.
+    let (s, _) = sim("[VehicleTypes]\n1=DESO\n[DESO]\nX=1\n", "", "");
+    assert_eq!(s.vehicles["DESO"].named_area_fire_deployer, None);
+}

@@ -163,12 +163,20 @@ fn opening_by_orders() {
 // the M8 AI seams a guard unit drops a target it may not hurt, the waves
 // are stronger, and on the open map the game was won (about tick 13 600)
 // before either house got to the launcher (about tick 16 000 before).
+// Since sim issues S15 (#229, S-0309 r142 claim 23 (a): the attack-move
+// search starts *attack* with the readiness start) the island war went
+// otherwise and house 0's war factory was lost between ticks 17 000 and
+// 18 000, with its launcher on the line. So house 1 is now kept on its
+// island ([`climb_rules`]): only house 0 may build what crosses the water or
+// strikes across it. House 1 still climbs to LAB, and its waves wait on its
+// own shore, within the launcher's range of house 0's shore.
 #[test]
 #[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
 fn climbs_to_the_launcher_and_fires() {
     let map = fixture::map_islands();
+    let rules = climb_rules();
     let run = skirmish::run(
-        fixture::rules(),
+        rules.clone(),
         &map,
         "synthetic-climb",
         fixture::catalogue(),
@@ -181,7 +189,7 @@ fn climbs_to_the_launcher_and_fires() {
     let mut first: [BTreeMap<String, i32>; 2] = Default::default();
     let mut rockets = 0usize;
     run.replay
-        .run(fixture::rules(), &map, fixture::catalogue(), |w| {
+        .run(rules, &map, fixture::catalogue(), |w| {
             for h in 0..2u8 {
                 for (k, v) in counts(w, h) {
                     let e = most[usize::from(h)].entry(k.clone()).or_default();
@@ -209,6 +217,42 @@ fn climbs_to_the_launcher_and_fires() {
     }
     assert!(launchers > 0, "a house built a launcher: {most:?}");
     assert!(rockets > 0, "a rocket flew");
+}
+
+/// The climb's rules: the skirmish rules with every type that crosses the
+/// island map's water or strikes across it open to house 0's country
+/// (Alphaland) only. These are the naval yard and its boat, the hovercraft,
+/// the hovering transport, the aircraft pad and its jet, the missile silo
+/// and the launcher. What house 1 keeps cannot reach house 0's island: its
+/// ground units and wheeled transport keep to their own island, and the gun
+/// (5.5 cells) is short of the 9-column strait.
+fn climb_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
+    let mut r = fixture::ruleset();
+    let only_alpha = || Some(vec!["Alphaland".to_string()]);
+    // spec: S-0407 claim 5 (b) (a required list refuses a type unless the house's country is in it)
+    for n in ["NAVY", "HPAD", "SILO"] {
+        r.sim
+            .buildings
+            .get_mut(n)
+            .expect("a climb building")
+            .econ
+            .required_houses = only_alpha();
+    }
+    for n in ["BOAT", "HOVR", "LIFT", "LNCH"] {
+        r.sim
+            .vehicles
+            .get_mut(n)
+            .expect("a climb vehicle")
+            .econ
+            .required_houses = only_alpha();
+    }
+    r.sim
+        .aircraft
+        .get_mut("JET")
+        .expect("the jet")
+        .econ
+        .required_houses = only_alpha();
+    std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-skirmish"))
 }
 
 // On a map of two islands the houses build a naval yard on the sea, then
