@@ -1358,7 +1358,7 @@ impl MapRenderer {
         rects.clear();
         // design: render (#117): the spot groups' instances, built and uploaded only when their
         // spots change; a frame picks the batches that meet its view
-        let spots = self.sync_spots(device, queue, scene);
+        let spots = self.sync_spots(device, queue, scene, view, filter);
         let mut spots_drawn = 0;
         let mut push_spots = |gi: usize, g: &SpotGroup, batches: &mut Vec<Batch>| {
             if filter.shows_spots(g) {
@@ -1704,32 +1704,36 @@ impl MapRenderer {
         drawn
     }
 
-    /// The scene's spot groups laid out, laid out anew and uploaded when
-    /// their spots are not those laid out last (design: render (#117)).
+    /// The scene's spot groups laid out for `view` (design: render
+    /// (#117)): the groups it meets laid out if they are not, and the
+    /// instances the spot buffer does not hold yet uploaded.
     fn sync_spots(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         scene: &Scene,
+        view: &View,
+        filter: &Filter,
     ) -> SpotLayout {
         let mut layout = self.spot_layout.take().unwrap_or_default();
-        if layout.holds(scene) {
-            return layout;
-        }
-        layout.build(scene);
+        layout.sync(scene);
+        layout.lay_out_view(scene, view, filter);
         let n = layout.instances.len();
         if n > self.spot_capacity {
             self.spot_capacity = n.next_power_of_two();
             self.spot_buffer = Self::spot_buffer(device, self.spot_capacity);
+            layout.uploaded = 0;
         }
-        if n > 0 {
+        if n > layout.uploaded {
+            let new = &layout.instances[layout.uploaded..];
             queue.write_buffer(
                 &self.spot_buffer,
-                0,
-                bytemuck::cast_slice(&layout.instances),
+                (layout.uploaded * std::mem::size_of::<SpotInstance>()) as u64,
+                bytemuck::cast_slice(new),
             );
             self.stats.uploads += 1;
-            self.stats.upload_bytes += std::mem::size_of_val(&layout.instances[..]) as u64;
+            self.stats.upload_bytes += std::mem::size_of_val(new) as u64;
+            layout.uploaded = n;
         }
         layout
     }
@@ -1957,18 +1961,30 @@ impl PixelMarks {
     }
 }
 
+/// A spot group as the layout last saw it (design: render (#117)).
+#[derive(Default)]
+struct GroupEntry {
+    /// Its spots.
+    held: Vec<Spot>,
+    /// The world rectangle of its pixels.
+    cover: Option<WorldRect>,
+    /// Its runs in [`SpotLayout::batches`], once laid out.
+    laid: Option<std::ops::Range<usize>>,
+}
+
 /// The scene's spot groups laid out in world pixels (design: render
-/// (#117)): the instances the spot buffer holds and their runs, laid out
-/// once for every view and kept while the groups' spots stay; a frame
-/// draws the runs that meet its view.
+/// (#117)): the instances the spot buffer holds and their runs. A group is
+/// laid out once, when a view first meets it, for every view, and kept
+/// while the groups' spots stay; a frame draws the runs that meet its
+/// view. When a laid-out group's spots change, every group is laid out
+/// anew as views meet it.
 #[derive(Default)]
 struct SpotLayout {
-    /// Each group's spots as laid out.
-    held: Vec<Vec<Spot>>,
+    entries: Vec<GroupEntry>,
     instances: Vec<SpotInstance>,
     batches: Vec<SpotBatch>,
-    /// Each group's runs, and the world rectangle of its pixels.
-    groups: Vec<(std::ops::Range<usize>, Option<[i32; 4]>)>,
+    /// How many of `instances` the spot buffer holds.
+    uploaded: usize,
     marks: PixelMarks,
     /// Each spot's layer in the group being laid out.
     layers: Vec<u32>,
@@ -1981,46 +1997,62 @@ struct SpotLayout {
 }
 
 impl SpotLayout {
-    /// Whether the groups' spots are those laid out.
-    fn holds(&self, scene: &Scene) -> bool {
-        self.held.len() == scene.spots.len()
-            && self
-                .held
+    /// Takes in the scene's groups: a group whose spots are not those last
+    /// seen is held anew, not laid out; if it was laid out, every group is
+    /// laid out anew.
+    fn sync(&mut self, scene: &Scene) {
+        let mut stale = self.entries.len() > scene.spots.len()
+            && self.entries[scene.spots.len()..]
                 .iter()
-                .zip(&scene.spots)
-                .all(|(h, g)| *h == g.spots)
-    }
-
-    /// Lays out the scene's groups.
-    fn build(&mut self, scene: &Scene) {
-        self.instances.clear();
-        self.batches.clear();
-        self.groups.clear();
-        for g in &scene.spots {
-            let first = self.batches.len();
-            let cover = g.spots.iter().fold(None, |mut r, s| {
+                .any(|e| e.laid.is_some());
+        self.entries.truncate(scene.spots.len());
+        self.entries
+            .resize_with(scene.spots.len(), GroupEntry::default);
+        for (e, g) in self.entries.iter_mut().zip(&scene.spots) {
+            if e.held == g.spots {
+                continue;
+            }
+            stale |= e.laid.is_some();
+            e.held.clone_from(&g.spots);
+            e.cover = g.spots.iter().fold(None, |mut r, s| {
                 widen(&mut r, s.x, s.y);
                 r
             });
-            if let Some(r) = cover {
-                self.marks.begin(r, g.spots.len());
-                if g.spots
-                    .iter()
-                    .any(|s| matches!(s.kind, SpotKind::Wave { .. }))
-                {
-                    self.split(&g.spots);
-                } else {
-                    self.layered(&g.spots);
-                }
+            e.laid = None;
+        }
+        if stale {
+            self.instances.clear();
+            self.batches.clear();
+            self.uploaded = 0;
+            for e in &mut self.entries {
+                e.laid = None;
             }
-            self.groups.push((first..self.batches.len(), cover));
         }
-        self.held.truncate(scene.spots.len());
-        for (h, g) in self.held.iter_mut().zip(&scene.spots) {
-            h.clone_from(&g.spots);
-        }
-        for g in &scene.spots[self.held.len()..] {
-            self.held.push(g.spots.clone());
+    }
+
+    /// Lays out the groups `filter` shows whose pixels meet `view` and that
+    /// are not laid out yet.
+    fn lay_out_view(&mut self, scene: &Scene, view: &View, filter: &Filter) {
+        let v = world_view(view);
+        for (gi, g) in scene.spots.iter().enumerate() {
+            let e = &self.entries[gi];
+            let Some(cover) = e.cover else {
+                continue;
+            };
+            if e.laid.is_some() || !world_meets(&cover, &v) || !filter.shows_spots(g) {
+                continue;
+            }
+            let first = self.batches.len();
+            self.marks.begin(cover, g.spots.len());
+            if g.spots
+                .iter()
+                .any(|s| matches!(s.kind, SpotKind::Wave { .. }))
+            {
+                self.split(&g.spots);
+            } else {
+                self.layered(&g.spots);
+            }
+            self.entries[gi].laid = Some(first..self.batches.len());
         }
     }
 
@@ -2166,7 +2198,12 @@ impl SpotLayout {
     /// instances they draw. A group whose pixels miss the view is passed
     /// over whole.
     fn push_group(&self, gi: usize, view: &View, batches: &mut Vec<Batch>) -> usize {
-        let Some((range, Some(cover))) = self.groups.get(gi) else {
+        let Some(GroupEntry {
+            cover: Some(cover),
+            laid: Some(range),
+            ..
+        }) = self.entries.get(gi)
+        else {
             return 0;
         };
         let v = world_view(view);
