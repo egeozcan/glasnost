@@ -829,3 +829,75 @@ fn claim_26_the_text_is_chosen_again() {
     frame_at(&mut c, &mut t, 1000);
     assert!(shown(&mut c).is_some());
 }
+
+/// Puts a synthetic drawing of the local base unit at the middle of the
+/// battlefield view on top of the scene (the synthetic install draws no
+/// object art), and returns that point.
+fn draw_base_unit_at_middle(c: &mut Client) -> Point {
+    use glasnost_render::compose::{DepthTest, Paint, Profile};
+    use glasnost_render::scene::{Group, Item, ItemDepth};
+    let mcv = own(c, Kind::Vehicle)[0];
+    let s = session_mut(c);
+    let m = s.map_rect();
+    let p = Point::new(m.x + m.w / 2, m.y + m.h / 2);
+    let v = s.view();
+    let (x, y) = (v.origin.0 + p.x - m.x, v.origin.1 + p.y - m.y);
+    let image = s
+        .scene
+        .add_image(glasnost_fmt::image::IndexedImage::new(8, 8, vec![1; 64]).unwrap());
+    let row = s.scene.add_row([0xFFFF; 256]);
+    s.scene.items.push(Item {
+        image,
+        x: x - 4,
+        y: y - 4,
+        test: DepthTest::Ignore,
+        depth: ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias: 0,
+            companion: None,
+        },
+        paint: Paint::Row(row),
+        group: Group::Vehicles,
+        provisional: false,
+        object: Some(crate::mapview::live::SIM_OBJECT | mcv.0),
+        stack: None,
+    });
+    p
+}
+
+/// design: render (#120) (the pointer's pick is made once in a drawn frame
+/// and handed to the marks, the cursor, the tip and the drawing): a pick
+/// lives only within its frame, so a scene changed between two frames is
+/// picked again, both by the next frame (the tip's text, chosen again in
+/// every frame, S-0111 claim 26) and by a pick outside any frame (an input
+/// handler's).
+#[test]
+fn render_perf_120_a_pick_lives_only_within_its_frame() {
+    let (mut c, _) = tip_game();
+    let mut t = 10_000;
+    c.update(t);
+    let p = draw_base_unit_at_middle(&mut c);
+    let _ = c.frame();
+    c.pointer_moved(p);
+    // The rest ends in this frame; a tick before it redraws the scene, so
+    // the drawing is put on top again.
+    t += 1000;
+    c.update(t);
+    assert_eq!(draw_base_unit_at_middle(&mut c), p);
+    let _ = c.frame();
+    let first = shown(&mut c).expect("the base unit's tip shows");
+    assert_eq!(first.text, u("the mcv"));
+    // The scene changes under the resting pointer without a tick: no item
+    // names an object any more.
+    let s = session_mut(&mut c);
+    for item in &mut s.scene.items {
+        item.object = None;
+    }
+    assert_eq!(s.under(p).1, None, "a pick outside a frame is made again");
+    let _ = c.frame();
+    // spec: S-0111 claim 21 (an explored cell without a pointer object has no text) and claim 26 (no text hides the tip)
+    assert!(
+        shown(&mut c).is_none(),
+        "the next frame picks again: no object, no text, no tip"
+    );
+}
