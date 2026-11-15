@@ -1,9 +1,9 @@
 ---
 id: Q-3131
 title: A press, band box or scroll drag in progress when the pointer leaves the window
-status: open
+status: answered
 related: [S-0214, S-0111, S-0101]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need
