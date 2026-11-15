@@ -330,14 +330,19 @@ pub fn search_field(
 }
 
 /// The end of `s` that fits in `width` pixels, with a caret when `caret`.
+///
+/// design: render (#126): one pass, dropping characters from the front
+/// of the advances' sum until the rest and the caret fit; a text measures
+/// as its advances' sum less one spacing.
 pub fn tail_fit(s: &str, width: i32, caret: bool) -> String {
     let caret = if caret { "_" } else { "" };
-    let chars: Vec<char> = s.chars().collect();
-    for start in 0..=chars.len() {
-        let t: String = chars[start..].iter().collect::<String>() + caret;
-        if font::text_width(&t) <= width {
-            return t;
+    let mut w: i32 = s.chars().chain(caret.chars()).map(font::advance).sum();
+    let measured = |w: i32| if w > 0 { w - font::SPACING } else { 0 };
+    for (start, c) in s.char_indices() {
+        if measured(w) <= width {
+            return s[start..].to_owned() + caret;
         }
+        w -= font::advance(c);
     }
     caret.to_owned()
 }
