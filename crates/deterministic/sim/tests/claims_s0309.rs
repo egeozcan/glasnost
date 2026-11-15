@@ -2684,6 +2684,38 @@ fn cells_of_no_reach_region_compare_as_one_region() {
     );
 }
 
+// spec: S-0309 claim 7 and table C row zone (revision 144, Q-3109 answered: the object's cell is the cell that holds its reference point, for a building the centre of its foundation without a bib row, S-0204 claim 4, not its own position; for a foundation side of even length the cell on the larger-coordinate side of the edge)
+#[test]
+fn issue_245_map_wide_zone_row_reads_a_buildings_reference_point_cell() {
+    let mut r = base();
+    shed(&mut r, Some("Gun"), 5, false);
+    r.sim.buildings.get_mut("SHED").unwrap().foundation = Some([2, 2]);
+    // Control: a 2 × 2 building wholly east of the rock column at mid + 2,
+    // and a searcher east of it too.
+    let mut w = walled_game(&r);
+    let a = veh(&mut w, "CART", 0, 6, 0);
+    let b = put(&mut w, Kind::Building, "SHED", 1, 3, 0);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt),
+        Some(b),
+        "control"
+    );
+    // The building's position cell on the rock column (no reach region); its
+    // reference point, position plus (128, 128), lies on the edge between
+    // columns mid + 2 and mid + 3 and rows 0 and 1, so its cell is (3, 1),
+    // east of the rock, in the searcher's region.
+    let mut w = walled_game(&r);
+    let a = veh(&mut w, "CART", 0, 6, 0);
+    let b = put(&mut w, Kind::Building, "SHED", 1, 2, 0);
+    assert_eq!(w.obj(b).unwrap().pos.cell(), at(2, 0));
+    assert_eq!(w.reference_point(b).cell(), at(3, 1));
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt),
+        Some(b),
+        "the zone row reads the reference point's cell, not the position cell"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The money thief (claim 5, table C rows capture and storage) and claim 25
 // part e's capture exception.

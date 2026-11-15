@@ -984,7 +984,8 @@ pub fn put_on_map_facing(
     } else {
         // spec: S-0406 claim 1 and F4 (the centre of the cell, (256x + 128, 256y + 128), at the surface height)
         let z = w.surface_at(256 * cell.x + 128, 256 * cell.y + 128);
-        // A place order or a wall fill is placed; any other insertion is a deploy's (S-0415 claim 6).
+        // spec: S-0406 claim 17 and S-0415 claim 6 (the place order's own building enters with the ready mark clear; a deploy sets it)
+        // A filling building of a type that is not a wall type (S-0406 claim 11) is neither: whether and how it enters construction is Q-3128. Interim: it enters as any insertion other than a place order does, with the ready mark set, so it runs its build-up once.
         begin_construction(w, id, !by_order);
         crate::objects::place_with(w, id, Pos::centre(cell, z), facing, by_order);
     }

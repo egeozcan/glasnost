@@ -1158,7 +1158,7 @@ fn loss_and_crash_cancel() {
     let h0 = w.obj(t).unwrap().health;
     shoot(&mut w, f, t);
     testkit::run(&mut w, 4);
-    w.obj_mut(f).unwrap().on_map = false;
+    glasnost_sim::objects::take_inside(&mut w, f);
     testkit::run(&mut w, 1);
     assert!(w.discs.is_empty());
     w.obj_mut(f).unwrap().on_map = true;

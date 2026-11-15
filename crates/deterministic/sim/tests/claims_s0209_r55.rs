@@ -115,6 +115,13 @@ fn ruleset(quirk: bool) -> Ruleset {
     });
     infantry(&mut r, "Z", |t| t.primary = Some("Blank".into()));
     infantry(&mut r, "S", |t| t.secondary = Some("Full".into()));
+    // Only an elite primary weapon (scenario C8 part c2 shape).
+    infantry(&mut r, "EO", |t| t.elite_primary = Some("Full".into()));
+    // An ordinary damaging primary, an elite primary of no damage (scenario C3 part a6 shape).
+    infantry(&mut r, "EZ", |t| {
+        t.primary = Some("Full".into());
+        t.elite_primary = Some("Blank".into());
+    });
     let concrete = |b: &mut glasnost_rules::sim::BuildingType| {
         b.strength = Some(300);
         b.combat.armor = Some(ArmourClass::Concrete);
@@ -371,6 +378,46 @@ fn row_wp13_reads_the_primary_weapon_and_rows_wp24_and_wp28_read_armed() {
             Outcome::Blocked,
             Outcome::EnemyObstacle
         ]
+    );
+}
+
+/// [`three_rows`] with the switch on for a walker made elite or not.
+fn three_rows_ranked(walker: &str, elite: bool) -> [Outcome; 3] {
+    let mut w = game(true, &CLOSED);
+    let id = put(&mut w, Kind::Infantry, walker, ALPHA, at(-4, 0));
+    if elite {
+        // Experience 2.0 as single-precision bits: elite rank.
+        w.obj_mut(id).unwrap().combat.experience = glasnost_num::F32(0x4000_0000);
+    }
+    put(&mut w, Kind::Building, "B", BETA, at(-5, 1));
+    put(&mut w, Kind::Building, "G", BETA, at(-4, 1));
+    put(&mut w, Kind::Vehicle, "BUGGY", BETA, at(-3, 1));
+    step(&mut w);
+    assert_eq!(
+        glasnost_sim::combat::veterancy::rank(&w, id)
+            == glasnost_sim::combat::veterancy::Rank::Elite,
+        elite
+    );
+    [at(-5, 1), at(-4, 1), at(-3, 1)].map(|c| inf(&w, id, c))
+}
+
+// spec: S-0209 Terms (Armed; has a primary weapon: the weapon of the slot at the current veterancy rank, an elite unit has the elite weapon of a slot when its type gives one)
+#[test]
+fn issue_321_elite_only_primary_gives_a_primary_weapon_and_arms_the_elite_walker() {
+    // Below elite rank: no weapon at all (rows WP22, WP14, WP22).
+    assert_eq!(three_rows_ranked("EO", false), [Outcome::Blocked; 3]);
+    // Elite: armed and with a primary weapon (rows WP24, WP13, WP28).
+    assert_eq!(three_rows_ranked("EO", true), [Outcome::EnemyObstacle; 3]);
+}
+
+// spec: S-0209 Terms (Armed: the elite weapon of a slot replaces the ordinary one in the mean damage)
+#[test]
+fn issue_321_elite_primary_of_no_damage_disarms_the_elite_walker() {
+    assert_eq!(three_rows_ranked("EZ", false), [Outcome::EnemyObstacle; 3]);
+    // Elite: mean damage 0, still a primary weapon (rows WP22, WP13, WP22).
+    assert_eq!(
+        three_rows_ranked("EZ", true),
+        [Outcome::Blocked, Outcome::EnemyObstacle, Outcome::Blocked]
     );
 }
 

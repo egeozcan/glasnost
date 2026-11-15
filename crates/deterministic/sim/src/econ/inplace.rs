@@ -176,6 +176,10 @@ fn now_of(w: &World) -> i32 {
 fn set_form(w: &mut World, id: ObjectId, f: Form) {
     if let Some(o) = w.obj_mut(id) {
         o.econ.deploy.form = f;
+        if f == Form::Mobile {
+            // spec: S-0517 claim 12 (off: the deploy sound once per deploy; a vehicle back in its mobile form starts its next deploy afresh)
+            o.econ.deploy.sound_requested = false;
+        }
     }
     if let Form::Deploying { .. } | Form::Deployed = f {
         // spec: S-0503 claim 19 (a hover that becomes deploying or deployed keeps the movement it holds; quirks.hover_deployed_keeps_moving)
@@ -257,6 +261,7 @@ fn deploy_step(w: &mut World, id: ObjectId) {
             if repeats || first {
                 // spec: S-0517 claim 12 (every deploy step requests the deploy sound; off: once, at the first step that starts landing)
                 sound(w, id, Sound::Deploy);
+                mark_sound_requested(w, id);
             }
         }
         // spec: S-0517 claim 5 (a type that is not landing-first: nothing)
@@ -266,20 +271,31 @@ fn deploy_step(w: &mut World, id: ObjectId) {
     if repeats {
         sound(w, id, Sound::Deploy);
     }
+    // spec: S-0517 claim 12 (off: once per deploy; a landing-first deployment makes no second request at touchdown)
+    if !repeats && !sound_requested(w, id) {
+        sound(w, id, Sound::Deploy);
+        mark_sound_requested(w, id);
+    }
     let now = now_of(w);
     if presentation(w, id).is_some() {
         // spec: S-0517 claim 4 (height 0 and a deploying presentation: it starts at the vehicle's position, playing forward, and the vehicle becomes deploying)
-        if !repeats {
-            sound(w, id, Sound::Deploy);
-        }
         start_presentation(w, id, false);
         set_form(w, id, Form::Deploying { since: now });
     } else {
         // spec: S-0517 claim 4 (height 0 and no presentation: it becomes deployed in that step)
-        if !repeats {
-            sound(w, id, Sound::Deploy);
-        }
         set_form(w, id, Form::Deployed);
+    }
+}
+
+/// Whether this deploy has requested the deploy sound (claim 12, switch
+/// off). Every deploy order begins a new deploy and clears it.
+fn sound_requested(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.econ.deploy.sound_requested)
+}
+
+fn mark_sound_requested(w: &mut World, id: ObjectId) {
+    if let Some(o) = w.obj_mut(id) {
+        o.econ.deploy.sound_requested = true;
     }
 }
 

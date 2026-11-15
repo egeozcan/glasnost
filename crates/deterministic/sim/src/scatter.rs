@@ -350,8 +350,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
     let d = o.body.turning(t);
     // spec: S-0207 claim 16 (e): a destination and a request that is not move-anywhere
     let e = o.dest.is_some() && !req.anywhere;
-    // spec: S-0207 claim 16 (f): deployed, deploying or undeploying have no state yet
-    let f = false;
+    // spec: S-0207 claim 16 (f): deployed, deploying or undeploying (a vehicle type that deploys in place, S-0517 Terms)
+    let f = crate::econ::inplace::deployed(w, id) || crate::econ::inplace::in_transition(w, id);
     // spec: S-0207 claim 16 (g): a locomotor switched off. A hovering vehicle's only while it is not powered in S-0503's sense, switched off and down at a hover height of 0 (S-0405 claim 20 and Changes for other specs, revision 36; S-0503 Terms and claim 10). Any other vehicle's locomotor is switched off by the disabling of S-0405 claims 13 and 20 and switched on again at enabling; no other switch-off of a vehicle locomotor has state here.
     // spec: S-0207 claim 16 (r85, Q-2781: case g reads the locomotor the vehicle has at the request, so a seized hovering type with the jumpjet stand-in is judged by that locomotor's switch, not by the hover's power)
     let g = if loco == Some(Locomotor::Hover) && crate::hover::is_hover(w, id) {
@@ -391,8 +391,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
     };
     // spec: S-0207 claim 16 (h): the current behaviour has the paralysed property (S-0215 claim 17)
     let h = o.beh.seen().is_some_and(|x| r.behaviour(x).paralysed);
-    // spec: S-0207 claim 16 (i): unloading passengers has no state in M3
-    let i = false;
+    // spec: S-0207 claim 16 (i): unloading passengers (S-0507: the transport letting out holds unload current, which case a already refuses)
+    let i = crate::transport::letting_out(w, id);
     // spec: S-0207 claim 16 (j): a destination and its turret turning
     let j = o.dest.is_some() && o.turret.turning(t);
     if h || i || j {

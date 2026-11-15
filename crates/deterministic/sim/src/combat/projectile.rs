@@ -1621,6 +1621,8 @@ fn explode(
         );
         let _ = res;
         if let Some(aw) = p.airburst_weapon {
+            // spec: S-0306 claim 21 (the children take the firer of the projectile that launched it, so the same attacker rule applies: a firer its own detonation killed is not carried)
+            drop_killed_firer(w, pr);
             airburst_children(w, pr, aw);
         }
         return;
@@ -1628,6 +1630,8 @@ fn explode(
     // spec: S-0306 Edge cases (a cluster count of 0 or less: no detonation, no draw)
     let mut q = point;
     for _ in 0..p.cluster.max(0) {
+        // spec: S-0306 claim 21 and S-0302 claim 1 (each detonation carries the firer and its house unless the firer was killed between the shot and that detonation, an earlier detonation of this projectile included)
+        drop_killed_firer(w, pr);
         // spec: S-0525 claim 1 (each detonation of a projectile with a cluster count above 1 leaves radiation at its own point; a child of an airburst leaves none)
         // spec: S-0318 claim 5 and S-0525 claim 1 (revision 4: a fragment carries no weapon and leaves no radiation, so a fragment weapon's radiation level has no effect)
         if !pr.airburst_child && pr.chain == 0 {
@@ -1652,6 +1656,21 @@ fn explode(
         let lambda = w.rng.ranged(256, 512, half);
         let b = w.rng.raw();
         q = crate::combat::death::nearby_point(w, q, lambda, b, false);
+    }
+}
+
+/// Drops the firer and its house from the turn's copy of a projectile when
+/// a killing hit since the turn began has dropped them from the stored
+/// projectile ([`crate::combat::death::mark_killed`]; S-0306 claim 21,
+/// S-0302 claim 1).
+fn drop_killed_firer(w: &World, pr: &mut Projectile) {
+    if pr.attacker.is_some()
+        && w.projectiles
+            .get(&pr.id)
+            .is_some_and(|s| s.attacker.is_none())
+    {
+        pr.attacker = None;
+        pr.house = None;
     }
 }
 
@@ -1691,6 +1710,10 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
         let cc = Pos::centre(cell, pr.pos.z);
         // spec: S-0306 claim 8 (revision 45: a projectile a burst releases is raised to 1 lepton above the terrain of its own x and y when not above it)
         let at = start_point(w, cc);
+        // spec: S-0306 claim 21 (each child is aimed at its cell) and Terms (points of a cell target: K is the cell's target point, a high-bridge cell's at the deck height)
+        let stored = cell_target_point(w, Target::Cell(cell));
+        // spec: S-0306 T1 (Ω at placement is the full spatial distance from the placed position to K, for every placed projectile; claim 21: the children are placed as claim 8 gives)
+        let omega = d3(w, at, stored);
         let id = w.new_id();
         let child = Projectile {
             id,
@@ -1702,13 +1725,13 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             pos: at,
             vel: [F64::ZERO, F64::ZERO, f(-i64::from(sw / 10), mode)],
             target: Some(Target::Cell(cell)),
-            // spec: S-0306 claim 21 (each child is aimed at its cell) and Terms (points of a cell target: K is the cell's target point, a high-bridge cell's at the deck height)
-            stored: cell_target_point(w, Target::Cell(cell)),
+            stored,
             placed_at: at,
+            // spec: S-0306 claims 9 and 21 (whether a child takes its type's arm field is not stated, Q-3130; interim: every child is armed at once)
             arm: 0,
             placed: w.tick,
             damage: rules.combat.weapon(aw).damage,
-            omega: 0,
+            omega,
             top_speed: sw,
             turns: 0,
             unlocked: 0,

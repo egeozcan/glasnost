@@ -140,14 +140,36 @@ pub fn counts_as_moving(w: &World, id: ObjectId) -> bool {
     o.dest.is_some() || o.body.turning(w.tick) || in_progress(w, id)
 }
 
+/// The weapon name in a mobile unit's primary slot (`secondary` false) or
+/// secondary slot at its current veterancy rank (S-0209 Terms, *armed* and
+/// *has a primary weapon*): an elite unit has the elite weapon of a slot
+/// when its type gives one, otherwise the ordinary one. A multi-turret
+/// type's selected weapon is not read (a seam): its slots are read as any
+/// other type's.
+fn slot_name(w: &World, id: ObjectId, secondary: bool) -> Option<&String> {
+    let o = w.obj(id)?;
+    let u = w.rules().unit(o.kind, o.type_index)?;
+    let (ordinary, elite) = if secondary {
+        (&u.secondary, &u.raw.elite_secondary)
+    } else {
+        (&u.primary, &u.raw.elite_primary)
+    };
+    // spec: S-0209 Terms (Armed: the weapons at the current veterancy rank; an elite unit has the elite weapon of a slot when its type gives one, otherwise the ordinary one)
+    if crate::combat::veterancy::rank(w, id) == crate::combat::veterancy::Rank::Elite
+        && let Some(e) = elite.as_ref()
+    {
+        return Some(e);
+    }
+    ordinary.as_ref()
+}
+
 /// The mean damage armed test of a walker (S-0209 Terms, *armed*).
 fn walker_armed(w: &World, id: ObjectId) -> bool {
-    let Some(o) = w.obj(id) else { return false };
-    let Some(u) = w.rules().unit(o.kind, o.type_index) else {
-        return false;
-    };
     let (mut sum, mut n) = (0i64, 0i64);
-    for name in [&u.primary, &u.secondary].into_iter().flatten() {
+    for name in [slot_name(w, id, false), slot_name(w, id, true)]
+        .into_iter()
+        .flatten()
+    {
         let wt = w.rules().weapons.get(name);
         sum += i64::from(wt.and_then(|x| x.damage).unwrap_or(0))
             + i64::from(wt.and_then(|x| x.ambient_damage).unwrap_or(0));
@@ -168,20 +190,14 @@ fn has_primary(w: &World, id: ObjectId) -> bool {
             .raw
             .primary
             .is_some(),
-        _ => w
-            .rules()
-            .unit(o.kind, o.type_index)
-            .is_some_and(|u| u.primary.is_some()),
+        // spec: S-0209 Terms (has a primary weapon: a weapon in its primary slot at its current veterancy rank)
+        _ => slot_name(w, id, false).is_some(),
     }
 }
 
 fn primary_warhead_flag(w: &World, id: ObjectId, wall: bool) -> bool {
-    let Some(o) = w.obj(id) else { return false };
-    let Some(p) = w
-        .rules()
-        .unit(o.kind, o.type_index)
-        .and_then(|u| u.primary.as_ref())
-    else {
+    // spec: S-0209 Terms (the wall and wood rows ask it of the primary weapon at the current veterancy rank)
+    let Some(p) = slot_name(w, id, false) else {
         return false;
     };
     let wh = w.rules().weapons.get(p).and_then(|x| x.warhead.as_ref());
@@ -195,12 +211,8 @@ fn primary_warhead_flag(w: &World, id: ObjectId, wall: bool) -> bool {
 }
 
 fn primary_hits_ground(w: &World, id: ObjectId) -> bool {
-    let Some(o) = w.obj(id) else { return false };
-    let Some(p) = w
-        .rules()
-        .unit(o.kind, o.type_index)
-        .and_then(|u| u.primary.as_ref())
-    else {
+    // spec: S-0209 Terms (row VR10 asks it of the primary weapon at the current veterancy rank)
+    let Some(p) = slot_name(w, id, false) else {
         return false;
     };
     let pj = w.rules().weapons.get(p).and_then(|x| x.projectile.as_ref());
@@ -663,7 +675,8 @@ pub fn vehicle_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) 
         return Outcome::Blocked;
     };
     let crusher = mv.crusher;
-    let armed = u.primary.is_some() || u.train;
+    // spec: S-0209 Terms (a ground vehicle is armed when it has a primary weapon at its current veterancy rank, or its type is a train)
+    let armed = mv.primary(w).has || u.train;
     let crushes_wall =
         |crushable: bool| (crushable && crusher) || u.zone == MovementZone::CrusherAll;
     let mut overlay_value = None;
@@ -680,8 +693,8 @@ pub fn vehicle_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) 
                 // spec: S-0209 claim 5 (row VO3: a wall it crushes, other owner or none: none)
                 None
             }
-        } else if u.primary.is_none() {
-            // spec: S-0209 claim 5 (row VO4)
+        } else if !mv.primary(w).has {
+            // spec: S-0209 claim 5 (row VO4: no primary weapon at the current veterancy rank)
             Some(Outcome::Blocked)
         } else if mv.primary(w).wall || (o.wood && mv.primary(w).wood) {
             // spec: S-0209 claim 5 (row VO5: friendly obstacle for an allied owner, enemy obstacle for another)
@@ -716,6 +729,9 @@ pub fn vehicle_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) 
             // spec: S-0209 claim 5 (row VP17: the vehicle it enters)
             over = true;
             v = Some(Outcome::Clear);
+        } else if o.kind == Kind::Building && m.contact == Some(oid) && !blocking_cell(w, oid, c) {
+            // spec: S-0209 claim 5 (row VP3: a building the vehicle is in contact with, on a cell that is not one of its blocking cells: none; part 5d: the first matching row from the top, so VP3 comes before rows VP5 to VP7)
+            v = None;
         } else if o.kind == Kind::Building
             && r.buildings[o.type_index as usize].absorb.vehicle
             && m.beh.seen() == Some(Behaviour::Enter)
@@ -749,10 +765,7 @@ pub fn vehicle_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) 
             v = Some(Outcome::Clear);
         } else if o.kind == Kind::Building {
             let b = &r.buildings[o.type_index as usize];
-            if m.contact == Some(oid) && !blocking_cell(w, oid, c) {
-                // spec: S-0209 claim 5 (row VP3: a building the vehicle is in contact with, on a cell that is not one of its blocking cells: none)
-                v = None;
-            } else if b.gate && crate::process::gate_open(w, oid) {
+            if b.gate && crate::process::gate_open(w, oid) {
                 // spec: S-0209 claim 5 (row VP8: an open gate gives none; open or closed by S-0215 claim 35)
                 v = None;
             } else if b.gate && w.allied(o.owner, m.owner) {
@@ -927,8 +940,8 @@ pub fn vehicle_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) 
         // spec: S-0209 claim 5 (row VR8)
         return Outcome::EnemyObstacle;
     }
-    if u.primary.is_none() {
-        // spec: S-0209 claim 5 (row VR9)
+    if !mv.primary(w).has {
+        // spec: S-0209 claim 5 (row VR9: no primary weapon at the current veterancy rank)
         return Outcome::Blocked;
     }
     // spec: S-0209 claim 5 (row VR10)

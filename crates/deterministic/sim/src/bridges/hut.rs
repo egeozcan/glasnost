@@ -125,6 +125,13 @@ fn tile_family(w: &World, c: CellXY, filter: Option<Family>) -> Option<Family> {
 /// it detonates. No gate applies.
 pub fn demolish(w: &mut World, hut: ObjectId) {
     let Some(c) = hut_cell(w, hut) else { return };
+    demolish_from(w, c);
+}
+
+/// [`demolish`] from the hut cell `c`, read beforehand: a timed bomb's
+/// detonation may destroy the hut before its demolition follows (S-0511
+/// claim 16, S-0519 claim 5).
+pub fn demolish_from(w: &mut World, c: CellXY) {
     let filter = family_filter(w, c);
     if let Some((p, l)) = first_low(w, c, filter) {
         demolish_low(w, p, l);

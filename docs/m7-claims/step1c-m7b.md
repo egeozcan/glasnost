@@ -122,7 +122,7 @@ This is M7b step 1c. It covers the approved revisions that reached main after st
 | Claim | Class | Notes |
 |---|---|---|
 | 7 and table C row *zone*: cells of no reach region, the searcher's deck read, the no-link deck exception (Q-1502) | changed | `acquire::same_zone` (`regions::reach_read`). Tests: `cells_of_no_reach_region_compare_as_one_region` (`claims_s0309.rs`), `the_search_region_reads_the_searchers_deck` (`claims_s0212.rs`). |
-| 11, the area-search cell test follows the same exception | satisfied | the area search applies the zone test per offered object through the same `same_zone`. |
+| 11, the area-search cell test follows the same exception | satisfied | the area search applies the zone test per offered object through the same `same_zone`. Superseded by S-0309 r144 (sim issues S17, #245): the area search applies no zone row to an offered object; its skip of the visited cell (`acquire::search`) follows the same exception. |
 | 7, hovering jumpjets: the paths that reach one (Q-1504) | satisfied | as built. Test: `a_map_wide_search_never_finds_a_hovering_jumpjet`. Retaliation (claim 18) has no layer test. A locomotor that sets the limited-scan mark (claim 22) is still a seam. |
 | Backing, scenario A11 parts j and k | (c) | |
 
