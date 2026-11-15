@@ -2885,6 +2885,55 @@ fn t1_steering_deck_crossing_is_strict() {
     assert!(matches!(out, Out::Flying(_)), "{out:?}");
 }
 
+/// A locked steering projectile with no target that moves from 28 leptons
+/// short of the east edge of cell (-5, 3) into cell (-4, 3), from height
+/// `z0` with vertical velocity `vz`; `old` and `new` give each cell's
+/// level and whether it is a high-bridge cell. Its outcome, and the terrain
+/// height of the cell it moves into plus 416.
+fn steering_across(z0: i32, vz: i64, old: (i8, bool), new: (i8, bool)) -> (Out, i32) {
+    let mut s = steering_s(10);
+    let (a, b) = (cell_of(-5, 3), cell_of(-4, 3));
+    for (cell, (level, deck)) in [(a, old), (b, new)] {
+        set_level(&mut s.w, cell, level);
+        if deck {
+            set_deck(&mut s.w, cell);
+        }
+    }
+    let centre = c(-5, 3, z0);
+    let p = Pos::new(centre.x + 100, centre.y, z0);
+    let id = missile(&mut s, p, [64, 0, vz]);
+    s.w.projectiles.get_mut(&id).unwrap().target = None;
+    s.w.projectiles.get_mut(&id).unwrap().locked = true;
+    let q = Pos::centre(b, 0);
+    let deck = s.w.surface_at(q.x, q.y) + 416;
+    (step(&mut s, id), deck)
+}
+
+// spec: S-0306 T1 (revision 91, Q-3114: the steering row's deck height is the terrain height of the cell of P′ + 416, whichever of the two cells is the high-bridge cell and whatever the other cell's terrain height)
+#[test]
+fn q3114_steering_deck_height_is_that_of_the_new_cell() {
+    // The old cell carries the deck at level 0; the new cell is one level up
+    // with no bridge. P to P′ crosses the old cell's own deck height (416) but
+    // stays below the new cell's terrain + 416.
+    let (out, deck) = steering_across(400, 40, (0, true), (1, false));
+    assert!(deck > 440, "the new cell's deck height {deck} is above P′");
+    assert!(matches!(out, Out::Flying(_)), "no deck crossing: {out:?}");
+}
+
+// spec: S-0306 T1 (revision 91, Q-3114: the deck height of the cell of P′, crossed going down out of a higher high-bridge cell; z at that deck height)
+#[test]
+fn q3114_steering_deck_crossing_into_a_lower_cell() {
+    // The old cell carries the deck one level up; the new cell is at level 0
+    // with no bridge. P to P′ stays below the old cell's own deck height but
+    // crosses the new cell's terrain + 416 going down.
+    let (out, deck) = steering_across(440, -40, (1, true), (0, false));
+    assert_eq!(deck, 416);
+    let Out::Detonated(q) = out else {
+        panic!("no detonation: {out:?}")
+    };
+    assert_eq!(q.z, deck);
+}
+
 // spec: S-0306 T1 (arrival: past its arm time and η = trunc(d₃(P′, K) / 2) < 32; claim 20 b snaps to the target's reference point; scenario P22 a)
 #[test]
 fn t1_arrival_row() {
