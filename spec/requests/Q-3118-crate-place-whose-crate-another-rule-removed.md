@@ -1,9 +1,9 @@
 ---
 id: Q-3118
 title: What happens to a crate place whose crate another rule removed before it expires
-status: open
+status: answered
 related: [S-0520, S-0524, S-0303]
-answered-by: []
+answered-by: [S-0520]
 ---
 
 ## Need
