@@ -456,3 +456,69 @@ pub async fn load_with(
         theme,
     }
 }
+
+#[cfg(test)]
+mod session_palette_tests {
+    use std::rc::Rc;
+
+    use glasnost_fmt::image::Palette;
+    use glasnost_fmt::mix::{MixWriter, WriteLayout, id_hash};
+    use glasnost_vfs::{GameOptions, MemSource, PickedFile};
+
+    use super::*;
+
+    /// A mounted install whose main archive holds each named palette file,
+    /// every component of it `value`. The bytes are invented.
+    fn install(files: &[(String, u8)]) -> Vfs {
+        let mut entries = vec![(id_hash("filler.ini"), b"[Filler]\n".to_vec())];
+        for (name, value) in files {
+            entries.push((id_hash(name), vec![*value; 768]));
+        }
+        let main = MixWriter {
+            layout: WriteLayout::Plain,
+            files: entries,
+        }
+        .write();
+        let mut vfs = Vfs::default();
+        pollster::block_on(vfs.mount_install(vec![PickedFile {
+            path: "ra2md.mix".into(),
+            source: Rc::new(MemSource(main)),
+        }]));
+        pollster::block_on(vfs.mount_startup(GameOptions::default()));
+        vfs
+    }
+
+    fn theater_files(t: Theater, value: u8) -> Vec<(String, u8)> {
+        vec![
+            (t.unit_palette(), value),
+            (t.tile_palette(), value),
+            (t.theater_palette(), value),
+        ]
+    }
+
+    /// The session's second game in the same theater reads no palette
+    /// file, and one in another theater keeps the tile palette in force
+    /// when its own is missing (#152).
+    /// spec: S-0103 claim 3 (the palettes are reloaded only when a game starts in a different theater
+    /// from the previous game of the session; the first game of a session always loads them) and
+    /// claim 2 (a missing tile palette file: the one in force stays)
+    #[test]
+    fn claims_2_3_the_session_keeps_its_palettes_across_games() {
+        let t = Theater::Temperate;
+        let first = install(&theater_files(t, 10));
+        let game1 = pollster::block_on(game_palettes(&first, t, None));
+        assert_ne!(game1.tile, Palette::default(), "the first game loads");
+        // Same theater, other files: not read.
+        let second = install(&theater_files(t, 20));
+        let fresh = pollster::block_on(game_palettes(&second, t, None));
+        assert_ne!(fresh, game1, "the files differ");
+        let game2 = pollster::block_on(game_palettes(&second, t, Some(game1.clone())));
+        assert_eq!(game2, game1, "same theater as the previous game: no palette file is read");
+        // Another theater without its tile palette file: the one in force stays.
+        let s = Theater::Snow;
+        let snow = install(&[(s.unit_palette(), 30), (s.theater_palette(), 30)]);
+        let game3 = pollster::block_on(game_palettes(&snow, s, Some(game2)));
+        assert_eq!(game3.tile, game1.tile, "a missing tile palette keeps the one in force");
+        assert_ne!(game3.unit, game1.unit, "a new theater loads its unit palette");
+    }
+}
