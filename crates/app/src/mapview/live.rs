@@ -417,6 +417,11 @@ pub struct Live {
     /// The effect tint (hundredths) the kept drawings' house-colour tables
     /// were last shaded with, `None` for none (S-0104 claims 3 and 5, #75).
     house_tint: Option<[i32; 3]>,
+    /// The buildings' lights as last seen (S-0405 claim 9, #152).
+    building_lights: super::building_lights::Tracker,
+    /// The light source of a building type (import index) at a top-left
+    /// foundation cell, read once (S-0104 claim 12).
+    building_light_of: BTreeMap<(usize, (i32, i32)), Option<glasnost_render::light::LightSource>>,
     /// Static objects ([`Built::objects`] indices) left out of the cell
     /// pass, as last drawn: buildings whose simulation object is gone, the
     /// map's gates (drawn live) and the overlays of cells that changed.
@@ -1380,6 +1385,8 @@ impl Live {
             ),
             // spec: S-0104 claim 3 (with no effect the house-colour tables were shaded with white light)
             house_tint: None,
+            building_lights: super::building_lights::Tracker::default(),
+            building_light_of: BTreeMap::new(),
             gone: BTreeSet::new(),
             live_gates,
             map_start,
@@ -2292,6 +2299,58 @@ impl Live {
     #[cfg(test)]
     pub(super) fn protection_look_of(&self, id: ObjectId) -> Option<super::protection::Look> {
         self.protection_look(self.world.obj(id)?)
+    }
+
+    /// The light sources of the buildings lit now (S-0405 claim 9, S-0104
+    /// claim 12), in object ID order, the lights followed to this frame.
+    fn building_light_sources(
+        &mut self,
+        inputs: &Inputs,
+    ) -> Vec<glasnost_render::light::LightSource> {
+        let map_placed: BTreeSet<ObjectId> = self.building_ids.values().copied().collect();
+        let power = &self.rules.econ.power.buildings;
+        let on_map: Vec<super::building_lights::Building> = self
+            .world
+            .objects
+            .values()
+            .filter(|o| o.kind == SimKind::Building && o.on_map)
+            .map(|o| super::building_lights::Building {
+                id: o.id,
+                switched_off: o.econ.building.switched_off,
+                owner: o.owner,
+                needs_engineer: power
+                    .get(o.type_index as usize)
+                    .is_some_and(|b| b.needs_engineer),
+                manned: o.econ.building.manned,
+                map_placed: map_placed.contains(&o.id),
+            })
+            .collect();
+        let lit = self.building_lights.update(&on_map);
+        let mut sources = Vec::new();
+        for id in lit {
+            let Some(o) = self.world.obj(id) else {
+                continue;
+            };
+            let Some(idx) = self
+                .types
+                .get(&(o.kind, o.type_index))
+                .copied()
+                .flatten()
+            else {
+                continue;
+            };
+            let c = o.pos.cell();
+            if inputs.map.cells.get(c).is_none() {
+                continue;
+            }
+            let painter = &self.painter;
+            let source = *self
+                .building_light_of
+                .entry((idx, (c.x, c.y)))
+                .or_insert_with(|| painter.building_light(inputs.import, idx, (c.x, c.y)));
+            sources.extend(source);
+        }
+        sources
     }
 
     /// The light of cell `c` as the view last computed it (tests).
@@ -3695,6 +3754,10 @@ impl Live {
         // S-0104 claims 4 and 5; the psychic domination's and the storm's
         // lighting among them): the cells and the terrain are lit again,
         // before this frame's drawings take their cells' light (#152).
+        // spec: S-0104 claim 12 (each lit building is a light source; a light added, removed or changed
+        // relights the same tick), S-0405 claim 9 (which buildings are lit)
+        let buildings = self.building_light_sources(inputs);
+        let buildings_changed = self.painter.set_building_lights(buildings);
         let l = &self.world.lighting;
         let key = (l.current, l.choice);
         // spec: S-0525 claim 13 (each field is a light source; every change of it relights the cells it reaches)
@@ -3710,7 +3773,7 @@ impl Live {
             })
             .collect();
         let fields_changed = self.painter.set_field_lights(fields);
-        let relit = key != self.lit || fields_changed;
+        let relit = key != self.lit || fields_changed || buildings_changed;
         if relit {
             let set =
                 glasnost_sim::lighting::set_of(l, key.1).unwrap_or(inputs.map.lighting.normal);

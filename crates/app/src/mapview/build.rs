@@ -6887,9 +6887,10 @@ impl Painter {
     /// frame are shaded again by [`Painter::retint_houses`]); claim 10's
     /// and claim 16's height terms and the cell light of the static objects
     /// of the cell pass are not followed. The building light sources are
-    /// those of the map's placed structures, collected when the view is
-    /// built: a lit building built or lost in play adds or removes no
-    /// source, though claim 12 relights on both (#152). The named palettes' tables take
+    /// the game's lit buildings ([`Painter::set_building_lights`], S-0405
+    /// claim 9), except that a pulse never puts one out or on (no pulse
+    /// exists in the game yet) and a building's light is never scaled for
+    /// its damage (S-0302 claim 12's factor is open) (#152). The named palettes' tables take
     /// the effect tint with the house-colour tables (S-0103 claim 17). The
     /// house tables are all built when the game starts (S-0104 Open questions),
     /// so claim 2's third column, the tint of a table built while an effect
@@ -6998,6 +6999,18 @@ impl Painter {
             return false;
         }
         self.field_sources = lights;
+        true
+    }
+
+    /// Sets the lit buildings' light sources (S-0104 claim 12, S-0405
+    /// claim 9); returns whether they changed, so that the caller relights
+    /// (claim 12: a light added, removed or changed relights the same
+    /// tick).
+    pub fn set_building_lights(&mut self, lights: Vec<LightSource>) -> bool {
+        if lights == self.sources {
+            return false;
+        }
+        self.sources = lights;
         true
     }
 
