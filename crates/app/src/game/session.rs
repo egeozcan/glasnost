@@ -1150,13 +1150,12 @@ impl Session {
 
     /// The battlefield composed on the CPU, RGBA.
     pub fn map_rgba(&self) -> Vec<u8> {
+        let covers = self.shroud_covers();
+        // spec: S-0110 claim 5 (127 before any cover acts: with no covers, 127 everywhere, which `None` composes)
+        // design: render (#118) (no view-sized buffer for a view without covers)
+        let alpha = (!covers.is_empty()).then(|| self.light_alpha_of(&covers));
         self.scene
-            .compose_lit(
-                &self.view(),
-                &self.filter,
-                &ComposeQuirks::default(),
-                Some(self.light_alpha()),
-            )
+            .compose_lit(&self.view(), &self.filter, &ComposeQuirks::default(), alpha)
             .to_rgba()
     }
 

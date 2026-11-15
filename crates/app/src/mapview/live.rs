@@ -2889,7 +2889,10 @@ impl Live {
                 a.entry = table.get(&s.player.name.to_ascii_uppercase()).cloned();
             }
             // spec: S-0109 claim 28 (no viewer-dependent cosmetic stream substitutes for the playback draws: the stage shown is the simulation's)
-            a.player.clone_from(&s.player);
+            // design: render (#142) (copied only when it differs: a copy is a fresh clone of its name and fields)
+            if a.player != s.player {
+                a.player.clone_from(&s.player);
+            }
             if let Some(p) = s.pos {
                 a.pos = p;
             }
