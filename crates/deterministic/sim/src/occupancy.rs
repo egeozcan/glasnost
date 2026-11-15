@@ -729,8 +729,7 @@ pub fn vehicle_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) 
             // spec: S-0209 claim 5 (row VP17: the vehicle it enters)
             over = true;
             v = Some(Outcome::Clear);
-        } else if o.kind == Kind::Building && m.contact == Some(oid) && !blocking_cell(w, oid, c)
-        {
+        } else if o.kind == Kind::Building && m.contact == Some(oid) && !blocking_cell(w, oid, c) {
             // spec: S-0209 claim 5 (row VP3: a building the vehicle is in contact with, on a cell that is not one of its blocking cells: none; part 5d: the first matching row from the top, so VP3 comes before rows VP5 to VP7)
             v = None;
         } else if o.kind == Kind::Building

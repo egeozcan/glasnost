@@ -1643,8 +1643,7 @@ fn explode(
 /// S-0302 claim 1).
 fn drop_killed_firer(w: &World, pr: &mut Projectile) {
     if pr.attacker.is_some()
-        && w
-            .projectiles
+        && w.projectiles
             .get(&pr.id)
             .is_some_and(|s| s.attacker.is_none())
     {

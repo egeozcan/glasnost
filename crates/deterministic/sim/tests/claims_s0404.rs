@@ -689,7 +689,11 @@ fn issue_311_step_payment_wraps_at_the_range_ends() {
     let mut w = game(&ruleset());
     set_credits(&mut w, 0, i32::MAX);
     production::pay(&mut w, HouseId(0), -1);
-    assert_eq!(credits(&w, 0), i32::MIN, "a negative payment at the top wraps");
+    assert_eq!(
+        credits(&w, 0),
+        i32::MIN,
+        "a negative payment at the top wraps"
+    );
     set_credits(&mut w, 0, i32::MIN);
     production::pay(&mut w, HouseId(0), 1);
     assert_eq!(credits(&w, 0), i32::MAX, "a payment at the bottom wraps");

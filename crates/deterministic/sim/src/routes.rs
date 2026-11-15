@@ -1037,9 +1037,7 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
         }
         r.steps = kept;
         // spec: S-0213 claim 16e (when a deleted point lay inside a loop and the loop is left with fewer than 3 points, the loop is cancelled; the remaining points form an ordinary route) and revision 84 (on a loop that ends early, once its number of points is below 3); a delete that removed no point inside this loop leaves it as it is
-        let lp = from
-            .zip(n)
-            .filter(|&(_, n)| !inside || n >= MIN_LOOP);
+        let lp = from.zip(n).filter(|&(_, n)| !inside || n >= MIN_LOOP);
         r.set_loop(lp);
     }
     // spec: S-0213 claim 16f (deleting a route's last remaining point ends holding but does not lower the count, under quirks.route_holder_count_drift; off, the count is the holders')

@@ -82,7 +82,8 @@ fn issue_318_later_cluster_detonation_after_the_firer_is_killed() {
     let wp = w.rules().combat.weapon_index["Shot"];
     let fp = w.obj(firer).unwrap().pos;
     let far = Target::Cell(testkit::mid(N, 12, 9));
-    let id = launch(&mut w, firer, wp, far, Pos::new(fp.x, fp.y, fp.z + 300), 60).expect("a launch");
+    let id =
+        launch(&mut w, firer, wp, far, Pos::new(fp.x, fp.y, fp.z + 300), 60).expect("a launch");
     {
         // Deep below the surface next to the firer: the deep-fall row detonates it in its next turn.
         let p = Pos::centre(testkit::mid(N, 1, 0), -380);

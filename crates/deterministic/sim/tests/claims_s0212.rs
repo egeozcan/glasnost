@@ -2218,7 +2218,10 @@ fn issue_245_an_area_search_applies_no_zone_row_to_an_object_under_a_deck() {
         bank,
         "the van's own cell and layer, the ground, lie in F"
     );
-    assert_eq!(w.obj(van).unwrap().layer, glasnost_sim::world::Layer::Ground);
+    assert_eq!(
+        w.obj(van).unwrap().layer,
+        glasnost_sim::world::Layer::Ground
+    );
     let found = acquire::search(&mut w, car, SearchKind::Area, SearchContext::Area);
     assert_eq!(
         found,

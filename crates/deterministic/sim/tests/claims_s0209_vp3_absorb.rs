@@ -91,8 +91,15 @@ fn issue_322_vp3_before_vp5_for_a_vehicle_in_contact_with_its_absorber() {
             break;
         }
     }
-    assert!(ready, "the mover reached enter with contact and destination");
-    assert_eq!(w.obj(idle).unwrap().pos.cell(), f, "the idle vehicle stayed");
+    assert!(
+        ready,
+        "the mover reached enter with contact and destination"
+    );
+    assert_eq!(
+        w.obj(idle).unwrap().pos.cell(),
+        f,
+        "the idle vehicle stayed"
+    );
     assert!(w.obj(idle).unwrap().dest.is_none());
     // Row VP3 (none) for the building, row VP20 for the idle allied vehicle.
     assert_eq!(out(&w, mover, f), Outcome::StationaryFriendly);
