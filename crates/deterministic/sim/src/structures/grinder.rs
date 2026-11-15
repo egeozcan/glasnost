@@ -66,11 +66,12 @@ fn recycler_refuses(w: &World, b: ObjectId, u: ObjectId, links: bool) -> bool {
     if !w.allied(bo.owner, uo.owner) {
         return true;
     }
-    // spec: S-0603 claim 2 (under construction, being sold or not finished building up)
+    // spec: S-0603 claim 2 (under construction, being sold or not finished building up: the build-up state too, after an owner change took the queued construction away, #347)
     if matches!(
         crate::econ::placement::seen_behaviour(bo),
         Some(Behaviour::Construction | Behaviour::Selling)
     ) || bo.econ.sale.is_some()
+        || bo.econ.construction.building_up
     {
         return true;
     }

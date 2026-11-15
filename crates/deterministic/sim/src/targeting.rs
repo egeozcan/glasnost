@@ -775,17 +775,18 @@ fn teleporter(w: &World, id: ObjectId) -> bool {
     uflag(w, id, |u| u.raw.teleporter.unwrap_or(false))
 }
 
-/// A free mover (S-0214 Terms): an aircraft, an underground type (zone
-/// *subterranean*) or a jumpjet infantry type. The jumpjet counts for a
-/// click on a cell only while no ion storm is active, and our engine has no
-/// ion storm. Nothing of another kind is in the air before the aircraft
-/// topic.
+/// A free mover (S-0214 Terms): an actor in the air, an aircraft, an
+/// underground type (zone *subterranean*) or a jumpjet infantry type. The
+/// jumpjet counts for a click on a cell only while no ion storm is active,
+/// and our engine has no ion storm. A unit is in the air by the answer of
+/// S-0502 claim 30, a jumpjet unit in flight.
 fn free_mover(w: &World, id: ObjectId) -> bool {
     match kind(w, id) {
         Some(Kind::Aircraft) => true,
         Some(Kind::Infantry) if uflag(w, id, |u| u.jumpjet) => true,
+        // spec: S-0214 Terms (free mover: an actor that is in the air, #359) and S-0502 claim 30 (a unit with the jumpjet locomotor in flight is in the air)
         Some(Kind::Infantry | Kind::Vehicle) => {
-            uflag(w, id, |u| u.zone == MovementZone::Subterranean)
+            uflag(w, id, |u| u.zone == MovementZone::Subterranean) || weapon::in_air(w, id)
         }
         _ => false,
     }
@@ -1301,9 +1302,10 @@ fn infantry_on(
     let r = w.rules();
     let tb = building(w, t);
     let is_bld = tb.is_some();
-    // spec: S-0214 table I value e (row e4: a hospital, no force-fire, the actor at full health; armories and docking answers need contact exchanges)
+    // spec: S-0214 table I value e (defined only for an allied building not being erased, #358; row e4: a hospital, no force-fire, the actor at full health; armories and docking answers need contact exchanges)
     let e = (is_bld
         && allied(w, actor, t)
+        && !being_erased(w, t)
         && tb.is_some_and(|b| b.raw.hospital.unwrap_or(false))
         && !mods.force_fire
         && !below_full(w, actor))
@@ -1318,9 +1320,11 @@ fn infantry_on(
     } else {
         Action::Nothing
     };
-    // spec: S-0214 table I value x (rows x1 to x4)
+    // spec: S-0214 table I value x (rows x1 to x4; defined only for a target not being erased and not phasing in, #358)
     let x = (unit_or_building(w, t)
         && allied(w, actor, t)
+        && !being_erased(w, t)
+        && !crate::teleport::phasing_in(w, t)
         && passengers(w, t)
         && movable(w, house, actor)
         && !matches!(v, Action::Attack | Action::AreaGuard | Action::NoEnter))
@@ -1440,7 +1444,8 @@ fn infantry_on(
     // Rows I17 and I18 need the weapon cursor flags, which are not imported.
     // spec: S-0214 table I row I19 (a bomb planter: bomb if the type accepts bombs and carries none)
     if uflag(w, actor, |u| u.raw.ivan.unwrap_or(false)) && g1 == Action::Attack {
-        return if bombable(w, t) {
+        // spec: S-0214 table I row I19 (the target's type accepts bombs and the target carries none, #355)
+        return if bombable(w, t) && !crate::bomb::carries(w, t) {
             Action::Bomb
         } else {
             Action::NoBomb
@@ -1658,13 +1663,15 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
         // spec: S-0214 table V row n3 (an accepting allied building: enter)
         Action::Enter
     };
-    // spec: S-0214 table V value q (rows q1 to q3 apply to an allied passenger-carrying target other than the actor)
+    // spec: S-0214 table V value q (rows q1 to q3 apply to an allied passenger-carrying target other than the actor, not being erased and not phasing in, #358)
     let q = if !matches!(
         n,
         Action::Attack | Action::RepairVehicle | Action::AreaGuard | Action::NoEnter
     ) && unit_or_building(w, t)
         && allied(w, actor, t)
         && t != actor
+        && !being_erased(w, t)
+        && !crate::teleport::phasing_in(w, t)
         && passengers(w, t)
     {
         if kind(w, t).is_some_and(Kind::is_mobile) && moving(w, t) {
@@ -1934,10 +1941,17 @@ fn cell_action(
             if dipd && g == Action::Move {
                 return Action::NoMove;
             }
-            // spec: S-0214 table IC row IC7
+            // spec: S-0214 table IC row IC7 (does not fire while deployed, or the cell centre out of range of its first weapon, #354)
             if dipd
                 && g == Action::Attack
-                && !uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false))
+                && (!uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false))
+                    || !range::in_range(
+                        w,
+                        actor,
+                        first_weapon(w, actor),
+                        Some(Target::Cell(c)),
+                        None,
+                    ))
             {
                 return Action::NoMove;
             }
@@ -2207,10 +2221,12 @@ pub fn berserk_cursor_arrow(kind: Option<Kind>, berserk: bool, show_action: bool
     !show_action && berserk && matches!(kind, Some(Kind::Infantry | Kind::Vehicle))
 }
 
-/// Attack-move eligibility (S-0214 claim 5).
+/// Attack-move eligibility (S-0214 claim 5): the first slot, not the slot
+/// in use (Terms, *armed*: a rule that names the first slot means it).
 fn eligible(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 claim 5 (infantry or a vehicle with a weapon in its first slot and no prevent-attack-move flag, #357)
     matches!(kind(w, id), Some(Kind::Infantry | Kind::Vehicle))
-        && armed(w, id)
+        && first_weapon(w, id).is_some()
         && !uflag(w, id, |u| u.raw.prevent_attack_move.unwrap_or(false))
 }
 
@@ -2673,10 +2689,12 @@ pub fn key_command(
             KeyCommand::Scatter if mv => Some(Order::Scatter { actor: id }),
             KeyCommand::Guard => {
                 // spec: S-0213 claim 15 (a house's orders act only on its own objects; the input rules keep it) and claim 3 (an object of another house is an order the input would not let a person give): table T2's "movable or not" waives the rest of movable, not its own-object part (#207)
+                // spec: S-0213 table T2 (a vehicle that is a harvester or controls slave units, the S-0213 Terms slave master, #356)
                 let harvester = own(w, house, id)
                     && o.kind == Kind::Vehicle
-                    && unit(w, id).is_some_and(|u| u.harvester);
-                // spec: S-0213 table T2 (guard: movable, able to fire and not a building; or an own harvester vehicle, movable or not)
+                    && (unit(w, id).is_some_and(|u| u.harvester)
+                        || crate::seams::is_slave_master(w, id));
+                // spec: S-0213 table T2 (guard: movable, able to fire and not a building; or an own vehicle that is a harvester or controls slave units, movable or not)
                 ((mv && fire && o.kind != Kind::Building) || harvester).then(|| Order::Behaviour {
                     actor: id,
                     behaviour: Behaviour::AreaGuard,

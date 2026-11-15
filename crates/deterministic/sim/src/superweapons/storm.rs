@@ -250,6 +250,8 @@ fn make_cloud(w: &mut World, cell: CellXY) {
         // spec: S-0513 claim 46 (the effective stage delay of the ordinary playback; 0 freezes the stage)
         delay: d,
         pending: true,
+        // spec: S-0513 claim 46 and S-0109 claim 5 (made after the turn pass, a trigger action in the house raise: its first animation update is in the next tick, u = c + 1, #352)
+        late: w.after_turn_pass,
     });
 }
 
@@ -264,18 +266,21 @@ fn frames(w: &World, c: &Cloud) -> i32 {
 }
 
 /// A cloud's stage as the weather update of tick `t` finds it (claim 46):
-/// the advances made before it. The cloud is created before the turn pass
-/// (the weather update, or a polled trigger), so its first update is in its
-/// creation tick; with *d* ≥ 1 the first advance is in tick *a* = *c* + *d*
-/// and advance *j* in *a* + (*j* − 1)*d*; weather precedes the animation
-/// turns of its tick.
+/// the advances made before it. A cloud created before the turn pass (the
+/// weather update, or a polled trigger) has its first update *u* in its
+/// creation tick *c*; one created after it (a trigger action in the house
+/// raise) in the next tick. With *d* ≥ 1 the first advance is in tick
+/// *a* = max(*c* + *d*, *u* + 1) and advance *j* in *a* + (*j* − 1)*d*;
+/// weather precedes the animation turns of its tick.
 fn stage(c: &Cloud, t: i32) -> i32 {
     // spec: S-0513 claim 46 (a zero stage delay freezes the stage; it is not replaced by 1 tick)
     if c.delay < 1 {
         return 0;
     }
-    // spec: S-0513 claim 46 and S-0109 claim 5 (the first advance is max(c + d, u + 1) = c + d with u = c; advance j ≥ 1 in a + (j − 1)d)
-    let a = c.created.wrapping_add(c.delay);
+    // spec: S-0513 claim 46 and S-0109 claim 5 (u = c before the turn pass, c + 1 after it, #352)
+    let u = c.created.wrapping_add(i32::from(c.late));
+    // spec: S-0513 claim 46 and S-0109 claim 5 (the first advance is a = max(c + d, u + 1); advance j ≥ 1 in a + (j − 1)d)
+    let a = c.created.wrapping_add(c.delay).max(u.wrapping_add(1));
     if t <= a { 0 } else { (t - 1 - a) / c.delay + 1 }
 }
 

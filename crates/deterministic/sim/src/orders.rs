@@ -864,6 +864,7 @@ pub fn attack_move_eligible(w: &World, id: ObjectId) -> bool {
         return false;
     }
     // spec: S-0214 claim 5 (a weapon in its first slot, no prevent-attack-move flag)
+    // The type's first-slot field is read here; the input side reads the object's first slot (#357). They differ only where the object's slot 0 is substituted (elite, upgrade, garrison): a seam.
     w.rules()
         .unit(o.kind, o.type_index)
         .is_some_and(|u| u.primary.is_some() && !u.raw.prevent_attack_move.unwrap_or(false))

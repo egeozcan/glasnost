@@ -288,3 +288,77 @@ fn claim_14_low_bridges_start_no_cell_animation() {
     let _ = r.ranged(0, 65535, true);
     assert_eq!(w.rng, r);
 }
+
+/// The scene of #348: an ordinary overlay at (0, −4), then a marker 122 at
+/// (0, −3) whose end row it blocks, on a tile with an animation when
+/// `animated`, then a bridge 123 … 122 on row 0.
+fn blocked_marker_scene(animated: bool) -> Scene {
+    use glasnost_map::terrain::TileAnim;
+    use glasnost_rules::sim::AnimationType;
+    let mut s = overlay_scene();
+    s.map.has_overlay_data = false;
+    // Tile 1 names SPARK on sub-tile 0: a descending pair, one ranged draw at its creation.
+    s.catalogue.tiles[1].anim = Some(TileAnim {
+        name: "spark".into(),
+        attaches_to: 0,
+        ..TileAnim::default()
+    });
+    s.register("animations", "SPARK");
+    s.ruleset.sim.animations.insert(
+        "SPARK".into(),
+        AnimationType {
+            random_rate: Some([2, 1]),
+            ..Default::default()
+        },
+    );
+    s.cell_mut(cell(0, -4)).overlay = 7;
+    s.cell_mut(cell(0, -3)).overlay = 122;
+    if animated {
+        s.set_cell(cell(0, -3), 1, 0);
+    }
+    s.cell_mut(cell(-4, 0)).overlay = 123;
+    s.cell_mut(cell(0, 0)).overlay = 122;
+    s
+}
+
+/// spec: S-0202 claim 10 (a marker whose end row holds an overlay: nothing is written, and nothing else follows, draw none; the bridge's nine pieces are the overlay-stream group's draws; a tile animation starts at its cell's first recalculation before the second pass and again in the second pass) and S-0319 claims 10 and 13 (a refused placement takes no placement draw)
+#[test]
+fn issue_348_a_blocked_marker_takes_no_draw_in_the_overlay_stream_group() {
+    for animated in [false, true] {
+        let s = blocked_marker_scene(animated);
+        let w = s.build();
+        assert_eq!(overlay(&w, cell(0, -4)).0, 7, "set-up");
+        assert_eq!(
+            overlay(&w, cell(0, -3)).0,
+            NO_OVERLAY,
+            "the blocked marker wrote nothing"
+        );
+        assert_eq!(
+            overlay(&w, cell(0, -2)).0,
+            NO_OVERLAY,
+            "the blocked marker wrote nothing"
+        );
+        let mut r = Rng::new(s.setup.seed);
+        let mut want = Vec::new();
+        for _ in 0..9 {
+            want.push(74 + (r.raw() % 4) as u8);
+        }
+        let mut got = Vec::new();
+        for dx in [-3, -2, -1] {
+            for dy in [-1, 0, 1] {
+                got.push(overlay(&w, cell(dx, dy)).0);
+            }
+        }
+        assert_eq!(
+            got, want,
+            "the nine pieces, animated tile under the blocked marker: {animated}"
+        );
+        if animated {
+            // The first recalculation pass, then the second pass.
+            let _ = r.ranged(450, 900, true);
+            let _ = r.ranged(450, 900, true);
+        }
+        let _ = r.ranged(0, 65535, true);
+        assert_eq!(w.rng, r, "animated: {animated}");
+    }
+}

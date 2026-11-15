@@ -271,11 +271,12 @@ fn permits_but_place(w: &World, k: ObjectId, id: ObjectId, standing: bool) -> bo
     if !is_depot(w, k) || b.health <= 0 || !b.on_map || o.kind != Kind::Vehicle {
         return false;
     }
-    // spec: S-0314 claim 16 (construction, selling and the build-up state refuse)
+    // spec: S-0314 claim 16 (construction, selling and the build-up state refuse: the build-up state too, after an owner change took the queued construction away, #347)
     if matches!(
         crate::econ::placement::seen_behaviour(b),
         Some(Behaviour::Construction | Behaviour::Selling)
     ) || b.econ.sale.is_some()
+        || b.econ.construction.building_up
     {
         return false;
     }

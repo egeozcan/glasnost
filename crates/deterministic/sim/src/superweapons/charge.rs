@@ -193,6 +193,8 @@ fn grant_by_building(w: &mut World, h: HouseId, i: u32, never_suspended: bool) {
     r.granted = true;
     r.ready = false;
     r.one_time = false;
+    // spec: S-0512 claims 7 and 12 (a grant by buildings is an ordinary grant, judged by claims 6 and 7 and lost with its last giving building; a permanent grant sets the flag again after this call, claim 13, #351)
+    r.permanent = false;
     r.silent = false;
     r.remain = ty_charge;
     r.start = t;
@@ -455,6 +457,8 @@ pub fn set_charge(w: &mut World, h: HouseId, i: u32, p: i32) {
     // spec: S-0512 claim 14 (the clock runs from that tick; quirks.superweapon_restart_ignores_suspension: even when suspended)
     let running = !rec.suspended || ignores;
     rec.restart(t, r, running);
+    // spec: S-0512 claim 10 (only a source pick's own re-completion is silent) and claim 14 (the new clock completes through claim 5, with its announcement, #353)
+    rec.silent = false;
     if !keeps_ready {
         // spec: S-0512 claim 14 (quirks.set_charge_keeps_ready off: readiness is cleared)
         rec.ready = false;
@@ -485,6 +489,8 @@ pub fn reset(w: &mut World, h: HouseId, i: u32) {
     if r.running {
         r.start = t;
     }
+    // spec: S-0512 claim 10 (only a source pick's own re-completion is silent) and claims 15 and 5 (the full recharge becomes ready with its announcement and ready tick, #353)
+    r.silent = false;
 }
 
 /// Spy infiltration of building `b` (S-0510 claim 3, row E4; S-0512 claim

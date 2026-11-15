@@ -237,7 +237,8 @@ fn take_destination_with(w: &mut World, id: ObjectId, forced: bool) {
     }
     // spec: S-0207 claim 20 (a) (dropped while phasing in, held, S-0614 Terms, or being erased by a temporal beam, S-0514 claim 16; the electromagnetic pulse has no state in our engine; a superweapon warp's leaving stage is the warp-pending immobilization of part b below)
     // spec: S-0207 claim 27 (Q-1130 table, third row: with no suppression pending the order-level destination becomes empty and nothing is consumed)
-    if st.phasing.is_some() || crate::parasite::held(w, id) || crate::temporal::erased(w, id) {
+    // spec: S-0214 Terms and S-0513 Terms and claim 40 (phasing in is also a superweapon warp member's, from departure until its arrival hold ends, #361)
+    if phasing_in(w, id) || crate::parasite::held(w, id) || crate::temporal::erased(w, id) {
         st.for_dest = None;
         set_state(w, id, st);
         drop_destination(w, id);
@@ -399,6 +400,32 @@ fn landing_point(w: &mut World, id: ObjectId, dc: CellXY) -> Option<Pos> {
     let p = Pos::centre(c, 0);
     // spec: S-0207 claim 20 (b) (L: the chosen cell's centre at the height H there)
     Some(Pos::centre(c, w.surface_at(p.x, p.y)))
+}
+
+/// A superweapon warp ends a teleporting infantry unit's fixed landing
+/// point (S-0513 claim 51; S-0208 claim 19): its standing-position
+/// reservation there is released, as when a landing point not jumped to is
+/// replaced. Called at the join and at departure; what landing choice a
+/// destination given while warp-pending makes is Q-3142.
+pub(crate) fn warp_release(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if o.kind != Kind::Infantry {
+        return;
+    }
+    let Some(mut st) = o.teleport.clone() else {
+        return;
+    };
+    let Some(c) = st.mark else { return };
+    let oq = crate::objects::occ_quirks(w);
+    // A landing point in the cell the unit stands in shares the record of its own standing entry, which stays until the departure clears that cell.
+    if (c, st.mark_layer) != (o.pos.cell(), o.layer) || !o.on_map {
+        // spec: S-0208 claim 19 (Q-0235: a landing point not jumped to releases its standing-position reservation) and S-0513 claim 51 (the launch clears the current driving step; none resumes when the warp ends, #363)
+        w.cells.clear_infantry(c, st.mark_layer, id, oq);
+    }
+    st.mark = None;
+    st.landing = None;
+    st.for_dest = None;
+    set_state(w, id, st);
 }
 
 /// An infantry unit takes destination `dest` (S-0208 claim 19): the

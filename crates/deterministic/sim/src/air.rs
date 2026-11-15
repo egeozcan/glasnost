@@ -3275,11 +3275,12 @@ pub fn accepts(w: &World, k: ObjectId, id: ObjectId) -> bool {
     if !w.allied(b.owner, o.owner) {
         return false;
     }
-    // spec: S-0501 claim 22 (not being built up or sold, build-up finished)
+    // spec: S-0501 claim 22 (not being built up or sold, build-up finished: the build-up state too, after an owner change took the queued construction away, #347)
     if matches!(
         b.beh.current.or(b.beh.queued),
         Some(Behaviour::Construction | Behaviour::Selling)
     ) || b.econ.sale.is_some()
+        || b.econ.construction.building_up
     {
         return false;
     }
