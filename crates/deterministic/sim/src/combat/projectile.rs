@@ -1140,10 +1140,6 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let mut rows = Rows::default();
     let nc = newpos.cell();
     let terrain_new = w.surface_at(newpos.x, newpos.y);
-    let deck_old = w
-        .high_bridge(start.cell())
-        .then(|| w.surface_at(start.x, start.y) + 416);
-    let deck_new = w.high_bridge(nc).then(|| terrain_new + 416);
     let crossing = |a: i32, b: i32, deck: Option<i32>| -> Option<i32> {
         let d = deck?;
         // spec: S-0306 T1 row 1 (revision 89: crossing a bridge deck height going up, from P below it to P′ at or above it, gives 20 below it; going down, from P at or above it to P′ below it, the deck height)
@@ -1244,11 +1240,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
             }
         }
         if !(rows.steering_dist || rows.steer_ground || rows.safety || rows.orbit) {
-            // spec: S-0306 T1 (steering: P′ strictly crosses the deck height of a high-bridge cell, old or new; z at the deck height); Q-3114 interim (each cell's own deck height when the two differ)
-            let strict = |deck: Option<i32>| {
-                deck.filter(|&d| (start.z < d && newpos.z > d) || (start.z > d && newpos.z < d))
-            };
-            rows.bridge = strict(deck_old).or_else(|| strict(deck_new));
+            // spec: S-0306 T1 (steering: P′ strictly crosses the bridge deck height of a high-bridge cell, old or new cell; deck height = terrain height of the cell of P′ + 416, whichever of the two cells is the high-bridge cell and whatever the other cell's terrain height; z at that deck height)
+            rows.bridge = deck_here.filter(|&d| (start.z < d && newpos.z > d) || (start.z > d && newpos.z < d));
         }
     }
     if (kind == ProjectileKind::Steering || p.ranged) && !p.dropping {
