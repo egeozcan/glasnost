@@ -72,6 +72,13 @@ const ALT_ICON_SPRITES: u32 = 6000;
 /// by it too.
 pub use glasnost_net::start::content_hash;
 
+/// A scene stamp never handed out before in this process (design: render
+/// (#112); our own bookkeeping, not game state).
+fn next_stamp() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 /// A game on a loaded map.
 pub struct Session {
     /// The map, its scene inputs and the live drawing state.
@@ -80,6 +87,9 @@ pub struct Session {
     /// read through [`Session::scene`] and changed only through
     /// [`Session::scene_mut`] and [`Session::with_live`].
     scene: Scene,
+    /// A stamp no other scene state of any session had, renewed whenever
+    /// the scene may change ([`Session::scene_stamp`]).
+    scene_stamp: u64,
     /// The game and the local player's interface state.
     pub play: Play,
     /// The radar map (S-0410).
@@ -502,6 +512,7 @@ impl Session {
         let mut s = Self {
             loaded,
             scene,
+            scene_stamp: next_stamp(),
             play: Play::new(game, local),
             radar,
             map_id,
@@ -595,7 +606,16 @@ impl Session {
 
     /// The scene, to change it.
     pub fn scene_mut(&mut self) -> &mut Scene {
+        self.scene_stamp = next_stamp();
         &mut self.scene
+    }
+
+    /// The scene's stamp: equal between two reads only when the scene was
+    /// not handed out to be changed in between, by this session or any
+    /// other (design: render (#112): a frame whose stamp, view, filter and
+    /// light are the last drawn frame's keeps that battlefield).
+    pub fn scene_stamp(&self) -> u64 {
+        self.scene_stamp
     }
 
     /// Calls `f` with the live drawing state holding the canonical world.
@@ -604,13 +624,35 @@ impl Session {
         f: impl FnOnce(&mut Live, &Inputs, &mut Scene) -> R,
     ) -> Option<R> {
         let view = self.view();
-        let (inputs, live) = self.loaded.split();
+        let scene = &mut self.scene;
+        let stamp = &mut self.scene_stamp;
+        Self::live_parts(&mut self.loaded, &mut self.play, view, |live, inputs| {
+            *stamp = next_stamp();
+            f(live, inputs, scene)
+        })
+    }
+
+    /// [`Session::with_live`] for work that leaves the scene as it is.
+    fn live_only<R>(&mut self, f: impl FnOnce(&mut Live, &Inputs) -> R) -> Option<R> {
+        let view = self.view();
+        Self::live_parts(&mut self.loaded, &mut self.play, view, f)
+    }
+
+    /// Calls `f` with the live drawing state of `loaded` holding `play`'s
+    /// world, for the battlefield view `view`.
+    fn live_parts<R>(
+        loaded: &mut Loaded,
+        play: &mut Play,
+        view: View,
+        f: impl FnOnce(&mut Live, &Inputs) -> R,
+    ) -> Option<R> {
+        let (inputs, live) = loaded.split();
         let live = live?;
         // spec: S-0316 claim 5 (the bolts' view test is on the battlefield view as drawn)
         live.battlefield = Some((view.origin, view.size));
-        std::mem::swap(&mut live.world, &mut self.play.game.world);
-        let r = f(live, &inputs, &mut self.scene);
-        std::mem::swap(&mut live.world, &mut self.play.game.world);
+        std::mem::swap(&mut live.world, &mut play.game.world);
+        let r = f(live, &inputs);
+        std::mem::swap(&mut live.world, &mut play.game.world);
         Some(r)
     }
 
@@ -1225,8 +1267,7 @@ impl Session {
             .scene
             .object_at(qx, qy, &view, &self.filter, &ComposeQuirks::default());
         let id = code.and_then(|c| {
-            self.with_live(|live, _, _| live.object_of_code(c))
-                .flatten()
+            self.live_only(|live, _| live.object_of_code(c)).flatten()
         });
         (CellXY::new(cell.0, cell.1), id)
     }
@@ -1846,7 +1887,7 @@ impl Session {
     /// battlefield view's top-left corner.
     fn screen_candidates(&mut self) -> Vec<(ObjectId, Point)> {
         let drawn = self
-            .with_live(|live, inputs, _| live.drawn_mobiles(inputs))
+            .live_only(|live, inputs| live.drawn_mobiles(inputs))
             .unwrap_or_default();
         let w = &self.play.game.world;
         let v = self.view();
@@ -2535,16 +2576,18 @@ impl Session {
         self.update_name_tip();
         let selection = self.play.selection.clone();
         let digits = self.play.group_digits();
-        self.with_live(|live, inputs, scene| {
+        let stale = self.live_only(|live, _| {
             let marks = live.set_marks(&selection, hovered);
             // Making or changing a group changes no mark, but its digits.
             let groups = live.set_group_digits(digits);
             // spec: S-0111 claim 1 (status extras are culled against the battlefield view as drawn)
             // design: render (#78) a view moved between ticks (a scroll, a radar click, a jump to a group) redraws the status extras in the frame it shows, not at the next tick
-            if marks || groups || live.status_view_stale() {
-                live.redraw_status(inputs, scene);
-            }
+            marks || groups || live.status_view_stale()
         });
+        // design: render (#112): only a redraw hands the scene out, so a frame with no new marks keeps the battlefield
+        if stale == Some(true) {
+            self.with_live(|live, inputs, scene| live.redraw_status(inputs, scene));
+        }
     }
 
     /// One frame of the tips (S-0111 claims 20 and 26, S-0411 claims 20 and

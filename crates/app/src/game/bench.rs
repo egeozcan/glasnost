@@ -1213,6 +1213,9 @@ impl Bench {
         }
         let rebuilds: usize = timed.iter().map(|r| r.stats.rebuilds).sum();
         let _ = writeln!(out, "  {:<24} {:>12}", "renderer rebuilds", rebuilds);
+        // design: render (#112): the timed frames that showed the battlefield drawn before
+        let kept: usize = timed.iter().map(|r| r.stats.kept).sum();
+        let _ = writeln!(out, "  {:<24} {:>12}", "battlefields kept", kept);
         // The atlas and the scene's images at the first and the last timed
         // frame, and their largest values (#105).
         let _ = writeln!(out);
