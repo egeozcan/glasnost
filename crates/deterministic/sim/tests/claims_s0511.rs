@@ -1408,6 +1408,40 @@ fn claim_16_hut_demolishes_a_high_bridge() {
     assert!(!w.cells.links[0].enabled);
 }
 
+/// Detonates a timed bomb of `bomb_damage` on a hut of strength 500 beside
+/// a high bridge; returns whether the hut is still in play and how many deck
+/// sections are left.
+fn bombed_hut(bomb_damage: i32) -> (bool, usize) {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut r = ruleset();
+    r.sim.general.ivan_warhead = Some("DEMO".into());
+    r.sim.general.ivan_damage = Some(bomb_damage);
+    let mut w = game(&r, &m);
+    let h = hut(&mut w, at(3, 3));
+    let sections = |w: &World| (0..8).filter(|&x| data(w, at(x, 0)).is_some()).count();
+    assert_eq!(sections(&w), 8, "the bridge starts intact");
+    let tick = w.tick;
+    w.obj_mut(h).unwrap().combat.bomb = Some(glasnost_sim::bomb::Bomb {
+        planter: None,
+        house: None,
+        planted: tick,
+    });
+    glasnost_sim::bomb::detonate(&mut w, h);
+    (alive(&w, h), sections(&w))
+}
+
+// spec: S-0519 claim 5 and S-0511 claim 16 (a hut that is the target of a timed bomb that detonates demolishes its bridge after the bomb's own detonation, with no condition on the hut's survival)
+#[test]
+fn issue_316_a_hut_destroyed_by_its_bomb_demolishes_its_bridge() {
+    // Control: bomb damage 100 against strength 500, the hut survives.
+    assert_eq!(bombed_hut(100), (true, 0), "control");
+    // Bomb damage 1000 against strength 500: the hut is destroyed.
+    let (up, left) = bombed_hut(1000);
+    assert!(!up, "the hut is destroyed by the blast");
+    assert_eq!(left, 0, "the bridge is demolished all the same");
+}
+
 // spec: S-0511 claim 16 (a low bridge: up to four strips from the centre displaced by −trunc((w − e) / 2), toward increasing coordinate when e ≥ w, each with three low-form animations and up to three attempts)
 #[test]
 fn claim_16_hut_demolishes_a_low_bridge() {
