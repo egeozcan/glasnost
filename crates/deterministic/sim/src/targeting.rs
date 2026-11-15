@@ -1713,6 +1713,10 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
     if q == Action::Nothing {
         return fallback_move(w, house, actor, t);
     }
+    // spec: S-0214 table V row V5 (q is attack and the vehicle fails the deploy check: nothing) (#413)
+    if q == Action::Attack && !deploy_check(w, actor) {
+        return Action::Nothing;
+    }
     // spec: S-0214 table V row V6
     if q == Action::Attack && immune(w, t) {
         return Action::NoMove;
@@ -1998,6 +2002,10 @@ fn cell_action(
                 })
             {
                 return Action::Harvest;
+            }
+            // spec: S-0214 table VC row VC6 (c′ is attack and the vehicle fails the deploy check: nothing) (#413)
+            if g == Action::Attack && !deploy_check(w, actor) {
+                return Action::Nothing;
             }
             // spec: S-0214 table VC row VC7
             g
