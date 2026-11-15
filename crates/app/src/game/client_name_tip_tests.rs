@@ -874,8 +874,14 @@ fn draw_base_unit_at_middle(c: &mut Client) -> Point {
 #[test]
 fn render_perf_120_a_pick_lives_only_within_its_frame() {
     let (mut c, _) = tip_game();
+    // Selected, the base unit is not hovered (S-0111 Terms), so pointing
+    // at it changes no mark and the frame redraws no status extras, which
+    // would take the synthetic drawing off the scene.
+    let mcv = own(&c, Kind::Vehicle)[0];
+    session_mut(&mut c).play.selection = vec![mcv];
     let mut t = 10_000;
     c.update(t);
+    let _ = c.frame();
     let p = draw_base_unit_at_middle(&mut c);
     let _ = c.frame();
     c.pointer_moved(p);
