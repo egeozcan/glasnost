@@ -533,15 +533,19 @@ The lanes compare base 3d9f38e with the batch (a396d37).
 
 The checks all ran on the final tree.
 - The sim gate with its ignored tests passes 17. After the format bump all nine goldens moved and were regenerated (a396d37). Four change length: duel 1931 → 2001 ticks, duel-diagonal 2112 → 1839, duel-naval 1437 → 2126, skirmish 2390 → 3259.
-- **The AI suite does not pass.** With its ignored tests it gives 361 passed and 1 failed: `skirmish::climbs_to_the_launcher_and_fires` passes on base and fails from 19aa137 (#229) on, at every later commit tried.
+- The AI suite with its ignored tests passes 362, after b1577e4 reworked the launcher climb's set-up. Before that it gave 361 passed and 1 failed: `skirmish::climbs_to_the_launcher_and_fires` passes on base and failed from 19aa137 (#229) on, at every later commit tried.
   - What changed: base and 19aa137 part at tick 16243, where object 77 (house 0's vehicle, attack-moving to (32, 29)) shows #229's signature. On base it starts *attack*; at 19aa137 it goes on in *move* with *attack* queued.
   - On base: house 0's launcher (LNCH), started by tick 17 000, is built at tick 19 273, and rockets fly.
   - With #229: house 0's vehicle production line, with the launcher item on it, is gone at ticks 18 000, 19 000 and 20 000, and back at 21 000. Its building line holds an item of FACT's price (1500) at 18 000, so the war factory was lost between ticks 17 000 and 18 000. Later launcher items wait for money (both houses hold about 0 credits from tick 27 000, as on base). No launcher is built before house 1 wins at tick 55 711.
   - No unit stays in *move* with *attack* queued for more than 2000 ticks, so this is not a stall.
-  - The test is left failing, unchanged. Its premise (the climb comes before the war takes the factory) no longer holds at the plain seed, and picking another seed would be choosing one for passing. This is handed back to the coordinator.
+  - The test's premise (the climb comes before the war takes the factory) no longer held at the plain seed. At the coordinator's request the scenario was reworked, following the file's own precedent (the move to the island map), so that the premise holds by construction (b1577e4).
+    - The climb's rules open every type that crosses the water or strikes across it (NAVY, HPAD, SILO, BOAT, HOVR, LIFT, LNCH, JET) to house 0's country only, through the required-houses list (S-0407 claim 5 (b)).
+    - What house 1 keeps cannot reach house 0's island. Its ground units and wheeled transport keep to their own island, and the gun (5.5 cells) is short of the 9-column strait.
+    - House 1 still climbs to LAB. Its waves go to its own shore (`Script::reachable`), where house 0's launcher can reach them from its shore (`Script::reaches`).
+    - The map, the seed (5) and the plan are unchanged, and so are the assertions. The set-up was fixed before its one run, which passed.
 - The workspace tests pass, `quirks::tests::every_spec_quirk_has_a_switch` among them.
 - `cargo clippy --workspace --all-targets -- -D warnings` is clean. `cargo fmt --check` needed a rustfmt commit (c05d067).
 - The wasm32 build of `glasnost-app` succeeds.
 - `xtask check` passes. `xtask gate` passes, and on wasm32 it matches all nine goldens.
 
-Seams left: `skirmish::climbs_to_the_launcher_and_fires` fails, as above. Q-3118 (#284's stale place), Q-3119 (#285's open-topped firer). The renderer's use of `placed_tick` (#81's drawing half) waits for a render batch. `claims_s0215_r137_deployed.rs` still cites the Q-3100 interim in a comment; its tests pass unchanged, since none uses a type with the named flag.
+Seams left: the launcher climb now checks an asymmetric game (house 1 cannot leave its island), not the open island war. Q-3118 (#284's stale place), Q-3119 (#285's open-topped firer). The renderer's use of `placed_tick` (#81's drawing half) waits for a render batch. `claims_s0215_r137_deployed.rs` still cites the Q-3100 interim in a comment; its tests pass unchanged, since none uses a type with the named flag.
