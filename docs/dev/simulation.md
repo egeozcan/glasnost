@@ -2010,3 +2010,55 @@ The twentieth batch of the game-logic audit takes the three issues whose request
 All three now call `objects::discard_unplaced`. Each of them removes the newest creation, so "the object and every object created after it" is exactly its creation set. Two raw removals stay as they are, because the object there is not the newest creation and has no set made with it: an in-play wall building turned into overlay (`placement.rs`) and a deleted production item's object, which `production::delete_item_object` already discards through its own path.
 
 **Design: a removed house is no house of the game (#373, #375, #376; S-0414 Terms, S-0009 claims 28 and 45, S-0409 claim 15).** The unused-house cleanup marks a house removed and keeps its entry, so house numbers stay fixed. Two lookups still ranged over every entry: the civilian house that takes the buildings of a defeated house (`victory::destroy_all`) and the countries of the starting-unit budget pool (`starting::give`). Both now skip removed houses, as `econ::setup::live` and the trigger owner lookup already did. The third issue of the group shares the defeat path: the defeat's own sweep can take the spy satellite's power, and the radar recheck that sweep asks for was cleared at the end of `radar::on_defeat`, so the satellite stayed active for a house that had lost it. The recheck it asked for now stays due.
+
+**Answered requests (S-0611 r11, S-0212 r107, S-0406 r14).**
+
+- *#291, a moving infantry-making animation (S-0611 claim 15, Q-3121).* The animation marked a fixed spot and layer taken at its start. Each update now marks the standing position of the animation's point (cell, layer and position, `mutation::Stand`), and the end attempt, the removals, an attached animation and the 416-lepton free read the last marked position. The new switch `quirks.infantry_animation_stale_marks` (on by default) keeps the spec's default: an earlier mark is not freed when the point moves, and a removal other than a successful end attempt frees nothing. Off, the earlier mark is freed in the record it was made in. A conversion animation of a bouncing type is given no infantry-making state and flies as an ordinary animation (a seam).
+- *#305, the congestion marks on a bridge (S-0212 claim 19, Q-3122).* The cell ahead is read on its deck when it is a bridge cell and the blocked unit is on a deck or the height levels differ by more than 3. When it lists no unit, the first unit of the 5 x 5 block heading to it is considered, with the objects after it. Part (ii) reads a cell's ground record. The new switch `quirks.path_congestion_ground_record` (on by default) is the spec's reading; off, a bridge cell is read in the layer read in the cell ahead. The Q-3122 interim is retired.
+- *#310, a filling building of a type that is not a wall type (S-0406 claim 11, Q-3128).* It now enters in its construction state exactly as the building the place order names, with the ready mark clear at entry (`placement::put_with`), and takes the placed building's construction ticks. The Q-3128 interim of the earlier batch is retired.
+
+**Creation sets (S-0611 claim 14).** *#366* (a map entry dropped for its cell, and a map wall building), *#369* (a starting unit or the base unit that finds no cell) and *#372* (a failed trigger restoration) are built as the design above says.
+
+**Removed houses and the defeat (S-0414, S-0009, S-0409).** *#373* (the defeat's satellite loss), *#375* (the civilian house of `destroy_all`) and *#376* (the starting-unit budget pool) are built as the design above says.
+
+**Triggers (S-0011, S-0409).**
+
+- *#367, the waypoint reveal (S-0011 claim 26, S-0409 claim 17).* The reveal-around-a-waypoint action reached every player house. It now skips one whose whole-map-revealed mark is set. Whether it reaches such a house through an ally's reveal (S-0409 claim 2) is Q-3149; until it is answered, the marked house takes no reveal by any route.
+- *#368, the entered-by event with the country-only switch off (S-0011 claim 18, Edge cases).* With `quirks.entered_by_country_only` off, the event's value is now resolved as a house value (`mp_triggers::resolve_house`, claim 23) and matches the causing object's owner. With it on, claim 18's country reading stands, and a player-position value never matches.
+- *#370, the coverage tables (S-0011 claim 24, S-0508 claims 10 to 13, S-0217 claim 1, S-0520 claim 7).* Actions 6, 14 and 111 and event 49 are built; `action_coverage` and `event_coverage` now say so, and action 14 is off the seam list. The module doc of `triggers.rs` names the built bridge-destroyed and crate-pickup raises. The comment in `judge` says codes 4, 7 and 29 are raised and judged false. The test is in the #368 test commit (4a3d17b), which took it by mistake. No behaviour change.
+
+**Combat, crates and transports (S-0301, S-0520, S-0412, S-0507).**
+
+- *#371, making peace (S-0301 claim 4, S-0414 claim 12).* A target of the new ally dropped by `victory::drop_allied_targets` kept its firer's burst counter. The counter is now set to 0 there, as at the other target clears.
+- *#374, game-start crates past the last free place (S-0520 claim 1).* `crates::place_at_start` went on through the whole count when no crate place was free or no crate overlay was named. It now ends its loop there, and a full map with a huge count is left as it was.
+- *#378, the game-start crates' draws (S-0412 claims 10 and 14, S-0520 claims 2 and 3).* No behaviour change. The `econ/setup.rs` module comment and rows 10 and 14 of the S-0412 ledger called the crates' draws a seam. They now say each crate is placed with its own draws from the game's stream, before the secret-lab draws.
+- *#379, the loading reply (S-0507 claim 5, S-0212 claim 5).* `transport::load_request` compared reach regions that a category change earlier in the tick (a terrain object's removal) had left stale. It now calls `regions::ensure` first.
+
+**Radar (S-0410, S-0110).**
+
+- *#377, the flat-grid switch.* The radar's object tests read the flat grid whatever `quirks.shroud_on_flat_grid` said. `compose` now passes `View::on_flat_grid` to the draw-time test (`winner_among_on`, `shown_on`). `listed_on` and `Arrivals::observe_on` give the listing test under the switch. The plain forms keep the flat-grid reading. The `EXTERNAL_QUIRKS` note says the radar follows the switch.
+
+**Limits (S-0513, S-0205).**
+
+- *#380, a protection duration near the integer limit (S-0513 claims 25 and 29).* `protect::start` and `tint_turn` computed the remaining time as start + duration - t, which overflows for a duration near the 32-bit limit. They now compute duration - (t - start), which gives the same value and stays in range.
+- *#381, rules-fed sums and products (S-0205 claim 1).* The following computations overflowed in the dev profile for huge rules values, and now wrap as the claim says:
+  - the delayed-kill radius (`damage.rs`, S-0302 F7);
+  - the walker's frame and expiry (S-0615 F1);
+  - the kill value (`veterancy.rs`, S-0311 F2);
+  - the price sums (`production::price`, S-0404 claim 2);
+  - the flying search's far cells (`flying::sector_set`, S-0303 F7).
+
+  The sell refund and `cancel_item` already wrapped.
+
+**Formats.** #291 changes the saved infantry-making state (`mutation::Making`): the save format goes to 153 and the AI game format to 129, the numbers the main session gave this batch. Wire version 12: no order's encoding changes. The sim-gate goldens are regenerated for the new format.
+
+**Seams.**
+
+- Q-3149 (#367) waits for an answer.
+- #291: a bouncing conversion animation is not given infantry-making state. The mech locomotor maps to no layer rule. There is no path that detaches an attached animation while it plays.
+- #305: the 5 x 5 search of `considered` has no test of its own.
+- The civilian recipient of `slaves` and the civilian house of `garrison` still range over removed houses (#375's lookup elsewhere).
+- S-0009 claim 29's References rule is not built (#368).
+- The app's radar still calls the plain `observe`, which reads the flat grid (#377).
+- The walker's expiry site of #381 was changed with the frame but has no test of its own.
+- Target clears other than `drop_allied_targets` were not audited for the burst counter (#371).
