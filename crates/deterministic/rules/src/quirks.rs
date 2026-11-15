@@ -2144,6 +2144,10 @@ pub struct Quirks {
     // spec: S-0606 claim 6, F5 and Edge cases
     #[serde(default = "on")]
     pub bunker_clear_far_point: bool,
+    /// A bunker-eligible vehicle with the hovering locomotor is permitted and takes the bunker's contact, but makes no arrival report: it stays in enter where its move ended, holding the contact, and the bunker stays at clearing; off: claim 1's eligibility also requires a locomotor other than the hovering one, so such a vehicle is refused at row P8 and a repeated request ends any contact it holds.
+    // spec: S-0606 claim 22 and Edge cases
+    #[serde(default = "on")]
+    pub bunker_hover_no_arrival: bool,
     /// A deploy order to an airborne in-place deploying type without the deploy-to-land flag is silently dropped; off: the order is kept until the vehicle is on the ground, and the next processing takes the ground deploy step of claim 4. Not implemented yet (wave 2).
     // spec: S-0517 claim 5 and Edge cases
     #[serde(default = "on")]
@@ -2855,6 +2859,7 @@ impl Default for Quirks {
             enter_nearest_survives_absorption: true,
             bunker_clear_chosen_only: true,
             bunker_clear_far_point: true,
+            bunker_hover_no_arrival: true,
             airborne_deploy_order_dropped: true,
             drain_relink_strands_previous: true,
             drain_position_check_vehicles_only: true,
@@ -4231,6 +4236,7 @@ impl Quirks {
             ),
             ("bunker_clear_chosen_only", self.bunker_clear_chosen_only),
             ("bunker_clear_far_point", self.bunker_clear_far_point),
+            ("bunker_hover_no_arrival", self.bunker_hover_no_arrival),
             (
                 "airborne_deploy_order_dropped",
                 self.airborne_deploy_order_dropped,

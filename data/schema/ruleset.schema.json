@@ -8971,6 +8971,11 @@
           "type": "boolean",
           "default": true
         },
+        "bunker_hover_no_arrival": {
+          "description": "A bunker-eligible vehicle with the hovering locomotor is permitted and takes the bunker's contact, but makes no arrival report: it stays in enter where its move ended, holding the contact, and the bunker stays at clearing; off: claim 1's eligibility also requires a locomotor other than the hovering one, so such a vehicle is refused at row P8 and a repeated request ends any contact it holds.",
+          "type": "boolean",
+          "default": true
+        },
         "cash_cycle_lapse": {
           "description": "An income cycle that falls while the building is being erased is lost with all later cycles until the next ownership change; off: the building's first turn at or after that tick has the cycle, and cycles continue from there. Not implemented yet (wave 2).",
           "type": "boolean",
