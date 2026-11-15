@@ -1402,3 +1402,134 @@ fn gpu_spots_match_cpu() {
         assert_eq!(differing, 0, "view at {origin:?}");
     }
 }
+
+/// spec: S-0102 F3 (a tile pixel's depth is (e + d(t + 30)) mod 65536); S-0010 claim 23 (the
+/// depth data cover the tile's image). design: render (#151): a tile whose depth image is
+/// smaller than the tile reads e = 0 past the depth image, on the GPU path as on the CPU
+/// reference
+#[test]
+fn gpu_a_tile_depth_image_smaller_than_its_tile_matches_cpu() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = rows_only();
+    let tile = s.add_image(image(40, 20, 3));
+    // The depth image covers the tile's left half only, with e = 0; images
+    // of e = 200 sit beside it in the atlas.
+    let td = s.add_image(IndexedImage::new(20, 20, vec![0; 400]).unwrap());
+    for _ in 0..3 {
+        s.add_image(IndexedImage::new(20, 20, vec![200; 400]).unwrap());
+    }
+    let wall = s.add_image(IndexedImage::new(48, 28, vec![5; 48 * 28]).unwrap());
+    // A writer under the tile, d(r) + 0 on rows 2 to 29.
+    s.items.push(Item {
+        image: wall,
+        x: 0,
+        y: 2,
+        test: DepthTest::Writer,
+        depth: ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias: 0,
+            companion: None,
+        },
+        paint: Paint::Row(1),
+        group: Group::Buildings,
+        provisional: false,
+        object: None,
+        stack: None,
+    });
+    // The tile on rows 6 to 25 with d(t + 30) = d(29) − 100: nearer than
+    // the writer at e = 0, farther at e = 200.
+    s.items.push(Item {
+        image: tile,
+        x: 4,
+        y: 6,
+        test: DepthTest::Tile,
+        depth: ItemDepth::Tile {
+            depth: Some(td),
+            reference_row: 29 + 100 - 30,
+        },
+        paint: Paint::Row(0),
+        group: Group::Tiles,
+        provisional: false,
+        object: None,
+        stack: None,
+    });
+    assert_eq!(differing_in_view(&device, &queue, &s, (0, 0)), 0);
+}
+
+/// spec: S-0104 claim 15 (the pixel's light-alpha value picks its row of the shade table).
+/// design: render (#151): a pixel whose shade row is missing, past the table's first, is not
+/// drawn and stores no depth, on the GPU path as on the CPU reference
+#[test]
+fn gpu_a_missing_shade_row_past_the_first_matches_cpu() {
+    use glasnost_render::compose::Shade;
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = rows_only();
+    let body = s.add_image(image(40, 20, 9));
+    // Rows 1 to 4 of a 3-row scene: rows 3 and 4 are missing.
+    s.items.push(Item {
+        test: DepthTest::Writer,
+        paint: Paint::Lit(Shade::new(1, 4, 2000)),
+        depth: ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias: -10,
+            companion: None,
+        },
+        ..flat_item(body, 4, 4)
+    });
+    // A reader over it, farther than the lit drawing: drawn only where the
+    // lit drawing stored no depth.
+    s.items.push(Item {
+        test: DepthTest::Reader,
+        paint: Paint::Row(2),
+        depth: ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias: -5,
+            companion: None,
+        },
+        ..flat_item(body, 6, 6)
+    });
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let size = (64u32, 32u32);
+    let view = View {
+        origin: (0, 0),
+        size,
+        reference: DEPTH_REFERENCE,
+    };
+    let alpha: Vec<u8> = (0..(size.0 * size.1) as usize)
+        .map(|i| ((i * 5) % 256) as u8)
+        .collect();
+    let filter = Filter::default();
+    let q = ComposeQuirks::default();
+    let cpu = s
+        .compose_lit(&view, &filter, &q, Some(alpha.clone()))
+        .to_rgba();
+    let plain = s.compose_lit(&view, &filter, &q, None).to_rgba();
+    assert_ne!(cpu, plain, "some pixels take a missing row");
+    let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    r.render_lit(
+        &device,
+        &queue,
+        &mut encoder,
+        &color,
+        &depth.create_view(&Default::default()),
+        &s,
+        &view,
+        &filter,
+        &q,
+        Some(&alpha),
+    );
+    queue.submit([encoder.finish()]);
+    let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+    let differing = cpu
+        .chunks(4)
+        .zip(gpu.chunks(4))
+        .filter(|(a, b)| a[..3] != b[..3])
+        .count();
+    assert_eq!(differing, 0);
+}
