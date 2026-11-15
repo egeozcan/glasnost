@@ -9947,7 +9947,7 @@
           "default": true
         },
         "mind_control_owner_change_keeps_victims": {
-          "description": "A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does (`glasnost_sim::mind::owner_changed`).",
+          "description": "A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does (`glasnost_sim::mind::owner_changing`, before the new owner is written).",
           "type": "boolean",
           "default": true
         },
