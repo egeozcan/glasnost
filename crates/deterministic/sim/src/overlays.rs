@@ -124,11 +124,7 @@ pub fn place_stream(w: &mut World, map: &Map, stream: &[(CellXY, u8, u8)]) {
         if !(t.has_art || t.cell_anim.is_some()) || (t.crate_ && q.skirmish_drops_map_crates) {
             continue;
         }
-        let Some(slope) = w.cells.cell(c).map(|x| x.slope) else {
-            continue;
-        };
-        // spec: S-0009 claim 12 (the cell's slope shape as it stands is at most 4, or the type is at position 178)
-        if slope > SLOPE_LIMIT && o != SLOPE_EXEMPT {
+        if !slope_allows(w, c, o) {
             continue;
         }
         place_overlay(w, c, o);
@@ -145,6 +141,15 @@ pub fn place_stream(w: &mut World, map: &Map, stream: &[(CellXY, u8, u8)]) {
             }
         }
     }
+}
+
+/// Whether S-0009 claim 12's slope condition lets overlay type `o` appear
+/// in cell `c`; a cell outside the map takes none.
+pub(crate) fn slope_allows(w: &World, c: CellXY, o: u8) -> bool {
+    // spec: S-0009 claim 12 (the cell's slope shape as it stands is at most 4, or the type is at position 178)
+    w.cells
+        .cell(c)
+        .is_some_and(|x| x.slope <= SLOPE_LIMIT || o == SLOPE_EXEMPT)
 }
 
 /// One overlay of the map's overlay list is created in `c` with its

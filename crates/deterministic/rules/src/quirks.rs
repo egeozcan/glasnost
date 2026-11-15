@@ -2017,8 +2017,8 @@ pub struct Quirks {
     // spec: S-0520 claim 13 and Edge cases
     #[serde(default = "on")]
     pub crate_harvester_list_prefix: bool,
-    /// A selected crate cell whose overlay a terrain object prevents still occupies its crate place, with its lifetime draw, until expiry; off: the failed overlay placement takes no place or lifetime draw. Unreachable in our engine: no terrain object blocks an overlay on a cell the placement search accepted, so both settings act alike.
-    // spec: S-0520 claim 3 and Edge cases
+    /// A selected crate cell whose overlay S-0009 claim 12's slope condition (or a terrain object) refuses still occupies its crate place, with its lifetime draw, until expiry, and the placement makes no further attempt; off: the overlay's appearance is a placement test, so the attempt fails with no place or lifetime draw. The terrain-object case is unreachable in our engine: the placement search rejects a cell with a terrain object.
+    // spec: S-0520 claims 3 and 5 and Edge cases (revision 16, Q-3140)
     #[serde(default = "on")]
     pub crate_phantom_place: bool,
     /// A unit crate that cannot place its unit gives money with the unit power-up's argument as the base b; off: with the money power-up's argument, as a money crate would.

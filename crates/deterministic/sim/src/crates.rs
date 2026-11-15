@@ -379,9 +379,17 @@ fn put(w: &mut World, c: CellXY, contents: u8, trigger: bool) -> bool {
         w.note("S-0520 claim 3: no crate overlay is named for this land: no crate is placed");
         return false;
     };
-    crate::overlays::place_overlay(w, c, o);
-    if let Some(x) = w.cells.grid.get_mut(c) {
-        x.overlay_data = contents; // spec: S-0520 Terms (the overlay data value is the contents)
+    // spec: S-0520 claims 3 and 5 (revision 16, Q-3140: the overlay appears only where S-0009 claim 12 allows it)
+    let shown = crate::overlays::slope_allows(w, c, o);
+    if !shown && !r.quirks.crate_phantom_place {
+        // spec: S-0520 Edge cases (quirks.crate_phantom_place off: the overlay's appearance is a placement test; the attempt fails with no place and no lifetime draw)
+        return false;
+    }
+    if shown {
+        crate::overlays::place_overlay(w, c, o);
+        if let Some(x) = w.cells.grid.get_mut(c) {
+            x.overlay_data = contents; // spec: S-0520 Terms (the overlay data value is the contents)
+        }
     }
     // spec: S-0520 claim 3 (any overlay draws precede the lifetime request, which begins at the current tick)
     let life = lifetime(w);
@@ -395,8 +403,11 @@ fn put(w: &mut World, c: CellXY, contents: u8, trigger: bool) -> bool {
             trigger,
         },
     );
-    // spec: S-0520 claim 29 (with quirks.crate_place_by_cell off each place belongs to the crate it placed)
-    w.crates.owners.insert(c, place);
+    if shown {
+        // spec: S-0520 claim 29 (with quirks.crate_place_by_cell off each place belongs to the crate it placed)
+        w.crates.owners.insert(c, place);
+    }
+    // spec: S-0520 claims 3 and 5 and Edge cases (quirks.crate_phantom_place: a refused overlay still counts as the successful attempt; the place is taken with its lifetime, no crate appears and no further attempt is made)
     true
 }
 
