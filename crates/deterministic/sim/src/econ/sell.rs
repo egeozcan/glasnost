@@ -377,10 +377,11 @@ pub fn building_turn(w: &mut World, id: ObjectId) {
     if o.health <= 0 {
         return;
     }
-    // spec: S-0314 claim 12 (every ordinary living building turn that reaches repair work considers automatic action, before claim 8's step; a building being erased or phasing in does not reach it); Q-3113 interim (a repair already on keeps claim 8's steps)
-    if !crate::temporal::building_erased(w, id) && !crate::teleport::phasing_in(w, id) {
-        automatic(w, id);
+    // spec: S-0314 claim 12 (every ordinary living building turn that reaches repair work considers automatic action, before claim 8's step; a building being erased or phasing in does not reach it) and claim 8 (Being erased: no step while it is being erased or phasing in, so nothing is paid and health does not rise; the state does not turn repair off, and the steps resume after it ends)
+    if crate::temporal::building_erased(w, id) || crate::teleport::phasing_in(w, id) {
+        return;
     }
+    automatic(w, id);
     let Some(o) = w.obj(id) else { return };
     if !o.econ.building.repairing {
         return;
