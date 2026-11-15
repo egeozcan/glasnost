@@ -75,7 +75,7 @@ fn issue_315_airburst_child_omega_is_its_placement_distance() {
     }
     let before: Vec<ObjectId> = w.projectiles.keys().copied().collect();
     turn(&mut w, id);
-    assert!(w.projectiles.get(&id).is_none(), "the parent detonated");
+    assert!(!w.projectiles.contains_key(&id), "the parent detonated");
     let kids: Vec<Projectile> = w
         .projectiles
         .values()

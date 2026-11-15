@@ -95,7 +95,7 @@ fn issue_318_later_cluster_detonation_after_the_firer_is_killed() {
     }
     let kills = stats::of(&w, HouseId(0)).kills;
     turn(&mut w, id);
-    assert!(w.projectiles.get(&id).is_none(), "the projectile detonated");
+    assert!(!w.projectiles.contains_key(&id), "the projectile detonated");
     let f = w.obj(firer).expect("the firer stays in play");
     assert!(f.combat.killed, "the first detonation killed the firer");
     assert!(
