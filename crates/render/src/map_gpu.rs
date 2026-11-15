@@ -470,6 +470,9 @@ pub struct MapRenderer {
     resized: Vec<u32>,
     /// A frame's cell-pass items near the view, kept for its room.
     near: Vec<u32>,
+    /// The view's pixels marked for laying out spot groups (design: render
+    /// (#115, #116)).
+    spot_stamps: SpotStamps,
 }
 
 /// The side of a [`CellCull`] bucket in world pixels (design: render
@@ -900,6 +903,7 @@ impl MapRenderer {
             cull: None,
             resized: Vec::new(),
             near: Vec::new(),
+            spot_stamps: SpotStamps::default(),
         })
     }
 
@@ -1271,7 +1275,7 @@ impl MapRenderer {
             self.stats.items += 1;
             while let Some(g) = spot_groups.next_if(|g| g.at <= n) {
                 if filter.shows_spots(g) {
-                    spot_instances(g, view, &mut list, &mut batches);
+                    spot_instances(g, view, &mut self.spot_stamps, &mut list, &mut batches);
                     spot_rects(&list, &mut rects);
                 }
             }
@@ -1428,7 +1432,7 @@ impl MapRenderer {
             }
         }
         for g in spot_groups.filter(|g| filter.shows_spots(g)) {
-            spot_instances(g, view, &mut list, &mut batches);
+            spot_instances(g, view, &mut self.spot_stamps, &mut list, &mut batches);
             spot_rects(&list, &mut rects);
         }
         self.near = near;
@@ -1590,7 +1594,22 @@ fn passes(batches: Vec<Batch>, rects: &[[u32; 4]]) -> Vec<(Vec<[u32; 4]>, Vec<Ba
 /// already holds: overlapping spots then apply in order, as on the CPU
 /// ([`crate::spots::apply`]). A magnetic wave's spots never repeat a pixel
 /// and read the copy around them (S-0607 claim 25).
-fn spot_instances(g: &SpotGroup, view: &View, list: &mut Vec<Instance>, batches: &mut Vec<Batch>) {
+///
+/// A group with no magnetic wave is laid out by [`layered_spot_instances`]
+/// instead (design: render (#115, #116)).
+fn spot_instances(
+    g: &SpotGroup,
+    view: &View,
+    stamps: &mut SpotStamps,
+    list: &mut Vec<Instance>,
+    batches: &mut Vec<Batch>,
+) {
+    if g.spots.len() < SpotStamps::LAYERS as usize
+        && !g.spots.iter().any(|s| matches!(s.kind, SpotKind::Wave { .. }))
+    {
+        layered_spot_instances(g, view, stamps, list, batches);
+        return;
+    }
     let (ox, oy) = view.origin;
     let (w, h) = (view.size.0 as i32, view.size.1 as i32);
     let mut held: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
@@ -1663,6 +1682,175 @@ fn spot_instances(g: &SpotGroup, view: &View, list: &mut Vec<Instance>, batches:
         });
     }
     close(list, start, rect, batches);
+}
+
+/// The view's pixels marked for laying out one spot group, kept for their
+/// room (design: render (#115, #116)): a word a pixel, the group's
+/// generation in the top 8 bits and the layer of the last spot at the pixel
+/// in the low 24, so that a new group needs no clearing.
+#[derive(Default)]
+struct SpotStamps {
+    cells: Vec<u32>,
+    /// The generation of the group being laid out, 1 to 255 (0 marks
+    /// nothing).
+    generation: u32,
+    /// Each in-view spot's layer, in group order.
+    layers: Vec<u32>,
+    /// Each layer's spot count, then where its spots go.
+    counts: Vec<u32>,
+    /// Each layer's rectangle of reading spots (x0, y0, x1, y1).
+    reads: Vec<Option<[i32; 4]>>,
+    /// The group's instances in layer order.
+    sorted: Vec<Instance>,
+}
+
+impl SpotStamps {
+    /// The layers a word holds; a group with as many spots or more is laid
+    /// out spot by spot.
+    const LAYERS: u32 = 1 << 24;
+
+    /// Starts a group over a view of `n` pixels.
+    fn begin(&mut self, n: usize) {
+        if self.cells.len() != n {
+            self.cells.clear();
+            self.cells.resize(n, 0);
+            self.generation = 0;
+        }
+        self.generation += 1;
+        if self.generation > 255 {
+            self.cells.fill(0);
+            self.generation = 1;
+        }
+    }
+
+    /// The layer of the group's last spot at pixel `i`, if one is there.
+    fn get(&self, i: usize) -> Option<u32> {
+        let c = self.cells[i];
+        (c >> 24 == self.generation).then_some(c & (Self::LAYERS - 1))
+    }
+
+    fn set(&mut self, i: usize, layer: u32) {
+        self.cells[i] = (self.generation << 24) | layer;
+    }
+}
+
+/// Appends the instances of spot group `g`, which holds no magnetic wave,
+/// and their batches, one batch a layer (design: render (#115, #116)).
+///
+/// A spot that reads the target (additive and blended, S-0518 F7 and F8)
+/// reads the copy taken before its batch, which must hold every earlier
+/// spot at its pixel; one that does not (opaque, S-0518 claim 23; a beam
+/// flash, S-0514 claim 25) only replaces the pixel. So the first spot at a
+/// pixel is in layer 0, and a later one in the layer of the spot before it
+/// there, one higher if it reads. The layers are drawn in turn, each spot
+/// after every earlier spot at its pixel, and within a layer in group
+/// order, which the draw keeps; spots read and write no depth (S-0518 claim
+/// 20), so none changes whether another is drawn. A layer's batch covers
+/// the pixels its reading spots read, and a layer without one takes no
+/// copy: the pixels are those [`crate::spots::apply`] gives, with a copy
+/// and a pass for each depth of repetition instead of each repeat.
+fn layered_spot_instances(
+    g: &SpotGroup,
+    view: &View,
+    stamps: &mut SpotStamps,
+    list: &mut Vec<Instance>,
+    batches: &mut Vec<Batch>,
+) {
+    let (ox, oy) = view.origin;
+    let (w, h) = (view.size.0 as i32, view.size.1 as i32);
+    stamps.begin(view.size.0 as usize * view.size.1 as usize);
+    stamps.layers.clear();
+    stamps.reads.clear();
+    let start = list.len();
+    let mut top = 0;
+    for s in &g.spots {
+        let (x, y) = (s.x - ox, s.y - oy);
+        if x < 0 || y < 0 || x >= w || y >= h {
+            continue;
+        }
+        let (kind, colour, weights, alpha_from, reads) = match s.kind {
+            SpotKind::Opaque { colour } => (0u32, u32::from(colour), 0u32, (0, 0), false),
+            SpotKind::Additive { rgb } => (1, rgb_word(rgb), 0, (0, 0), true),
+            SpotKind::Blended {
+                rgb,
+                line,
+                screen,
+                alpha_from,
+            } => (
+                2,
+                rgb_word(rgb),
+                u32::from(line) | (u32::from(screen) << 16),
+                alpha_from,
+                true,
+            ),
+            SpotKind::Flash { rgb } => (3, rgb_word(rgb), 0, (0, 0), false),
+            SpotKind::Wave { .. } => continue,
+        };
+        let i = y as usize * view.size.0 as usize + x as usize;
+        let layer = stamps.get(i).map_or(0, |l| l + u32::from(reads));
+        stamps.set(i, layer);
+        stamps.layers.push(layer);
+        top = top.max(layer);
+        if reads {
+            // A blended spot's `alpha_from` reads the light-alpha values, not the target.
+            let l = layer as usize;
+            if stamps.reads.len() <= l {
+                stamps.reads.resize(l + 1, None);
+            }
+            let r = stamps.reads[l].get_or_insert([x, y, x + 1, y + 1]);
+            r[0] = r[0].min(x);
+            r[1] = r[1].min(y);
+            r[2] = r[2].max(x + 1);
+            r[3] = r[3].max(y + 1);
+        }
+        list.push(Instance {
+            image: [0, 0, NO_IMAGE, 1 | (1 << 16)],
+            place: [s.x, s.y, s.bias, 0],
+            depth: [0, 0, NO_IMAGE, 0],
+            paint: [kind, colour, weights, 0],
+            companion: [i32::from(alpha_from.0), i32::from(alpha_from.1), 0, 0],
+        });
+    }
+    if list.len() == start {
+        return;
+    }
+    let layers = top as usize + 1;
+    stamps.counts.clear();
+    stamps.counts.resize(layers, 0);
+    for &l in &stamps.layers {
+        stamps.counts[l as usize] += 1;
+    }
+    if layers > 1 {
+        // A stable counting sort by layer.
+        let mut at = 0;
+        for c in &mut stamps.counts {
+            let n = *c;
+            *c = at;
+            at += n;
+        }
+        stamps.sorted.clear();
+        stamps.sorted.resize(list.len() - start, Instance::zeroed());
+        for (k, inst) in list[start..].iter().enumerate() {
+            let slot = &mut stamps.counts[stamps.layers[k] as usize];
+            stamps.sorted[*slot as usize] = *inst;
+            *slot += 1;
+        }
+        list[start..].copy_from_slice(&stamps.sorted);
+    }
+    // `counts` now holds each layer's end (or, for one layer, its count).
+    let mut from = start as u32;
+    for l in 0..layers {
+        let end = if layers > 1 {
+            start as u32 + stamps.counts[l]
+        } else {
+            list.len() as u32
+        };
+        let rect = stamps.reads.get(l).copied().flatten().map(|[x0, y0, x1, y1]| {
+            [x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32]
+        });
+        batches.push((Role::Spot, from..end, rect));
+        from = end;
+    }
 }
 
 /// Three 8-bit channels in one word, red lowest.
