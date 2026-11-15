@@ -1703,6 +1703,73 @@ fn claim_14_holder_defeat_spares_victims() {
     );
 }
 
+/// [`game`] with a third, non-human house Civ (house 2) of an invented
+/// civilian-side country that is not passive; with `cleanup` the
+/// unused-house cleanup of S-0009 claim 28 then runs and removes it.
+fn civilian_game(cleanup: bool) -> World {
+    let mut r = rules();
+    r.sim.countries.insert(
+        "Civland".into(),
+        glasnost_rules::sim::Country {
+            multiplay_passive: Some(false),
+            econ: glasnost_rules::sim_econ::CountryEcon {
+                side: Some("Civilian".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("countries".into())
+        .or_default()
+        .push("Civland".into());
+    let mut s = testkit::setup(1);
+    s.houses.push(glasnost_sim::world::HouseSetup {
+        name: "Civ".into(),
+        country: "Civland".into(),
+        human: false,
+        start: None,
+        role: glasnost_sim::world::HouseRole::Neutral,
+        ai: false,
+    });
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-test"));
+    let mut w =
+        glasnost_sim::load::new_game(rules, &testkit::empty_map(SIZE), testkit::catalogue(), &s)
+            .expect("loads");
+    if cleanup {
+        glasnost_sim::load::cleanup(&mut w, &s);
+    }
+    w
+}
+
+// spec: S-0414 claim 5 table (of this house, held by another house through a controlling unit: with a civilian-side house of the game, not hit and the first such house becomes its original house; with none, hit) and Terms (a house removed by unused-house cleanup is no house of the game)
+#[test]
+fn claim_14_defeat_skips_a_removed_civilian_house() {
+    const CIV: u8 = 2;
+    for cleanup in [false, true] {
+        let mut w = civilian_game(cleanup);
+        assert_eq!(
+            w.houses[usize::from(CIV)].removed,
+            cleanup,
+            "the cleanup removes Civ"
+        );
+        let c = veh(&mut w, "CTRL3", BETA, 0, 0);
+        let a = veh(&mut w, "BOX", ALPHA, 3, 0);
+        assert!(mind::take(&mut w, c, a));
+        glasnost_sim::econ::victory::defeat(&mut w, HouseId(ALPHA));
+        if cleanup {
+            assert_ne!(mind::original_owner(&w, a), Some(HouseId(CIV)));
+            assert!(
+                w.obj(a).is_none_or(|o| o.health <= 0),
+                "no civilian-side house of the game: hit"
+            );
+        } else {
+            assert!(w.obj(a).is_some_and(|o| o.health > 0), "spared");
+            assert_eq!(mind::original_owner(&w, a), Some(HouseId(CIV)));
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Claim 16: overload.
 
