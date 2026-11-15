@@ -2063,7 +2063,7 @@ The twenty-first batch of the game-logic audit takes up four answered requests (
 **The flak distance (S-0306 F17, claims 4 and 9; #317, Q-3129).**
 
 - `combat::projectile::flak_distance`: Δx, Δy and Δz are 32-bit wrapping differences; *u* and *v* are Δx and Δy narrowed to single precision by the rules mode; the squares and the partial sums (*u*² + *v*²) + Δz² are doubles in the rules mode, Δz entering exactly; the root is `root_floor`, d₃'s own (with `quirks.table_root_distance`), whose own narrowing applies. *n*_f is below 2⁶⁴, so it is passed as a `u64`. The claim 4 radius takes it from the fire point to the aim point, claim 9's invisible flak projectile from the fire point to the unscattered *K*.
-- On a map every difference is below 2²⁴, so *D*_f equals d₃ there (F17's consequence), and no game's numbers change. The tests call the function itself: the wrap (Δx of 2³² − 1 is −1) and a horizontal difference of 2²⁴ + 3 tell it from d₃.
+- On a map every difference is below 2²⁴, so *D*_f equals d₃ there (F17's consequence), and no game's numbers change. The tests call the function itself: the wrap (Δx of 2³² − 1 is −1) tells it from d₃, and so does a horizontal difference of 2²⁴ + 1 with `quirks.table_root_distance` off (it narrows to 2²⁴ in either rounding mode). With the table root on, the root's own narrowing of *n* hides such a narrowing of Δx.
 
 **An airburst child's arm time (S-0306 claims 9 and 21; #315, Q-3130).** Each of the nine children takes its own projectile type's arm field, whatever the bursting projectile's target was: a child's target is a cell, never an aircraft.
 
