@@ -1605,6 +1605,26 @@ fn surface_formats(
 mod tests {
     use super::*;
 
+    /// #130. design: render (#130): a frame reads the clock only when the
+    /// benchmark times it.
+    #[test]
+    fn a_frame_reads_the_clock_only_when_timed() {
+        assert!(frame_clock(None).is_none(), "an untimed frame reads no clock");
+        assert!(frame_clock(Some(0)).is_some());
+        assert!(frame_clock(Some(7)).is_some());
+    }
+
+    /// #130. design: render (#130): the battlefield's targets and their
+    /// views are kept from frame to frame and made again only for a view of
+    /// another size (or when none are kept).
+    #[test]
+    fn a_resize_remakes_the_kept_targets_and_views() {
+        assert!(remake_targets(None, (640, 480)), "none kept: made");
+        assert!(!remake_targets(Some((640, 480)), (640, 480)), "kept");
+        assert!(remake_targets(Some((640, 480)), (800, 480)), "wider");
+        assert!(remake_targets(Some((640, 480)), (640, 360)), "lower");
+    }
+
     /// #101. design: render (#101): a failed GPU battlefield puts only its
     /// own game on the CPU; the next game tries the GPU again.
     #[test]
