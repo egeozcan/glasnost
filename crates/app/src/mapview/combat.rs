@@ -87,11 +87,13 @@ pub fn wrench_frame(t: i32, speed: u8, normalise: bool) -> usize {
 /// The image frame of a bomb icon in tick `n` for a bomb planted in tick
 /// `t`, with timed delay `delay` and flicker rate `flicker` (S-0519 F3).
 pub fn bomb_frame(n: i32, t: i32, delay: i32, flicker: i32) -> usize {
+    // Exact in 64 bits for every 32-bit argument (#153).
+    let (n, t, flicker) = (i64::from(n), i64::from(t), i64::from(flicker));
     // spec: S-0519 F3 (q = ⌊D / 6⌋; when q = 0 our engine substitutes q = 1)
-    let q = (delay / 6).max(1);
+    let q = i64::from((delay / 6).max(1));
     // spec: S-0519 F3 (b = 1 when (n mod 2F) ≥ F, else 0; when F = 0 our engine uses b = 0)
     let b = if flicker > 0 {
-        i32::from((n % (2 * flicker)) >= flicker)
+        i64::from((n % (2 * flicker)) >= flicker)
     } else {
         0
     };
@@ -113,6 +115,14 @@ pub const DEFAULT_ART_HEIGHT: i32 = 2; // spec: S-0111 Import mapping (building 
 /// beyond it is held to it. 128 levels are 1920 pixels of box, taller than
 /// the views we draw; no building art comes near.
 pub const LEVEL_LIMIT: i32 = 128; // design: render (#153)
+
+/// The building box's height *V* in leptons for an art height field of
+/// `levels` (S-0111 Terms), the field held to [`LEVEL_LIMIT`].
+pub fn box_height(levels: i32) -> i32 {
+    // design: render (#153) (the field held to ±LEVEL_LIMIT levels)
+    // spec: S-0111 Terms (V = art height × 104 leptons)
+    levels.clamp(-LEVEL_LIMIT, LEVEL_LIMIT) * LEVEL_HEIGHT
+}
 
 /// A health colour (S-0111 claim 5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -300,8 +310,8 @@ pub fn building_bar(
     strength: i32,
     r: &Ratios,
 ) -> Vec<Pip> {
-    // spec: S-0111 Terms (α = 128·W, β = 128·D; V = art height × 104 leptons)
-    let (alpha, beta, v) = (128 * w, 128 * d, levels * LEVEL_HEIGHT);
+    // spec: S-0111 Terms (α = 128·W, β = 128·D; V = art height × 104 leptons, held as box_height holds it)
+    let (alpha, beta, v) = (128 * w, 128 * d, box_height(levels));
     // spec: S-0111 F5 (Q = P(−α, β, V), Q′ = P(−α, −β, V), n = trunc((Q_y − Q′_y) / 2))
     let q = displacement(-alpha, beta, v);
     let q2 = displacement(-alpha, -beta, v);
@@ -892,7 +902,9 @@ pub fn corner_segments(w: i32, d: i32, v: i32) -> Vec<((i32, i32), (i32, i32))> 
 /// `v`) in palette index `index`, and the displacement of its top-left
 /// pixel from the status anchor; `None` when there is nothing to draw.
 pub fn corner_image(w: i32, d: i32, v: i32, index: u8) -> Option<(IndexedImage, (i32, i32))> {
-    let segs = corner_segments(w, d, v);
+    // design: render (#153) (a box at most LEVEL_LIMIT levels high or deep)
+    let most = LEVEL_LIMIT * LEVEL_HEIGHT;
+    let segs = corner_segments(w, d, v.clamp(-most, most));
     let pts = || segs.iter().flat_map(|&(a, b)| [a, b]);
     let (x0, x1) = (pts().map(|p| p.0).min()?, pts().map(|p| p.0).max()?);
     let (y0, y1) = (pts().map(|p| p.1).min()?, pts().map(|p| p.1).max()?);

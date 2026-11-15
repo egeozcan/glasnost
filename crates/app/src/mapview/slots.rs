@@ -353,7 +353,9 @@ pub fn first_frame(t: &AnimType, n: i32) -> i32 {
         Some(v) => v,
     };
     // spec: S-0109 claim 8, F3 (k₀ = λ_e − 1 for a reversed animation: image frame a + λ_e − 1)
-    t.start + loop_end - 1
+    // design: render (#153) (a frame beyond the 32-bit range is the nearest it holds)
+    let k = i64::from(t.start) + i64::from(loop_end) - 1;
+    k.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
 }
 
 /// Whether an animation of type `t` is drawn at the player's detail level

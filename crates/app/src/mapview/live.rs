@@ -5207,7 +5207,7 @@ impl Live {
                             inputs.assets,
                             anchor,
                             (w, d),
-                            levels * combat::LEVEL_HEIGHT,
+                            combat::box_height(levels),
                             index,
                             Some(sim_code(o.id)),
                         ));

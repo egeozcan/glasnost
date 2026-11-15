@@ -149,13 +149,19 @@ impl Stack {
     /// The number of copies *C* in a view whose top row is world row `top`
     /// (S-0109 claim 27).
     pub fn copies(&self, top: i32) -> i32 {
-        let above = self.base_row - top;
+        if self.spacing <= 0 {
+            // design: render (#153) (no spacing above 0, which the builder never makes: the lowest copy alone)
+            return 1;
+        }
+        // Exact in 64 bits for every 32-bit row (#153).
+        let above = i64::from(self.base_row) - i64::from(top);
         if above < 0 {
             // spec: S-0109 claim 27 (C = 1 when pᵧ − ⌊h/2⌋ < 0)
             1
         } else {
             // spec: S-0109 claim 27 (C = ⌊(pᵧ − ⌊h/2⌋) / h⌋ + 2; both operands are non-negative here)
-            above / self.spacing + 2
+            // design: render (#153) (a count beyond the 32-bit range is the most it holds)
+            i32::try_from(above / i64::from(self.spacing) + 2).unwrap_or(i32::MAX)
         }
     }
 }

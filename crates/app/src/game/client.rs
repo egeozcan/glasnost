@@ -875,7 +875,7 @@ impl Client {
         };
         if self.pointer.is_some_and(|p| s.on_map(p)) {
             // design: touch and touchpad scrolling (lead's request 2026-11-10): the content follows the fingers, so the centre moves against the delta
-            s.pan((-dx, -dy));
+            s.pan((dx.saturating_neg(), dy.saturating_neg()));
         } else {
             let rows = self.wheel_strip.add(dy, s.strip_pitch());
             self.wheel_rows(rows);
