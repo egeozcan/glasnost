@@ -213,6 +213,11 @@ fn drain(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
     let r = rec.remaining(t);
     match rec.drain {
         DrainState::Ready => {
+            if ty.kind == Some(SwKind::Dominator) && crate::domination::in_force(w) {
+                // spec: S-0612 claims 3 and 7 and S-0512 claims 8 and 19 (an order in ready is a launch of the kind: refused while a domination is in force, for any house; the charge, the ready state and the drain state are kept; a refusal message for its own player)
+                super::event(w, SwEvent::Refused, Some(h), Some(i), None);
+                return;
+            }
             // spec: S-0512 F5 (active time trunc(Z((T − r) × ρ)))
             let active = F64::from_i64(i64::from(ty.charge - r), mode)
                 .mul(rho, mode)

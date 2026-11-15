@@ -378,6 +378,8 @@ pub fn per_tick(w: &mut World, id: ObjectId) {
         },
         Target::Cell(c) => c,
     };
+    // design: the reach test reads the reach regions, which must be up to date (#298, as `search`)
+    crate::regions::ensure(w);
     if reaches(w, id, tc) {
         return;
     }

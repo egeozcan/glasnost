@@ -347,6 +347,8 @@ pub fn set_owner_by(w: &mut World, id: ObjectId, new: Option<HouseId>, actor: Op
     }
     let old = o.owner;
     let spawner = o.spawn.is_some();
+    // spec: S-0601 claim 11 (the switch-off release comes first, from the house the controller still has)
+    owner_changing(w, id);
     if let Some(ob) = w.obj_mut(id) {
         ob.owner = new;
     }
@@ -751,10 +753,12 @@ pub fn trigger_owner_change(w: &mut World, id: ObjectId) {
     release_all(w, id);
 }
 
-/// Any other owner change of object `id` (claim 11), after the change:
-/// with `quirks.mind_control_owner_change_keeps_victims` on (the original)
-/// nothing is released; off, a controller releases every victim.
-pub fn owner_changed(w: &mut World, id: ObjectId) {
+/// Any other owner change of object `id` (claim 11), before the new owner
+/// is written and before every other consumer of the change: with
+/// `quirks.mind_control_owner_change_keeps_victims` on (the original)
+/// nothing is released; off, a controller releases every victim, each
+/// release reading the house the controller still has.
+pub fn owner_changing(w: &mut World, id: ObjectId) {
     if w.rules().quirks.mind_control_owner_change_keeps_victims {
         // spec: S-0601 claim 11 (a controller that changes owner keeps its victims)
         return;

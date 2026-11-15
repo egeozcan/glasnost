@@ -63,8 +63,8 @@ pub enum What {
     Search {
         /// The mode asked for.
         asked: Mode,
-        /// The mode the search ran in (a blocked re-path without
-        /// congestion marks runs fresh).
+        /// The mode the search ran in (a blocked re-path whose part (i)
+        /// of the congestion marks counts no cell runs fresh).
         mode: Option<Mode>,
         /// The start cell.
         from: CellXY,

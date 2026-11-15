@@ -2032,7 +2032,7 @@ pub struct Quirks {
     // spec: S-0519 claim 18
     #[serde(default = "on")]
     pub airstrike_recharge_same_target_only: bool,
-    /// A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does (`glasnost_sim::mind::owner_changed`).
+    /// A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does (`glasnost_sim::mind::owner_changing`, before the new owner is written).
     // spec: S-0601 claim 11 and Edge cases
     #[serde(default = "on")]
     pub mind_control_owner_change_keeps_victims: bool,

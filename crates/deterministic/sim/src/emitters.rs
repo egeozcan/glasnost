@@ -207,6 +207,12 @@ pub fn effect_weapon_emitter(
         if let Some(s) = w.gas.systems.get_mut(&sys) {
             // spec: S-0616 claim 1 (owner object: the firer; no first particle) and Terms (a system with an owner object takes the owner's current target as its target object; a railgun turn uses only its fixed target point)
             s.owner_object = Some(firer);
+            // spec: S-0616 claims 1 and 5 (the system keeps the displacement from its owner that it had when it was made: its creation point less the firer's position)
+            s.owner_offset = [
+                at.x.wrapping_sub(o.pos.x),
+                at.y.wrapping_sub(o.pos.y),
+                at.z.wrapping_sub(o.pos.z), // nocite: vector and matrix dimensions (three axes)
+            ];
             s.target = point;
             // spec: S-0616 claim 1 (revision 27, from S-0301 revision 63's change (c): the place, not the system's kind, sets the creation: the fire or spark place passes the shot's target object, the railgun place passes none)
             s.target_object = if place == Place::Railgun {
@@ -625,7 +631,12 @@ pub fn trigger_create(w: &mut World, ti: i32, c: CellXY) {
     };
     // spec: S-0616 claim 1 (at the centre of the cell of the action's waypoint, at the ground surface height of that cell, not raised on a bridge)
     let p = crate::superweapons::cell_point(w, c, false);
-    crate::particles::create(w, i, p, None);
+    if let Some(s) = crate::particles::create(w, i, p, None)
+        && let Some(x) = w.gas.systems.get_mut(&s)
+    {
+        // spec: S-0616 claim 1 (a trigger-made system's target point is its creation point)
+        x.target = p;
+    }
 }
 
 /// S-0011 code 89 and S-0616 claim 1: marks every particle system in play

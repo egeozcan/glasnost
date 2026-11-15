@@ -447,16 +447,7 @@ pub fn apply_pending(w: &mut World) {
         let house = HouseId(hi as u8);
         let orders = std::mem::take(&mut w.houses[hi].pending);
         // spec: S-0213 claim 3 (non-behaviour orders first, in issue order)
-        // design: C7-P5 yield (any order for a unit ends its giving way)
-        // spec: S-0213 claim 15 (Network games: an order refused by the owner check has no effect at all)
-        let given: Vec<ObjectId> = orders
-            .iter()
-            .filter(|o| !refused_by_owner(w, house, o))
-            .filter_map(Order::actor)
-            .collect();
-        for a in given {
-            crate::path::order_given(w, a);
-        }
+        // design: C7-P5 yield (only an order that takes effect ends a unit's giving way: `path::order_given` in the stop, scatter and deploy arms and in `apply_behaviour`, #300)
         for o in orders.iter().filter(|o| !is_behaviour(o)) {
             // spec: S-0213 claim 15 (Network games: checked immediately before the order is applied; a refused order has no effect at all and does not end the actor's route, claim 17)
             if refused_by_owner(w, house, o) {
@@ -558,6 +549,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             if !live_on_map(w, actor) || crate::econ::tethered(w, actor) {
                 return;
             }
+            // design: C7-P5 yield (a stop order that takes effect ends the actor's giving way, #300)
+            crate::path::order_given(w, actor);
             // spec: S-0314 claims 20 and 23 (an approaching vehicle given another order loses its depot contact; any order clears a queued entry)
             crate::depot::stop_order(w, actor);
             let t = w.tick;
@@ -646,6 +639,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             {
                 return;
             }
+            // design: C7-P5 yield (a scatter order that takes effect ends the actor's giving way, #300)
+            crate::path::order_given(w, actor);
             // spec: S-0314 claims 20 and 23 (an approaching vehicle given another order loses its depot contact; any later order clears a queued entry)
             crate::depot::stop_order(w, actor);
             scatter::request(
@@ -666,10 +661,22 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             {
                 return;
             }
+            if w.obj(actor).is_some_and(|ob| {
+                ob.econ.construction.building_up
+                    || matches!(
+                        crate::econ::placement::seen_behaviour(ob),
+                        Some(Behaviour::Construction | Behaviour::Selling)
+                    )
+            }) {
+                // spec: S-0213 claim 10 (not under construction or being sold) and S-0406 claim 17 (the construction state: construction queued or current until the build-up's handover)
+                return;
+            }
             if on_vehicle_factory(w, actor) {
                 // spec: S-0213 claim 10 (an actor on a vehicle-factory cell ignores the order)
                 return;
             }
+            // design: C7-P5 yield (a deploy order that takes effect ends the actor's giving way, #300)
+            crate::path::order_given(w, actor);
             // spec: S-0314 claims 20 and 23 (an approaching vehicle given another order loses its depot contact; any later order clears a queued entry)
             crate::depot::stop_order(w, actor);
             // spec: S-0213 claim 10 and S-0502 claim 28 (deploy makes one destination-clear request, while the target is still present, and no retry after the target is cleared: a balloon-hover vehicle can keep a nonempty destination and end with no target); S-0503 claim 19 (the retention extended to a hovering type with the balloon-hover field)
@@ -912,6 +919,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     {
         return;
     }
+    // design: C7-P5 yield (a behaviour order that takes effect ends the actor's giving way, #300)
+    crate::path::order_given(w, actor);
     if b == Behaviour::Move {
         // spec: S-0616 claim 1 (a fire emitter is marked and let go when its firer is given a move order)
         crate::emitters::let_go_fire(w, actor);
