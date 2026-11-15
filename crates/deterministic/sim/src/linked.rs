@@ -401,8 +401,7 @@ pub fn start_charging(w: &mut World, id: ObjectId) -> bool {
 
 /// An infantry unit's *attack* processing while its charging mark is set
 /// (claim 15): an automatic range search without the timer gate; a unit
-/// that finds a target takes it and the mark clears. Returns whether the
-/// mark was set (the search ran).
+/// that finds a target takes it and the mark clears.
 pub fn break_off(w: &mut World, id: ObjectId) {
     // spec: S-0518 claim 15 and Edge cases (the break-off search belongs to infantry; quirks.vehicle_charge_no_break_off off: vehicles break off too)
     let no_vehicles = w.rules().quirks.vehicle_charge_no_break_off;
