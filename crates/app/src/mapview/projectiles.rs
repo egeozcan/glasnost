@@ -154,6 +154,62 @@ mod tests {
         }
     }
 
+    /// [`counter`] as it walked before #142, with a 256-entry table of
+    /// `Option<usize>`.
+    fn counter_walked(lo: u8, hi: u8, rate: u8, turns: i32) -> u8 {
+        let hold = if rate == 0 {
+            WRAPPED_RATE
+        } else {
+            i32::from(rate)
+        };
+        let mut steps = (turns.max(0) / hold) as usize;
+        let step = |a: u8| {
+            let n = a.wrapping_add(1);
+            if n > hi { lo } else { n }
+        };
+        let mut seen: [Option<usize>; 256] = [None; 256];
+        let mut a = 0u8;
+        let mut k = 0usize;
+        while k < steps {
+            if let Some(first) = seen[usize::from(a)] {
+                let cycle = k - first;
+                steps = k + (steps - k) % cycle;
+                seen = [None; 256];
+                if k >= steps {
+                    break;
+                }
+            }
+            seen[usize::from(a)] = Some(k);
+            a = step(a);
+            k += 1;
+        }
+        a
+    }
+
+    /// Equivalence test (design: render (#142); passes before and after
+    /// the change): the counter equals the earlier walk for low and high
+    /// fields across their range, the edges included, every rate kind and
+    /// short, cycle-long and very long flights.
+    /// spec: S-0306 F15 (the animation counter)
+    #[test]
+    fn counter_matches_the_walk() {
+        let mut fields: Vec<u8> = (0..=255u8).step_by(5).collect();
+        fields.extend([1, 2, 3, 6, 254]);
+        for &lo in &fields {
+            for &hi in &fields {
+                for rate in [0u8, 1, 2, 7, 255] {
+                    for turns in [-5, 0, 1, 2, 255, 256, 257, 511, 513, 1000, 65_537, 1 << 30] {
+                        assert_eq!(
+                            counter(lo, hi, rate, turns),
+                            counter_walked(lo, hi, rate, turns),
+                            "({lo}, {hi}, {rate}, {turns})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     /// spec: S-0306 claim 29 (animated wins over rotating; rotating (28 − ψ) mod 32: 0 up the screen, 8 left, 16 down, 24 right; else 0)
     #[test]
     fn sprite_frames() {
