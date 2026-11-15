@@ -1,7 +1,9 @@
-//! S-0212 claim 19 (#305): a re-path on a bridge deck builds its congestion
-//! marks from the cell layer the blocked unit's step is on, so the unit
-//! blocking it on the deck is seen. Interim reading pending Q-3122 (which
-//! layer or layers claim 19 reads). Synthetic types and map from the shared
+//! S-0212 claim 19 (#305; r107 answers Q-3122): a re-path on a bridge deck
+//! reads the cell ahead on its deck when the blocked unit is on a deck, so
+//! the unit blocking it there is considered; part (ii) reads each cell of
+//! the 5 × 5 block from its ground record (`quirks.path_congestion_ground_record`
+//! on), or a bridge cell from the layer read in the cell ahead (off).
+//! Synthetic types and map from the shared
 //! `common` helpers: a fast car TESTCAR at (3, 0) facing east, a slower
 //! vehicle TESTSLOW of another type at (4, 0) with five stored steps east;
 //! every name and number is made up.
@@ -30,7 +32,13 @@ fn raise(w: &mut World, id: ObjectId) {
 
 /// Returns the mode A's mode-1 re-path ran in and its congestion-marked cells.
 fn run(deck: bool) -> (Option<Mode>, Vec<CellXY>) {
+    run_with(deck, true)
+}
+
+/// [`run`] with `quirks.path_congestion_ground_record` set to `ground_record`.
+fn run_with(deck: bool, ground_record: bool) -> (Option<Mode>, Vec<CellXY>) {
     let mut s = Scene::new();
+    s.ruleset.globals.quirks.path_congestion_ground_record = ground_record;
     s.vehicle("TESTCAR", unit_type(WHEEL, 40, 6));
     s.vehicle("TESTSLOW", unit_type(WHEEL, 20, 6));
     if deck {
@@ -112,13 +120,27 @@ fn control_on_the_ground() {
     }
 }
 
-// spec: S-0212 claim 19 (the same two units on a bridge deck) and claim 7 (the step's layer) (#305)
-// design: interim (Q-3122): the cell ahead is read on the layer of the blocked unit's step
+// spec: S-0212 claim 19 (the same two units on a bridge deck: the cell ahead is read on its deck, the blocked unit being on a deck) (#305)
 #[test]
 fn the_same_on_a_bridge_deck() {
     let (mode, marked) = run(true);
     assert_eq!(mode, Some(Mode::Blocked), "marked: {marked:?}");
     for x in 6..=9 {
         assert!(marked.contains(&cell(x, 0)), "{marked:?}");
+    }
+}
+
+// spec: S-0212 claim 19 ((ii): a cell of the block is occupied from its ground record only; the cell ahead, with its blocker on the deck, is counted only in (iii) and so carries the mark) and Edge cases (quirks.path_congestion_ground_record off: a bridge cell reads the record of the layer read in the cell ahead, the deck here, so the cell ahead is counted twice) (#305)
+#[test]
+fn deck_blocker_cell_counts_by_the_ground_record() {
+    for ground_record in [true, false] {
+        let (_, marked) = run_with(true, ground_record);
+        assert_eq!(
+            marked.contains(&cell(4, 0)),
+            ground_record,
+            "switch {ground_record}: {marked:?}"
+        );
+        let (_, flat) = run_with(false, ground_record);
+        assert!(!flat.contains(&cell(4, 0)), "on the ground: {flat:?}");
     }
 }
