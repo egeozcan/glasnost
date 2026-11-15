@@ -245,6 +245,28 @@ fn take_destination_with(w: &mut World, id: ObjectId, forced: bool) {
         return;
     }
     if o.kind == Kind::Infantry {
+        if crate::superweapons::warp_leaving(w, id) {
+            // spec: S-0208 claim 19 (Landing choice while a warp is pending, r66, Q-3142: from the leaving stage until the departure, being erased drops the destination before any choice, S-0207 claim 20 a)
+            st.for_dest = None;
+            set_state(w, id, st);
+            drop_destination(w, id);
+            return;
+        }
+        if crate::superweapons::warp_pending_or_leaving(w, id)
+            && !w.rules().quirks.warp_pending_infantry_landing
+        {
+            // spec: S-0208 Edge cases (quirks.warp_pending_infantry_landing off: treated as S-0207 claim 20 b treats warp-pending immobilization for other objects; L unchanged, no choice, reservation or draw, an earlier landing point keeps its reservation; the destination is removed when L is still the own position or none was fixed)
+            if st.landing.is_none_or(|l| l == o.pos) {
+                st.for_dest = None;
+                set_state(w, id, st);
+                drop_destination(w, id);
+            } else {
+                st.for_dest = Some(dest);
+                set_state(w, id, st);
+            }
+            return;
+        }
+        // spec: S-0208 claim 19 (Landing choice while a warp is pending, r66, Q-3142: chosen, entry-tested and reserved as for any destination, replacing an earlier landing point; no jump follows while the warp is pending, S-0513 claims 48 and 51)
         take_infantry_destination(w, id, dest, st);
         return;
     }
@@ -402,30 +424,87 @@ fn landing_point(w: &mut World, id: ObjectId, dc: CellXY) -> Option<Pos> {
     Some(Pos::centre(c, w.surface_at(p.x, p.y)))
 }
 
-/// A superweapon warp ends a teleporting infantry unit's fixed landing
-/// point (S-0513 claim 51; S-0208 claim 19): its standing-position
-/// reservation there is released, as when a landing point not jumped to is
-/// replaced. Called at the join and at departure; what landing choice a
-/// destination given while warp-pending makes is Q-3142.
-pub(crate) fn warp_release(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id) else { return };
-    if o.kind != Kind::Infantry {
+/// Whether `id` is a teleporting infantry unit (S-0208 claim 19's
+/// standing-position records).
+fn teleporting_infantry(w: &World, id: ObjectId) -> bool {
+    w.obj(id)
+        .is_some_and(|o| o.kind == Kind::Infantry && o.teleport.is_some())
+        && is_teleporter(w, id)
+}
+
+/// Whether a teleporting infantry warp member with a remembered landing
+/// point keeps its standing-position entries when it leaves the map at the
+/// warp's departure (S-0208 claim 19, *Appearance of a teleporting infantry
+/// warp member*): a landing point not jumped to, or one jumped to, stays
+/// taken until the appearance frees it. Only a unit with no remembered
+/// landing point frees the entry at its own position at the departure.
+pub(crate) fn warp_keeps_entry(w: &World, id: ObjectId) -> bool {
+    teleporting_infantry(w, id)
+        && w.obj(id)
+            .and_then(|o| o.teleport.as_ref())
+            .is_some_and(|t| t.mark.is_some() || t.held.is_some())
+}
+
+/// A teleporting infantry warp member's passing landing check (S-0513 claim
+/// 37): a unit with no remembered landing point takes again the entry at
+/// the place it left, at the height it stood at there (S-0208 claim 19).
+pub(crate) fn warp_check_passed(w: &mut World, id: ObjectId) {
+    if !teleporting_infantry(w, id) || warp_keeps_entry(w, id) {
         return;
     }
-    let Some(mut st) = o.teleport.clone() else {
+    let Some(o) = w.obj(id).cloned() else { return };
+    let top = w.rules().quirks.top_position_counts_as_centre;
+    let p = walk::position_class(within(o.pos).0, within(o.pos).1, top);
+    if let Some(h) = o.owner {
+        // spec: S-0208 claim 19 (Appearance of a teleporting infantry warp member, r66, Q-3142: for a unit with no remembered landing point the entry at the place it left is taken again when its landing check passes; its position does not change while it is off the map)
+        w.cells.mark_infantry(o.pos.cell(), o.layer, p, id, h);
+    }
+}
+
+/// What a teleporting infantry warp member's appearance frees before it
+/// takes the standing position at the warp's landing point (S-0208 claim
+/// 19): what a later destination choice would free at that moment, by the
+/// same old point. Also used when such a member is removed before it
+/// appears.
+pub(crate) fn warp_appear_free(w: &mut World, id: ObjectId) {
+    if !teleporting_infantry(w, id) {
         return;
-    };
-    let Some(c) = st.mark else { return };
+    }
+    let Some(o) = w.obj(id).cloned() else { return };
+    let st = o.teleport.clone().unwrap_or_default();
     let oq = crate::objects::occ_quirks(w);
-    // A landing point in the cell the unit stands in shares the record of its own standing entry, which stays until the departure clears that cell.
-    if (c, st.mark_layer) != (o.pos.cell(), o.layer) || !o.on_map {
-        // spec: S-0208 claim 19 (Q-0235: a landing point not jumped to releases its standing-position reservation) and S-0513 claim 51 (the launch clears the current driving step; none resumes when the warp ends, #363)
+    if let Some(c) = st.mark {
+        // spec: S-0208 claim 19 (Appearance of a teleporting infantry warp member, r66, Q-3142: after a choice made while the warp was pending, or with the switch off an earlier landing point that kept its reservation, the standing position at the chosen point is freed)
         w.cells.clear_infantry(c, st.mark_layer, id, oq);
+    } else if st.held.is_some() && w.rules().quirks.teleport_infantry_ground_reservation {
+        let top = w.rules().quirks.top_position_counts_as_centre;
+        let p = walk::position_class(within(o.pos).0, within(o.pos).1, top);
+        // spec: S-0208 claim 19 and Edge cases (Appearance of a teleporting infantry warp member: after a completed jump the entry a later choice clears, by the unit's actual position and height at the place it left; quirks.teleport_infantry_ground_reservation)
+        w.cells
+            .clear_position(o.pos.cell(), reservation_layer(w, o.pos), p, oq);
+    } else {
+        // spec: S-0208 claim 19 (Appearance of a teleporting infantry warp member: otherwise the entry at the place the unit left, at the height it stood at there)
+        w.cells.clear_infantry(o.pos.cell(), o.layer, id, oq);
     }
-    st.mark = None;
-    st.landing = None;
-    st.for_dest = None;
-    set_state(w, id, st);
+    set_state(w, id, TeleportState::default());
+}
+
+/// A teleporting infantry warp member has appeared at `c` on `layer`
+/// (S-0208 claim 19): the standing position taken there is its remembered
+/// landing point.
+pub(crate) fn warp_appeared(w: &mut World, id: ObjectId, c: CellXY, layer: Layer) {
+    if !teleporting_infantry(w, id) {
+        return;
+    }
+    // spec: S-0208 claim 19 (Appearance of a teleporting infantry warp member, r66, Q-3142: the appearance takes the standing position at the warp's landing point, which becomes the unit's remembered landing point)
+    set_state(
+        w,
+        id,
+        TeleportState {
+            held: Some((c, layer)),
+            ..Default::default()
+        },
+    );
 }
 
 /// An infantry unit takes destination `dest` (S-0208 claim 19): the
