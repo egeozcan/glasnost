@@ -774,7 +774,7 @@ fn judge(w: &World, inst: &Instance, e: &glasnost_map::triggers::Event, r: &Rais
             return false;
         }
         return match e.code {
-            ENTERED_BY => entered_by(w, e.value, r.causer),
+            ENTERED_BY => entered_by(w, e.value, r.causer, inst.triggering),
             // spec: S-0011 claim 8 (event 6, attacked: judged true in any raise carrying its code)
             ATTACKED => true,
             // spec: S-0011 claim 8 (event 44, attacked by house: only with a causing object, and only when the value equals the house number of the causing object's owner at that raise)
@@ -813,8 +813,10 @@ fn attacked_by_house(w: &World, v: i32, causer: Option<ObjectId>) -> bool {
     v == i32::from(owner.0)
 }
 
-/// The entered-by condition (S-0011 claim 18).
-fn entered_by(w: &World, v: i32, causer: Option<ObjectId>) -> bool {
+/// The entered-by condition (S-0011 claim 18); `triggering` is the
+/// instance's triggering house, which the switch-off reading of a house
+/// value can name (claim 23).
+fn entered_by(w: &World, v: i32, causer: Option<ObjectId>, triggering: Option<HouseId>) -> bool {
     let Some(owner) = causer.and_then(|c| w.obj(c)).and_then(|o| o.owner) else {
         return false;
     };
@@ -822,7 +824,11 @@ fn entered_by(w: &World, v: i32, causer: Option<ObjectId>) -> bool {
     if v == -1 {
         return true;
     }
-    // spec: S-0011 claim 18 (a country index played by a house, the causing object's owner being the first such house; quirks.entered_by_country_only)
+    if !w.rules().quirks.entered_by_country_only {
+        // spec: S-0011 Edge cases (quirks.entered_by_country_only off: the value is resolved like an action's house value, claim 23, and the event is satisfied when the causing object's owner is that house)
+        return crate::mp_triggers::resolve_house(w, v, triggering) == Some(owner);
+    }
+    // spec: S-0011 claim 18 (a country index played by a house, the causing object's owner being the first such house; quirks.entered_by_country_only on: the player-position values never match)
     u32::try_from(v)
         .ok()
         .filter(|&c| (c as usize) < w.rules().country_names.len())
