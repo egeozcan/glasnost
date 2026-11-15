@@ -246,19 +246,29 @@ pub async fn game_palettes(
     theater: Theater,
     kept: Option<PaletteState>,
 ) -> PaletteState {
-    let _ = kept;
     let pal = |b: Option<Vec<u8>>| b.and_then(|b| Palette6::parse(&b).ok());
-    // spec: S-0103 State and ordering (program start: the snow unit palette and the anim palette)
-    let mut palettes = PaletteState::at_program_start(
-        pal(read_named(vfs, &Theater::Snow.unit_palette()).await).as_ref(),
-        pal(read_named(vfs, ANIM_PALETTE_FILE).await).as_ref(),
-        PaletteQuirks::default(),
-    );
-    // spec: S-0112 claim 2 (the start-up resource table: the temperate theater palette, read at program start);
-    // S-0103 Terms and claim 8 (ore and gem overlays use it; later theater loads leave it)
-    palettes.set_startup_resource(
-        pal(read_named(vfs, &Theater::Temperate.theater_palette()).await).as_ref(),
-    );
+    let mut palettes = match kept {
+        // spec: S-0103 claim 3 (one palette state for the session: a later game continues from the previous game's)
+        Some(p) => p,
+        None => {
+            // spec: S-0103 State and ordering (program start: the snow unit palette and the anim palette)
+            let mut p = PaletteState::at_program_start(
+                pal(read_named(vfs, &Theater::Snow.unit_palette()).await).as_ref(),
+                pal(read_named(vfs, ANIM_PALETTE_FILE).await).as_ref(),
+                PaletteQuirks::default(),
+            );
+            // spec: S-0112 claim 2 (the start-up resource table: the temperate theater palette, read at program start);
+            // S-0103 Terms and claim 8 (ore and gem overlays use it; later theater loads leave it)
+            p.set_startup_resource(
+                pal(read_named(vfs, &Theater::Temperate.theater_palette()).await).as_ref(),
+            );
+            p
+        }
+    };
+    // spec: S-0103 claim 3 (same theater as the previous game of the session: no palette file is read)
+    if palettes.loaded_theater() == Some(theater) {
+        return palettes;
+    }
     let mut files = std::collections::BTreeMap::new();
     for name in [
         theater.unit_palette(),
