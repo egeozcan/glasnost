@@ -184,6 +184,10 @@ pub struct Quirks {
     // spec: S-0208 claim 19 and Edge cases
     #[serde(default = "on")]
     pub teleport_infantry_ground_reservation: bool,
+    /// A teleporting infantry unit with warp-pending immobilization chooses and reserves a standing position it does not jump to, and the reservation lasts until its warp appearance; off: such a destination is treated as S-0207 claim 20 b treats one for other objects, with no choice, reservation or draw, an earlier landing point keeping its reservation.
+    // spec: S-0208 claim 19 and Edge cases (revision 66, Q-3142)
+    #[serde(default = "on")]
+    pub warp_pending_infantry_landing: bool,
     /// A teleporting vehicle reserves the ground record of its landing cell even on a high bridge, remembers that point for later clearing and keeps the ground reservation through deck placement, which also marks deck; off: reserve and clear the eventual landing layer only.
     // spec: S-0207 claim 20 a, e and Edge cases; S-0209 claim 1
     #[serde(default = "on")]
@@ -2398,6 +2402,7 @@ impl Default for Quirks {
             walker_bridge_destination_deck: true,
             teleport_infantry_negative_level_entry: true,
             teleport_infantry_ground_reservation: true,
+            warp_pending_infantry_landing: true,
             teleport_vehicle_ground_reservation: true,
             teleport_aircraft_ground_reservation: true,
             cow_idle: true,
@@ -3011,6 +3016,10 @@ impl Quirks {
             (
                 "teleport_infantry_ground_reservation",
                 self.teleport_infantry_ground_reservation,
+            ),
+            (
+                "warp_pending_infantry_landing",
+                self.warp_pending_infantry_landing,
             ),
             (
                 "teleport_vehicle_ground_reservation",
