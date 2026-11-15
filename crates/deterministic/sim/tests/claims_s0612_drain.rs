@@ -88,7 +88,11 @@ fn second_launch_by_beta(drain: bool) {
     fire_now(&mut w, BETA, DOM, at(3, 3));
     let d = w.domination.current.as_ref();
     // spec: S-0612 claims 3 and 7 (a second launch while one is in force is refused, for any house)
-    assert_eq!(d.map(|d| d.house), Some(ALPHA), "Alpha's domination is still in force");
+    assert_eq!(
+        d.map(|d| d.house),
+        Some(ALPHA),
+        "Alpha's domination is still in force"
+    );
     assert_eq!(d.map(|d| d.cell), Some(at(0, 0)));
     assert_eq!(d.map(|d| d.launched), launched);
     assert_eq!(w.domination.anims.len(), 1, "one lead-in animation");

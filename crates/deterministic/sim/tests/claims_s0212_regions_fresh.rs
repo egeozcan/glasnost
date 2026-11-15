@@ -53,7 +53,10 @@ fn per_tick_approach_after_a_category_change() {
     glasnost_sim::objects::remove(&mut w, tree);
     assert!(w.regions.dirty, "the removal changed a category");
     glasnost_sim::approach::per_tick(&mut w, car);
-    assert!(!w.regions.dirty, "the approach brought the regions up to date");
+    assert!(
+        !w.regions.dirty,
+        "the approach brought the regions up to date"
+    );
 }
 
 // spec: S-0212 claim 5 (the whole tick after the change: nothing reads the regions out of date) (#298)

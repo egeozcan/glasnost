@@ -146,7 +146,11 @@ fn claim_9_a_trailer_makes_its_unit() {
     effects::trailer(&mut w, "MUTA", p);
     let a = only_anim(&w);
     let (made, playing) = run_out(&mut w, a, 40);
-    assert_eq!(made.len(), 1, "a trailer of an infantry-making type makes its unit");
+    assert_eq!(
+        made.len(),
+        1,
+        "a trailer of an infantry-making type makes its unit"
+    );
     assert!(!playing, "then it is removed");
     let o = w.obj(made[0]).unwrap();
     assert_eq!(o.owner, Some(CIV));
@@ -212,7 +216,10 @@ fn claim_11_a_refused_trailer_stays_and_retries() {
     let a = only_anim(&w);
     let car = sw_common::spawn(&mut w, "CART", BETA, 0, 0);
     let (made, playing) = run_out(&mut w, a, 30);
-    assert!(made.is_empty(), "a vehicle in the cell refuses the placement");
+    assert!(
+        made.is_empty(),
+        "a vehicle in the cell refuses the placement"
+    );
     assert!(playing, "the animation stays");
     sw_common::remove(&mut w, car);
     let (made, playing) = run_out(&mut w, a, 30);

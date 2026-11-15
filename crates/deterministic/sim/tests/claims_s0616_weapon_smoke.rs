@@ -59,8 +59,22 @@ fn smoke_kind_weapon_emitter_keeps_its_creation_displacement() {
     r.sim.vehicles.get_mut("BUGGY").unwrap().strength = Some(30000);
     let n = 24;
     let mut w = testkit::game_with(&r, n, 7);
-    let a = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, testkit::mid(n, -2, 0), 16384);
-    let b = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, testkit::mid(n, 2, 0), 49152);
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(n, -2, 0),
+        16384,
+    );
+    let b = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        1,
+        testkit::mid(n, 2, 0),
+        49152,
+    );
     let t = Target::Object(b);
     w.obj_mut(a).unwrap().target = Some(t);
     assert!(fire::shot(&mut w, a, 0, t));
@@ -73,8 +87,7 @@ fn smoke_kind_weapon_emitter_keeps_its_creation_displacement() {
     particles::smoke_turn(&mut w, e.system);
     assert_eq!(w.obj(a).unwrap().pos, firer);
     assert_eq!(
-        w.gas.systems[&e.system].pos,
-        fp,
+        w.gas.systems[&e.system].pos, fp,
         "claim 5: owner position plus the creation displacement; firer at {firer:?}"
     );
 }

@@ -67,8 +67,22 @@ fn rules(interval: i32) -> Ruleset {
 /// one turn in tick `tick`, with a live owner and no sweep.
 fn emitted(interval: i32, tick: i32) -> usize {
     let mut w: World = testkit::game_with(&rules(interval), N, 7);
-    let a = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, testkit::mid(N, -2, 0), 16384);
-    let b = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, testkit::mid(N, 2, 0), 49152);
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(N, -2, 0),
+        16384,
+    );
+    let b = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        1,
+        testkit::mid(N, 2, 0),
+        49152,
+    );
     w.obj_mut(a).unwrap().target = Some(Target::Object(b));
     let t = w.obj(a).unwrap().target.unwrap();
     assert!(fire::shot(&mut w, a, 0, t));
@@ -82,6 +96,10 @@ fn emitted(interval: i32, tick: i32) -> usize {
 #[test]
 fn fire_interval_zero_emits_at_tick_zero() {
     assert_eq!(emitted(5, 0), 1, "control: interval 5 emits at tick 0");
-    assert_eq!(emitted(0, 7), 0, "interval 0, tick 7: 7 rem 0 = 7, no emission");
+    assert_eq!(
+        emitted(0, 7),
+        0,
+        "interval 0, tick 7: 7 rem 0 = 7, no emission"
+    );
     assert_eq!(emitted(0, 0), 1, "interval 0, tick 0: 0 rem 0 = 0, emits");
 }

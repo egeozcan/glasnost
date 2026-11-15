@@ -3179,35 +3179,32 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     let steps = flatten(&steps, q.flatten_straight_run_v, &ok);
     // spec: S-0212 claim 18 and F7 (threat counted only when k exceeds the binary64 value nearest 0.00001)
     let counts = k.gt(crate::consts::THREAT_COEFFICIENT_MIN);
-    let ok18 = |cur: &[Option<PathStep>],
-                starts: &[CellXY],
-                first: usize,
-                shape: &[u8],
-                limit: u32| {
-        let s = starts[first];
-        // The height level of the search pair the stretch starts from: the
-        // path as it now stands walked from the start pair (S-0212 claim 7).
-        let mut lvl = reference;
-        for (k, st) in cur[..first].iter().enumerate() {
-            let n = starts[k + 1];
-            match st {
-                // spec: S-0212 claims 7 and 18 (each step's pair on claim 7's candidate layer from the pair before it)
-                Some(PathStep::Dir(_)) => lvl = pair_level(w, n, candidate_layer(w, lvl, n)),
-                // spec: S-0212 claim 18 (after a tunnel step, as on a new path: from the ground)
-                Some(PathStep::Tunnel { .. }) => lvl = level(w, n),
-                None => {}
+    let ok18 =
+        |cur: &[Option<PathStep>], starts: &[CellXY], first: usize, shape: &[u8], limit: u32| {
+            let s = starts[first];
+            // The height level of the search pair the stretch starts from: the
+            // path as it now stands walked from the start pair (S-0212 claim 7).
+            let mut lvl = reference;
+            for (k, st) in cur[..first].iter().enumerate() {
+                let n = starts[k + 1];
+                match st {
+                    // spec: S-0212 claims 7 and 18 (each step's pair on claim 7's candidate layer from the pair before it)
+                    Some(PathStep::Dir(_)) => lvl = pair_level(w, n, candidate_layer(w, lvl, n)),
+                    // spec: S-0212 claim 18 (after a tunnel step, as on a new path: from the ground)
+                    Some(PathStep::Tunnel { .. }) => lvl = level(w, n),
+                    None => {}
+                }
             }
-        }
-        let mut n = 0u32;
-        let mut within = |c: CellXY| {
-            // spec: S-0212 claim 18 (the count of entered cells with threat value × k ≥ the binary64 value nearest 0.01, each cell's own value, stays within the limit)
-            if counts && tk(c).ge(crate::consts::THREAT_COUNTED) {
-                n += 1;
-            }
-            n <= limit
+            let mut n = 0u32;
+            let mut within = |c: CellXY| {
+                // spec: S-0212 claim 18 (the count of entered cells with threat value × k ≥ the binary64 value nearest 0.01, each cell's own value, stays within the limit)
+                if counts && tk(c).ge(crate::consts::THREAT_COUNTED) {
+                    n += 1;
+                }
+                n <= limit
+            };
+            enters_clear(s, lvl, &mut shape.iter().copied(), &mut within)
         };
-        enters_clear(s, lvl, &mut shape.iter().copied(), &mut within)
-    };
     let received: Vec<PathStep> = steps.iter().map(|&d| PathStep::Dir(d)).collect();
     // spec: S-0212 claim 18 (early detours are shortened, after claim 17)
     let steps: Vec<u8> = shorten_at(
