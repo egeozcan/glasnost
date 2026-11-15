@@ -433,4 +433,47 @@ mod tests {
         assert!(font::text_width(&t) <= 50 && t.len() > 3);
         assert!(long.ends_with(&t));
     }
+
+    /// The text field's cut as it was before render perf RP3 (#126): the
+    /// whole tail built and measured again for every character dropped.
+    fn old_tail_fit(s: &str, width: i32, caret: bool) -> String {
+        let caret = if caret { "_" } else { "" };
+        let chars: Vec<char> = s.chars().collect();
+        for start in 0..=chars.len() {
+            let t: String = chars[start..].iter().collect::<String>() + caret;
+            if font::text_width(&t) <= width {
+                return t;
+            }
+        }
+        caret.to_owned()
+    }
+
+    /// design: render (#126): the text field shows the same end of every
+    /// text, with or without the caret, at every width.
+    #[test]
+    fn render_perf_126_tail_fit_matches_the_old_one() {
+        let pool: Vec<char> = (' '..='~').chain(['é', '\u{1}', '.', ' ']).collect();
+        let mut seed = 54_321_u32;
+        let mut texts = vec![String::new(), " ".into(), "_".into(), "é".into()];
+        for len in 1..40 {
+            let s = (0..len)
+                .map(|_| {
+                    seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                    pool[(seed >> 16) as usize % pool.len()]
+                })
+                .collect();
+            texts.push(s);
+        }
+        for s in &texts {
+            for caret in [false, true] {
+                for width in -4..=font::text_width(s) + 8 {
+                    assert_eq!(
+                        tail_fit(s, width, caret),
+                        old_tail_fit(s, width, caret),
+                        "{s:?} in {width}, caret {caret}"
+                    );
+                }
+            }
+        }
+    }
 }

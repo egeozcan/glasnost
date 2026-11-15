@@ -275,6 +275,80 @@ mod tests {
         }
     }
 
+    /// The measuring as it was before render perf RP3 (#126): a search of
+    /// the glyph table per character, and a fit that measures every
+    /// candidate again. The oracle of the measuring now.
+    fn old_advance(c: char) -> i32 {
+        if c == ' ' {
+            return SPACE_ADVANCE;
+        }
+        let s = GLYPHS
+            .iter()
+            .find(|(g, _)| *g == c)
+            .or_else(|| GLYPHS.iter().find(|(g, _)| *g == '?'));
+        s.map_or(SPACE_ADVANCE, |(_, m)| {
+            m.split('/').map(str::len).max().unwrap_or(0) as i32 + SPACING
+        })
+    }
+
+    fn old_text_width(s: &str) -> i32 {
+        let w: i32 = s.chars().map(old_advance).sum();
+        if w > 0 { w - SPACING } else { 0 }
+    }
+
+    fn old_fit(s: &str, width: i32) -> String {
+        if old_text_width(s) <= width {
+            return s.to_owned();
+        }
+        let mut out = String::new();
+        for c in s.chars() {
+            let mut t = out.clone();
+            t.push(c);
+            t.push_str("..");
+            if old_text_width(&t) > width {
+                break;
+            }
+            out.push(c);
+        }
+        out.push_str("..");
+        out
+    }
+
+    /// Invented texts for the oracle: every printable character, spaces,
+    /// dots, characters the font lacks, in a fixed pseudo-random mix.
+    fn texts() -> Vec<String> {
+        let pool: Vec<char> = (' '..='~')
+            .chain(['é', 'ß', '\u{1}', '\t', '\u{263a}', '.', '.', ' '])
+            .collect();
+        let mut seed = 12_345_u32;
+        let mut out = vec![String::new(), " ".into(), "..".into(), "é".into()];
+        for len in 1..40 {
+            let s = (0..len)
+                .map(|_| {
+                    seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                    pool[(seed >> 16) as usize % pool.len()]
+                })
+                .collect();
+            out.push(s);
+        }
+        out
+    }
+
+    /// design: render (#126): every character measures as before, and
+    /// every text's width and cut are the old ones at every width.
+    #[test]
+    fn render_perf_126_measures_match_the_old_ones() {
+        for c in (0..0x3000).filter_map(char::from_u32) {
+            assert_eq!(advance(c), old_advance(c), "{c:?}");
+        }
+        for s in texts() {
+            assert_eq!(text_width(&s), old_text_width(&s), "{s:?}");
+            for width in -4..=old_text_width(&s) + 4 {
+                assert_eq!(fit(&s, width), old_fit(&s, width), "{s:?} in {width}");
+            }
+        }
+    }
+
     #[test]
     fn descenders_use_the_rows_below_the_baseline() {
         let g = glyph('g').unwrap();
