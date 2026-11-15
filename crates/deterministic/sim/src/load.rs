@@ -32,13 +32,23 @@ pub enum LoadError {
     NoStartCell,
     /// The skirmish setup is refused (S-0412).
     Setup(crate::econ::setup::SetupError),
+    /// The setup has more houses than a house id can name ([`MAX_HOUSES`];
+    /// our own input validation, #334).
+    TooManyHouses(usize),
 }
+
+/// The most houses a game can have: a house id is one byte.
+// nocite: our own input validation (#334): a house id (`HouseId`) is a u8
+pub const MAX_HOUSES: usize = 256;
 
 impl std::fmt::Display for LoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnknownCountry(c) => write!(f, "unknown country {c:?}"),
             Self::Setup(e) => write!(f, "{e}"),
+            Self::TooManyHouses(n) => {
+                write!(f, "the setup has {n} houses; a game can have at most {MAX_HOUSES}")
+            }
             Self::NoStartCell => write!(
                 f,
                 "no start cell could be found on the map: 1000 random candidates in a row had no clear 8 × 8 area (S-0009 claim 18)"
@@ -403,6 +413,10 @@ pub fn new_game(
     catalogue: Arc<TileCatalogue>,
     setup: &GameSetup,
 ) -> Result<World, LoadError> {
+    // design: #334 (a setup with more houses than a house id can name is refused, before any draw: also for a replay's stored setup)
+    if setup.houses.len() > MAX_HOUSES {
+        return Err(LoadError::TooManyHouses(setup.houses.len()));
+    }
     // spec: S-0412 claims 11 and 13 (setups our engine refuses)
     crate::econ::setup::check(setup, &rules).map_err(LoadError::Setup)?;
     let mut houses = Vec::new();
