@@ -1,8 +1,9 @@
 ---
 id: Q-3122
 title: Which cell layers the congestion marks of a re-path read
-status: open
+status: answered
 related: [S-0212, S-0209]
+answered-by: [S-0212]
 ---
 
 ## Need
