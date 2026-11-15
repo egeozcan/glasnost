@@ -1012,6 +1012,11 @@ impl Brain {
                 return;
             }
             self.drop_climb(out);
+            // design: own AI (sim issues S17, #312): the defence takes its line from this think's other starting orders for it, which S-0411 claim 6 would let take the line first and refuse the defence at every think; the type is picked only when its line is free (no resume), and a dropped order's use is not counted
+            let line = production::line_kind(w, t);
+            out.retain(|o| {
+                !matches!(o, Order::Build { what } if line.is_some() && production::line_kind(w, *what) == line)
+            });
         }
         out.push(Order::Build { what: t });
         self.special.offer_use(Use::AntiAirBuild, out);
