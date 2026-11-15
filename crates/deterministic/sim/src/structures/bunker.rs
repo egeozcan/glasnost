@@ -181,7 +181,10 @@ pub fn eligible(w: &World, id: ObjectId) -> bool {
     let not_hover = u.class != Some(LocomotionClass::Hover);
     // spec: S-0606 claim 1 (no parasite is inside it, S-0614)
     let no_parasite = crate::parasite::parasite_of(w, id).is_none();
-    flag && turret && weapon && not_hover && no_parasite
+    // spec: S-0606 claim 22 and Edge cases (quirks.bunker_hover_no_arrival off: claim 1's test also requires that the vehicle's locomotor is not the hovering locomotor; on, claims 1 and 2 have no locomotor test)
+    let locomotor = w.rules().quirks.bunker_hover_no_arrival
+        || crate::lift::current_locomotor(w, id) != Some(crate::rules::Locomotor::Hover);
+    flag && turret && weapon && not_hover && no_parasite && locomotor
 }
 
 /// Bunker `k`'s answer to actor `id`'s permission query (S-0606 claim 2,
