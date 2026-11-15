@@ -61,20 +61,28 @@ pub fn counter(lo: u8, hi: u8, rate: u8, turns: i32) -> u8 {
         if n > hi { lo } else { n }
     };
     // The counter has at most 256 values: walk until a value repeats, then
-    // skip whole cycles.
-    let mut seen: [Option<usize>; 256] = [None; 256];
+    // skip whole cycles. A value first repeats within 256 steps, and once
+    // the cycles are skipped fewer steps than one cycle remain, so no value
+    // repeats again: a step number fits 16 bits and the table is filled once.
+    // design: render (#142) (a 512-byte table, set up once a call)
+    const UNSEEN: u16 = u16::MAX;
+    let mut seen = [UNSEEN; 256];
     let mut a = 0u8;
     let mut k = 0usize;
+    let mut skipped = false;
     while k < steps {
-        if let Some(first) = seen[usize::from(a)] {
-            let cycle = k - first;
+        let first = seen[usize::from(a)];
+        if !skipped && first != UNSEEN {
+            let cycle = k - usize::from(first);
             steps = k + (steps - k) % cycle;
-            seen = [None; 256];
+            skipped = true;
             if k >= steps {
                 break;
             }
         }
-        seen[usize::from(a)] = Some(k);
+        if !skipped {
+            seen[usize::from(a)] = k as u16;
+        }
         a = step(a);
         k += 1;
     }
