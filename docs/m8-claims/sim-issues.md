@@ -554,6 +554,46 @@ No fix makes or moves a rarer back-reference of `World::census` (#402): #360's `
 
 `quirks::tests::every_spec_quirk_has_a_switch` fails on base and here for `quirks.bunker_hover_no_arrival` (S-0606). It is not this batch's.
 
+## Batch S21: crate places by cell, the flak distance, airburst arming, the exact direction's edge cases and order targeting
+
+Base main 5d8c648, not rebased. Save format 154 and AI game format 130 (da82fba): #284 adds two saved fields (`CrateWorld::owners` and `CrateWorld::map_crates`); wire version unchanged (12). The sim-gate goldens were regenerated once, after the last fix (da82fba); their state hashes change with the saved fields. Each test is committed before its fix and fails on the commit before the fix (logs in `local-lane/sim-issues/s21/`); no fix commit changes a test. Three test corrections are commits of their own: 0985fad (#294, the exact direction's reference routine kept 0 for a zero displacement), a3bfbc8 (#415, a deactivated vehicle passes the deploy check in `claims_s0213_deploy_rule.rs`) and cb51f54 (#415, the rank test compared with the testkit CART, which is armed; it now uses the unarmed BUGGY). Request Q-3152 (787fbe4). The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S21: crate places by cell, the flak distance, airburst arming, the exact direction's edge cases and order targeting)* (855e815, eb36801, 2c2869a).
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #284 | An expiry removed whatever overlay stood on its place's cell, and a pickup freed the place the crate belonged to (Q-3118) | fixed (217ff69, a8959b4); a named crate overlay that holds no place is Q-3152 (787fbe4), removed by its pickup in the interim | S-0520 r12 claims 4, 11 and 29, Terms, Import mapping: `[CrateRules] CrateImg` is the campaign crate overlay; an expiry removes only a named crate overlay; a pickup frees the lowest occupied place on the crate's cell and removes a named crate overlay or a map's own crate. `quirks.crate_place_by_cell` (default on) off: the place's own crate only, kept in `CrateWorld::owners`, forgotten by `crates::overlay_changed` | `claims_s0520_r12.rs` (eight tests, both switch positions); `sim_crate_tests.rs` (the import) |
+| #317 | Claims 4 and 9 took the distance d₃, not F17's flak distance (Q-3129) | fixed (59b37df stub, 7e4c6f2) | S-0306 r93 F17: `combat::projectile::flak_distance`, 32-bit wrapping differences, Δx and Δy narrowed to single precision, double squares and sums in the stated order, then d₃'s root. Equal to d₃ for every difference on a map | `claims_s0306_flak_distance.rs` |
+| #315 | An airburst child's arm time was 0 (Q-3130); the Ω half was fixed earlier | fixed (50553c4) | S-0306 r93 claims 9 and 21: each child takes its own projectile type's arm field | `claims_s0306_airburst_arm.rs` |
+| #294 | With `quirks.table_direction` off a zero displacement gave 0, and a real argument that is not a number or is infinite fell back to the table (Q-3103) | fixed (cf3354a) | S-0204 r14 Edge cases: a not-a-number argument counts as 0, then infinite arguments count as ±1 and finite ones as 0, then two zeros give 16384, for integer and real displacements | `direction_off_edges.rs`, `direction_exact_identity.rs` (reference, 0985fad), `claims_s0318.rs` (a fragment straight over its aim point) |
+| #415 | `targeting::disabled` read the control-centre state, so a deactivated vehicle lost its rank, deploy check and deploy readiness | fixed (f38ed45) | S-0214 r83 Terms: *disabled* is paralysis (`econ::power::under_pulse`, a seam) or a vehicle's death sequence (a seam); *deactivated* is `econ::power::unit_disabled`. *Movable*, *able to fire* and the band box ask both; table R, the deploy check and deploy readiness ask *disabled* only | `claims_s0214_s21_deactivated.rs` |
+| #413 | Rows V5 and VC6 (attack with a failed deploy check gives *nothing*) were not built | fixed as the tables give them (5b5d3aa); the issue's scenario is not a defect under the Terms | S-0214 r83 tables V and VC: V5 before V6 and VC6 before VC7. A deactivated vehicle passes the deploy check, so it still gets *attack*; no vehicle fails the check today (paralysis, the death sequence and tubes are seams) | `claims_s0214_s21_deploy_check.rs` |
+| #416 | Rows VD3 and VD5 asked only for the tunnel cell | fixed (4190f15) | S-0214 r83 table VD: both ask `deploy_readiness`, as VD2 does; an in-place deployer with passengers where S-0507 claim 7 refuses an unload gets *no-deploy* | `claims_s0214_s21_readiness.rs` |
+| #412 | Table I row v3 was not built | fixed (ccca7b6) | S-0214 r83 table I, S-0215 Terms: an infantry actor whose deploy weapon has the area-fire flag gets *area attack* where *g*₁ is deploy; `in_route_mode` turns it into *no-deploy*, as row v2 does *deploy* | `claims_s0214_s21_area_attack.rs` |
+| #417 | A building whose undeploy name names no vehicle type counted as vehicle-like | fixed (b0fc3c6) | S-0214 r83 Terms, S-0415 Import mapping: `targeting::vehicle_like`, the building arm of *movable* and `structures::engineer::vehicle_like` use `econ::sell::vehicle_like` and `econ::deploy::undeploys_into` | `claims_s0214_s21_vehicle_like.rs` |
+| #418 | The tap added the deploy building of any type with a deploy name | fixed (087b5fb) | S-0214 r83 claim 32: only a vehicle type's `DeploysInto` (`econ::deploy::deploys_into`) | `claims_s0214_s21_tap.rs` |
+| #419 | The cheer rate limit *L* + *R* could overflow 32 bits | fixed (f649f82) | S-0213 Formulas: *t* > *L* + *R* in 64-bit integers | `claims_s0213_s21_cheer.rs` |
+| #414 | The targeting docs listed seams that are now live states | fixed (4170f96, docs only) | The module doc names each live state's module and the seams that remain; the docs of `selectable`, `armed` and `disabled` and the comment over the state predicates say what each reads | none |
+
+Lanes compare base 5d8c648 with the batch at 2993a49 (the sim is unchanged after it).
+
+**Oracle arena** (`--record all`, two threads). Every output file is byte-identical to base: M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 and M-0021 10 of 50 failing.
+
+**Sweeps.** M6c, M7a and M7b over seeds 1–16 print the same lines as base (every seed's length and counters, every minimum and median; smallest minimum 0, 2 and drain 3).
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games). Every game ends on the same tick with the same winner as base.
+
+**Suites.** The AI suite with its ignored tests passes 362 before and after. The sim gate with its ignored tests passes 17 on base and, against the regenerated goldens, here; `cargo xtask gate` matches them on wasm32 too.
+
+Seams left:
+- Q-3152 (#284): a named crate overlay that holds no place and is no map crate (a resource bounce over modded data, S-0319 claim 10); its pickup removes it in the interim (`crates.rs`).
+- #284: an overlay written straight into a cell without `overlays::place_overlay` or `crush::remove_overlay` (resource growth, wall placement, bridge pieces) does not forget the cell's crate owner.
+- #413: rows V5 and VC6 cannot be reached until paralysis, a vehicle's death sequence and tubes are modelled.
+- #417: the raw undeploy-name tests in `structures::spy` (S-0007 claim 25) and `objects` (S-0311 claim 11) cite other specs and are left.
+- #412: S-0215 r139's named area-fire deployer changes its aim (claim 30), not the cursor; row v3 applies to it too.
+
+No fix makes or moves a rarer back-reference of `World::census` (#402): the crate state holds cells and place numbers only.
+
+`quirks::tests::every_spec_quirk_has_a_switch` fails on base for `quirks.bunker_hover_no_arrival` (S-0606), `quirks.path_congestion_ground_record` (S-0212), `quirks.infantry_animation_stale_marks` (S-0611), `quirks.crate_place_by_cell` (S-0520) and `quirks.offview_release_origin_cell` (S-0214). Here it no longer names `crate_place_by_cell` (217ff69, both positions tested in `claims_s0520_r12.rs`); the other four are not this batch's.
+
 ## Batch S13: deaths, depots, power wrap, turning and the bridge deck
 
 Base main 1a1fc50, not rebased. Three doc-comment issues come first (#248 in 1036912, #255 in cd86ad6, #259 in 84bd6da; comments only). Then nine issues and two seams that render batch R9 found in the projectile rules. Failing tests are committed first (fe2f367 to e1d8a6b, one commit per issue or seam), and each fails on the commit before its fix; no fix commit changes a test. Requests Q-3112 and Q-3113 (e664ef5) and Q-3114 (7717829) are filed. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S13: deaths, depots, power wrap, turning and the bridge deck)* (4184af5, d27bd05).
