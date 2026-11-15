@@ -343,11 +343,8 @@ pub fn tap_types(w: &World, selection: &[ObjectId]) -> Vec<(Kind, u32)> {
         let Some(o) = w.obj(id) else { continue };
         // spec: S-0214 claim 32 (the tap's types: the types of the objects then selected)
         push((o.kind, o.type_index));
-        // spec: S-0214 claim 32 and Import mapping (DeploysInto: together with the building type each of them deploys into)
-        if let Some(b) = unit(w, id)
-            .and_then(|u| u.raw.deploys_into.as_deref())
-            .and_then(|n| w.rules().index_of(Kind::Building, n))
-        {
+        // spec: S-0214 claim 32 and Import mapping (DeploysInto, read for vehicle types: together with the building type each of them deploys into) (#418)
+        if let Some(b) = crate::econ::deploy::deploys_into(w, o.kind, o.type_index) {
             push((Kind::Building, b));
         }
     }
