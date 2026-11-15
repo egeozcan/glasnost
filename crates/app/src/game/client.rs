@@ -1782,3 +1782,7 @@ mod touch_tests;
 #[cfg(test)]
 #[path = "client_display_tests.rs"]
 mod display_tests;
+
+#[cfg(test)]
+#[path = "client_render_perf_tests.rs"]
+mod render_perf_tests;
