@@ -307,8 +307,8 @@ pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: Objec
     };
     // spec: S-0214 claim 19 (a unit tethered to a building is excluded while its cell holds that building)
     let tether = crate::econ::power::tethered_in_own_cell(w, id);
-    // spec: S-0214 claim 19 and S-0405 claim 20 (an ordinary band box does not take a disabled vehicle)
-    let deactivated = disabled(w, id);
+    // spec: S-0214 claim 19 and S-0405 claim 20 (an ordinary band box does not take a deactivated vehicle)
+    let deactivated = deactivated(w, id);
     // spec: S-0214 claim 19 and S-0606 claim 11 (a bunkered vehicle and an occupied bunker are excluded from the ordinary band box)
     let bunker = crate::structures::bunker::bunkered(w, id)
         || (crate::structures::bunker::is_bunker(w, id)
@@ -512,20 +512,25 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
     // spec: S-0214 Terms (revision 62: falling is part of neither movable nor able to fire; a falling unit takes orders and carries them out once landed, S-0522 claim 17)
     match kind(w, id) {
         // spec: S-0214 Terms (movable mobile object: not disabled, not a spawned aircraft type, not a slave unit, …)
+        // spec: S-0214 Terms (revision 83: a movable mobile object is not deactivated, S-0405 claims 13 and 20)
         // spec: S-0214 Terms and S-0614 claim 8 (not held)
         // spec: S-0214 Terms and S-0606 claim 11 (not held inside a tank bunker)
         // spec: S-0214 Terms (movable: not phasing in) and claim 6 (d) (r78: a phasing-in actor is not movable, so part (d) asks that the target be in range of the weapon it would use)
         // spec: S-0214 Terms (movable mobile object: it is not being erased, and it is not a slave unit, S-0402 claim 14's slave with a master) (#209)
         Some(Kind::Infantry | Kind::Vehicle) => {
             !disabled(w, id)
+                && !deactivated(w, id)
                 && !being_erased(w, id)
                 && !crate::econ::slaves::is_slave(w, id)
                 && !phasing_in(w, id)
                 && !crate::parasite::held(w, id)
                 && !crate::structures::bunker::bunkered(w, id)
         }
+        // spec: S-0214 Terms (revision 83: a movable mobile object, an aircraft too, is neither disabled nor deactivated)
         Some(Kind::Aircraft) => {
-            !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false))
+            !disabled(w, id)
+                && !deactivated(w, id)
+                && !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false))
                 && !being_erased(w, id)
                 && !crate::econ::slaves::is_slave(w, id)
                 && !phasing_in(w, id)
@@ -535,7 +540,9 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
         Some(Kind::Building) => {
             let b = building(w, id);
             let yard = b.is_some_and(|b| b.raw.construction_yard.unwrap_or(false));
-            rally_capable(w, id) || (b.is_some_and(|b| b.raw.undeploys_into.is_some()) && !yard)
+            // spec: S-0214 Terms (a building is movable when it is not paralysed and either …)
+            !disabled(w, id)
+                && (rally_capable(w, id) || (b.is_some_and(|b| b.raw.undeploys_into.is_some()) && !yard))
         }
         _ => false,
     }
@@ -596,12 +603,13 @@ pub fn first_may_move_into_shroud(w: &World, selection: &[ObjectId]) -> bool {
         .is_some_and(|u| u.move_to_shroud)
 }
 
-/// Able to fire (S-0214 Terms): own, armed, not disabled. A falling
-/// unit is able to fire: it takes the order and fires once landed (S-0522
-/// claim 17; S-0511 claim 10 and S-0203 keep it from firing in the air).
+/// Able to fire (S-0214 Terms): own, armed, not disabled and not
+/// deactivated. A falling unit is able to fire: it takes the order and
+/// fires once landed (S-0522 claim 17; S-0511 claim 10 and S-0203 keep it
+/// from firing in the air).
 pub fn able_to_fire(w: &World, house: HouseId, id: ObjectId) -> bool {
-    // spec: S-0214 Terms (revision 62: able to fire is armed, not disabled and not deactivated; falling is no part of it)
-    own(w, house, id) && armed(w, id) && !disabled(w, id)
+    // spec: S-0214 Terms (revisions 62 and 83: able to fire is armed, not disabled and not deactivated, S-0405 claims 13 and 20; falling is no part of it)
+    own(w, house, id) && armed(w, id) && !disabled(w, id) && !deactivated(w, id)
 }
 
 /// A healing actor (S-0214 Terms): an armed object whose default weapon
@@ -739,10 +747,23 @@ fn planted_bomb(w: &World, house: HouseId, id: ObjectId) -> bool {
     crate::bomb::visible(w, house, id)
 }
 
-/// Disabled (S-0214 Terms): paralysed, or a vehicle playing its death
-/// sequence; neither exists before M4.
+/// Disabled (S-0214 Terms): paralysed (the pulse disable of S-0405,
+/// `econ::power::under_pulse`, still a seam that answers "no"), or a
+/// vehicle playing its death sequence (a seam: no such sequence yet). A
+/// vehicle deactivated by the loss of its control centre is not disabled
+/// ([`deactivated`]).
 fn disabled(w: &World, id: ObjectId) -> bool {
-    // spec: S-0405 claim 20 (a vehicle disabled by the loss of its control centre is neither movable nor able to fire in S-0214's sense)
+    // spec: S-0214 Terms (revision 83, disabled: paralysed, or, for a vehicle, playing its death sequence) and glossary (*hold*: paralysed is the electromagnetic-pulse disable)
+    crate::econ::power::under_pulse(w, id)
+}
+
+/// Deactivated (S-0214 Terms, S-0405 claims 13 and 20): a vehicle
+/// disabled by the loss of its control centre. A separate term from
+/// [`disabled`]: it takes away *movable* and *able to fire* (and the
+/// ordinary band box, claim 19), not the deploy check, deploy readiness or
+/// table R's rank.
+fn deactivated(w: &World, id: ObjectId) -> bool {
+    // spec: S-0214 Terms (revision 83: movable and able to fire ask not disabled and not deactivated, S-0405 claims 13 and 20)
     crate::econ::power::unit_disabled(w, id)
 }
 
@@ -2168,8 +2189,7 @@ pub fn rep_distance(w: &World, id: ObjectId, on: ClickOn) -> u64 {
 fn representative(w: &World, sel: &[ObjectId], on: ClickOn) -> Option<ObjectId> {
     let mut best: Option<(u8, u64, ObjectId)> = None;
     for &id in sel.iter().filter(|&&id| w.obj(id).is_some()) {
-        let key = (rank(w, id), rep_distance(w, id, on));
-        let better = match best {
+        let key = (rank(w, id), rep_distance(w, id, on));        let better = match best {
             None => true,
             Some((r, d, _)) => key.0 > r || (key.0 == r && key.1 < d),
         };
