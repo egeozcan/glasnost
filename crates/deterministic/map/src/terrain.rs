@@ -152,6 +152,7 @@ pub struct Roles {
 
 /// Four unset role starts (S-0010 claim 4), the default of roles a stored
 /// catalogue lacks.
+// spec: S-0513 Import mapping (four waterfall roles)
 fn unset_four() -> [i32; 4] {
     [UNSET; 4] // spec: S-0513 Import mapping (absent: −1, unset)
 }
