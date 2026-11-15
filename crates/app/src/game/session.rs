@@ -3297,7 +3297,15 @@ impl Session {
             }
         }
         // spec: S-0601 claim 18 (the control ring on a controlled object, the permanent ring on a permanently controlled one, raised by the ring height; on a building in front of it). Seam: the ring animations' art is not drawn yet; a marker stands in at the ring's place.
-        for o in w.objects.values() {
+        // design: render (#122) only a victim or a permanently controlled object has a ring (`mind::ring`), so those records are walked, in object order, instead of every object
+        let ringed: std::collections::BTreeSet<ObjectId> = w
+            .mind
+            .victims
+            .keys()
+            .chain(&w.mind.permanent)
+            .copied()
+            .collect();
+        for o in ringed.into_iter().filter_map(|id| w.obj(id)) {
             // Our own: no ring on objects in cells the local player has not
             // explored (in a watch game, where nothing is shrouded, on every one).
             let seen = self
