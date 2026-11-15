@@ -69,6 +69,7 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
     // (`objects::remove_with` forgets it at its end).
     w.census = Some(census);
     let mut reverted_holders = Vec::new();
+    let holders = ids.clone();
     for x in ids {
         // spec: S-0309 claim 27 (the drop resets the targeting timer: the draw first, S-0501 claim 37)
         timer_draw(w, x);
@@ -151,6 +152,10 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
         {
             ob.attack_move = Some(at);
         }
+    }
+    for x in holders {
+        // spec: S-0519 claim 19 (revision 3: a designator's loss of its target cancels its strike when the change applies, in the tick of the cancelling event, whatever part of the tick it falls in) and S-0203 claim 7 (immediate target-change effects: losing a designator's target does not wait for a shared strike pass)
+        crate::strike::turn(w, x);
     }
     if how != Leaving::Removed {
         crate::census::forget(w);
