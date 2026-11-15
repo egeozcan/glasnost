@@ -116,7 +116,7 @@ pub fn destruction_credited(
     // spec: S-0311 F2 (V = 0 when the credited object's house is allied with the destroyed object's, the credited house's view)
     let allied = w.allied(oo.owner, v.owner);
     // spec: S-0311 F2 (V = m × A_v, m = 1, 2, 3 for rookie, veteran, elite)
-    let mult = match rank_of(v.combat.experience) {
+    let mult: i32 = match rank_of(v.combat.experience) {
         Rank::Rookie => 1,
         Rank::Veteran => 2,
         Rank::Elite => 3,
@@ -124,7 +124,8 @@ pub fn destruction_credited(
     let value = if allied {
         0
     } else {
-        mult * actual_cost(w, victim)
+        // spec: S-0205 claim 1 (an integer result outside the range wraps)
+        mult.wrapping_mul(actual_cost(w, victim))
     };
     if let Some(ch) = oo.owner
         && let Some(h) = w.houses.get_mut(usize::from(ch.0))

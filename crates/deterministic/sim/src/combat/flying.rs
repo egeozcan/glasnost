@@ -124,10 +124,11 @@ pub fn sector_set(w: &World, c: CellXY, rho: i32) -> Vec<Sector> {
     let clamp = |i: i32, j: i32| (i.clamp(0, 19), j.clamp(0, 19));
     let mut out = vec![(cx, cy)];
     // spec: S-0303 F7 (the four runs: east, north, south, west, each from its far sector inwards)
-    let e = sx(c.x + rho) - cx;
-    let n = cy - sy(c.y - rho);
-    let s = sy(c.y + rho) - cy;
-    let u = cx - sx(c.x - rho);
+    // spec: S-0205 claim 1 (the cell ρ cells away: an integer result outside the range wraps; F7 states no clamp before σ)
+    let e = sx(c.x.wrapping_add(rho)) - cx;
+    let n = cy - sy(c.y.wrapping_sub(rho));
+    let s = sy(c.y.wrapping_add(rho)) - cy;
+    let u = cx - sx(c.x.wrapping_sub(rho));
     for k in (1..=e).rev() {
         out.push((cx + k, cy));
     }

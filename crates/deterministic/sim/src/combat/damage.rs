@@ -1175,7 +1175,8 @@ pub fn delay_kill_countdown(w: &World, f: i32, alpha: F64, spread: F64, r: i32) 
     let rr = if rules.quirks.delay_kill_whole_cell_spread {
         // spec: S-0302 F7 (R′ = 256 × trunc(s))
         // spec: S-0312 F6 (V = 256 × trunc(S) with quirks.delay_kill_whole_cell_spread on, R of S-0302 F3 off)
-        256 * spread.to_i32_common()
+        // spec: S-0205 claim 1 (an integer result outside the range wraps)
+        256i32.wrapping_mul(spread.to_i32_common())
     } else {
         // spec: S-0302 Edge cases (delay_kill_whole_cell_spread off: R of F3)
         spread.mul(d(256, mode), mode).to_i32_common()

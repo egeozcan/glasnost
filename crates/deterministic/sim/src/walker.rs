@@ -121,8 +121,9 @@ pub fn frame(wk: &Walker, r: i32, tick: i32, table: bool) -> i32 {
         // spec: S-0615 F1 (d = ⌊(⌊f / 4096⌋ + 1) / 2⌋ mod 8)
         ((i32::from(f) / 4096 + 1) / 2).rem_euclid(8)
     });
-    // spec: S-0615 F1 (frame = R × (7 − d) + (⌊t / 3⌋ mod R))
-    r * (7 - d) + (tick / FRAME_PERIOD).rem_euclid(r)
+    // spec: S-0615 F1 (frame = R × (7 − d) + (⌊t / 3⌋ mod R)) and S-0205 claim 1 (an integer result outside the range wraps)
+    r.wrapping_mul(7 - d)
+        .wrapping_add((tick / FRAME_PERIOD).rem_euclid(r))
 }
 
 /// The cell next to `c` in step direction `d` (S-0204 Constants).
@@ -281,8 +282,8 @@ fn expire(w: &World, wk: &mut Walker, clear: bool) {
         .get(wk.anim as usize)
         .map_or(0, |a| a.running_frames);
     wk.expiring = true;
-    // spec: S-0615 claim 11 (the stage is set to 8R + 1)
-    wk.stage = 8 * r + 1;
+    // spec: S-0615 claim 11 (the stage is set to 8R + 1) and S-0205 claim 1 (an integer result outside the range wraps)
+    wk.stage = 8i32.wrapping_mul(r).wrapping_add(1);
     if clear {
         // spec: S-0615 claim 11 (expiry from claims 4 or 9 clears the destination; on landing it can be kept)
         wk.dest = None;
