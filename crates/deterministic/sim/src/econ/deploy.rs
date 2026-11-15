@@ -28,6 +28,10 @@ pub struct DeployState {
     /// The form of an in-place deploying vehicle (S-0517 Terms).
     #[serde(default)]
     pub form: super::inplace::Form,
+    /// This deploy has requested the deploy sound, with
+    /// `quirks.deploy_sound_repeats` off (S-0517 claim 12).
+    #[serde(default)]
+    pub sound_requested: bool,
 }
 
 /// The building type a vehicle type deploys into (S-0415 Import mapping).
