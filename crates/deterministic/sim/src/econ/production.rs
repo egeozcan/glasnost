@@ -1056,6 +1056,12 @@ pub fn build(w: &mut World, house: HouseId, t: TypeRef) {
             return;
         }
     }
+    // spec: S-0411 claim 6 (no starting or queuing build order takes effect for a building or defence while that line has an item, whatever its state; the resume above stays legal) and S-0404 claim 7 (buildings never queue: a type already waiting to start counts as well)
+    if matches!(lk, LineKind::Building | LineKind::Defence)
+        && (line.item.is_some() || !line.queue.is_empty())
+    {
+        return;
+    }
     let max = w.rules().econ.production.max_queued;
     // spec: S-0404 claim 3 (the queue limit counts queued types; 0 or below refuses every queued type)
     if line.queue.len() as i32 >= max {
