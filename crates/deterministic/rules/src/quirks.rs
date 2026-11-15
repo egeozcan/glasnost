@@ -740,6 +740,10 @@ pub struct Quirks {
     // spec: S-0009 claim 12
     #[serde(default = "on")]
     pub skirmish_drops_map_crates: bool,
+    /// A crate place that outlives its crate keeps the crate's cell: its expiry removes whatever named crate overlay is on that cell, and a pickup frees the lowest-numbered occupied place on the crate's cell; off: each place belongs to the crate it placed.
+    // spec: S-0520 claim 29 and Edge cases (quirks.crate_place_by_cell, default on)
+    #[serde(default = "on")]
+    pub crate_place_by_cell: bool,
     /// A starting infantry unit stands at its cell's centre position whatever infantry already stand there, with no draw; off: it takes a standing position by S-0208 claim 3, with that claim's draw.
     // spec: S-0009 claim 46
     #[serde(default = "on")]
@@ -2510,6 +2514,7 @@ impl Default for Quirks {
             early_phase_stale_country_data: true,
             skirmish_drops_country_owned_objects: true,
             skirmish_drops_map_crates: true,
+            crate_place_by_cell: true,
             starting_infantry_share_centre: true,
             gate_tower_fixed_cells: true,
             building_ammo_fast_rearm: true,
@@ -3295,6 +3300,7 @@ impl Quirks {
                 self.skirmish_drops_country_owned_objects,
             ),
             ("skirmish_drops_map_crates", self.skirmish_drops_map_crates),
+            ("crate_place_by_cell", self.crate_place_by_cell),
             (
                 "starting_infantry_share_centre",
                 self.starting_infantry_share_centre,

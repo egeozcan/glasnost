@@ -4003,6 +4003,14 @@
           ],
           "default": null
         },
+        "crate_img": {
+          "description": "`[CrateRules] CrateImg`, an overlay type key: the campaign crate\noverlay, a named crate overlay (S-0520 Terms and Import mapping);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "crate_maximum": {
           "description": "`[CrateRules] CrateMaximum` (S-0412 claim 10); absent: 255.",
           "type": [
@@ -9118,6 +9126,11 @@
         },
         "crate_phantom_place": {
           "description": "A selected crate cell whose overlay a terrain object prevents still occupies its crate place, with its lifetime draw, until expiry; off: the failed overlay placement takes no place or lifetime draw. Unreachable in our engine: no terrain object blocks an overlay on a cell the placement search accepted, so both settings act alike.",
+          "type": "boolean",
+          "default": true
+        },
+        "crate_place_by_cell": {
+          "description": "A crate place that outlives its crate keeps the crate's cell: its expiry removes whatever named crate overlay is on that cell, and a pickup frees the lowest-numbered occupied place on the crate's cell; off: each place belongs to the crate it placed.",
           "type": "boolean",
           "default": true
         },

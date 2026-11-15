@@ -106,6 +106,8 @@ pub struct CrateRules {
     pub wood: Option<u8>,
     /// The water-crate overlay.
     pub water_overlay: Option<u8>,
+    /// The campaign crate overlay (S-0520 Terms, Import mapping `CrateImg`).
+    pub campaign: Option<u8>,
     /// The flame warhead.
     pub flame: Option<WarheadId>,
     /// The gas warhead (the one named `GAS`; the table always holds one).
@@ -192,6 +194,8 @@ impl CrateRules {
             unit_type: g.unit_crate_type.as_ref().and_then(vehicle),
             wood: overlay(&g.wood_crate_img),
             water_overlay: overlay(&g.water_crate_img),
+            // spec: S-0520 Import mapping (CrateImg names the campaign crate overlay; absent: none)
+            campaign: overlay(&g.crate_img),
             flame: warhead(&g.flame_damage),
             // spec: S-0520 Edge cases (the gas warhead is the one registered under the fixed name; the table adds a default one when none exists)
             gas: combat
