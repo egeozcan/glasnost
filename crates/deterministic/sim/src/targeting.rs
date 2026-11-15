@@ -775,17 +775,18 @@ fn teleporter(w: &World, id: ObjectId) -> bool {
     uflag(w, id, |u| u.raw.teleporter.unwrap_or(false))
 }
 
-/// A free mover (S-0214 Terms): an aircraft, an underground type (zone
-/// *subterranean*) or a jumpjet infantry type. The jumpjet counts for a
-/// click on a cell only while no ion storm is active, and our engine has no
-/// ion storm. Nothing of another kind is in the air before the aircraft
-/// topic.
+/// A free mover (S-0214 Terms): an actor in the air, an aircraft, an
+/// underground type (zone *subterranean*) or a jumpjet infantry type. The
+/// jumpjet counts for a click on a cell only while no ion storm is active,
+/// and our engine has no ion storm. A unit is in the air by the answer of
+/// S-0502 claim 30, a jumpjet unit in flight.
 fn free_mover(w: &World, id: ObjectId) -> bool {
     match kind(w, id) {
         Some(Kind::Aircraft) => true,
         Some(Kind::Infantry) if uflag(w, id, |u| u.jumpjet) => true,
+        // spec: S-0214 Terms (free mover: an actor that is in the air, #359) and S-0502 claim 30 (a unit with the jumpjet locomotor in flight is in the air)
         Some(Kind::Infantry | Kind::Vehicle) => {
-            uflag(w, id, |u| u.zone == MovementZone::Subterranean)
+            uflag(w, id, |u| u.zone == MovementZone::Subterranean) || weapon::in_air(w, id)
         }
         _ => false,
     }
