@@ -4491,7 +4491,7 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     ),
     (
         "shroud_on_flat_grid",
-        "renderer (render::shroud::Quirks), S-0110 claim 8; S-0410 claim 6 names it for the radar's shroud and gap tests (S-0410 r15, not yet followed by the radar)",
+        "renderer (render::shroud::Quirks), S-0110 claim 8; S-0410 claims 6 and 7 name it for the radar's shroud and gap tests (the radar follows it through econ::minimap::View::on_flat_grid and the _on forms of its listing tests)",
     ),
     ("sequence_value_length_limit", "importer, S-0107 claim 22"),
     ("case_sensitive_direction", "importer, S-0107 claim 22"),

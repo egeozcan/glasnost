@@ -499,6 +499,19 @@ fn insignificant(w: &World, id: ObjectId) -> bool {
 /// and 8): empty when it is not listed. A building is listed at the pixel
 /// set of F8 inside the image.
 pub fn listed(w: &World, h: HouseId, id: ObjectId, g: &Grid, img: &Image) -> Vec<(i32, i32)> {
+    listed_on(w, h, id, g, img, true)
+}
+
+/// [`listed`] under the renderer's `quirks.shroud_on_flat_grid` (S-0110
+/// Edge cases: with it off the point test reads the cell under the point).
+pub fn listed_on(
+    w: &World,
+    h: HouseId,
+    id: ObjectId,
+    g: &Grid,
+    img: &Image,
+    on_flat_grid: bool,
+) -> Vec<(i32, i32)> {
     let Some(o) = w.obj(id) else {
         return Vec::new();
     };
@@ -517,8 +530,10 @@ pub fn listed(w: &World, h: HouseId, id: ObjectId, g: &Grid, img: &Image) -> Vec
             return Vec::new();
         }
     } else {
-        // spec: S-0410 claim 7 (not owned: inside the usable area at its position, its point not shrouded)
-        if !w.cells.usable(o.pos.cell()) || crate::econ::shroud::point_shrouded(w, h, o.pos) {
+        // spec: S-0410 claim 7 (not owned: inside the usable area at its position, its point not shrouded, S-0110's point test) and S-0110 Edge cases (quirks.shroud_on_flat_grid off: the cell under the point)
+        if !w.cells.usable(o.pos.cell())
+            || crate::econ::shroud::point_shrouded_on(w, h, o.pos, on_flat_grid)
+        {
             return Vec::new();
         }
         // spec: S-0410 claim 7 and S-0516 claim 27 (another house's fully cloaked object, an ally's included, only where H's own sensor coverage covers its cell)
@@ -585,10 +600,31 @@ pub fn shown(
     g: &Grid,
     img: &Image,
 ) -> bool {
+    shown_on(w, h, id, pixel, g, img, true)
+}
+
+/// [`shown`] under the renderer's `quirks.shroud_on_flat_grid` (claim 6:
+/// its direct-cell alternative takes precedence in the shroud test).
+pub fn shown_on(
+    w: &World,
+    h: HouseId,
+    id: ObjectId,
+    pixel: (i32, i32),
+    g: &Grid,
+    img: &Image,
+    on_flat_grid: bool,
+) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let shift = w.rules().quirks.radar_pixel_cell_shift;
-    // spec: S-0410 claim 7 (not owned by H: the cell shown at its pixel is not shrouded)
-    if o.owner != Some(h) && cell_shrouded(w, h, cell_at_pixel(g, img, pixel.0, pixel.1, shift)) {
+    // spec: S-0410 claim 7 (not owned by H: the cell shown at its pixel is not shrouded, claim 6's test with quirks.shroud_on_flat_grid's precedence)
+    if o.owner != Some(h)
+        && cell_shrouded_on(
+            w,
+            h,
+            cell_at_pixel(g, img, pixel.0, pixel.1, shift),
+            on_flat_grid,
+        )
+    {
         return false;
     }
     // spec: S-0410 claim 7 (radar-invisible, unless H allies its owner, H's side)
@@ -628,6 +664,12 @@ type ByPixel = BTreeMap<(i32, i32), Vec<(ObjectId, (i32, usize))>>;
 impl Arrivals {
     /// Brings the arrivals up to date for house `h`.
     pub fn observe(&mut self, w: &World, h: HouseId, g: &Grid, img: &Image) {
+        self.observe_on(w, h, g, img, true);
+    }
+
+    /// [`Arrivals::observe`] under the renderer's
+    /// `quirks.shroud_on_flat_grid` (the listing's point test, [`listed_on`]).
+    pub fn observe_on(&mut self, w: &World, h: HouseId, g: &Grid, img: &Image, on_flat_grid: bool) {
         // spec: S-0410 Terms (arrivals ordered by tick, then by the order in which the objects' turns run, S-0203: each object's first place in the update order, as a scan of it finds)
         let mut places: BTreeMap<ObjectId, usize> = BTreeMap::new();
         for (i, &id) in w.update.order.iter().enumerate() {
@@ -636,7 +678,7 @@ impl Arrivals {
         let mut now = BTreeMap::new();
         for &id in w.objects.keys() {
             let place = places.get(&id).copied().unwrap_or(usize::MAX);
-            for px in listed(w, h, id, g, img) {
+            for px in listed_on(w, h, id, g, img, on_flat_grid) {
                 // spec: S-0410 Terms (an object that stays listed at one pixel keeps its arrival; arrivals ordered by tick, then by turn order)
                 let arr = self.at.get(&(id, px)).copied().unwrap_or((w.tick, place));
                 now.insert((id, px), arr);
@@ -708,6 +750,20 @@ fn winner_among(
     img: &Image,
     at: impl Iterator<Item = (ObjectId, (i32, usize))>,
 ) -> Option<ObjectId> {
+    winner_among_on(w, h, pixel, g, img, true, at)
+}
+
+/// [`winner_among`] under the renderer's `quirks.shroud_on_flat_grid`
+/// ([`shown_on`]).
+fn winner_among_on(
+    w: &World,
+    h: HouseId,
+    pixel: (i32, i32),
+    g: &Grid,
+    img: &Image,
+    on_flat_grid: bool,
+    at: impl Iterator<Item = (ObjectId, (i32, usize))>,
+) -> Option<ObjectId> {
     let mut own = Vec::new();
     let mut other = Vec::new();
     for (id, arr) in at {
@@ -723,7 +779,7 @@ fn winner_among(
     own.into_iter()
         .chain(other)
         .map(|(_, id)| id)
-        .find(|&id| shown(w, h, id, pixel, g, img))
+        .find(|&id| shown_on(w, h, id, pixel, g, img, on_flat_grid))
 }
 
 /// Inputs of the radar map that are not game state: house colours, the
@@ -820,7 +876,8 @@ fn compose_by(
             let t = terrain.get(i).copied().unwrap_or([0, 0, 0]);
             // spec: S-0410 claim 6 (the colour of the first object shown at the pixel)
             if let Some(at) = listed.get(&(p, q))
-                && let Some(id) = winner_among(w, h, (p, q), g, img, at.iter().copied())
+                && let Some(id) =
+                    winner_among_on(w, h, (p, q), g, img, view.on_flat_grid, at.iter().copied())
             {
                 let o = w.obj(id);
                 // spec: S-0410 claim 8 and S-0516 claim 38 (a disguised unit: its owner's colour when the owner allies H, otherwise its disguise house's, the neutral fallback when the disguise has no house)
