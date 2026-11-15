@@ -531,7 +531,10 @@ fn hover_loco_game(on: bool) -> (World, ObjectId, ObjectId) {
 #[test]
 fn issue_272_on_a_hovering_locomotor_vehicle_is_eligible_and_takes_contact() {
     let (mut w, b, u) = hover_loco_game(true);
-    assert!(glasnost_sim::hover::is_hover(&w, u), "the hovering locomotor");
+    assert!(
+        glasnost_sim::hover::is_hover(&w, u),
+        "the hovering locomotor"
+    );
     assert!(bunker::eligible(&w, u));
     assert!(bunker::permits(&w, b, u), "P10");
     send(&mut w, u, b);
@@ -560,7 +563,10 @@ fn issue_272_off_a_hovering_locomotor_vehicle_is_refused_at_p8() {
     // Claim 3: a repeated request from a vehicle in contact is refused once
     // it is not bunker-eligible (the refusal ends the contact).
     w.obj_mut(u).unwrap().contact = Some(b);
-    assert!(!bunker::request(&mut w, u, b), "the repeated request is refused");
+    assert!(
+        !bunker::request(&mut w, u, b),
+        "the repeated request is refused"
+    );
     // A vehicle with another locomotor keeps its eligibility.
     let t = tank(&mut w, -5, 1);
     assert!(bunker::eligible(&w, t));

@@ -558,7 +558,11 @@ fn issue_342_relink_keeps_one_drain_animation_both_positions() {
         w.obj_mut(d).unwrap().pos = Pos::new(p.x, p.y, ground);
         attempt(&mut w, d, second);
         assert_eq!(drain::partner(&w, d), Some(second), "strands {strands}");
-        assert_eq!(drain::being_drained(&w, first), strands, "strands {strands}");
+        assert_eq!(
+            drain::being_drained(&w, first),
+            strands,
+            "strands {strands}"
+        );
         assert_eq!(
             glasnost_sim::anims::with_role(&w, role).len(),
             1,

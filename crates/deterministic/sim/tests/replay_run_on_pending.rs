@@ -38,7 +38,14 @@ fn pending(w: &World) -> usize {
 fn game() -> (World, ObjectId, Replay) {
     let mut w = testkit::game_with(&rules(), SIZE, 13);
     testkit::run(&mut w, 4);
-    let hut = testkit::spawn(&mut w, Kind::Building, "HUT", 0, testkit::mid(SIZE, 0, 0), 0);
+    let hut = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "HUT",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     w.obj_mut(hut).unwrap().health = 200;
     testkit::run(&mut w, 1);
     let pb = w.rules().combat.general.repair_period;

@@ -68,7 +68,11 @@ fn issue_339_supporter_before_the_master_beams_one_tick_later() {
     for d in [0, 1, 2, 5] {
         let base = (d - 1).max(0);
         // The fixture's support rearm is 100 ticks.
-        assert_eq!(gap(false, d), (base, base + 100), "d = {d}: after the master");
+        assert_eq!(
+            gap(false, d),
+            (base, base + 100),
+            "d = {d}: after the master"
+        );
         assert_eq!(
             gap(true, d),
             (base + 1, base + 101),

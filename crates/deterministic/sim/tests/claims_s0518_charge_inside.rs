@@ -58,7 +58,10 @@ fn issue_340_a_charger_that_boards_a_closed_transport_leaves_the_list() {
     assert!(!glasnost_sim::transport::open_topped(&w, car));
     for &u in &us {
         glasnost_sim::transport::board(&mut w, u, car);
-        assert!(!w.update.contains(u), "out of the update order: out of play");
+        assert!(
+            !w.update.contains(u),
+            "out of the update order: out of play"
+        );
         assert!(!w.obj(u).unwrap().on_map);
     }
     let at_once = power::chargers(&w, b);

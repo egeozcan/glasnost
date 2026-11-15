@@ -37,7 +37,10 @@ fn rules() -> Ruleset {
     );
     r.registries.insert(
         "buildings".into(),
-        ["TOWER", "GAP", "SAT"].iter().map(|s| s.to_string()).collect(),
+        ["TOWER", "GAP", "SAT"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
     );
     let b = |sight: i32| {
         let mut b = BuildingType {

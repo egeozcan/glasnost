@@ -19,7 +19,10 @@ fn rules(radius: i32) -> Ruleset {
     let mut r = testkit::ruleset();
     r.registries.insert(
         "buildings".into(),
-        ["TOWER", "GAP", "SAT"].iter().map(|s| s.to_string()).collect(),
+        ["TOWER", "GAP", "SAT"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
     );
     let b = |sight: i32| {
         let mut b = BuildingType {
@@ -60,9 +63,23 @@ fn run(r: Ruleset) -> (usize, (i64, i64), bool, bool) {
     assert!(shroud::counts(&w, A, off).is_none(), "not a legal cell");
     let at = testkit::mid(SIZE, 0, 25);
     assert!(shroud::counts(&w, A, at).is_some(), "a legal cell");
-    testkit::spawn(&mut w, Kind::Building, "SAT", 0, testkit::mid(SIZE, -10, -10), 0);
+    testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "SAT",
+        0,
+        testkit::mid(SIZE, -10, -10),
+        0,
+    );
     // House 1 keeps a building throughout.
-    testkit::spawn(&mut w, Kind::Building, "TOWER", 1, testkit::mid(SIZE, 10, -10), 0);
+    testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "TOWER",
+        1,
+        testkit::mid(SIZE, 10, -10),
+        0,
+    );
     step(&mut w);
     step(&mut w);
     assert!(shroud::spy_satellite_active(&w, A));
@@ -78,7 +95,10 @@ fn run(r: Ruleset) -> (usize, (i64, i64), bool, bool) {
         .iter()
         .filter(|&&i| i as usize == shared)
         .count();
-    assert!(!shroud::explored(&w, A, off), "covered while the field runs");
+    assert!(
+        !shroud::explored(&w, A, off),
+        "covered while the field runs"
+    );
     assert_eq!(shared_counts(&w).1, n as i64, "G counts every contribution");
     glasnost_sim::objects::remove(&mut w, g);
     step(&mut w);
@@ -103,7 +123,10 @@ fn issue_338_shared_state_is_covered_again_whatever_the_radius() {
     assert!(small.0 > 0 && small.0 <= 32767);
     assert_eq!((small.1, small.2, small.3), ((0, 0), true, false));
     let large = run(rules(127));
-    assert!(large.0 > 32767, "the field has more than 32 767 non-legal cells");
+    assert!(
+        large.0 > 32767,
+        "the field has more than 32 767 non-legal cells"
+    );
     assert_eq!(
         (large.1, large.2, large.3),
         ((0, 0), true, false),

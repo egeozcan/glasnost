@@ -127,7 +127,11 @@ fn issue_346_vehicle_absorbed_from_a_deck_releases_its_claim() {
         last = Some(o.layer);
     }
     let from_layer = entered_from.expect("the car went inside");
-    assert_eq!(from_layer, Layer::Deck, "the scenario: it arrived on the deck");
+    assert_eq!(
+        from_layer,
+        Layer::Deck,
+        "the scenario: it arrived on the deck"
+    );
     // The absorbed car is off the map: no deck record keeps its claim.
     assert_eq!(
         deck_counts(&w),

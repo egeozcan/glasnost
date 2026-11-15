@@ -1241,7 +1241,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
         }
         if !(rows.steering_dist || rows.steer_ground || rows.safety || rows.orbit) {
             // spec: S-0306 T1 (steering: P′ strictly crosses the bridge deck height of a high-bridge cell, old or new cell; deck height = terrain height of the cell of P′ + 416, whichever of the two cells is the high-bridge cell and whatever the other cell's terrain height; z at that deck height)
-            rows.bridge = deck_here.filter(|&d| (start.z < d && newpos.z > d) || (start.z > d && newpos.z < d));
+            rows.bridge = deck_here
+                .filter(|&d| (start.z < d && newpos.z > d) || (start.z > d && newpos.z < d));
         }
     }
     if (kind == ProjectileKind::Steering || p.ranged) && !p.dropping {

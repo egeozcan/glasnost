@@ -27,7 +27,9 @@ fn unit(owner: &str, dx: i32, dy: i32, key: usize) -> Unit {
 fn owners(n: usize) -> glasnost_map::Map {
     let mut m = testkit::map();
     for i in 2..n {
-        m.objects.units.push(unit(&format!("H{i}"), 12, 12, 1000 + i));
+        m.objects
+            .units
+            .push(unit(&format!("H{i}"), 12, 12, 1000 + i));
     }
     m
 }

@@ -1339,8 +1339,17 @@ fn stop_gap(w: &mut World, id: ObjectId) {
 fn gap_hostility_change(w: &World, id: ObjectId) -> Option<(Vec<HouseId>, Vec<HouseId>)> {
     let g = w.obj(id)?.econ.sight.gap.as_ref()?;
     let now = hostile_houses(w, g.owner);
-    let joined: Vec<HouseId> = now.iter().copied().filter(|h| !g.houses.contains(h)).collect();
-    let left: Vec<HouseId> = g.houses.iter().copied().filter(|h| !now.contains(h)).collect();
+    let joined: Vec<HouseId> = now
+        .iter()
+        .copied()
+        .filter(|h| !g.houses.contains(h))
+        .collect();
+    let left: Vec<HouseId> = g
+        .houses
+        .iter()
+        .copied()
+        .filter(|h| !now.contains(h))
+        .collect();
     (!joined.is_empty() || !left.is_empty()).then_some((joined, left))
 }
 
@@ -1719,8 +1728,7 @@ pub fn alliance_changed(w: &mut World) {
         .values()
         .filter_map(|o| {
             let sight = o.kind == Kind::Building
-                && o
-                    .econ
+                && o.econ
                     .sight
                     .sight
                     .as_ref()

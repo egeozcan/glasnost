@@ -49,7 +49,10 @@ impl std::fmt::Display for LoadError {
             Self::UnknownCountry(c) => write!(f, "unknown country {c:?}"),
             Self::Setup(e) => write!(f, "{e}"),
             Self::TooManyHouses(n) => {
-                write!(f, "the setup has {n} houses; a game can have at most {MAX_HOUSES}")
+                write!(
+                    f,
+                    "the setup has {n} houses; a game can have at most {MAX_HOUSES}"
+                )
             }
             Self::NoStartCell => write!(
                 f,
