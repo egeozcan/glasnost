@@ -1545,6 +1545,9 @@ impl MapRenderer {
         let alpha = alpha.filter(|a| a.len() == n);
         if self.alpha.1 != size {
             let t = alpha_texture(device, queue, size);
+            // design: render (#152): the texture's first fill is an upload too
+            self.stats.uploads += 1;
+            self.stats.upload_bytes += n as u64;
             let backdrop = backdrop_texture(device, size);
             self.bind_group = bind_group(
                 device,
