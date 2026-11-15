@@ -127,7 +127,20 @@ pub fn recruit(w: &mut World, master: ObjectId) -> bool {
         });
     let Some(s) = best else { return false };
     let to = crate::combat::position::fire_point(w, master, 0, 0);
-    let due = w.tick.wrapping_add((delay_field(w) - 1).max(0));
+    let order = &w.update.order;
+    let before = match (
+        order.iter().position(|&x| x == s),
+        order.iter().position(|&x| x == master),
+    ) {
+        (Some(ps), Some(pm)) => ps < pm,
+        // design: #339 (a supporter or master not in the update order: no extra tick, as before)
+        _ => false,
+    };
+    // spec: S-0518 claim 6 (max(d − 1, 0) ticks after recruitment for a supporter that takes its turns after the master in the update order, S-0203 claim 3; one tick later for one before it)
+    let due = w
+        .tick
+        .wrapping_add((delay_field(w) - 1).max(0))
+        .wrapping_add(i32::from(before));
     if let Some(ob) = w.obj_mut(master) {
         // spec: S-0518 claim 4 (the support count rises by 1; no shot in this processing)
         ob.combat.support = ob.combat.support.wrapping_add(1);
