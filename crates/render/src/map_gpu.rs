@@ -622,7 +622,7 @@ impl MapRenderer {
                 },
             ],
         });
-        let alpha = alpha_texture(device, queue, (1, 1));
+        let alpha = alpha_texture(device, queue, (1, 1), true);
         let backdrop = backdrop_texture(device, (1, 1));
         let bind_group = bind_group(
             device,
@@ -1544,10 +1544,15 @@ impl MapRenderer {
         let n = size.0 as usize * size.1 as usize;
         let alpha = alpha.filter(|a| a.len() == n);
         if self.alpha.1 != size {
-            let t = alpha_texture(device, queue, size);
-            // design: render (#152): the texture's first fill is an upload too
-            self.stats.uploads += 1;
-            self.stats.upload_bytes += n as u64;
+            // design: render (#152): when values follow, the texture is made
+            // without the 127 fill and the values are its one write
+            let filled = alpha.is_none();
+            let t = alpha_texture(device, queue, size, filled);
+            if filled {
+                // design: render (#152): the texture's first fill is an upload too
+                self.stats.uploads += 1;
+                self.stats.upload_bytes += n as u64;
+            }
             let backdrop = backdrop_texture(device, size);
             self.bind_group = bind_group(
                 device,
@@ -1560,7 +1565,10 @@ impl MapRenderer {
             );
             self.alpha = (t, size);
             self.backdrop = backdrop;
-            self.alpha_default = true;
+            // Unfilled, the texture holds neither 127 nor any held values:
+            // the write below gives it `alpha`.
+            self.alpha_default = filled;
+            self.alpha_held.clear();
         }
         let bytes = match alpha {
             Some(a) if !self.alpha_default && self.alpha_held == a => return,
@@ -1601,24 +1609,35 @@ impl MapRenderer {
     }
 }
 
-/// A light-alpha texture of `size`, 127 everywhere (S-0110 claim 5).
-fn alpha_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: (u32, u32)) -> wgpu::Texture {
+/// A light-alpha texture of `size`: 127 everywhere (S-0110 claim 5) when
+/// `filled`, else left for the caller to write before it is drawn with
+/// (#152).
+fn alpha_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    size: (u32, u32),
+    filled: bool,
+) -> wgpu::Texture {
+    let desc = wgpu::TextureDescriptor {
+        label: Some("map light-alpha"),
+        size: wgpu::Extent3d {
+            width: size.0,
+            height: size.1,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R8Uint,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    };
+    if !filled {
+        return device.create_texture(&desc);
+    }
     device.create_texture_with_data(
         queue,
-        &wgpu::TextureDescriptor {
-            label: Some("map light-alpha"),
-            size: wgpu::Extent3d {
-                width: size.0,
-                height: size.1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Uint,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        },
+        &desc,
         wgpu::util::TextureDataOrder::LayerMajor,
         &vec![crate::light::DEFAULT_LIGHT_ALPHA as u8; size.0 as usize * size.1 as usize],
     )
