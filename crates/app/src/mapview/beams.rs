@@ -1004,6 +1004,11 @@ pub fn ripple_wave(i: i64, mode: Rounding) -> i64 {
 pub fn ripple(dist_sq: u64, c: i32, mode: Rounding) -> (i32, u16) {
     // spec: S-0607 F5 (D = trunc(r(…)) with the table root)
     let d = glasnost_num::geom::root_floor(dist_sq, true, mode) as i64;
+    ripple_of(d, c, mode)
+}
+
+/// [`ripple`] for the distance *D* already found.
+fn ripple_of(d: i64, c: i32, mode: Rounding) -> (i32, u16) {
     // spec: S-0607 F5 (j = min(|W(D + c)|, 9))
     let j = ripple_wave(d + i64::from(c), mode).abs().min(9);
     // spec: S-0607 F5 (s = 0 for j ≤ 1, 1 for 2 ≤ j ≤ 6, 2 for 7 ≤ j ≤ 9; k = 110 + 8j)
@@ -1029,6 +1034,41 @@ fn inside(v: &[(i64, i64); 4], p: (i64, i64)) -> bool {
     !(pos && neg) && (pos || neg)
 }
 
+/// The doubled x range that can hold points [`inside`] the polygon `v` on
+/// the doubled row `py`, as whole pixels x with the centre 2x + 1: `None`
+/// for an empty row. `area` is the sum of the edges' cross products (twice
+/// the signed area), not 0. Every edge's cross product of a point sums to
+/// `area` whatever the point, so a point is inside exactly when no cross
+/// product has the opposite sign of `area`: one linear bound per edge.
+// design: render (#141)
+fn row_span(v: &[(i64, i64); 4], area: i64, py: i64) -> Option<(i64, i64)> {
+    let s = i128::from(area.signum());
+    let (mut lo, mut hi) = (i128::MIN, i128::MAX);
+    for i in 0..4 {
+        let (a, b) = (v[i], v[(i + 1) % 4]);
+        let (a0, a1) = (i128::from(a.0), i128::from(a.1));
+        let (dx, dy) = (i128::from(b.0) - a0, i128::from(b.1) - a1);
+        // cross = dx (py − a1) − dy (px − a0) = k px + m, wanted s × cross ≥ 0
+        let k = -dy * s;
+        let m = (dx * (i128::from(py) - a1) + dy * a0) * s;
+        if k == 0 {
+            if m < 0 {
+                return None;
+            }
+        } else if k > 0 {
+            // px ≥ ⌈−m / k⌉, and px = 2x + 1
+            let px = -((m).div_euclid(k));
+            lo = lo.max(-((1 - px).div_euclid(2)));
+        } else {
+            // px ≤ ⌊m / −k⌋
+            let px = m.div_euclid(-k);
+            hi = hi.min((px - 1).div_euclid(2));
+        }
+    }
+    let clamp = |x: i128| x.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
+    (lo <= hi).then(|| (clamp(lo), clamp(hi)))
+}
+
 /// The spots of a magnetic wave with ends `e1` and `e2` (`e2` already
 /// raised), shift direction `dir` and countdown `c` (S-0607 claim 25, F5).
 pub fn wave_spots(e1: Pos, e2: Pos, dir: (i8, i8), c: i32, mode: Rounding) -> Vec<Spot> {
@@ -1041,15 +1081,47 @@ pub fn wave_spots(e1: Pos, e2: Pos, dir: (i8, i8), c: i32, mode: Rounding) -> Ve
     let right = corners.iter().map(|c| c.0).max().unwrap_or(0);
     let top = corners.iter().map(|c| c.1).min().unwrap_or(0);
     let bottom = corners.iter().map(|c| c.1).max().unwrap_or(0);
+    // design: render (#141) (each row scans only the span its pixels inside can lie in; a band of no area is scanned whole)
+    let area: i64 = (0..4)
+        .map(|i| {
+            let (a, b) = (doubled[i], doubled[(i + 1) % 4]);
+            a.0 * b.1 - a.1 * b.0
+        })
+        .sum();
+    // design: render (#141) (at one countdown the displacement and boost depend on D alone: each found once)
+    let mut by_d: Vec<Option<(i32, u16)>> = Vec::new();
     let mut out = Vec::new();
     for y in top..=bottom {
-        for x in left..=right {
+        let (from, to) = if area == 0 {
+            (left, right)
+        } else {
+            let Some((a, b)) = row_span(&doubled, area, 2 * i64::from(y) + 1) else {
+                continue;
+            };
+            let (a, b) = (a.max(i64::from(left)), b.min(i64::from(right)));
+            if a > b {
+                continue;
+            }
+            // Both lie within left..=right here.
+            (a as i32, b as i32)
+        };
+        for x in from..=to {
             // Our interim fill rule: the pixel's centre inside or on the band.
             if !inside(&doubled, (2 * i64::from(x) + 1, 2 * i64::from(y) + 1)) {
                 continue;
             }
             let (dx, dy) = (i64::from(x - x0), i64::from(y - y0));
-            let (s, k) = ripple((dx * dx + dy * dy) as u64, c, mode);
+            // spec: S-0607 F5 (D = trunc(r(…)) with the table root)
+            let d = glasnost_num::geom::root_floor((dx * dx + dy * dy) as u64, true, mode);
+            let (s, k) = match usize::try_from(d) {
+                Ok(i) if i < 1 << 16 => {
+                    if by_d.len() <= i {
+                        by_d.resize(i + 1, None);
+                    }
+                    *by_d[i].get_or_insert_with(|| ripple_of(d as i64, c, mode))
+                }
+                _ => ripple_of(d as i64, c, mode),
+            };
             out.push(Spot {
                 x,
                 y,
