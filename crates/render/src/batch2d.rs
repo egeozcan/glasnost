@@ -374,6 +374,10 @@ pub struct Batch2d {
     instances: wgpu::Buffer,
     capacity: u64,
     runs: Vec<(Option<u32>, u32, u32)>,
+    /// The quads in `instances` and the target size in `screen`, as last
+    /// written: a prepare of the same skips the writes (#124).
+    held: Vec<Quad>,
+    held_size: Option<(u32, u32)>,
     stats: BatchStats,
 }
 
@@ -575,6 +579,8 @@ impl Batch2d {
             instances,
             capacity,
             runs: Vec::new(),
+            held: Vec::new(),
+            held_size: None,
             stats: BatchStats::default(),
         }
     }
@@ -762,6 +768,11 @@ impl Batch2d {
 
     /// Writes the quads of the next [`draw`](Self::draw) for a target of
     /// `size` pixels, and splits them into runs by image.
+    ///
+    /// design: render (#124): the batch keeps the quads and the size it
+    /// last wrote; the same size writes no screen uniform again, and the
+    /// same quads write no instances and keep their runs (the runs follow
+    /// from the quads alone).
     pub fn prepare(
         &mut self,
         device: &wgpu::Device,
@@ -769,25 +780,32 @@ impl Batch2d {
         size: (u32, u32),
         quads: &[Quad],
     ) {
-        let s: [f32; 4] = [size.0 as f32, size.1 as f32, 0.0, 0.0];
-        queue.write_buffer(&self.screen, 0, bytemuck::cast_slice(&s));
-        let n = quads.len() as u64;
-        if n > self.capacity {
-            self.capacity = n.next_power_of_two();
-            self.instances = Self::instance_buffer(device, self.capacity);
-        }
-        if n > 0 {
-            queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(quads));
-            self.stats.uploads += 1;
-            self.stats.upload_bytes += std::mem::size_of_val(quads) as u64;
+        if self.held_size != Some(size) {
+            let s: [f32; 4] = [size.0 as f32, size.1 as f32, 0.0, 0.0];
+            queue.write_buffer(&self.screen, 0, bytemuck::cast_slice(&s));
+            self.held_size = Some(size);
         }
         self.stats.quads += quads.len();
-        self.runs.clear();
-        for (i, q) in quads.iter().enumerate() {
-            let img = (q.mode() == MODE_IMAGE).then_some(q.image);
-            match self.runs.last_mut() {
-                Some((last, _, len)) if *last == img => *len += 1,
-                _ => self.runs.push((img, i as u32, 1)),
+        if quads != self.held.as_slice() {
+            let n = quads.len() as u64;
+            if n > self.capacity {
+                self.capacity = n.next_power_of_two();
+                self.instances = Self::instance_buffer(device, self.capacity);
+            }
+            if n > 0 {
+                queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(quads));
+                self.stats.uploads += 1;
+                self.stats.upload_bytes += std::mem::size_of_val(quads) as u64;
+            }
+            self.held.clear();
+            self.held.extend_from_slice(quads);
+            self.runs.clear();
+            for (i, q) in quads.iter().enumerate() {
+                let img = (q.mode() == MODE_IMAGE).then_some(q.image);
+                match self.runs.last_mut() {
+                    Some((last, _, len)) if *last == img => *len += 1,
+                    _ => self.runs.push((img, i as u32, 1)),
+                }
             }
         }
         self.stats.draws += self.runs.len();

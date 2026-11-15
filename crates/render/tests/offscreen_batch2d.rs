@@ -151,6 +151,33 @@ fn render_perf_124_each_prepare_draws_its_own_quads() {
     }
 }
 
+/// design: render (#124): a prepare of the quads the batch holds uploads
+/// nothing and draws them in as many draw calls as before; other quads
+/// upload once.
+#[test]
+fn render_perf_124_the_same_quads_upload_nothing() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let quads = vec![
+        Quad::solid([0, 0, 8, 8], [1, 2, 3, 255]),
+        Quad::image(7, (4, 3), [0, 0, 4, 3]),
+        Quad::solid([2, 2, 2, 2], [4, 5, 6, 255]),
+    ];
+    let mut batch = Batch2d::new(&device, OFFSCREEN_FORMAT);
+    batch.prepare(&device, &queue, (8, 8), &quads);
+    let first = batch.take_stats();
+    assert_eq!((first.uploads, first.quads, first.draws), (1, 3, 3));
+    batch.prepare(&device, &queue, (8, 8), &quads);
+    let again = batch.take_stats();
+    assert_eq!((again.uploads, again.upload_bytes), (0, 0));
+    assert_eq!((again.quads, again.draws), (3, 3));
+    let mut other = quads.clone();
+    other[2] = Quad::solid([3, 3, 2, 2], [4, 5, 6, 255]);
+    batch.prepare(&device, &queue, (8, 8), &other);
+    assert_eq!(batch.take_stats().uploads, 1);
+}
+
 /// An image drawn from a texture the caller owns (the client's map target)
 /// matches the same image uploaded through `set_image`.
 #[test]
