@@ -148,9 +148,10 @@ pub fn place_stream(w: &mut World, map: &Map, stream: &[(CellXY, u8, u8)]) {
 pub(crate) fn place_overlay(w: &mut World, c: CellXY, o: u8) {
     if let Some(m) = marker(o) {
         // spec: S-0009 claim 12 and S-0202 claim 14 (a low-bridge end marker, its end-row writes and its piece writes start no cell animation; their recalculations can start tile animations)
-        end_marker(w, c, m);
-        // spec: S-0202 claim 10 (placing an overlay recalculates its cell)
-        recalc_cells(w, &[c]);
+        if end_marker(w, c, m) {
+            // spec: S-0202 claim 10 (placing an overlay recalculates its cell; a blocked end row writes nothing and nothing follows, so no recalculation and no draw, #348)
+            recalc_cells(w, &[c]);
+        }
         return;
     }
     if let Some(cell) = w.cells.grid.get_mut(c) {
@@ -241,12 +242,13 @@ fn holds_overlay(w: &World, c: CellXY) -> bool {
     w.cells.cell(c).is_some_and(|x| x.overlay != NO_OVERLAY)
 }
 
-/// A low-bridge end marker placed in `c` (S-0202 claim 10).
-fn end_marker(w: &mut World, c: CellXY, m: &Marker) {
+/// A low-bridge end marker placed in `c` (S-0202 claim 10). Returns
+/// whether its end row was written (false: blocked, nothing written).
+fn end_marker(w: &mut World, c: CellXY, m: &Marker) -> bool {
     let row = across(m.line, c);
     // spec: S-0202 claim 10 (any end-row cell holding an overlay: nothing is written, nothing follows)
     if row.iter().any(|&x| holds_overlay(w, x)) {
-        return;
+        return false;
     }
     for (k, &x) in row.iter().enumerate() {
         // spec: S-0202 claim 10 (the end-row type with data 0, 1, 2; recalculated as written; nothing outside the map, S-0009 claim 44)
@@ -272,7 +274,7 @@ fn end_marker(w: &mut World, c: CellXY, m: &Marker) {
         }
     }
     let Some(mdist) = found else {
-        return;
+        return true;
     };
     // spec: S-0202 Formulas (d = max(m − 1, 1) steps; for m = 1 the step is the marker's own end row)
     let steps: Vec<i32> = if mdist >= 2 {
@@ -295,6 +297,7 @@ fn end_marker(w: &mut World, c: CellXY, m: &Marker) {
             }
         }
     }
+    true
 }
 
 /// Whether a land type is one the vein placement test refuses (S-0202
