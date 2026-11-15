@@ -1576,7 +1576,8 @@ fn a_vehicle_placed_later_starts_its_barrel_level() {
         first.elevation, target,
         "placed at the start: turned by now"
     );
-    // A second cart enters the map after tick 5 (as a factory's would).
+    // A second cart enters the map in tick 5 (as a factory's would): the
+    // game places it at tick number 5, and the tick then runs.
     let late = testkit::spawn(
         &mut live.world,
         SimKind::Vehicle,
@@ -1585,7 +1586,7 @@ fn a_vehicle_placed_later_starts_its_barrel_level() {
         testkit::mid(24, 0, 6),
         16384,
     );
-    live.after_tick();
+    live.step();
     let elevation = |live: &Live| live.mobile(&inputs, late).expect("drawn").elevation;
     let mut seen = vec![elevation(&live)];
     for _ in 0..3 {
@@ -1650,10 +1651,14 @@ fn claim_6_a_vehicle_placed_again_turns_again_and_a_warp_keeps_its_elevation() {
         "the test type's barrel turns"
     );
     assert_eq!(turned_cart_elevation(&live, &inputs, cart), target);
-    // Taken off the map (into a transport) and unloaded a tick later.
+    // Taken off the map (into a transport) and unloaded a tick later: the
+    // game's placement notes the tick number current then.
     live.world.obj_mut(cart).unwrap().on_map = false;
     tick_by_hand(&mut live);
-    live.world.obj_mut(cart).unwrap().on_map = true;
+    let tick = live.world.tick;
+    let o = live.world.obj_mut(cart).unwrap();
+    o.on_map = true;
+    o.placed_tick = tick;
     tick_by_hand(&mut live);
     let mut seen = vec![turned_cart_elevation(&live, &inputs, cart)];
     for _ in 0..3 {
@@ -1736,8 +1741,12 @@ fn claim_6_a_drop_pod_seize_restarts_the_turn() {
         target,
         "an ordinary seize keeps the turn"
     );
-    // The drop-pod stand-in ends at the seize: level, then turning again.
-    live.world.obj_mut(cart).unwrap().lift.stand_in = Some(StandIn::DropPod);
+    // The drop-pod stand-in ends at the seize: level, then turning again;
+    // the game's seize notes the tick number current then.
+    let tick = live.world.tick;
+    let o = live.world.obj_mut(cart).unwrap();
+    o.lift.stand_in = Some(StandIn::DropPod);
+    o.placed_tick = tick;
     live.world.effects.push(Effect::Seized { unit: cart });
     tick_by_hand(&mut live);
     let mut seen = vec![turned_cart_elevation(&live, &inputs, cart)];
@@ -1754,12 +1763,13 @@ fn claim_6_a_drop_pod_seize_restarts_the_turn() {
     );
 }
 
-/// design: render (#81) (S-0105 claim 6 keeps every turn through a save; a game the drawing
-/// catches up with, a rejoin or ticks run directly, cannot tell when its objects were placed,
-/// so they count from tick 0 as the map's own objects do: their turns are over, never shown
-/// level again)
+/// spec: S-0105 claim 6 (When the turn starts: t₀ is the tick number current at the placement,
+/// which the game keeps with the object; First appearance: a drawn frame shows ε = n − t₀).
+/// design: render (#81) (a game the drawing catches up with, ticks run directly as the
+/// benchmark's, reads the same placement tick: a vehicle placed in the last tick before the
+/// catch-up is drawn at ε = 1 and turns on, not at its final elevation)
 #[test]
-fn a_vehicle_first_seen_on_a_catch_up_shows_its_final_elevation() {
+fn a_vehicle_placed_before_a_catch_up_turns_from_its_placement() {
     use glasnost_render::voxel;
     use glasnost_sim::rules::Kind as SimKind;
     let assets = overlay_assets();
@@ -1776,6 +1786,7 @@ fn a_vehicle_first_seen_on_a_catch_up_shows_its_final_elevation() {
         rules: None,
         cells: None,
     };
+    // Ticks the drawing does not see; the cart is placed in the last of them.
     for _ in 0..40 {
         live.world.tick += 1;
     }
@@ -1787,11 +1798,96 @@ fn a_vehicle_first_seen_on_a_catch_up_shows_its_final_elevation() {
         testkit::mid(24, 0, 6),
         16384,
     );
+    live.world.tick += 1;
     live.resume();
     let first = live.mobile(&inputs, cart).expect("the cart is drawn");
     let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
     let target = voxel::barrel_elevation_after(fire_angle, 1000);
-    assert_eq!(turned_cart_elevation(&live, &inputs, late), target);
+    assert_ne!(
+        voxel::barrel_elevation_after(fire_angle, 1),
+        target,
+        "the test type's turn takes more than one tick"
+    );
+    assert_eq!(
+        turned_cart_elevation(&live, &inputs, cart),
+        target,
+        "placed at the start: turned by now"
+    );
+    let mut seen = vec![turned_cart_elevation(&live, &inputs, late)];
+    for _ in 0..3 {
+        tick_by_hand(&mut live);
+        seen.push(turned_cart_elevation(&live, &inputs, late));
+    }
+    let expected: Vec<u16> = (1..5)
+        .map(|t| voxel::barrel_elevation_after(fire_angle, t))
+        .collect();
+    assert_eq!(
+        seen, expected,
+        "caught up with: turned from its own placement, at ε = 1 first"
+    );
+}
+
+/// spec: S-0105 claim 6 (Saved games: a saved game keeps each object's turn and the tick
+/// number, so after a load every turn goes on where it was; a vehicle saved during its turn
+/// is drawn neither level again nor at its final elevation at once)
+#[test]
+fn claim_6_a_loaded_game_goes_on_with_each_turn() {
+    use glasnost_render::voxel;
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    // The game ran 40 ticks; a cart is placed in tick 40 and the game is
+    // saved after it, then loaded; the drawing starts on the loaded game.
+    let (mut live, _scene, map, import, catalogue, cart, _walker, late) =
+        pip_scale_live_with(&assets, |w| {
+            w.tick = 40;
+            let late = testkit::spawn(
+                w,
+                SimKind::Vehicle,
+                "CART",
+                0,
+                testkit::mid(24, 0, 6),
+                16384,
+            );
+            w.tick += 1;
+            let bytes = glasnost_sim::save::save(w);
+            let catalogue = w.catalogue.clone().expect("a catalogue");
+            *w = glasnost_sim::save::load(&bytes, w.rules_arc(), catalogue).expect("loads");
+            late
+        });
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let first = live.mobile(&inputs, cart).expect("the cart is drawn");
+    let fire_angle = super::build::fire_angle(&inputs, first.kind, first.idx);
+    let target = voxel::barrel_elevation_after(fire_angle, 1000);
+    assert_ne!(
+        voxel::barrel_elevation_after(fire_angle, 1),
+        target,
+        "the test type's turn takes more than one tick"
+    );
+    assert_eq!(
+        turned_cart_elevation(&live, &inputs, cart),
+        target,
+        "placed at the start: turned by now"
+    );
+    let mut seen = vec![turned_cart_elevation(&live, &inputs, late)];
+    for _ in 0..3 {
+        tick_by_hand(&mut live);
+        seen.push(turned_cart_elevation(&live, &inputs, late));
+    }
+    let expected: Vec<u16> = (1..5)
+        .map(|t| voxel::barrel_elevation_after(fire_angle, t))
+        .collect();
+    assert_eq!(seen, expected, "loaded: the turn goes on where it was");
 }
 
 /// spec: S-0309 claim 1 (units in guard find targets in range by
@@ -7896,6 +7992,27 @@ fn pip_scale_live(
     ObjectId,
     ObjectId,
 ) {
+    let (live, scene, map, import, catalogue, cart, walker, ()) =
+        pip_scale_live_with(assets, |_| ());
+    (live, scene, map, import, catalogue, cart, walker)
+}
+
+/// [`pip_scale_live`] with `prepare` run on the game before the drawing
+/// starts on it; its result comes back last.
+#[allow(clippy::type_complexity)]
+fn pip_scale_live_with<T>(
+    assets: &super::build::Assets,
+    prepare: impl FnOnce(&mut glasnost_sim::world::World) -> T,
+) -> (
+    Live,
+    Scene,
+    glasnost_map::Map,
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    ObjectId,
+    ObjectId,
+    T,
+) {
     use glasnost_sim::rules::Kind as SimKind;
     let rules = format!(
         "{}[CART]\nPipScale=Passengers\n[WALKER]\nPipScale=ammo\nPip=Yellow\n",
@@ -7947,6 +8064,7 @@ fn pip_scale_live(
         testkit::mid(24, 3, 0),
         16384,
     );
+    let prepared = prepare(&mut world);
     let rules = world.rules_arc();
     let live = Live::new(
         &inputs,
@@ -7954,7 +8072,7 @@ fn pip_scale_live(
         painter,
         (world, rules, testkit::setup(3), Vec::new()),
     );
-    (live, built.scene, map, import, catalogue, cart, walker)
+    (live, built.scene, map, import, catalogue, cart, walker, prepared)
 }
 
 /// spec: S-0111 claims 10, 11 and 12 (a transport's passenger row from the
