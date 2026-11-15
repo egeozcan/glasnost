@@ -1,8 +1,9 @@
 ---
 id: Q-3134
 title: The launch pass cadence of a spawner that takes no turn for ten ticks or more
-status: open
+status: answered
 related: [S-0506, S-0203]
+answered-by: [S-0506]
 ---
 
 ## Need
