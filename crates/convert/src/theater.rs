@@ -393,6 +393,13 @@ impl Catalogue {
             green_ground: start("GreenTile", UNSET),
             green_transition: start("ClearToGreenLat", UNSET),
             pave_transition: start("ClearToPaveLat", UNSET),
+            // spec: S-0513 Import mapping (the role starts of the wet tile: WaterfallEast, WaterfallWest, WaterfallNorth, WaterfallSouth, read as S-0010 reads roles, absent −1)
+            waterfalls: [
+                start("WaterfallEast", UNSET),
+                start("WaterfallWest", UNSET),
+                start("WaterfallNorth", UNSET),
+                start("WaterfallSouth", UNSET),
+            ],
         };
         if theater == FORCED_UNSET_THEATER && quirks.theater_five_forced_unset_roles {
             // spec: S-0010 claim 4 (quirks.theater_five_forced_unset_roles: theater 5's bridge, cliff, shore,

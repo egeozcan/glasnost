@@ -143,6 +143,17 @@ pub struct Roles {
     pub green_ground: i32,
     pub green_transition: i32,
     pub pave_transition: i32,
+    /// The four waterfall roles, east, west, north and south (S-0010 claim
+    /// 4; S-0513 Terms, *wet tile*, and Import mapping).
+    // spec: S-0513 Import mapping (the role starts of the wet tile: WaterfallEast, WaterfallWest, WaterfallNorth, WaterfallSouth; absent −1, unset)
+    #[serde(default = "unset_four")]
+    pub waterfalls: [i32; 4],
+}
+
+/// Four unset role starts (S-0010 claim 4), the default of roles a stored
+/// catalogue lacks.
+fn unset_four() -> [i32; 4] {
+    [UNSET; 4] // spec: S-0513 Import mapping (absent: −1, unset)
 }
 
 /// The unset role start (S-0010 claim 4).
@@ -181,6 +192,7 @@ impl Default for Roles {
             green_ground: UNSET,
             green_transition: UNSET,
             pave_transition: UNSET,
+            waterfalls: unset_four(),
         }
     }
 }
