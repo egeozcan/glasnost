@@ -391,7 +391,13 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     crate::bomb::turn(w, id);
     // spec: S-0519 claim 19 (a designator's change of target cancels its strike: looked at in its own turn)
     crate::strike::turn(w, id);
-    if w.obj(id).is_none() {
+    // spec: S-0519 claim 4 and S-0203 claim 6 (c) (a carrier its bomb kills that stays in play only plays out its death: an infantry unit in its death sequence takes no more of its living turn, so no step, no boarding); Q-3159 (interim: one that is then crashing or sinking goes on with the turn as before)
+    if w.obj(id).is_none_or(|o| {
+        crate::combat::damage::dead(o)
+            && !(crate::jump::crashing(w, id)
+                || crate::air::crashing(w, id)
+                || crate::naval::sinking(w, id))
+    }) {
         return;
     }
     // spec: S-0506 claim 2 (a spawner's launch pass, when one is due, in its own turn; claim 24: a vehicle or ship spawner's own firing step comes later in the turn, so its shot waits for the next pass)
