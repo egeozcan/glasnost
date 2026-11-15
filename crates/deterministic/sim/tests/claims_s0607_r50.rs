@@ -187,7 +187,11 @@ fn a_lifter_that_boards_while_gripping_drops_and_stays_the_dropper() {
     let o = w.obj(v).unwrap();
     assert_eq!(o.lift.dropper, Some(l), "the lifter stays the dropper");
     assert_eq!(o.lift.dropper_house, Some(HouseId(0)));
-    assert_eq!(w.obj(l).unwrap().target, None, "the lifter's target is cleared");
+    assert_eq!(
+        w.obj(l).unwrap().target,
+        None,
+        "the lifter's target is cleared"
+    );
     // spec: S-0607 claim 14 (the exception's dropper: the first sentence applies once it is removed while out of play)
     objects::remove(&mut w, l);
     let o = w.obj(v).unwrap();
@@ -204,7 +208,10 @@ fn a_lifter_that_boards_while_gripping_drops_and_stays_the_dropper() {
 fn a_dropper_that_boards_before_the_landing_is_no_dropper() {
     let (mut w, t, l, v) = gripping_high();
     glasnost_sim::econ::assign_destination(&mut w, l, Some(Target::Cell(at(0, -1))));
-    assert!(lift::dropped(&w, v), "a destination ends the grip with a drop");
+    assert!(
+        lift::dropped(&w, v),
+        "a destination ends the grip with a drop"
+    );
     assert_eq!(w.obj(v).unwrap().lift.dropper, Some(l));
     transport::board(&mut w, l, t);
     let o = w.obj(v).unwrap();

@@ -38,7 +38,11 @@ fn a_target_lost_in_the_house_update_cancels_in_that_tick() {
         w.obj(v).is_none_or(|o| o.health <= 0),
         "the target was destroyed"
     );
-    assert_eq!(w.obj(d).unwrap().target, None, "the designator lost its target");
+    assert_eq!(
+        w.obj(d).unwrap().target,
+        None,
+        "the designator lost its target"
+    );
     let s = w.strike.strikes.get(&d).expect("the designator lives");
     assert!(!s.active, "the strike is no longer active");
     assert_eq!(s.target, None, "the strike target is forgotten");

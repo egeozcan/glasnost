@@ -159,7 +159,10 @@ fn passenger_created_before_its_transport_dies_once() {
         .values()
         .filter(|o| o.owner == Some(HouseId(0)))
         .count();
-    assert_eq!(mine, 2, "the house owns the passenger and the transport only");
+    assert_eq!(
+        mine, 2,
+        "the house owns the passenger and the transport only"
+    );
     w.effects.clear();
     victory::defeat(&mut w, HouseId(0));
     assert!(w.obj(p).is_none() && w.obj(t).is_none());
@@ -171,7 +174,9 @@ fn passenger_created_before_its_transport_dies_once() {
     let deaths = w
         .effects
         .iter()
-        .filter(|e| matches!(e, glasnost_sim::combat::effects::Effect::Killed { id, .. } if *id == p))
+        .filter(
+            |e| matches!(e, glasnost_sim::combat::effects::Effect::Killed { id, .. } if *id == p),
+        )
         .count();
     assert_eq!(deaths, 1, "the passenger dies once");
 }
