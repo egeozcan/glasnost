@@ -1,9 +1,9 @@
 ---
 id: Q-3141
 title: Which landing cell is "a road cell that is water" for quirks.warp_naval_road_cell off
-status: open
+status: answered
 related: [S-0513, S-0211]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
