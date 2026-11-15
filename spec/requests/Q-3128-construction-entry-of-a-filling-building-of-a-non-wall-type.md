@@ -1,9 +1,9 @@
 ---
 id: Q-3128
 title: Construction entry of a filling building of a type that is not a wall type
-status: open
+status: answered
 related: [S-0406, S-0415]
-answered-by: []
+answered-by: [S-0406]
 ---
 
 ## Need
