@@ -508,6 +508,51 @@ Seams left:
 
 `quirks::tests::every_spec_quirk_has_a_switch` fails on base and here for `quirks.crate_beneath_overlay_refusal` (S-0312). It is not this batch's.
 
+## Batch S19: build-up, bridges at load, superweapon records, storm clouds, order targeting and warp members
+
+Base main 0d3ed80, not rebased. Save format 152 and AI game format 128 (141aa6e): #352 adds a saved field (`Cloud::late`); wire version unchanged (12). The sim-gate goldens were regenerated once, after the last fix, with the ignored tests, and none moved: no golden scenario makes a storm cloud or meets a changed rule. Each test is committed before its fix (c8366e0 to ce10cbb, and d891200 for #358's value *e*) and fails on the commit before the fix; no fix commit changes a test. Requests Q-3140 and Q-3141 (b49b3e4) and Q-3142 (7e4056d). The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S19: build-up, bridges at load, superweapon records, storm clouds, order targeting and warp members)* (6f78c19).
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #347 | An owner change replaces the queued *construction* with guard, so a docking building handed over in its build-up accepted at once: the infantry absorber, the recycler, the repair depot's permission and the reload pad tested only the queued mission | fixed (d7c9107) | S-0605 claim 1, S-0603 claim 2, S-0314 claim 16, S-0501 claim 22: each also refuses while `econ.construction.building_up` is on, as the tank bunker's row P3 does | `claims_s0605_build_up.rs` |
+| #348 | A blocked low-bridge end marker still recalculated its cell at load, taking an animated tile's draws | fixed (de943d3) | S-0202 claim 10: `end_marker` says whether it wrote its row; `place_overlay` recalculates only then | `claims_s0202.rs` |
+| #349 | The slope condition of S-0009 claim 12 is not tested for a crate overlay in play | not done: Q-3140 (b49b3e4) | S-0520 claim 3 does not say what a refused crate overlay does to the crate place and its lifetime draw | none |
+| #350 | A fire order on a drain-mode missile record in ready started the effect with no silo, so a type that is not one-time never launched | fixed (5b40df2) | S-0512 claim 19, S-0513 claim 7, S-0407 claim 12 j: the ready branch picks the silo (`nuke::silo_choice`) and makes the tech recheck due, as an ordinary launch does | `claims_s0512_drain_missile.rs` |
+| #351 | A one-time record that also got a permanent grant kept the permanent flag after firing, so a later building grant was never lost or suspended | fixed (d0a67ee) | S-0512 claims 7, 12 and 13: `grant_by_building` clears the flag | `claims_s0512_regrant.rs` |
+| #352 | A storm cloud made after the turn pass (a trigger action in the house raise) advanced a tick early with *d* = 1 | fixed (5fbbe64) | S-0513 claim 46, S-0109 claim 5: *a* = max(*c* + *d*, *u* + 1) with *u* = *c* + 1 after the turn pass; the transient `World::after_turn_pass` (not saved, false between ticks) and the saved `Cloud::late` | `claims_s0513_storm_late.rs` |
+| #353 | A reset or set-charge after a first-stage source pick kept the pick's silent re-completion, so the full recharge was not announced and kept the old ready tick | fixed (c6bc6c4) | S-0512 claims 5, 10, 14 and 15: `reset` and `set_charge` clear the silent flag | `claims_s0512_silent_mark.rs` |
+| #354 | Row IC7 ignored its second alternative, a cell out of range of the deployed deployer's first weapon | fixed (8736972) | S-0214 table IC row IC7: `range::in_range` of the first weapon against the cell, as row I21 does for an object | `claims_s0214_ic7_range.rs` |
+| #355 | Row I19 offered *bomb* on a target already carrying one | fixed (209e95a) | S-0214 table I row I19: *bomb* only when the target accepts bombs and `bomb::carries` is false | `claims_s0214_bomb_carrier.rs` |
+| #356 | The guard key gave nothing to an unarmed vehicle that controls slave units | fixed (8250d81) | S-0213 table T2: an own vehicle that is a harvester or a slave master (`seams::is_slave_master`), movable or not | `claims_s0213_guard_slaves.rs` |
+| #357 | The attack-move gesture read the slot in use, so a switching type whose current slot was empty lost it | fixed (0ced81a) | S-0214 claim 5 and Terms (*armed*): `targeting::eligible` and `orders::attack_move_eligible` both read the object's first slot (`weapon::slot_weapon`, slot 0) | `claims_s0214_attack_move_slot.rs` |
+| #358 | Values *x*, *q* and *e* ignored their target-state conditions: a transport phasing in still gave *enter*, a hospital being erased still gave *no-enter* | fixed for *x*, *q* and *e* (2e57803); *n* and the engineer branch are seams | S-0214 tables I and V and Terms: *x* and *q* need a target not being erased and not phasing in, *e* a building not being erased | `claims_s0214_phasing_target.rs` (two tests) |
+| #359 | A jumpjet vehicle in the air was not a free mover, so its move click searched for a cell | fixed (2845a5c) | S-0214 Terms, S-0502 claim 30: `free_mover` counts an infantry or vehicle `weapon::in_air` | `claims_s0214_free_mover_air.rs` |
+| #360 | A jumpjet warp member's departure left its flying registration, landing reservation and hover slot | fixed (e782bbd) | S-0502 claims 4, 15 and 29, S-0513 claim 39: `warp::lift_off` calls `jump::leaving` | `claims_s0513_warp_jump_leaving.rs` (two tests) |
+| #361 | A teleporting-locomotor unit phasing in after a warp took a destination given to it | fixed (7756e8f) | S-0207 claim 20 a and claim 27, S-0214 and S-0513 Terms, S-0513 claim 40: the drop asks `teleport::phasing_in` | `claims_s0207_warp_phasing.rs` (three tests) |
+| #362 | A jumpjet that joined a warp while moving kept its point, order and moving state and took off again after its placement | fixed (658fe33) | S-0513 claim 51, S-0502 claims 5, 15 and 17: `jump::warp_join` at the join clears them and sets the target height to 0 | `claims_s0513_warp_jump_commitment.rs` |
+| #363 | A teleporting infantry member's standing-position reservation at a landing point it never jumped to stayed after the warp | fixed (c1c5e34); the landing choice while pending is Q-3142 | S-0208 claim 19 (Q-0235), S-0513 claim 51: `teleport::warp_release` at the join and at departure | `claims_s0513_warp_teleport_mark.rs` (two tests) |
+| #364 | `quirks.warp_naval_road_cell` off has no effect | not done: Q-3141 (b49b3e4) | S-0513 claim 38 does not say which cell is "a road cell that is water" | none |
+| #365 | With `quirks.update_order_removal_skip` off a unit boarding an open-topped transport after its own turn took a second turn | fixed (0e06256) | S-0203 claims 10 and 11: with the switch off the pass skips an object whose `last_turn` is this tick | `claims_s0203_second_turn.rs` (two tests) |
+
+Lanes compare base 0d3ed80 with the batch at 141aa6e.
+
+**Oracle arena** (`--record all`, two threads). Every output file is byte-identical to base: M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 and M-0021 10 of 50 failing.
+
+**Sweeps.** M6c, M7a and M7b over seeds 1–16 print the same lines as base (every seed's length and counters, every minimum and median; smallest minimum 0, 0 and drain 3).
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games). 1 game ends on another tick and none changes winner: seed 9 map 2 sides 0 and 2, house 1 at 48641 → 48582. It was not traced.
+
+**Suites.** The AI suite with its ignored tests passes 362 before and after. The sim gate with its ignored tests passes 17 against the goldens, which did not move.
+
+Seams left:
+- Q-3140 (#349), Q-3141 (#364) and Q-3142 (#363's landing choice while warp-pending).
+- #358: the "not being erased" of value *n*'s accepting allied building and of the engineer-friendly building's passive-neutral branch.
+- A teleporting vehicle's pending reservation at a warp launch with the vehicle ground-reservation switch on.
+
+No fix makes or moves a rarer back-reference of `World::census` (#402): #360's `jump::leaving` only ends a flight registration.
+
+`quirks::tests::every_spec_quirk_has_a_switch` fails on base and here for `quirks.bunker_hover_no_arrival` (S-0606). It is not this batch's.
+
 ## Batch S13: deaths, depots, power wrap, turning and the bridge deck
 
 Base main 1a1fc50, not rebased. Three doc-comment issues come first (#248 in 1036912, #255 in cd86ad6, #259 in 84bd6da; comments only). Then nine issues and two seams that render batch R9 found in the projectile rules. Failing tests are committed first (fe2f367 to e1d8a6b, one commit per issue or seam), and each fails on the commit before its fix; no fix commit changes a test. Requests Q-3112 and Q-3113 (e664ef5) and Q-3114 (7717829) are filed. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S13: deaths, depots, power wrap, turning and the bridge deck)* (4184af5, d27bd05).
