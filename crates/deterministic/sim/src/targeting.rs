@@ -970,6 +970,20 @@ pub fn deploy_readiness(w: &World, id: ObjectId) -> bool {
     }
 }
 
+/// Whether an infantry unit's deploy weapon fires over an area (S-0214
+/// table I row v3): the deploy weapon of S-0215 claim 30 and Terms, the
+/// secondary weapon or, for a type with the spray-attack flag, the primary.
+fn deploy_weapon_area_fire(w: &World, id: ObjectId) -> bool {
+    // spec: S-0215 claim 30 and Terms (the deploy weapon: the secondary, or the primary for a type with the spray-attack flag)
+    let slot = if uflag(w, id, |u| u.raw.spray_attack.unwrap_or(false)) {
+        0
+    } else {
+        1
+    };
+    // spec: S-0214 Import mapping (Weapon AreaFire: deploy weapon fires over an area, value v of table I)
+    weapon::slot_weapon(w, id, slot).is_some_and(|x| w.rules().combat.weapon(x).area_fire)
+}
+
 fn has_undeploy_delay(w: &World, id: ObjectId) -> bool {
     // spec: S-0214 Import mapping (UndeployDelay: present when 0 or more)
     unit(w, id).is_some_and(|u| u.raw.undeploy_delay.is_some_and(|d| d >= 0))
@@ -1333,9 +1347,12 @@ fn infantry_on(
     .then_some(Action::NoEnter);
     // spec: S-0214 table I (g₁ = e where defined, else g)
     let g1 = e.unwrap_or(g);
-    // spec: S-0214 table I value v (deploy: area attack, deploys in place, else nothing)
+    // spec: S-0214 table I value v (deploy: area attack, deploys in place, else nothing; row v2, route mode, is applied by `in_route_mode`)
     let v = if g1 != Action::Deploy {
         g1
+    } else if deploy_weapon_area_fire(w, actor) {
+        // spec: S-0214 table I row v3 (the actor's deploy weapon fires over an area: area attack) (#412)
+        Action::AreaAttack
     } else if uflag(w, actor, |u| u.deployer) {
         Action::Deploy
     } else {
@@ -2097,15 +2114,15 @@ pub fn action_of(
 
 /// An action as it stands while route mode is held (S-0214 table I value v
 /// row v2, row I22 and table VD row VD1: route mode held gives no-deploy
-/// where the action would be deploy). Route mode is the client's input
+/// where the action would be deploy, or area attack, row v3). Route mode is the client's input
 /// state, so its rows are applied to the action the tables give without it.
 /// A building's deploy action stays deploy (S-0213 claim 16b, revision 87).
 pub fn in_route_mode(w: &World, sel: &[ObjectId], on: ClickOn, a: Action) -> Action {
     // spec: S-0213 claim 16b (revision 87: a building's deploy action is not refused in route mode) and S-0214 table G row G5 (a building's deploy is a click on itself, its only selected object)
     let buildings_own = matches!((sel, on), ([s], ClickOn::Object(t)) if *s == t
         && w.obj(t).is_some_and(|o| o.kind == Kind::Building));
-    // spec: S-0214 table I row v2, row I22 and table VD row VD1 (route mode held: no-deploy)
-    if a == Action::Deploy && !buildings_own {
+    // spec: S-0214 table I row v2, row I22 and table VD row VD1 (route mode held: no-deploy); row v2 comes before row v3, so area attack becomes no-deploy too (#412)
+    if matches!(a, Action::Deploy | Action::AreaAttack) && !buildings_own {
         Action::NoDeploy
     } else {
         a
