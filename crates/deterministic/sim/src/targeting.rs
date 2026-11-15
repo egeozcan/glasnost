@@ -285,9 +285,11 @@ pub fn clickable_by(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
 }
 
 /// A vehicle-like building: it undeploys into a vehicle and has a 1 × 1
-/// foundation (S-0214 Terms).
+/// foundation (S-0214 Terms); `econ::sell::vehicle_like`, which reads the
+/// undeploy name through S-0415's Import mapping (#417).
 pub(crate) fn vehicle_like(w: &World, id: ObjectId) -> bool {
-    building(w, id).is_some_and(|b| b.raw.undeploys_into.is_some() && b.foundation == (1, 1))
+    // spec: S-0214 Terms (vehicle-like building) and S-0415 Import mapping (UndeploysInto: a name that matches no vehicle type makes no packing building)
+    crate::econ::sell::vehicle_like(w, id)
 }
 
 /// Whether an ordinary band box can add the object to house `house`'s
@@ -541,8 +543,11 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
             let b = building(w, id);
             let yard = b.is_some_and(|b| b.raw.construction_yard.unwrap_or(false));
             // spec: S-0214 Terms (a building is movable when it is not paralysed and either …)
-            !disabled(w, id)
-                && (rally_capable(w, id) || (b.is_some_and(|b| b.raw.undeploys_into.is_some()) && !yard))
+            // spec: S-0214 Terms (its type undeploys into a vehicle) and S-0415 Import mapping (a name that matches no vehicle type does not) (#417)
+            let packs = w
+                .obj(id)
+                .is_some_and(|o| crate::econ::deploy::undeploys_into(w, o.type_index).is_some());
+            !disabled(w, id) && (rally_capable(w, id) || (packs && !yard))
         }
         _ => false,
     }
