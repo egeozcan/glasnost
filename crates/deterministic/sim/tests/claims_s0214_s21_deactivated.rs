@@ -16,7 +16,8 @@ use s21_targeting_common::*;
 fn issue_415_a_deactivated_armed_vehicle_keeps_its_rank() {
     let mut w = game();
     let tank = put(&mut w, Kind::Vehicle, "CRUSHER", ALPHA, -4, 0);
-    let cart = put(&mut w, Kind::Vehicle, "CART", ALPHA, 2, 0);
+    // BUGGY is unarmed (rank 2).
+    let buggy = put(&mut w, Kind::Vehicle, "BUGGY", ALPHA, 2, 0);
     let on = ClickOn::Cell(at(4, 0));
     deactivate(&mut w, tank);
     assert!(!targeting::movable(&w, A, tank), "deactivated: not movable");
@@ -25,11 +26,11 @@ fn issue_415_a_deactivated_armed_vehicle_keeps_its_rank() {
         "deactivated: not able to fire"
     );
     let tanks = targeting::action(&w, A, tank, on, Modifiers::default());
-    let carts = targeting::action(&w, A, cart, on, Modifiers::default());
-    assert_ne!(tanks, carts, "the two actions tell the representative");
-    // The cart is nearer, but the armed tank's rank 5 is above the cart's 2.
-    assert_eq!(cursor(&w, &[cart, tank], on), tanks);
-    assert_eq!(cursor(&w, &[tank, cart], on), tanks);
+    let buggys = targeting::action(&w, A, buggy, on, Modifiers::default());
+    assert_ne!(tanks, buggys, "the two actions tell the representative");
+    // The buggy is nearer, but the armed tank's rank 5 is above the buggy's 2.
+    assert_eq!(cursor(&w, &[buggy, tank], on), tanks);
+    assert_eq!(cursor(&w, &[tank, buggy], on), tanks);
 }
 
 // spec: S-0214 Terms (deploy readiness: a vehicle has it when it is not disabled and not inside a tunnel and it deploys into a building; the deactivated state is not disabled) and table VD row VD2 (deploy if the building could be placed and the vehicle has deploy readiness)

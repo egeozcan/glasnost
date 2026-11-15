@@ -37,7 +37,7 @@ fn building(r: &mut Ruleset, name: &str, undeploys_into: Option<&str>) {
 }
 
 /// The rules of the S21 targeting tests, on top of the testkit's combat
-/// rules (CRUSHER armed with `Gun`, CART and BUGGY unarmed, WALKER armed
+/// rules (CRUSHER and CART armed with `Gun`, BUGGY unarmed, WALKER armed
 /// with `Rifle`, the building TOWER):
 /// - buildings `YARD` (1 × 1), `HUT` (1 × 1, undeploys into `NOSUCH`, a
 ///   name no vehicle type has) and `PACK` (1 × 1, undeploys into `MCV`);
