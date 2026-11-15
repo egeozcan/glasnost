@@ -1414,6 +1414,12 @@ pub struct Painter {
     /// The live game's debris pieces' image slots (S-0317 claims 22, 24
     /// and 27).
     pieces: super::piece_pool::PiecePool<PieceKey>,
+    /// Each debris piece type's one-section model (S-0317 claim 23), by
+    /// import registration index. Its inputs, the type's model file and
+    /// its section index, are read from the import and the assets, which
+    /// do not change during a game, so nothing invalidates it.
+    // design: render (#140)
+    piece_models: BTreeMap<usize, Rc<voxel::VoxelModel>>,
     /// The level factors of the object height terms (S-0104 claim 13),
     /// thousandths per height level: λ, chosen by claim 2's per-cell
     /// ranking, and λ<sub>air</sub>, the ion storm's or the normal one.
@@ -3932,7 +3938,19 @@ impl<'a> Builder<'a> {
                 // spec: S-0317 claim 24 (S-0306 F16's one diffuse term with L′ = Rᵀ L, no specular term)
                 let shades = voxel::projectile_shade_table(&r, mode, &q);
                 // spec: S-0317 claim 23 (the section drawn with claim 22's transform only, no motion-file transform)
-                let one = voxel::VoxelModel::from_sections(vec![section.clone()], None, &q);
+                // design: render (#140) (the one-section model made once per type and shared)
+                let one = match self.p.piece_models.get(&d.idx) {
+                    Some(m) => Rc::clone(m),
+                    None => {
+                        let m = Rc::new(voxel::VoxelModel::from_sections(
+                            vec![section.clone()],
+                            None,
+                            &q,
+                        ));
+                        self.p.piece_models.insert(d.idx, Rc::clone(&m));
+                        m
+                    }
+                };
                 let vpl = self.vpl();
                 let body = voxel::draw_model_shaded(&one, 0, &r, vpl.as_deref(), &shades, &q);
                 let body = self.limit_checked(file, "piece", "its orientation", body);
@@ -6700,6 +6718,7 @@ impl Painter {
             tile_items: Vec::new(),
             protected_cells: BTreeMap::new(),
             pieces: Default::default(),
+            piece_models: BTreeMap::new(),
             object_levels: (0, 0),
             shadowed_cells: BTreeSet::new(),
             effect_tint: None,
