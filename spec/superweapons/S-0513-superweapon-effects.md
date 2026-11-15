@@ -2,15 +2,15 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 122
+revision: 124
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-15
 measurements: []
 requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850,
 Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213, Q-2276, Q-2316,
-Q-2317, Q-2376, Q-2416, Q-2418, Q-2419, Q-2468, Q-2566]
+Q-2317, Q-2376, Q-2416, Q-2418, Q-2419, Q-2468, Q-2566, Q-3141]
 supersedes: []
 ---
 
@@ -98,6 +98,14 @@ presentation and swept-layer rules below also apply where those specs cite them.
   during which the member is still phasing in (claim 40). The glossary needs the same
   distinction: 60 ticks is the leaving wait, not the whole leaving stage. A zero held delay still
   ends phasing in on the update after arrival effects.
+- **Wet tile.** A tile that passes the general test (S-0010 claim 5, table R) of the shore role
+  or the water role, or lies in the range of one of the four waterfall roles (east, west, north
+  and south; S-0010 claim 4), each of which covers 4 tile numbers from the role's start. It is a
+  test of the cell's tile, whatever land type the cell has (S-0211 claim 5), and it is wider
+  than the 14-tile water-tile test of S-0306 and S-0614. An unset shore or water role takes part
+  as S-0010 claim 5 says for a role whose general test is not checked: its range is counted from
+  the unset start (`quirks.unset_role_range`). This spec treats each waterfall role the same way,
+  as a role of range count 4 whose general test is not checked.
 - **Phasing in.** The state of a warped object from the moment it leaves its old position until
   its arrival hold ends (claims 39 and 40). A phasing-in object is not warped again (claim 34).
 - **Camera sight.** The spy plane's sight with its radius replaced (claim 44).
@@ -1007,18 +1015,31 @@ presentation and swept-layer rules below also apply where those specs cite them.
     landing point (claim 39, an appearance at the height of claim 36, not S-0501 claim 1's rule):
     - if any protected object is listed in the landing cell's ground layer (even under a deck),
       the member is killed as in claim 37,
-    - a member that lands on water, is not infantry, not naval, not a hover type (a hover type
+    - a member that lands on water (the landing cell's land type is *water*, S-0211 claim 5), is
+      not infantry, not naval, not a hover type (a hover type
       counts as not hovering when its type has the powered-unit flag and its owner has no active
       control centre, S-0405 claim 13), and not on a
       deck, sinks; its kill is credited to the launching house,
     - otherwise, a member for which the cell cannot be entered (S-0209), or a naval member landing
-      on a deck cell or on a road cell (`quirks.warp_naval_road_cell`, default on = original; off:
-      a road cell that is water is not counted), sinks with no credit when the cell is a water
-      tile and the member is not infantry, and is otherwise killed with no credit, as in claim 37.
-    - Backing: `measurable` (SW13 parts d and e). The independent effect of the naval road-cell
-      test is `unmeasured`: ordinary land entry already kills a ship, and no stock water-road
-      fixture isolating this extra test is established here
-    - Confidence: high for the control-centre and road-cell tests; medium for other arrival outcomes
+      on a deck cell or on a road cell, sinks with no credit when the landing cell's tile is a wet
+      tile (Terms) and the member is not infantry, and is otherwise killed with no credit, as in
+      claim 37. A *road cell* here is a cell whose land type (S-0211 claim 5) is *road*, whatever
+      its tile. So a cell that an overlay gives the road land type while it keeps a wet tile
+      (S-0211 claim 5, row 1) is a road cell, and a ship landing there sinks with no credit
+      (`quirks.warp_naval_road_cell`, default on = original; off: a road cell whose tile is a wet
+      tile is not counted as a road cell here, and the ship's fate on it follows the other
+      tests). The switch changes the outcome only for a naval member that can enter such a cell
+      (S-0209), as one can whose movement zone crosses the open category (S-0211 claim 12) and
+      whose locomotion class has a non-zero speed on road land; a naval member that cannot enter
+      it meets the cannot-enter test, which gives the same outcome under both settings.
+    - Backing: `measurable` (SW13 parts d and e; part f for the road cell read by its land type
+      and the sink test read by its tile). The wet tile's waterfall and shore ranges, and an
+      unset role's range, are `unmeasured`: no scenario here chooses a landing cell on a shore or
+      waterfall tile, and none uses a theater with an unset shore, water or waterfall role
+    - Confidence: high for the control-centre test and the deck-cell test with its no-credit
+      sinking over water (SW13 part e); medium for the road-cell test and the sink test
+      read by the tile (SW13 part f needs named data), for the shore, waterfall and unset-role
+      ranges of the wet tile, and for other arrival outcomes
 
 39. **Timing of a warp.** Let *t*_L be the tick of the warp launch (an order, applied after the turn
     pass, S-0203 claim 7). The following tick labels assume a surviving member with one warp
@@ -2419,7 +2440,14 @@ Absent-key defaults are in Import mapping.
   for a named-data witness, not an established fixture.
 - **`quirks.warp_kill_before_protection`** (claim 35). Default on.
 - **`quirks.warp_redirect_as_tracked`** (claim 37). Default on.
-- **`quirks.warp_naval_road_cell`** (claim 38). Default on.
+- **`quirks.warp_naval_road_cell`** (claim 38). Default on = original: a naval member landing on
+  a cell of the road land type sinks with no credit on a wet tile and is killed with no credit
+  otherwise, even when it could enter the cell. Off: a road cell whose tile is a wet
+  tile is not counted as a road cell for this test; a ship that can enter it (S-0209), as one can
+  whose movement zone crosses the open category (S-0211 claim 12) and whose locomotion class has a
+  non-zero speed on road land, is then not killed by the road test, and one that cannot enter it
+  meets claim 38's cannot-enter test, with the same outcome as under the default (design rule, decided at the delegated sign-off, 2026-11-15). Backing:
+  `unmeasured` for the Off form: the original has no such form. Confidence: medium.
 - **`quirks.warp_hold_persists`** (claim 40). Default on.
 - **`quirks.warp_departure_keeps_beam`** (claim 39a). Default on = original: a temporal projectile
   in flight at a warp launch, or a fragment (claim 39a, *The lock routes*), locks a beam on a
@@ -2499,6 +2527,7 @@ can reliably force its effect-creation failure through ordinary input.
 | object type sections | `Organic` | organic flag (claims 23, 24, 35) | boolean | yes for infantry, no otherwise |
 | object type sections | `Teleporter` | teleporter flag (claim 35) | boolean | no |
 | object type sections | `Naval`, `SpeedType`, `PoweredUnit`, `MovementZone` | arrival fate and redirect (claims 37, 38) | as their owning specs | as their owning specs |
+| theater `[General]` | `ShorePieces`, `WaterSet`, `WaterfallEast`, `WaterfallWest`, `WaterfallNorth`, `WaterfallSouth` | the role starts of the wet tile (Terms, claim 38) | integer tileset index, read as S-0010 reads roles | −1 (unset) |
 | object type sections | `Strength` | whole-strength hits (claims 23, 24, 35, 37) | integer, health points (S-0302 claim 12) | 0 health points (S-0302 Import mapping) |
 | `[General]` | `NukeTakeOff` | silo take-off animation (claim 8) | animation name | none |
 | `[AudioVisual]` | `DigSound` | nuclear siren (claim 5) | sound name | none |
@@ -3415,6 +3444,21 @@ is not under test.
   with no credit. Repeat onto a bridge deck above water with an otherwise empty landing cell:
   the ship sinks with no credit, unlike the tank's credited sinking in (d). A launcher kill-count
   increase for the ship falsifies the no-credit sinking rule.
+  (f) Named data: an overlay type with the own-land-type flag and the road land type, placed on
+  one cell of the water role's tiles in open water, and a test rules file that gives the naval
+  type the *amphibious* movement zone (S-0211 claim 12: it crosses the open category, which a
+  road-land cell has while road land's wheel multiplier is above 0.01, S-0211 claim 11) and its
+  locomotion class a non-zero speed on road land. First order the ship onto the overlay
+  cell by ordinary movement and back off it, recording whether it enters. Then warp it onto that
+  cell, and in a control run onto a cell of the same tiles without the overlay. Record whether
+  the ship survives, sinks or is killed without sinking, and the launcher's kill count.
+  Expected: on the overlay cell it sinks, with no rise in the launcher's kill count; in the
+  control run it survives. A ship that survives on the overlay cell falsifies reading the road
+  cell by its land type; one killed there without sinking falsifies reading the sink test by the
+  tile; a kill count rise falsifies the no-credit rule; a ship that does not survive the control
+  run falsifies claim 38's outcome for a naval member on open water. A run in which the ship
+  cannot enter the overlay cell by ordinary movement is void for the road reading only, since
+  the cannot-enter branch then sinks it under either reading.
 - **SW14 — paradrop (claim 42).** Named test file without a paradrop plane type; fire; expected:
   nothing sent, charge spent, no announcement for anyone.
 - **SW15 — spy plane (claims 43 to 45).** (a) Stock: one plane per first-side-group paradrop entry
@@ -3621,6 +3665,9 @@ for these two kinds.
 - The deck-to-deck bridge lift of claim 36 remains low confidence; SW12 needs a deck-to-deck
   run recording both the initial landing point and actual placed height.
 - The absolute tick of each warp step (claim 39).
+- Whether a landing cell that holds no tile (S-0211 claim 5) passes the wet-tile test of claim
+  38's sink test, so whether a member that claim 38 sinks on a wet tile sinks or is killed
+  there.
 - Q-0742 question 4: claim 29 supplies the protection envelope and its draw; S-0102
   claim 34 and F9 settle ordinary opaque composition and the sprite-vehicle, aircraft,
   building-voxel and marked-building-animation cases; claim 29b settles bibs, under-door,
@@ -3678,6 +3725,12 @@ for these two kinds.
   Q-0740 is claim 18. No oracle measurements are claimed.
 
 ## Changes for other specs
+
+- **S-0010, role table.** The row of further roles says the waterfall roles' uses are not covered
+  there. S-0513 Terms (*wet tile*) uses the four waterfall roles, with the shore and
+  water roles, for claim 38's sink test, and treats each waterfall role as a role of range count
+  4 whose general test is not checked, under `quirks.unset_role_range`. S-0010 may add those
+  four rows to table R and point to S-0513.
 
 - **S-0102 claim 34.** The row "Any drawing of a protected object whose centre cell is shrouded
   for the local player" does not apply to a building's slot animations. The animation rule
