@@ -2378,6 +2378,11 @@ fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
 /// its point as one held with no destination object and its unfinished
 /// flight; [`AirState::lost`] records the loss for *move*.
 pub(crate) fn destination_lost(w: &mut World, gone: ObjectId) {
+    // No object of the aircraft kind anywhere: the walk below, which looks
+    // at no other kind, would find none (#402).
+    if crate::census::none(w, crate::census::Held::Aircraft) {
+        return;
+    }
     let lost = Target::Object(gone);
     // spec: S-0501 claim 53 (every aircraft that holds the object as its destination, whatever its behaviour and however the object left play; in key order, which is creation order)
     let ids: Vec<ObjectId> = w

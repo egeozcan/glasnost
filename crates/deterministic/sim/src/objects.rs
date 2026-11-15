@@ -263,6 +263,8 @@ pub fn create_converted(
         lift: Default::default(),
     };
     w.objects.insert(id, obj);
+    // A new object can be an aircraft (#402, `crate::census`).
+    crate::census::forget(w);
     veteran_at_creation(w, id);
     // spec: S-0516 claims 2 (a) and 32 (the own cloak flag and a permanent disguise at creation)
     crate::cloak::machine::created(w, id);
@@ -768,6 +770,8 @@ fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
         }
     }
     // S-0309 claim 23 (d)'s memory conversion was made at the start, in `held::holders_drop` (r140).
+    // The census `held::holders_drop` took for this removal ends here (#402).
+    crate::census::forget(w);
     let gone = w.objects.remove(&id);
     if recalc && let Some(left) = gone {
         // spec: S-0203 claim 13 (a) and (b) (a removed object is kept to the end of the tick, out of play and off the map, with its owner and health; our arena's Removal before the groups, S-0216 claim 8, runs before play and keeps none)

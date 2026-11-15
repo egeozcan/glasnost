@@ -550,6 +550,7 @@ pub fn new_game(
         scratch: Default::default(),
         locomotion_under_way: Vec::new(),
         death_chain: Default::default(),
+        census: None,
         trace: Default::default(),
         pathfinder: Default::default(),
     };

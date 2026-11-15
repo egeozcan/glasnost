@@ -530,6 +530,11 @@ pub struct World {
     /// saved nor hashed.
     #[serde(skip)]
     pub death_chain: crate::combat::death::DeathChain,
+    /// Which rarer back-references exist, noted inside one removal so that
+    /// its walks that would find nothing are skipped (`crate::census`,
+    /// #402). Empty between actions, so neither saved nor hashed.
+    #[serde(skip)]
+    pub census: Option<crate::census::Census>,
     /// The movement trace of the pathing-report tool (M8 A4): off unless
     /// switched on, never saved, hashed, cloned or read by the simulation.
     #[serde(skip)]

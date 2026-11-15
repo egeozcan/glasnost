@@ -264,6 +264,8 @@ pub fn charge_hit(w: &mut World, firer: Option<ObjectId>, target: Option<Target>
         && !ob.combat.chargers.contains(&f)
     {
         ob.combat.chargers.push(f);
+        // A charger list now exists (#402, `crate::census`).
+        crate::census::forget(w);
     }
 }
 
@@ -326,6 +328,10 @@ pub fn building_turn(w: &mut World, b: ObjectId) {
 
 /// An object leaves play (claim 12): it leaves every charger list at once.
 pub fn leaving(w: &mut World, id: ObjectId) {
+    // No charger list anywhere: the walk below would find none (#402).
+    if crate::census::none(w, crate::census::Held::Chargers) {
+        return;
+    }
     for ob in w.objects.values_mut() {
         if !ob.combat.chargers.is_empty() {
             ob.combat.chargers.retain(|&c| c != id);

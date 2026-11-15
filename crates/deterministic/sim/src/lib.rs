@@ -23,6 +23,7 @@ pub mod bomb;
 pub mod bounce;
 pub mod bridges;
 pub mod cells;
+pub mod census;
 pub mod cloak;
 pub mod combat;
 pub mod computer;

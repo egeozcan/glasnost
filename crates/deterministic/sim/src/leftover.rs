@@ -193,6 +193,8 @@ fn with_restored(w: &mut World, id: ObjectId, f: impl FnOnce(&mut World)) {
         return;
     };
     let o = l.object.clone();
+    // The object put back can hold any relation (#402, `crate::census`).
+    crate::census::forget(w);
     let before = w.objects.insert(id, o);
     f(w);
     let back = w.objects.remove(&id);

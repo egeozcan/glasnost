@@ -499,6 +499,8 @@ pub(crate) fn created_in(w: &mut World, id: ObjectId, chain: &mut crate::objects
     if let Some(o) = w.obj_mut(id) {
         o.spawn = Some(c.clone());
     }
+    // A spawn controller now exists (#402, `crate::census`).
+    crate::census::forget(w);
     let owner = w.obj(id).and_then(|o| o.owner);
     for i in 0..c.slots.len() {
         // spec: S-0506 claim 1 (each slot at once receives a new docked slot object; no regeneration time on the first fill)
@@ -1367,6 +1369,10 @@ pub fn target_leaves_play(w: &mut World, id: ObjectId) {
 /// Clear requests recorded earlier are settled before the loss rules read
 /// pending and controller targets.
 fn settle_waiting(w: &mut World) {
+    // No spawn controller anywhere: the walk below would find none (#402).
+    if crate::census::none(w, crate::census::Held::Spawner) {
+        return;
+    }
     let waiting: Vec<ObjectId> = w
         .objects
         .iter()
@@ -1392,6 +1398,10 @@ pub fn target_lost(w: &mut World, id: ObjectId) {
 
 /// The controllers' side of the loss of `id` (S-0506 claims 11 and 25).
 fn target_gone(w: &mut World, id: ObjectId) {
+    // No spawn controller anywhere: the walk below would find none (#402).
+    if crate::census::none(w, crate::census::Held::Spawner) {
+        return;
+    }
     let gone = Some(Target::Object(id));
     // One walk finds both lists: clearing the pending targets below leaves
     // every controller target as it was, so the losers are the same as
