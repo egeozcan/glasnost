@@ -1996,3 +1996,17 @@ The seventeenth batch of the game-logic audit takes #245, whose request Q-3109 S
 **Formats.** #309 adds a saved field: the save format goes to 150 and the AI game format to 126, the numbers the main session gave this batch. Wire version 12: no order's encoding changes. Renumbered at the merge to save format 145 and AI game format 122.
 
 **Seams.** Q-3128 (#310), Q-3129 (#317) and Q-3130 (the arm time of an airburst child) wait for answers. A multi-turret type's selected weapon in the armed test (#321) and row VP29's weapon against the terrain object are not built.
+
+## Simulation (sim issues S20: answered requests, creation sets, removed houses and wrapping)
+
+The twentieth batch of the game-logic audit takes the three issues whose requests have answers, #291 (Q-3121, S-0611 r11), #305 (Q-3122, S-0212 r107) and #310 (Q-3128, S-0406 r14), and #366 to #381. Each change of behaviour has a test on synthetic data committed before it. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S20*.
+
+**Design: an object created and never placed (#366, #369, #372; S-0611 claim 14).** Creating an object can create more objects with it: the slot objects of a spawner, the slaves of a slave miner and the records of a mind controller. S-0611 claim 14 calls these its creation set; an object that is never placed goes away with its whole set, and the draws and object numbers taken stay taken. `objects::discard_unplaced` already does this for a production item and a reinforcement. Three more paths created an object, failed to place it and removed only the object itself, leaving its slot objects and slaves in the world without a parent and its launcher and controller records behind:
+
+- a map object whose cell is not a legal cell, and a map building that becomes a wall overlay (S-0009 claim 38, S-0112 claim 7), in `objects::place_map_objects`;
+- a starting unit, or the base unit, that finds no cell (S-0009 claim 45), in `starting::give`;
+- a trigger's restoration of a destroyed object that fails its cell test (S-0524 claim 9), in `mp_triggers::replace`.
+
+All three now call `objects::discard_unplaced`. Each of them removes the newest creation, so "the object and every object created after it" is exactly its creation set. Two raw removals stay as they are, because the object there is not the newest creation and has no set made with it: an in-play wall building turned into overlay (`placement.rs`) and a deleted production item's object, which `production::delete_item_object` already discards through its own path.
+
+**Design: a removed house is no house of the game (#373, #375, #376; S-0414 Terms, S-0009 claims 28 and 45, S-0409 claim 15).** The unused-house cleanup marks a house removed and keeps its entry, so house numbers stay fixed. Two lookups still ranged over every entry: the civilian house that takes the buildings of a defeated house (`victory::destroy_all`) and the countries of the starting-unit budget pool (`starting::give`). Both now skip removed houses, as `econ::setup::live` and the trigger owner lookup already did. The third issue of the group shares the defeat path: the defeat's own sweep can take the spy satellite's power, and the radar recheck that sweep asks for was cleared at the end of `radar::on_defeat`, so the satellite stayed active for a house that had lost it. The recheck it asked for now stays due.
