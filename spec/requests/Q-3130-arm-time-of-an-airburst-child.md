@@ -1,9 +1,9 @@
 ---
 id: Q-3130
 title: Arm time of an airburst child
-status: open
+status: answered
 related: [S-0306]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
