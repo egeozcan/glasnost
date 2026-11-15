@@ -875,9 +875,12 @@ fn a_terrain_object_on_a_slope_stands_on_the_surface() {
     }
 }
 
+/// A cell's coordinates and the (level, slope shape) to give it.
+type CellSet = ((i32, i32), (i8, u8));
+
 /// The test map of `text` with each listed cell set to its (level, slope
 /// shape).
-fn map_with_cells(text: &[u8], cells: &[((i32, i32), (i8, u8))]) -> glasnost_map::Map {
+fn map_with_cells(text: &[u8], cells: &[CellSet]) -> glasnost_map::Map {
     let (_, catalogue, _) = context();
     let doc = Document::parse(text, Quirks::default(), &mut Vec::new());
     let mut map = decode(
