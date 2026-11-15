@@ -1083,6 +1083,7 @@ impl Client {
                 .unwrap_or_default(),
             local: Some(HouseId(slot.house)),
             cursor: install.cursor_palette.clone(),
+            palettes: self.palettes.clone(),
             colour_blind: self.settings.colour_blind,
             watch: false,
         };

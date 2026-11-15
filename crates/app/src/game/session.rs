@@ -287,7 +287,9 @@ impl Session {
     /// (presentation only, M8 step C3). With `watch`, `local` may be an AI
     /// house, watched rather than played (the performance benchmark, M8
     /// step C4). The rules are resolved with our own patch layers `layers`
-    /// (M8 step C7), which the game's pathing reports record.
+    /// (M8 step C7), which the game's pathing reports record. `palettes` is
+    /// the session's palette state after its previous game, `None` for its
+    /// first (S-0103 claims 2 and 3).
     #[allow(clippy::too_many_arguments)]
     pub async fn start(
         vfs: &mut Vfs,
@@ -295,6 +297,7 @@ impl Session {
         make: live::MakeSetup<'_>,
         local: Option<HouseId>,
         cursor: &CursorPaletteKeep,
+        palettes: Option<glasnost_render::palette::PaletteState>,
         colour_blind: bool,
         watch: bool,
         layers: Layers,
@@ -321,6 +324,7 @@ impl Session {
             &options,
             true,
             glasnost_render::voxel::VoxelCanvas::new(),
+            palettes,
             Some(make),
             layers,
         )

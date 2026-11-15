@@ -77,6 +77,9 @@ pub enum Job {
         local: Option<HouseId>,
         /// The session's cursor palette keep (S-0111 claim 19a).
         cursor: super::session::CursorPaletteKeep,
+        /// The session's palette state after its previous game, `None` for
+        /// its first (S-0103 claims 2 and 3; [`Client::palettes`]).
+        palettes: Option<glasnost_render::palette::PaletteState>,
         /// The player houses show our colour-blind colours (the person's
         /// setting; presentation only).
         colour_blind: bool,
@@ -121,6 +124,7 @@ pub async fn run_job(job: Job) -> Done {
             speech,
             local,
             cursor,
+            palettes,
             colour_blind,
             watch,
         } => {
@@ -135,6 +139,7 @@ pub async fn run_job(job: Job) -> Done {
                 &make,
                 local,
                 &cursor,
+                palettes,
                 colour_blind,
                 watch,
                 lobby.layers,
@@ -200,6 +205,10 @@ pub struct Client {
     pub shell: Shell,
     /// The install's menu data, once read.
     pub install: Option<Install>,
+    /// The session's palette state as its last started game left it,
+    /// handed to the next game (S-0103 claims 2 and 3); `None` before the
+    /// first game of an install.
+    pub palettes: Option<glasnost_render::palette::PaletteState>,
     /// The mounted file system, while no job holds it.
     pub vfs: Option<Vfs>,
     /// The running game.
@@ -344,6 +353,7 @@ impl Client {
         Self {
             shell: Shell::new(),
             install: None,
+            palettes: None,
             vfs: None,
             session: None,
             painter: Painter::new(),
@@ -515,6 +525,8 @@ impl Client {
                         self.install = Some(*i);
                         // Another install's maps: its previews are not these.
                         self.previews = maps::Previews::default();
+                        // Another install: its first game reads the palettes as at program start.
+                        self.palettes = None;
                     }
                     Err(e) => self.status = e,
                 }
@@ -534,6 +546,8 @@ impl Client {
                         for p in &s.problems {
                             log::info!("game load: {p}");
                         }
+                        // spec: S-0103 claim 3 (the session's palettes, as this game started them, for its next game)
+                        self.palettes = Some(s.loaded.palettes.clone());
                         s.resize(self.size, self.ui_scale());
                         self.captions.clear();
                         // A fresh atlas per game: the icons of the last one go.
@@ -714,6 +728,7 @@ impl Client {
                 .unwrap_or_default(),
             local: None,
             cursor: install.cursor_palette.clone(),
+            palettes: self.palettes.clone(),
             colour_blind: self.settings.colour_blind,
             watch: false,
         });

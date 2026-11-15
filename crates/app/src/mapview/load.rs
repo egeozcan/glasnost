@@ -231,51 +231,22 @@ pub async fn load(
         play,
         canvas,
         None,
+        None,
         Layers::REFERENCE,
     )
     .await
 }
 
-/// The lobby colour slot of the local house that `choice` picks in
-/// `setup` (S-0112 claim 1 row 4: the walls take the local player's house
-/// colour; S-0103 claim 10: a house's colour is its lobby slot's), `None`
-/// without a local house or without a slot.
-pub(super) fn local_slot(
-    setup: &glasnost_sim::world::GameSetup,
-    choice: build::LocalChoice,
-) -> Option<u8> {
-    let h = live::local_of(setup, choice).ok()??;
-    setup.skirmish.houses.get(usize::from(h.0))?.colour
-}
-
-/// [`load`] with the game's setup made by `make` from the map's typed
-/// rules (the game client's skirmish); `options.game` should then be
-/// [`build::GameMode::Skirmish`] so the skirmish files are read. The rules
-/// are resolved with our own patch layers `layers` (M8 step C7).
-#[allow(clippy::too_many_arguments)]
-pub async fn load_with(
-    vfs: &mut Vfs,
-    bytes: Vec<u8>,
-    origin: String,
-    options: &Options,
-    play: bool,
-    canvas: VoxelCanvas,
-    make: Option<live::MakeSetup<'_>>,
-    layers: Layers,
-) -> Loaded {
-    let map_ini = glasnost_ini::Document::parse(&bytes, Default::default(), &mut Vec::new());
-    // spec: S-0703 Import mapping ([Basic] Theme, the map theme; the music player cuts and matches it); S-0009 Import mapping ([Basic] Theme: read and kept as map data, absent: no map theme)
-    let theme = map_ini.value(b"Basic", b"Theme").map(<[u8]>::to_vec);
-    let GameInputs {
-        map,
-        mut map_warnings,
-        import,
-        resolved,
-        catalogue,
-        tiles,
-        mut problems,
-    } = glasnost_convert::game::load(vfs, bytes, origin, layers).await;
-    let theater: Theater = to_vfs_theater(map.theater);
+/// The palettes of a game in `theater` (S-0103 claims 2 and 3), read from
+/// the install mounted in `vfs`. `kept` is the session's palette state as
+/// its previous game left it ([`Loaded::palettes`]), `None` for the
+/// session's first game, whose state is made as at program start.
+pub async fn game_palettes(
+    vfs: &Vfs,
+    theater: Theater,
+    kept: Option<PaletteState>,
+) -> PaletteState {
+    let _ = kept;
     let pal = |b: Option<Vec<u8>>| b.and_then(|b| Palette6::parse(&b).ok());
     // spec: S-0103 State and ordering (program start: the snow unit palette and the anim palette)
     let mut palettes = PaletteState::at_program_start(
@@ -298,6 +269,52 @@ pub async fn load_with(
     }
     // spec: S-0103 claim 3 (a game in a new theater loads its palettes)
     palettes.start_game(theater, |n| files.get(n).cloned().flatten());
+    palettes
+}
+
+/// The lobby colour slot of the local house that `choice` picks in
+/// `setup` (S-0112 claim 1 row 4: the walls take the local player's house
+/// colour; S-0103 claim 10: a house's colour is its lobby slot's), `None`
+/// without a local house or without a slot.
+pub(super) fn local_slot(
+    setup: &glasnost_sim::world::GameSetup,
+    choice: build::LocalChoice,
+) -> Option<u8> {
+    let h = live::local_of(setup, choice).ok()??;
+    setup.skirmish.houses.get(usize::from(h.0))?.colour
+}
+
+/// [`load`] with the game's setup made by `make` from the map's typed
+/// rules (the game client's skirmish); `options.game` should then be
+/// [`build::GameMode::Skirmish`] so the skirmish files are read. The rules
+/// are resolved with our own patch layers `layers` (M8 step C7). `kept` is
+/// the session's palette state ([`game_palettes`]).
+#[allow(clippy::too_many_arguments)]
+pub async fn load_with(
+    vfs: &mut Vfs,
+    bytes: Vec<u8>,
+    origin: String,
+    options: &Options,
+    play: bool,
+    canvas: VoxelCanvas,
+    kept: Option<PaletteState>,
+    make: Option<live::MakeSetup<'_>>,
+    layers: Layers,
+) -> Loaded {
+    let map_ini = glasnost_ini::Document::parse(&bytes, Default::default(), &mut Vec::new());
+    // spec: S-0703 Import mapping ([Basic] Theme, the map theme; the music player cuts and matches it); S-0009 Import mapping ([Basic] Theme: read and kept as map data, absent: no map theme)
+    let theme = map_ini.value(b"Basic", b"Theme").map(<[u8]>::to_vec);
+    let GameInputs {
+        map,
+        mut map_warnings,
+        import,
+        resolved,
+        catalogue,
+        tiles,
+        mut problems,
+    } = glasnost_convert::game::load(vfs, bytes, origin, layers).await;
+    let theater: Theater = to_vfs_theater(map.theater);
+    let palettes = game_palettes(vfs, theater, kept).await;
     let started = if play {
         match (&resolved, tiles) {
             (Err(e), _) => Err(format!("the rules did not resolve: {e}")),
