@@ -140,7 +140,10 @@ fn a_groups_marks_hold_for_that_group_only() {
     for (n, size) in [SIZE, SMALLER, SMALLER, SIZE].into_iter().enumerate() {
         let (differing, stats) = draw(&device, &queue, &mut r, &s, size);
         assert_eq!(differing, 0, "frame {n}: as the CPU draws them");
-        assert_eq!(stats.draws, 3, "frame {n}: the ground's draw and a draw a group");
+        assert_eq!(
+            stats.draws, 3,
+            "frame {n}: the ground's draw and a draw a group"
+        );
         assert_eq!(stats.copies, 2, "frame {n}: a copy a group");
         assert_eq!(stats.passes, 3, "frame {n}: passes");
     }

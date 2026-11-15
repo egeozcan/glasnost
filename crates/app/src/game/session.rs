@@ -1266,9 +1266,7 @@ impl Session {
         let code = self
             .scene
             .object_at(qx, qy, &view, &self.filter, &ComposeQuirks::default());
-        let id = code.and_then(|c| {
-            self.live_only(|live, _| live.object_of_code(c)).flatten()
-        });
+        let id = code.and_then(|c| self.live_only(|live, _| live.object_of_code(c)).flatten());
         (CellXY::new(cell.0, cell.1), id)
     }
 

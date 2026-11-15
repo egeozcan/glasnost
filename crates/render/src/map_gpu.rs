@@ -1605,7 +1605,10 @@ fn spot_instances(
     batches: &mut Vec<Batch>,
 ) {
     if g.spots.len() < SpotStamps::LAYERS as usize
-        && !g.spots.iter().any(|s| matches!(s.kind, SpotKind::Wave { .. }))
+        && !g
+            .spots
+            .iter()
+            .any(|s| matches!(s.kind, SpotKind::Wave { .. }))
     {
         layered_spot_instances(g, view, stamps, list, batches);
         return;
@@ -1845,9 +1848,12 @@ fn layered_spot_instances(
         } else {
             list.len() as u32
         };
-        let rect = stamps.reads.get(l).copied().flatten().map(|[x0, y0, x1, y1]| {
-            [x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32]
-        });
+        let rect = stamps
+            .reads
+            .get(l)
+            .copied()
+            .flatten()
+            .map(|[x0, y0, x1, y1]| [x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32]);
         batches.push((Role::Spot, from..end, rect));
         from = end;
     }

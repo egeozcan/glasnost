@@ -97,14 +97,16 @@ fn draw(device: &wgpu::Device, queue: &wgpu::Queue, s: &Scene) -> (usize, MapSta
     };
     let filter = Filter::default();
     let q = ComposeQuirks::default();
-    let cpu = s
-        .compose_lit(&view, &filter, &q, Some(alpha()))
-        .to_rgba();
+    let cpu = s.compose_lit(&view, &filter, &q, Some(alpha())).to_rgba();
     let plain = ground()
         .compose_lit(&view, &filter, &q, Some(alpha()))
         .to_rgba();
     assert!(
-        cpu.chunks(4).zip(plain.chunks(4)).filter(|(a, b)| a != b).count() > 100,
+        cpu.chunks(4)
+            .zip(plain.chunks(4))
+            .filter(|(a, b)| a != b)
+            .count()
+            > 100,
         "the spots show"
     );
     let mut r = MapRenderer::new(device, queue, s, COLOR_FORMAT).expect("scene uploads");
@@ -153,7 +155,11 @@ fn repeated_flashes_take_no_copy() {
     };
     let mut s = ground();
     let flash = |at: i32, n: usize| SpotKind::Flash {
-        rgb: [(at * 37 % 256) as u8, (n * 90 + 40) as u8, (at * 11 % 256) as u8],
+        rgb: [
+            (at * 37 % 256) as u8,
+            (n * 90 + 40) as u8,
+            (at * 11 % 256) as u8,
+        ],
     };
     let mut spots = interleaved(10, flash);
     spots.extend(interleaved(10, |at, n| SpotKind::Opaque {
@@ -178,7 +184,11 @@ fn repeated_beam_pixels_take_a_copy_per_depth() {
     };
     let mut s = ground();
     let reader = |at: i32, n: usize| {
-        let rgb = [(at * 37 % 256) as u8, (at * 91 % 256) as u8, (n * 120 + 30) as u8];
+        let rgb = [
+            (at * 37 % 256) as u8,
+            (at * 91 % 256) as u8,
+            (n * 120 + 30) as u8,
+        ];
         if at % 2 == 0 {
             SpotKind::Additive { rgb }
         } else {

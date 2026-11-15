@@ -81,7 +81,9 @@ fn invented_item(s: &mut Session, at: (i32, i32), seed: u8) -> u32 {
     let o = s.view().origin;
     let scene = s.scene_mut();
     let row = scene.add_row(std::array::from_fn(|i| {
-        (i as u16).wrapping_mul(97).wrapping_add(u16::from(seed) * 1000)
+        (i as u16)
+            .wrapping_mul(97)
+            .wrapping_add(u16::from(seed) * 1000)
     }));
     let id = scene.add_image(image(48, 40, seed));
     scene.items.push(Item {
@@ -144,7 +146,10 @@ fn an_unchanged_frame_keeps_the_battlefield_and_a_change_draws_it_anew() {
         frame(&device, &queue, &mut kept, &mut c);
     }
     let (mut last, stats) = frame(&device, &queue, &mut kept, &mut c);
-    assert_eq!(stats.map.passes, 0, "an unchanged frame records no battlefield");
+    assert_eq!(
+        stats.map.passes, 0,
+        "an unchanged frame records no battlefield"
+    );
     let want = fresh(&device, &queue, &mut c);
     assert_eq!(
         battlefield(&c, &last),
@@ -175,12 +180,19 @@ fn an_unchanged_frame_keeps_the_battlefield_and_a_change_draws_it_anew() {
                 // The centre is limited to the map (S-0101 claim 8): a step that it allows.
                 let s = session_mut(c);
                 let (x, y) = s.centre();
-                let moved = [(24, 12), (-24, -12), (24, -12), (-24, 12), (24, 0), (-24, 0)]
-                    .into_iter()
-                    .any(|(dx, dy)| {
-                        s.set_centre((x + dx, y + dy));
-                        s.centre() != (x, y)
-                    });
+                let moved = [
+                    (24, 12),
+                    (-24, -12),
+                    (24, -12),
+                    (-24, 12),
+                    (24, 0),
+                    (-24, 0),
+                ]
+                .into_iter()
+                .any(|(dx, dy)| {
+                    s.set_centre((x + dx, y + dy));
+                    s.centre() != (x, y)
+                });
                 assert!(moved, "the view moves");
             }),
         ),
@@ -190,12 +202,19 @@ fn an_unchanged_frame_keeps_the_battlefield_and_a_change_draws_it_anew() {
             Box::new(move |c| session_mut(c).play.selection = vec![unit]),
         ),
         ("a tick", false, Box::new(|c| session_mut(c).step())),
-        ("the window resized", false, Box::new(|c| c.resize((720, 560)))),
+        (
+            "the window resized",
+            false,
+            Box::new(|c| c.resize((720, 560))),
+        ),
     ];
     for (what, shows, change) in changes {
         change(&mut c);
         let (got, stats) = frame(&device, &queue, &mut kept, &mut c);
-        assert!(stats.map.passes > 0, "{what}: the battlefield is drawn anew");
+        assert!(
+            stats.map.passes > 0,
+            "{what}: the battlefield is drawn anew"
+        );
         let want = fresh(&device, &queue, &mut c);
         assert_eq!(
             battlefield(&c, &got),

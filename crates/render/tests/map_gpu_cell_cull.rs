@@ -79,11 +79,23 @@ fn scene() -> Scene {
     for cy in 0..20 {
         for cx in 0..20 {
             let (x, y) = (cx * 30 - 10, cy * 15 - 8);
-            s.items
-                .push(item(piece, x, y, DepthTest::Writer, -(cx + cy), Group::Tiles));
+            s.items.push(item(
+                piece,
+                x,
+                y,
+                DepthTest::Writer,
+                -(cx + cy),
+                Group::Tiles,
+            ));
             if (cx + cy) % 3 == 0 {
-                s.items
-                    .push(item(smudge, x + 9, y + 4, DepthTest::Ignore, 0, Group::Smudges));
+                s.items.push(item(
+                    smudge,
+                    x + 9,
+                    y + 4,
+                    DepthTest::Ignore,
+                    0,
+                    Group::Smudges,
+                ));
             }
         }
     }
@@ -184,12 +196,18 @@ fn the_cell_pass_cull_follows_every_change() {
     check(&s, (-40, -20), &all, "a resized image");
     // Another filter: the tiles hidden, then the smudges.
     let no_tiles = Filter {
-        groups: Group::ALL.into_iter().filter(|&g| g != Group::Tiles).collect(),
+        groups: Group::ALL
+            .into_iter()
+            .filter(|&g| g != Group::Tiles)
+            .collect(),
         provisional: true,
     };
     check(&s, (-40, -20), &no_tiles, "the tiles hidden");
     let no_smudges = Filter {
-        groups: Group::ALL.into_iter().filter(|&g| g != Group::Smudges).collect(),
+        groups: Group::ALL
+            .into_iter()
+            .filter(|&g| g != Group::Smudges)
+            .collect(),
         provisional: true,
     };
     check(&s, (-40, -20), &no_smudges, "the smudges hidden");

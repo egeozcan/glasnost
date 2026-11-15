@@ -57,7 +57,9 @@ fn scene() -> Scene {
     let row = s.add_row(std::array::from_fn(|i| {
         (i as u16).wrapping_mul(2971).wrapping_add(0x1234)
     }));
-    let ground = s.add_image(IndexedImage::new(SIZE.0, SIZE.1, vec![200; (SIZE.0 * SIZE.1) as usize]).unwrap());
+    let ground = s.add_image(
+        IndexedImage::new(SIZE.0, SIZE.1, vec![200; (SIZE.0 * SIZE.1) as usize]).unwrap(),
+    );
     let mut bias = 0;
     let mut item = |image, x, y, test, paint| {
         bias -= 10;
