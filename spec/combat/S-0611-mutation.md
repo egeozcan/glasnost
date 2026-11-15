@@ -2,13 +2,13 @@
 id: S-0611
 title: Mutation
 topic: combat
-revision: 4
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-11-15
 measurements: []
-requests: [Q-1461, Q-1460, Q-1530]
+requests: [Q-1461, Q-1460, Q-1530, Q-3121]
 supersedes: []
 ---
 
@@ -20,7 +20,8 @@ How an infantry unit killed by a mutating warhead is replaced by a new infantry 
 convert and which do not, the conversion animation, and the owner, type, place, state and timing of
 the infantry it creates. It covers both deliveries: the genetic mutation superweapon (its launch
 and the two ways it reaches infantry) and any weapon whose warhead has the mutating death kind. It
-also owns the general rule by which an animation that makes infantry creates it at its end.
+also owns the general rule by which an animation that makes infantry creates it at its end, and
+what such an animation marks when it moves or is removed before its end.
 Skirmish only; network games and campaigns are out of scope.
 
 **What this spec does not restate.**
@@ -30,7 +31,8 @@ Skirmish only; network games and campaigns are out of scope.
   conversion does not take place: S-0107 claim 17 (row 7). This spec only says when row 7's
   replacement effect takes place and what it does.
 - **The ordinary death hand-off** (shared death effects, passengers, bomb, credit): S-0312 claim 8.
-- **Animation playback and lifetime:** S-0109 (claim 16 for the end of an animation).
+- **Animation playback and lifetime:** S-0109 (claim 16 for the end of an animation, claim 22 for
+  attached animations). **Flight and landing of a bouncing animation:** S-0319.
 - **Availability, charge, readiness, refusal and sidebar of the superweapon:** S-0512 claims 1 to 8
   and 16 to 18. **Aiming, the readiness guard at launch, the shared announcement rule, the
   computer-house draw after a fire order and the effect block:** S-0513 claims 1, 3, 5, 6 and 4.
@@ -228,10 +230,13 @@ Skirmish only; network games and campaigns are out of scope.
    conversion. Ordinary immediate victim removal clears that mark again, but a victim retained
    by a crash does not perform that removal in the death tick (claim 7).
    While it plays, an infantry-making animation holds its own standing position: in
-   each of its updates its position is marked taken in the occupancy record of its surface, and the
+   each of its updates the standing position of its point (claim 15) is marked taken in the
+   occupancy record of its surface, and the
    cell's infantry house becomes the animation's owner. For a victim removed immediately,
    between the death and its first update the position is free. At its end the position is shown free again, whatever else has marked it
-   meanwhile (`quirks.infantry_animation_occupancy`, Edge cases). The animation has no health and
+   meanwhile (`quirks.infantry_animation_occupancy`, Edge cases). Claim 15 says what becomes of
+   the marks of an animation that moves, is removed before its end or has its point outside the
+   legal map. The animation has no health and
    is not a target.
    - Backing: `measurable` (scenarios MU1, MU6, MU8, MU9, MU10 and MU13)
    - Confidence: high for the owner rule; medium for the occupancy marks
@@ -242,6 +247,8 @@ Skirmish only; network games and campaigns are out of scope.
    the conversion animation included. When its last pass ends and its type names no follow-up type
    (S-0109 claim 16), it tries to create one infantry unit of the made type, then is removed. When
    its type's make-infantry index *i* does not satisfy 0 ≤ *i* < *n* (F4), nothing is created.
+   Claim 15 says where an animation that moves makes this attempt, and that a landing or another
+   removal that is not a successful attempt makes none.
 
    The unit's house is the animation's owner, unless the animation has no owner or its owner is
    defeated by then: the animation itself changes owner to the civilian house and the unit goes
@@ -258,7 +265,7 @@ Skirmish only; network games and campaigns are out of scope.
     Thus it is a rookie unless the new owner's country infantry-veteran list or infiltrated
     infantry-factory flag grants veteran experience. The victim's experience is irrelevant.
     Nothing of the victim passes to it: not its health, rank, owner, orders, selection or group. It faces
-    24 576 facing units (F3, map south-east). Its placement asks for the animation's world point
+    24 576 facing units (F3, map south-east). Its placement asks for the animation's point (claim 15)
     under S-0614 claim 20's rules for infantry:
     - when the point is at terrain height inside the usable area, it is the desired point of the
       occupant-aware position choice of S-0208 claim 3 (with its draw for a centre-class point), and the unit
@@ -284,7 +291,7 @@ Skirmish only; network games and campaigns are out of scope.
 11. **Placement refused.** When the placement of claim 10 fails (for example, a vehicle has entered
     the position's cell), no unit appears and the animation stays: it steps back one frame and tries
     again when that frame is next due (S-0109 timing), and so on until a placement succeeds or the
-    animation is removed otherwise. Each attempt takes its own position-choice draw when the
+    animation is removed otherwise (claim 15). Each attempt takes its own position-choice draw when the
     point is at terrain height inside the usable area, its class is centre and no earlier
     position-choice refusal applies. The owner of claim 9 is resolved again at each attempt.
     In the original each failed attempt also builds a unit that is never placed, together
@@ -391,6 +398,128 @@ Skirmish only; network games and campaigns are out of scope.
       choice; medium for the depth-first order of nested sets and for the absence of later
       activity of a refused set
 
+### Animations that move or are removed before their end
+
+15. **Moving and early-removed infantry-making animations (Q-3121).** Claims 8 to 11 mark, free
+    and place at the animation's **point**. For an animation that is not a bouncing animation
+    (S-0319 claim 1) and has never been attached to an owner (S-0109 claim 22), its point is where
+    it was created, and it does not change. The point of this claim is the one these marks, frees
+    and placements use; where it differs from the position S-0109 claim 22 gives an attached
+    animation, this claim sets it (Changes for other specs). A *standing position* here is one
+    standing position of one cell in one occupancy record (ground or deck), so the same standing
+    position of the same cell in the other record counts as another one. In our engine a point
+    outside the legal map (S-0009 claim 1) has no standing position: an update at such a point
+    marks nothing, and a free of the standing position of such a point frees nothing, by this
+    claim or by claim 8, whatever the switch below. So the mark an animation made last is its last
+    one on the legal map, and an update at such a point frees no earlier mark, since the rules
+    below free an earlier mark only when an update marks another standing position (design rule,
+    decided at the delegated sign-off, 2026-11-15). Our engine never changes a cell outside the
+    map (S-0009 claim 44); the original differs (Edge cases and quirks, off-map marks).
+    - **Bouncing animation.** Its point is its position in play (S-0319 claim 4): its flight
+      position truncated toward zero in each axis after each motion step, and until its first
+      motion step its creation point (a falling animation) or its start position (a meteor
+      animation). The fractional flight position is not used. The mark of each of its updates is
+      made at the point it has at the start of that update, before that update's motion step, so
+      its first update marks the standing position of its creation point or start position. When
+      its last pass ends in flight and its type names no follow-up type (S-0319 claim 11), the end
+      attempt of claims 9 to 11 is made at its point after that update's motion step, with claim
+      10's placement rules applied at that point as at any other; a refused attempt is retried by
+      claim 11 while it flies on. That point can be above the ground or off the legal map (S-0319
+      claim 11); what the original's unit placed there does next is not established (Open
+      questions). In our engine these rules hold whether or not the animation is also attached to
+      an owner (the attached departure below). In the original they hold from the second update
+      after an attachment or a detachment.
+    - **Landing.** A landing (S-0319 claims 7 and 8) is not an end attempt. The animation leaves
+      play in its landing turn with S-0319 claim 8's effects, tries no creation and makes no
+      infantry, whether or not an earlier end attempt was refused.
+    - **Attached animation that is not bouncing.** In our engine its point is its position while
+      attached: the owner's position plus its displacement (S-0109 claim 22). When an update marks
+      a standing position other than the one it marked last, it first frees that earlier one, in
+      the record it was made in, as claim 8's end does, whatever the switch below. Its end attempts
+      follow the End attempts bullet below at this point, under either setting of the switch, so
+      at a point outside the legal map the switch decides whether its last mark on the legal map is
+      freed. Once detached, its point is the position it had when it
+      was detached and does not change again; the free of an earlier mark still applies, so its
+      first update after detachment frees the mark of its last attached update when the two
+      standing positions differ. In the original, while it is attached, its marks, its free at the
+      end and its placement are all made at the world point whose coordinates equal its
+      displacement from the owner, which does not move while it stays attached and lies off the
+      legal map unless the displacement is large. Once detached, the original marks at its
+      position, and the marks made at the displacement point stay. What the original's placement
+      gives at that point is not established (Open questions). This is a documented departure with
+      no switch: our engine uses the position. In the original, the first update after a bouncing
+      animation is attached or detached also marks once at another point (the displacement, or the
+      owner's position plus the flight position); our engine does not, as part of the same
+      departure.
+    - **Earlier marks.** With `quirks.infantry_animation_stale_marks` on (the original), a mark
+      made at an earlier point is not freed when the point moves on, so a bouncing animation leaves
+      taken each standing position (on the legal map, as above) it has marked, with the cell's
+      infantry house it set. With the
+      switch off, an update that marks a standing position other than the one the animation marked
+      last first frees that earlier one, in the record it was made in.
+    - **End attempts.** Each end attempt frees before its placement, whether the placement then
+      succeeds or is refused; after a refused attempt the animation's next update marks its point
+      again (claim 8). With the switch on, an end attempt frees the standing position of its point
+      at that attempt. For a bouncing animation whose last motion step moved its point into another
+      standing position, that is a position this animation has not marked (claim 8 frees it
+      whatever else has marked it), and the position it marked last stays taken. Also, at a point
+      at least 416 leptons above the terrain surface height there (S-0106 F1) in a cell that no high
+      bridge marks, the mark is made in the ground layer's record but the free in the deck layer's
+      record, so the ground mark stays. With the switch off, an end attempt frees the standing
+      position the animation marked last, in the record it was made in, if that mark is still
+      standing (not the one of its point after a motion step), and still places at its point.
+    - **Removal by another rule.** A removal of the animation that is not a successful end attempt
+      makes no infantry; this covers a removal before any end attempt and one after a refused
+      attempt. Among such removals are a landing and the owner's removal (S-0109 claim 22, which
+      also makes no infantry). For an animation that is not bouncing they also include a drain
+      link's end (S-0608), a new teleport source pick and the end of loading for a first-pass tile
+      animation. A bouncing animation in flight ends only by its stage or its owner's removal
+      (S-0319 claim 11), or by landing. With the switch on, such a removal frees nothing,
+      so each standing position the animation has marked stays taken unless an end attempt freed
+      it (the standing position of the point at that attempt) and no later update marked it again.
+      After a refused attempt this includes the marks made before that attempt, apart from the
+      position it freed. With the switch off, such a removal frees the mark the animation made
+      last, in the record it was made in, if that mark is still standing.
+    - Each free of this claim follows claim 8's rule for its end, under
+      `quirks.infantry_animation_occupancy`.
+    - Backing: `measurable` (scenario MU10 part b) for the lack of infantry at a landing of an
+      animation that has made no end attempt, and for a bouncing animation's earlier marks staying
+      taken after it lands and, in a run of MU10 part b whose flight crosses into another standing
+      position, after it moves on. `unmeasured` for the rest, each for its reason:
+      - the lack of a creation attempt at a landing: MU10 part b records no creation draws, so it
+        cannot tell no attempt from a refused one.
+      - a landing or another removal after a refused end attempt, and the free and re-mark around
+        a refused attempt: no scenario here records a removal after a refused attempt.
+      - the point used (position in play, not the fractional flight position): the two differ by
+        less than one lepton in each axis, so they give different standing positions only when the
+        flight passes within a lepton of a boundary between standing positions, which no scenario
+        here arranges.
+      - the mark before the motion step: the per-tick occupancy record of MU10 part b shows when a
+        position becomes taken but not the animation's point in that tick, so a lag of one update
+        between the mark and the motion step does not show in it.
+      - the point and free of an end attempt in flight: no scenario here ends a last pass in
+        flight.
+      - the original's point for an attached animation, before and after a detachment, and after
+        an attachment or detachment of a bouncing animation: no scenario here gives an attached
+        animation type a make-infantry index.
+      - the lack of a free at an owner's removal or a removal by another rule: no scenario here
+        removes an infantry-making animation that way.
+      - our engine's rule for a point outside the legal map: no scenario here observes a mark
+        outside the legal map (MU10 part b plays its flight far from the map's edge and does not
+        use a run that lands outside it). It is a design rule, decided at
+        the delegated sign-off, 2026-11-15.
+      - the record mismatch at 416 leptons or more: no scenario here plays an infantry-making
+        animation that high in a cell that no high bridge marks.
+      - the record identity of a standing position, a definition our engine's rules need: it
+        matters only when two marks, or a mark and a free, fall at the same standing position of
+        the same cell in different records (a point crossing 416 leptons above the surface in a
+        cell that a high bridge marks, or the mismatch above), which no scenario here plays.
+      - our engine's rules for an attached animation (detached or not) and for a bouncing
+        animation that is also attached, and the switch's off form: the original has no such
+        form (design rule, decided at the delegated sign-off, 2026-11-15)
+    - Confidence: high for the lack of infantry at a landing of an animation that has made no end
+      attempt; medium for the rest, the design rules included
+
 ## Formulas
 
 - **F1. Mutation point.** For target cell (*x*, *y*):
@@ -450,6 +579,12 @@ Skirmish only; network games and campaigns are out of scope.
 | conversion animation playing | last pass ends, no follow-up type, index valid, owner resolved, placement succeeds | creation-set draws and numbers consumed (claim 14), unit placed; animation removed |
 | conversion animation playing | same creation conditions, placement refused | creation-set draws and numbers consumed, but our engine retains none of those objects (claim 14); no unit appears; one frame stepped back; retry when the frame is next due (claim 11) |
 | conversion animation playing | same, no owner and no civilian house, or index invalid | animation removed, nothing created |
+| bouncing infantry-making animation flying | each update | standing position of its position in play before the motion step marked; earlier marks kept with `quirks.infantry_animation_stale_marks` on (claim 15) |
+| bouncing infantry-making animation flying | last pass ends in flight, no follow-up type | end attempt at its position in play after the motion step; with the switch on that position is freed, with it off the last marked one (claim 15) |
+| bouncing infantry-making animation flying | landing | leaves play with S-0319 claim 8's effects; no creation attempt, no infantry; no position freed with the switch on (claim 15) |
+| attached infantry-making animation, not bouncing | each update | in our engine, standing position of its position marked, the earlier one freed when it differs; also after it is detached (claim 15) |
+| infantry-making animation | end attempt, placement refused | before the placement, the standing position of its point freed with the switch on (its other marks stay), the one it marked last with it off; marked again at its next update (claim 15) |
+| infantry-making animation | removed other than by a successful end attempt (before any attempt or after a refused one) | no infantry; no position freed with the switch on, its last mark freed with it off if still standing (claim 15) |
 
 **Ordering consequences.**
 - Every effect of a launch (animation, announcement, sound, radar event, hits) happens in the launch
@@ -477,6 +612,36 @@ Skirmish only; network games and campaigns are out of scope.
   that took the position in the gap after the death loses its mark when the animation ends. Off:
   the animation holds its position only while no other unit holds it, never changes the cell's
   infantry house while other infantry stands in the cell, and at its end frees only its own mark.
+- **`quirks.infantry_animation_stale_marks`** (claim 15; default on, the original). On: an
+  infantry-making animation frees a standing position only at an end attempt, and only the one of
+  its point then, which after a bouncing animation's last motion step can be one it did not mark. So
+  a bouncing animation leaves each position on the legal map that it marked in flight taken, a
+  removal other than a successful end attempt (a landing, the owner's removal or, for an animation
+  that is not bouncing, a drain link's end; before any attempt or after a refused one) leaves each
+  mark not yet freed taken, marks made before a refused attempt included, and at a point at least
+  416 leptons above the terrain surface in a cell that no high bridge marks the free misses the
+  ground mark. Off: the animation frees its earlier mark whenever it marks another standing position
+  (another record counts as another), an end attempt or a removal frees its last mark if still
+  standing, and each free is made in the record its mark was made in. An attached animation that is
+  not bouncing frees its earlier mark in our engine under either setting (claim 15's departure).
+  Under either setting, in our engine an update at a point outside the legal map marks nothing and
+  frees no earlier mark, and a free of such a point's standing position frees nothing (claim 15).
+- **Attached infantry-making animation.** Claim 15's departure: our engine's point is its
+  position (for one that is not bouncing, the owner's position plus its displacement while
+  attached; for a bouncing one, its position in play), and its marks, frees and placement follow
+  claim 15's rules at that point. The original marks, frees and places at the world point equal
+  to its displacement from the owner, and once more at another point in the first update after a
+  bouncing animation is attached or detached. Once an attached animation that is not bouncing is detached,
+  the original marks at its position and the marks made at the displacement point stay; our engine
+  frees its earlier mark as while attached.
+- **Off-map marks.** Claim 15's departure: in our engine an infantry-making animation's update at
+  a point outside the legal map marks nothing, and a free of such a point's standing position
+  frees nothing. In the original the mark and the free are made at the shared stand-in cell
+  (S-0009 claim 44), so a later read of any cell outside the map sees that standing position
+  taken or free as the last such mark or free left it, and the infantry house the mark set.
+  Backing: `unmeasured`: no scenario here observes a mark outside the legal map; our engine's
+  rule is a design rule (claim 15, decided at the delegated sign-off, 2026-11-15).
+  Confidence: medium.
 - **Cell mode beneath a bridge.** With `quirks.superweapon_block_one_layer` on (S-0513), infantry
   on the ground or water beneath a high bridge in the block is not reached in cell mode, while
   infantry on the deck is. Explosion mode is S-0303's and has no such rule.
@@ -647,7 +812,7 @@ index names.
   colour. A different owner, different occupancy house or renewed A-owned placement falsifies
   claim 9.
 
-- **MU10 (generic infantry creation, claims 8 to 11, F4).** Use a temporary named art test file
+- **MU10 (generic infantry creation, claims 8 to 11 and 15, F4).** Use a temporary named art test file
   that gives a non-conversion animation a valid infantry-making index, then one with no index,
   and a pair of follow-up types with distinct valid indices. Start the animation by a map trigger
   at a clear side position. Record owner, frame advances, occupancy and unit counts. An ownerless
@@ -658,6 +823,34 @@ index names.
   rule. Compare centre-class and deck placements with MU7 and MU9: only terrain-height eligible
   centre choices consume a position draw. Invalid-index behaviour is not an oracle comparison:
   our engine must create nothing and warn, rather than reproduce an undefined result.
+
+  *Part b (bouncing animation, claim 15; Q-3121).* In the same test art file, give a falling
+  animation type (bouncer flag, S-0319 claim 1) that loops for ever (S-0109 claim 7) a valid
+  infantry-making index. Play it by a map trigger over flat clear ground far from the map's edge and
+  from every house's starting units, with no high bridge on the map. A run whose recorded landing
+  point is outside the legal map, or in which other infantry stands in a cell the flight marked at
+  any tick the record shows, is not used for the marks. Played by a trigger, the animation has no
+  owner; the map has the civilian house, so by claim 9 an end attempt would make a unit for that
+  house. Its loop never reaches a last pass
+  (S-0109 claim 7: each pass that ends is followed by a new one), so it makes no end attempt and its
+  flight runs until it lands (S-0319 claims 4 and 6: its vertical speed falls by 1.4 leptons per
+  tick each turn). Its horizontal speeds are drawn (S-0319 F1) and can be near zero, so record each
+  run's creation point and landing point; repeat with other scenario seeds until at least one run's
+  flight has marked standing positions of two or more cells. Record each tick the occupancy record
+  of every cell of the map, its landing tick and cell, and the count of infantry of the made type.
+  The cells whose standing positions the flight marked are read from that record after the run, so
+  they need not be known in advance. A named map override makes the made type one that no house
+  can build; the crate setting is off, the map gives no reinforcements, and no trigger but the
+  one that plays the animation creates units. A *new unit of the made type* means the recorded
+  count of infantry of the made type rising above its value in the tick the animation starts.
+  Expected with `quirks.infantry_animation_stale_marks` on: no new unit of the made type appears,
+  in its landing turn or later; every standing position marked during its flight is still
+  marked after the animation has left play and, in a run whose flight crosses into another
+  standing position, after the animation has moved on from it.
+  *Falsified if* a new unit of the made type appears, or a position marked during the flight is shown
+  free before the run ends. Every run counts for the no-infantry falsifier, including one whose
+  flight stays in one cell. With the switch off (engine only), each earlier position is free
+  once the animation has marked another one, and its last mark is free after its landing.
 - **MU11 (delivery and launch constants, claims 2 to 4).** Named map overrides give an ordinary
   human infantry type strength 30 000 hit points, no damage immunity and no death weapon, and
   give the explosion warhead a versus factor of 1 for that type's armour. Place a full-health
@@ -760,8 +953,10 @@ index names.
 ## Open questions
 
 The following unresolved original outcomes are `unmeasured` (low confidence): no safe missing-type
-fixture or observable consequence of an unplaced unit has been established, and no stock death
-effect fixture is known for the sweep interruption. They do not override the defined safe results.
+fixture or observable consequence of an unplaced unit has been established, no stock death
+effect fixture is known for the sweep interruption, no scenario here gives an attached
+animation type a make-infantry index, and no scenario here ends a bouncing animation's last pass
+in flight. They do not override the defined safe results.
 
 1. What the original does when the explosion or cell warhead is missing (no stock data reaches it).
 2. Whether the unit the original builds on each refused placement attempt (claim 11), and the
@@ -769,3 +964,32 @@ effect fixture is known for the sweep interruption. They do not override the def
    house unit counts or build limits. Our engine builds none of them.
 3. Whether a death effect of a cell-mode victim that removes the next listed infantry unit of the
    same cell can stop the sweep of that cell (no stock case known).
+4. What the original's placement gives when an attached infantry-making animation tries its unit
+   at the world point equal to its displacement from the owner (claim 15), a point that is usually
+   off the legal map (S-0009 claims 1 and 44). Our engine places at the animation's position
+   instead.
+5. What a unit placed by a bouncing animation's end attempt in flight does when that point is
+   above the ground or off the legal map (claim 15): whether it stays there, falls or is moved.
+   Claim 10's placement rules give where it is placed; its next movement there is not
+   established.
+
+## Changes for other specs
+
+- **S-0109 claim 16, its row of State and ordering for a pass that ends with no follow-up type,
+  and its Import mapping row for the make-infantry key.** Where they point to S-0611 claims 9 to
+  11, they should point to S-0611 claims 9 to 11 and 15: claim 15 says where an animation that
+  moves makes its end attempt. No rule change.
+- **S-0109 claim 22.** Its "no infantry" at an owner's removal agrees with S-0611 claim 15,
+  which also says what becomes of the standing position the animation marked. A
+  pointer to add: for a bouncing animation that is also attached, S-0611 claim 15
+  marks, frees and places at its position in play (S-0319 claim 4) in our engine, not at the
+  owner's position plus its displacement. Claim 22 can say that its position rule does not set
+  that point and point to S-0611 claim 15. Level and backing: medium, `unmeasured` (design rule,
+  S-0611 claim 15).
+- **S-0319 claim 8.** No rule change: a landing is not an end attempt of S-0611 claims 9 to 11
+  and makes no infantry (S-0611 claim 15).
+- **S-0009 claim 44 and its open question on rules in play that change the stand-in cell.** No rule
+  change. S-0611's off-map marks entry (claim 15) names one such change in the original: an
+  infantry-making animation's mark or free at a point outside the legal map is made at the stand-in
+  cell. Our engine makes none, as S-0009 claim 44 already says. Level and backing: medium,
+  `unmeasured` (S-0611 claim 15).
