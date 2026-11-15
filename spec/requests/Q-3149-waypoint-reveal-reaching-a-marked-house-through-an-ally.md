@@ -1,8 +1,9 @@
 ---
 id: Q-3149
 title: Waypoint reveal reaching a house with the whole-map-revealed mark through an ally
-status: open
+status: answered
 related: [S-0011, S-0409]
+answered-by: [S-0409]
 ---
 
 ## Need
