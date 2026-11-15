@@ -1424,8 +1424,15 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
         .map_or(L::Teleport, |x| x.type_locomotor());
     let Some(e) = apron(w, k) else { return };
     if !w.cells.footprint().is_legal(e) {
-        // spec: S-0417 Edge cases (an apron that is not a legal map cell: free; the exit instruction is refused, u stays where it appeared and reports clear at once, so K can close; claim 8's reply then applies; under both states of quirks.factory_apron_short_list)
-        report(w, u);
+        // spec: S-0417 Edge cases (an apron that is not a legal map cell: free; the exit instruction is refused, u stays where it appeared and reports clear at once, as on a cell-arrival update with no destination, so K can close; claim 8's reply then applies; under both states of quirks.factory_apron_short_list)
+        let reported = report(w, u);
+        if o.kind != Kind::Infantry {
+            // spec: S-0417 claim 8 (a vehicle factory gives the run-away reply to the clear report)
+            if reported.is_some_and(|k| vehicle_factory(w, k)) {
+                run_away(w, u);
+            }
+            arrival_fallback(w, u);
+        }
         return;
     }
     match loco {
@@ -1676,6 +1683,12 @@ pub fn arrival(w: &mut World, id: ObjectId) {
     {
         run_away(w, id);
     }
+    arrival_fallback(w, id);
+}
+
+/// The arrival fallback of a tethered vehicle after report handling
+/// (S-0417 claim 8).
+fn arrival_fallback(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     // spec: S-0417 claim 8 (the arrival fallback: still on a building cell with no destination, no queued destinations and no stored path)
     if building_cell(w, o.pos.cell())
