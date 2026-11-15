@@ -292,10 +292,6 @@ pub fn dotted_line(a: (i32, i32), b: (i32, i32), phase: bool) -> Vec<(i32, i32)>
     out
 }
 
-/// The image-cache key of the target line's 1 × 1 image (ours).
-const TARGET_LINE_IMAGE_KEY: &[u8] = b"\0target line pixel";
-/// The image-cache key of the pixel particles' shared 1 × 1 image (ours).
-const PIXEL_IMAGE_KEY: &[u8] = b"\0particle pixel";
 /// The veinhole marker overlay index (S-0009 claim 14).
 /// Rows an ore-spawning terrain object is drawn higher (S-0102 claim 23).
 const ORE_SPAWNER_RAISE: i32 = 16; // spec: S-0102 Constants (ore-spawning terrain object raise)
@@ -1309,7 +1305,13 @@ pub struct Painter {
     art: Document,
     lights: Lights,
     rows: Rows,
-    images: BTreeMap<(Vec<u8>, usize, u8), Option<u32>>,
+    /// The shared 1 × 1 images of the target lines and of the pixel
+    /// particles, once added: fields, so that a call needs no key copy to
+    /// find them. Each is added once to the scene the painter draws into,
+    /// and nothing changes it after.
+    // design: render (#148)
+    target_line_image: Option<u32>,
+    pixel_image: Option<u32>,
     /// Sprite files' headers and decoded frames, by upper-case name (`None`
     /// for a missing or unreadable file). A file's bytes do not change
     /// during a game ([`Assets`] changes only when it is loaded, and for the
@@ -4099,13 +4101,12 @@ impl<'a> Builder<'a> {
         };
         // spec: S-0301 claim 24 g (shade row 26 of 53: never lit, tinted or house-coloured)
         let row = base + TARGET_LINE_ROW.min(rows.saturating_sub(1));
-        let key = (TARGET_LINE_IMAGE_KEY.to_vec(), 0, 0);
-        let image = match self.p.images.get(&key).copied().flatten() {
+        let image = match self.p.target_line_image {
             Some(i) => i,
             None => {
                 let img = IndexedImage::new(1, 1, vec![TARGET_LINE_INDEX]).expect("1 × 1");
                 let i = self.built.scene.add_image(img);
-                self.p.images.insert(key, Some(i));
+                self.p.target_line_image = Some(i);
                 i
             }
         };
@@ -4210,14 +4211,13 @@ impl<'a> Builder<'a> {
     /// colour at the screen pixel of its position, a flat depth reader with
     /// bias −50 − L(z).
     fn pixel_particle(&mut self, rgb: [u8; 3], pos: (i32, i32, i32)) -> Vec<Item> {
-        let key = (PIXEL_IMAGE_KEY.to_vec(), 0, 0);
-        let image = match self.p.images.get(&key).copied().flatten() {
+        let image = match self.p.pixel_image {
             Some(i) => i,
             None => {
                 // One shared 1 × 1 image whose single pixel is not index 0 (S-0104 claim 6: entry 0 is transparent).
                 let img = IndexedImage::new(1, 1, vec![1]).expect("1 × 1");
                 let i = self.built.scene.add_image(img);
-                self.p.images.insert(key, Some(i));
+                self.p.pixel_image = Some(i);
                 i
             }
         };
@@ -6673,7 +6673,8 @@ impl Painter {
                 cells: Vec::new(),
             },
             rows: Rows::default(),
-            images: BTreeMap::new(),
+            target_line_image: None,
+            pixel_image: None,
             shps: BTreeMap::new(),
             anim_types: BTreeMap::new(),
             voxels: BTreeMap::new(),
