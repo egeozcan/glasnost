@@ -75,6 +75,8 @@ pub fn step_with<P: Probe>(w: &mut World, p: &mut P) {
     crate::econ::shroud::sweep(w);
     mark(p, Phase::TurnPass);
     turn_pass(w, p);
+    // spec: S-0513 claim 46 and S-0203 claim 1 (from here to the end of the tick the turn pass has run: a storm cloud made now first updates in the next tick, #352)
+    w.after_turn_pass = true;
     // spec: S-0203 claim 1 (after the turn pass: rows 15, 16, 6, 7, then the orders, row 8)
     // spec: S-0203 claim 1 row 15 and S-0612 claim 8 (blast rings, after the turn pass; no draws)
     mark(p, Phase::Rings);
@@ -94,6 +96,8 @@ pub fn step_with<P: Probe>(w: &mut World, p: &mut P) {
     // spec: S-0011 claim 11 (a one-time tag that fired is deleted at the end of the tick)
     mark(p, Phase::EndTick);
     crate::triggers::end_tick(w);
+    // spec: S-0513 claim 46 (the next tick's turn pass has not run, #352)
+    w.after_turn_pass = false;
     if w.econ.end.over == Some(w.tick) || w.econ.end.finished {
         // spec: S-0201 claim 1 and S-0203 State and ordering (the final tick runs in full but does not add 1: afterwards the tick number is the last tick's; no next tick runs, S-0414 claim 8)
         w.econ.end.finished = true;

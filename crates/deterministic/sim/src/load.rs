@@ -551,6 +551,7 @@ pub fn new_game(
         locomotion_under_way: Vec::new(),
         death_chain: Default::default(),
         census: None,
+        after_turn_pass: false,
         trace: Default::default(),
         pathfinder: Default::default(),
     };

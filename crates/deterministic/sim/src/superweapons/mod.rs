@@ -807,6 +807,10 @@ pub struct Cloud {
     pub delay: i32,
     /// Still pending its strike.
     pub pending: bool,
+    /// Made after the turn pass of its creation tick, so its first
+    /// animation update *u* is in the next tick (S-0513 claim 46).
+    #[serde(default)]
+    pub late: bool,
 }
 
 /// The game-wide superweapon state (`World::sw`).

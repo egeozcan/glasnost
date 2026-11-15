@@ -535,6 +535,12 @@ pub struct World {
     /// #402). Empty between actions, so neither saved nor hashed.
     #[serde(skip)]
     pub census: Option<crate::census::Census>,
+    /// The turn pass of the tick under way has run (S-0203 claim 1): what
+    /// is made from here to the end of the tick has its first turn in the
+    /// next tick (S-0513 claim 46, #352). False between ticks, so neither
+    /// saved nor hashed.
+    #[serde(skip)]
+    pub after_turn_pass: bool,
     /// The movement trace of the pathing-report tool (M8 A4): off unless
     /// switched on, never saved, hashed, cloned or read by the simulation.
     #[serde(skip)]
