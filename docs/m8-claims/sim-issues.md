@@ -463,3 +463,85 @@ The checks all ran on the final tree.
 - The workspace tests pass except main's `quirks::tests::every_spec_quirk_has_a_switch`, which fails on `gas_through_bridge_deck` only. The new switch `crate_beneath_overlay_refusal` is read.
 
 Seams left (also in the design section): Q-3109 (#245's zone row in an area search). A building's guard range is read as S-0309's Import mapping gives it (single-precision decimal × 256, truncated), while a mobile type's still reads S-0215's (the double × 256, truncated). The two can differ for a value that a single cannot hold exactly; whether they are one read is not settled here. Rubble beneath a building (S-0312 claim 20) is still not modelled. A seeking slave miner slave holds its own master as target with the attack flag set, on base and in the batch. Whether a spec gives that has not been checked.
+
+## Batch S15: S11's answered requests, the placement tick, crates and lifts
+
+Base main 3d9f38e, not rebased. The lead's answers to S11's three requests come first: Q-3102 (S-0309 r142), Q-3100 and Q-3101 (S-0215 r139). Then #237's field removal, the simulation half of #81, and #278 to #285. Save format 147 and AI game format 123 (0cb8c8d): #237 removes two saved fields and #81 adds one. The wire version is unchanged (12). Every golden moved (a396d37). Failing tests are committed first, one issue per commit: 15060e1, 6688a52, a75ecb6, 5604319, d779337, 006b9d7, bb82c64, 78f8c59, de16c20 and 729abd6. Each fails on the commit before its fix, and no fix commit changes a test. Two scaffold commits let a test commit build: 2a3f535 adds #232's rules field and schema entry, and de839f3 adds #81's field. Neither is read before its fix. #237 has no failing test: the two test set-ups that wrote a removed field go in their own commit (962f925). #278 has no test, since no reachable path differs. #285 is a comment only. Requests Q-3118 (6bd0c1a) and Q-3119 (9317b32) are filed. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S15: S11's answered requests, the placement tick, crates and lifts)* (431e8e0).
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #229 | Q-3102: S11's interim started *attack* at once in the attack-move search | fixed (19aa137) | S-0309 r142 claim 23 (a), S-0215 claims 7 and 11: both rows of `combat::acquire::attack_move_search` queue *attack* with the readiness-dependent start (`queue_and_start` with `process::ready`). A moving vehicle goes on in *move* with *attack* queued; the search leaves the destination and route alone | `claims_s0309.rs` (S11's two ignored tests now run: `issue_229_attack_move_destination_search_not_ready_queues_attack`, `issue_229_attack_move_target_search_not_ready_queues_attack`; new `issue_229_attack_move_search_keeps_destination_and_route`) |
+| #232 | Q-3100: the type singled out by name in *unload* was not built | fixed (3163109); scaffold 2a3f535 | S-0215 r139 claim 30, Terms and Import mapping: our format's `named_area_fire_deployer` flag, which the importer sets on the infantry type named `DESO` (`convert::sim`). With `quirks.named_deploy_area_fire` on, such a unit whose deploy weapon has the area-fire flag takes no new target, and with a negative undeploy delay waits its deploy sequence's frame count + 1. With the switch off the flag is ignored | `claims_s0215_r139_named.rs` (five tests); `convert/src/sim_tests.rs::named_area_fire_deployer_flag` |
+| #234 | Q-3101: the hover-attack cell of *attack* and *guard* was not built | fixed (f94093b) | S-0215 r139 claims 23 and 24, S-0212 claim 25: `process::hover_attack_cell`. A hover-attack type at height 0 above the surface takes the nearby cell centred on its own cell (own class, region and deck mode), or the placeholder cell (0, 0) when none qualifies, through the order assignment (S-0207 claim 27's unchanged-destination rejection). *Attack* takes it with or without a target and *guard* with a target. A changed destination drops the stored route (design) | `claims_s0215_r139_hover.rs` (seven tests) |
+| #237 | `turret_was_turning` and `last_shot_target` were never read | fixed (bbe0344; test set-ups 962f925) | Both fields and the one write in `combat/behave.rs` are removed from `combat::state` | none (the removal; every existing test still passes) |
+| #81 | The simulation kept no placement tick for the drawing | simulation half done (48ab197; field de839f3) | S-0105 claim 6: `Object::placed_tick`, saved and hashed, set by `objects::place_with` (not buildings), a rocket's placement, a drop-pod stand-in's end, and kept by the warp appearance. The renderer reads it as a public field; nothing in `crates/render` or `crates/app` was touched | `claims_s0105_placement_tick.rs` (five tests), `claims_s0105_placement_tick_warp.rs` (passes before the fix, since every tick was 0) |
+| #278 | `walk::arrival_tests_apply` left out "not falling"; `paradrop.rs` still called the parachute's playback a seam | fixed (719883b) | S-0208 claim 16: the test also requires the unit is not falling. The module comment now says `crate::anims` runs the playback (S-0522 claim 13). No result changes | none (no reachable path differs) |
+| #279 | A rocket's aim at a driving vehicle took the terrain height at the track target | fixed (11e47c4) | S-0207 Terms (heading point) and claim 24, S-0506 claim 14: `rocket::heading_point_with` uses the track's stored height | `claims_s0506_heading_height.rs` |
+| #280 | A seized jumpjet's neighbour step replaced its order-level destination | fixed (8476fd3) | S-0607 claims 5 and 9, S-0502 claim 21: `jump::give` returns at once for a seized unit; the step's draw and its cruising phase stay | `claims_s0607_neighbour_step.rs` |
+| #281 | A collector killed by the crate tag raise, still in its death sequence, completed the pickup | fixed (c60f5de) | S-0520 claim 7: `crates::pickup` ends with the step blocked when the collector is gone or `damage::dead` | `claims_s0520_dying_collector.rs` |
+| #282 | The unit crate gave base-unit types to the neutral and special houses | fixed (d1a1b4c) | S-0520 claim 13 (*In our engine*) and the glossary (*AI house*): `crates::random_vehicle` refuses a base-unit-list type to a house that is not human-controlled, whatever the bases setting | `claims_s0520_neutral_unit_crate.rs` (two tests) |
+| #283 | Napalm with no flame warhead also skipped its position-0 animation | fixed (9f0e6d2) | S-0520 claim 17 and Edge cases: the midpoint and the animation come first; a missing warhead skips only the hit and the area damage | `claims_s0520_napalm_anim.rs` (two tests) |
+| #284 | An expiring crate place cleared whatever overlay was on its cell | partly (43772bb); Q-3118 (6bd0c1a) | S-0520 Terms and claim 4: the expiry removes the overlay only when the cell holds a crate. Interim: a place whose crate another rule removed stays occupied until its lifetime ends and still makes its replacement placement | `claims_s0520_stale_place.rs` |
+| #285 | Whether an open-topped transport's passenger counts as having left play for a seizing hit | not done: Q-3119 (9317b32); comment d1763b6 | `lift::seize_hit` keeps the firer on-map test; the comment names the interim reading | none |
+
+The lanes compare base 3d9f38e with the batch (a396d37).
+- **Arena:** the same table as base apart from timings. Failing rows: M-0001 9 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25, M-0021 10 of 50.
+- **Seed sweeps:** M6c, M7a and M7b all pass. Their counters changed and were not traced.
+  - M6c: seeds 1, 3 and 14 change length (9233 → 9276, 9889 → 9753, 10131 → 9729). The smallest minimum stays 0.
+  - M7a: the smallest minimum goes 0 → 2 (seed 13's bunker counters, 0 → 3).
+  - M7b: every seed's drain, takeover and psychic counters move, and all still run 8000 ticks.
+- **AI quick lane** (seeds 7 to 10, maps 0, 2 and 8): all 36 games end differently, and 15 change winner (base → batch):
+  - 7/0 (0,1): 0@43233 → 1@57367
+  - 7/2 (0,2): 0@41695 → 1@47690
+  - 7/8 (0,1): 0@34592 → 1@41848
+  - 8/0 (0,2): 0@26886 → 1@54389
+  - 8/0 (1,2): 1@53020 → 0@72090
+  - 8/2 (1,2): 0@68650 → 1@76242
+  - 8/8 (0,2): 0@32925 → 1@44612
+  - 8/8 (1,2): 1@56992 → 0@47853
+  - 9/0 (0,2): 1@60979 → 0@23886
+  - 9/0 (1,2): 1@45766 → 0@61924
+  - 9/8 (0,2): 0@34210 → 1@36517
+  - 10/0 (0,2): 1@59796 → 0@49404
+  - 10/2 (0,2): 1@52496 → 0@42375
+  - 10/8 (0,2): 0@40494 → 1@34281
+  - 10/8 (1,2): 0@69890 → 1@48783
+
+  #237 and #81 change the saved world, so base and batch hash differently from tick 0. The lane was therefore also played on f94093b, which holds #229, #232 and #234 and has base's shape (its tick-0 hashes match base's). f94093b equals the batch in 33 of the 36 games and already holds all 15 winner changes. The other three games keep their winner:
+  - 7/0 (1,2): base 1@78181, f94093b 0@58442, batch 1@43065;
+  - 8/8 (1,2): f94093b 0@48112, batch 0@47853;
+  - 9/0 (1,2): f94093b 0@61913, batch 0@61924.
+
+  Every winner change was traced, base against f94093b, with the state hash every 10 ticks (`GLASNOST_AI_HASH`) and an object dump at the first differing tick (`GLASNOST_AI_OBJS`). Each time the first difference is one unit with an attack-move memory and a target. On base it starts *attack* at once. In the batch it is not ready, so it goes on in *move* with *attack* queued. That is #229 (S-0309 r142 claim 23 (a), S-0215 claims 7 and 11). First difference (game: tick, object, house, kind):
+  - 7/0 (0,1): 9456, 1212, house 0, infantry
+  - 7/2 (0,2): 8608, 923, house 0, infantry
+  - 7/8 (0,1): 8007, 235, house 0, vehicle
+  - 8/0 (0,2): 10175, 1489, house 0, infantry
+  - 8/0 (1,2): 10750, 1288, house 0, vehicle
+  - 8/2 (1,2): 10564, 1986, house 0, infantry
+  - 8/8 (0,2): 8313, 540, house 0, vehicle
+  - 8/8 (1,2): 8906, 521, house 0, vehicle
+  - 9/0 (0,2): 9319, 1397, house 0, vehicle
+  - 9/0 (1,2): 11409, 1330, house 0, vehicle
+  - 9/8 (0,2): 8023, 559, house 0, vehicle
+  - 10/0 (0,2): 9777, 1414, house 1, vehicle
+  - 10/2 (0,2): 8146, 871, house 0, vehicle
+  - 10/8 (0,2): 7969, 558, house 0, vehicle
+  - 10/8 (1,2): 8576, 524, house 0, vehicle
+
+  7/0 (1,2) was bisected over the later commits. 48ab197 and 719883b give f94093b's result (0@58442); 11e47c4 and c60f5de give the batch's (1@43065). So #279 moves that game. 8/8 (1,2) and 9/0 (1,2) were not bisected.
+
+The checks all ran on the final tree.
+- The sim gate with its ignored tests passes 17. After the format bump all nine goldens moved and were regenerated (a396d37). Four change length: duel 1931 → 2001 ticks, duel-diagonal 2112 → 1839, duel-naval 1437 → 2126, skirmish 2390 → 3259.
+- **The AI suite does not pass.** With its ignored tests it gives 361 passed and 1 failed: `skirmish::climbs_to_the_launcher_and_fires` passes on base and fails from 19aa137 (#229) on, at every later commit tried.
+  - What changed: base and 19aa137 part at tick 16243, where object 77 (house 0's vehicle, attack-moving to (32, 29)) shows #229's signature. On base it starts *attack*; at 19aa137 it goes on in *move* with *attack* queued.
+  - On base: house 0's launcher (LNCH), started by tick 17 000, is built at tick 19 273, and rockets fly.
+  - With #229: house 0's war factory is lost between ticks 17 000 and 18 000. A FACT is back on its building line at 18 000, and the launcher item on the vehicle line goes with the factory. Later launcher items wait for money (both houses hold about 0 credits from tick 27 000, as on base). No launcher is built before house 1 wins at tick 55 711.
+  - No unit stays in *move* with *attack* queued for more than 2000 ticks, so this is not a stall.
+  - The test is left failing, unchanged. Its premise (the climb comes before the war takes the factory) no longer holds at the plain seed, and picking another seed would be choosing one for passing. This is handed back to the coordinator.
+- The workspace tests pass, `quirks::tests::every_spec_quirk_has_a_switch` among them.
+- `cargo clippy --workspace --all-targets -- -D warnings` is clean. `cargo fmt --check` needed a rustfmt commit (c05d067).
+- The wasm32 build of `glasnost-app` succeeds.
+- `xtask check` passes. `xtask gate` passes, and on wasm32 it matches all nine goldens.
+
+Seams left: `skirmish::climbs_to_the_launcher_and_fires` fails, as above. Q-3118 (#284's stale place), Q-3119 (#285's open-topped firer). The renderer's use of `placed_tick` (#81's drawing half) waits for a render batch. `claims_s0215_r137_deployed.rs` still cites the Q-3100 interim in a comment; its tests pass unchanged, since none uses a type with the named flag.
