@@ -554,6 +554,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     crate::combat::projectile::target_leaves(w, id);
     // spec: S-0506 claim 14 (r34: going inside a building or a transport is leaving play: claim 11's reset of a controller whose target it is, unless a pending target waits; claim 25's clear of a pending target)
     crate::spawn::target_leaves_play(w, id);
+    // spec: S-0607 claims 2, 12, 14 and 21 (revision 50: going inside a transport, a bunker or a building is leaving play: a gripping lifter drops its unit and stays its dropper, a gripped unit's grip ends, earlier dropped units lose it as dropper, its waves end, and its seizing shots in flight seize nothing)
+    crate::lift::leaving_play(w, id);
     // spec: S-0615 claim 14 (taken off the map: lost to its disc lasers at once)
     crate::disc::object_lost(w, id);
     // spec: S-0608 claim 17 and S-0507 claim 6 (Q-1443: successful temporary off-map storage of either party ends its drain links at once, a stranded earlier link included)

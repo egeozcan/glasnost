@@ -243,6 +243,8 @@ fn fragment(
         // spec: S-0318 Terms (a fragment of a projectile of level d has level d + 1)
         chain: pr.chain + 1,
         looped: false,
+        // spec: S-0318 claim 5 and S-0607 claim 2 (revision 50: the fragment takes the projectile's attacker, and with it what has happened to that firer since the shot)
+        seize_void: crate::combat::projectile::void_of(w, pr),
     };
     w.projectiles.insert(id, frag);
     // spec: S-0318 claim 5 and S-0306 claim 8 (the fragment enters play at once; its first turn is in the tick of the burst) and S-0203 claim 5 (revision 40: unless removals cost it that turn, then in the first later tick in which none does; S-0306 State and ordering, revision 38: n + 1 or later)

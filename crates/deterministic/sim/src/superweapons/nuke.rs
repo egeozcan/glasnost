@@ -151,6 +151,7 @@ fn missile(
         chain: 0, // spec: S-0318 Terms (a projectile that is not a fragment has chain level 0)
         looped: false,
         multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
+        seize_void: false, // spec: S-0607 claim 2 (revision 50: nothing has happened to the firer since the shot yet)
     };
     w.projectiles.insert(id, pr);
     // spec: S-0306 claim 8 (the projectile enters play; its first turn is in the same tick)

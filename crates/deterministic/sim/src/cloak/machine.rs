@@ -158,6 +158,8 @@ fn start(w: &mut World, id: ObjectId) {
     ob.cloak.stepped = tick;
     // spec: S-0615 claim 14 (an object that begins to cloak is lost to its disc lasers)
     crate::disc::object_lost(w, id);
+    // spec: S-0607 claim 2 (revision 50: a firer that has started to cloak since the shot seizes nothing)
+    crate::combat::projectile::void_seizes_of(w, id);
     sound(w, id);
     // spec: S-0506 claim 11 (r37: the start of cloaking loses the object as a controller target or pending target, whatever the spawner's house and whatever sensors cover it: no exception, unlike claim 14's drop below)
     crate::spawn::target_lost(w, id);

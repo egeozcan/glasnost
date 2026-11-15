@@ -560,6 +560,7 @@ pub fn launch(
         multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
         chain: 0, // spec: S-0318 Terms (a projectile that is not a fragment has chain level 0)
         looped: false,
+        seize_void: false, // spec: S-0607 claim 2 (revision 50: nothing has happened to the firer since the shot yet)
     };
     w.projectiles.insert(id, proj);
     if o_kind == Kind::Vehicle
@@ -1600,12 +1601,14 @@ fn explode(
         }
         // spec: S-0318 claim 1 (an airburst projectile's one detonation bursts before its area damage and its nine children)
         crate::combat::shrapnel::burst(w, pr, p, burst, special);
+        // spec: S-0607 claim 2 (revision 50: a firer that has left play or started to cloak since the shot: the hit seizes nothing)
+        let attacker = seize_attacker(w, pr, special);
         let res = detonation_inner(
             w,
             pr.weapon,
             crate::linked::scaled_damage(pr.damage, pr.multiplier), // spec: S-0518 claim 9 and F1 (the damage supplied to area damage is scaled by the projectile's multiplier)
             point,
-            pr.attacker,
+            attacker,
             pr.house,
             pr.pos,
             p.inviso,
@@ -1633,12 +1636,14 @@ fn explode(
         }
         // spec: S-0318 claim 1 and State and ordering (each detonation of a cluster tests and bursts afresh from the same burst point, after the radiation and before the area damage)
         crate::combat::shrapnel::burst(w, pr, p, burst, special);
+        // spec: S-0607 claim 2 (revision 50: a firer that has left play or started to cloak since the shot: the hit seizes nothing)
+        let attacker = seize_attacker(w, pr, special);
         detonation_inner(
             w,
             pr.weapon,
             crate::linked::scaled_damage(pr.damage, pr.multiplier), // spec: S-0518 claim 9 and F1 (the damage supplied to area damage is scaled by the projectile's multiplier)
             q,
-            pr.attacker,
+            attacker,
             pr.house,
             pr.pos,
             p.inviso,
@@ -1665,6 +1670,36 @@ fn drop_killed_firer(w: &World, pr: &mut Projectile) {
     {
         pr.attacker = None;
         pr.house = None;
+    }
+}
+
+/// Whether a projectile's firer has left play or started to cloak since the
+/// shot (S-0607 claim 2, revision 50): the turn's copy or the stored
+/// projectile is marked.
+pub(crate) fn void_of(w: &World, pr: &Projectile) -> bool {
+    pr.seize_void || w.projectiles.get(&pr.id).is_some_and(|s| s.seize_void)
+}
+
+/// Marks every projectile fired by `firer` (S-0607 claim 2, revision 50):
+/// the firer has left play, even if it enters play again at once, or has
+/// started to cloak, so a seizing hit of those shots seizes nothing.
+pub(crate) fn void_seizes_of(w: &mut World, firer: ObjectId) {
+    for pr in w.projectiles.values_mut() {
+        if pr.firer == Some(firer) {
+            pr.seize_void = true;
+        }
+    }
+}
+
+/// The firer a detonation of `pr` carries into a seizing hit: none when the
+/// firer has left play or started to cloak since the shot (S-0607 claim 2,
+/// revision 50). The attacker is read after the special hit only by the
+/// area damage, which a special hit does not make (S-0514 claim 20).
+fn seize_attacker(w: &World, pr: &Projectile, special: Option<Special>) -> Option<ObjectId> {
+    if special == Some(Special::Locomotor) && void_of(w, pr) {
+        None
+    } else {
+        pr.attacker
     }
 }
 
@@ -1740,6 +1775,8 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
             chain: pr.chain, // spec: S-0318 Terms (only a fragment is a level below the projectile that launched it)
             looped,
+            // spec: S-0306 claim 21 and S-0607 claim 2 (revision 50: the children take the firer of the projectile that launched it, and with it what has happened to that firer since the shot)
+            seize_void: void_of(w, pr),
         };
         w.projectiles.insert(id, child);
         w.update.enter_new(id);
