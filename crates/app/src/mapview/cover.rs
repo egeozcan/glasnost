@@ -291,6 +291,33 @@ mod tests {
         assert!(a.iter().all(|&v| v == 127));
     }
 
+    /// Equivalence test (design: render (#118); passes before and after
+    /// the change): with no covers the light-alpha values are 127 at every
+    /// pixel of any view, the values a frame starts with, so a caller may
+    /// pass none instead.
+    /// spec: S-0110 claim 5 (127 before any cover or glow acts)
+    #[test]
+    fn no_covers_give_the_starting_alpha() {
+        let q = ShroudQuirks::default();
+        for (origin, size) in [
+            ((0, 0), (1, 1)),
+            ((-300, 45), (640, 480)),
+            ((17, -9), (61, 3)),
+        ] {
+            let view = View {
+                origin,
+                size,
+                reference: 0,
+            };
+            let a = alpha_of(&[], &view, &sprite(), &q);
+            assert_eq!(a.len(), (size.0 * size.1) as usize);
+            assert!(
+                a.iter()
+                    .all(|&v| i32::from(v) == glasnost_render::light::DEFAULT_LIGHT_ALPHA)
+            );
+        }
+    }
+
     /// [`covers`] as before M8 C4 part 4: every cell of the grid asked.
     fn covers_by_scan(world: &World, house: HouseId, view: &View, q: &ShroudQuirks) -> Vec<Cover> {
         let covered = |x: i32, y: i32| !explored(world, house, CellXY::new(x, y));
