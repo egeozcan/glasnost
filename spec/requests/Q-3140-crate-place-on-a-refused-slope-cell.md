@@ -1,9 +1,9 @@
 ---
 id: Q-3140
 title: What a crate placement does when the slope condition refuses its overlay
-status: open
+status: answered
 related: [S-0520, S-0009, S-0202]
-answered-by: []
+answered-by: [S-0520]
 ---
 
 ## Need
