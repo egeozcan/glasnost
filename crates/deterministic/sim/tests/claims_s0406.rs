@@ -850,6 +850,86 @@ fn claim_11_fill_stops_at_failing_cell() {
     assert_eq!(overlay(&w, c(1, 0)).0, glasnost_map::NO_OVERLAY);
 }
 
+/// Places WALLA as a type that is not a wall type (its wall overlay O0
+/// still has the wall flag) with an own O0 wall three cells east, and
+/// returns the filling buildings at (1, 0) and (2, 0).
+fn non_wall_fill(r: &mut Ruleset) -> (World, Vec<ObjectId>) {
+    r.sim.buildings.get_mut("WALLA").unwrap().econ.wall = None;
+    let mut w = with_yard(r);
+    set_overlay(&mut w, c(3, 0), 0, 0, Some(A));
+    assert!(place(&mut w, "WALLA", c(0, 0)));
+    let mut fill = Vec::new();
+    for x in [1, 2] {
+        let b = buildings_at(&w, c(x, 0));
+        assert_eq!(b.len(), 1, "a filling building at {x}");
+        fill.push(b[0]);
+    }
+    (w, fill)
+}
+
+// spec: S-0406 claims 11 and 17 (Q-3128: a filling building of a type that is not a wall type enters play in the place order's tick in its construction state exactly as the building that order names: no current behaviour, construction queued, the ready mark clear at entry) (#310)
+#[test]
+fn claim_11_non_wall_fill_enters_as_placed() {
+    let mut r = rules();
+    let (w, fill) = non_wall_fill(&mut r);
+    for id in fill {
+        let o = w.obj(id).unwrap();
+        assert!(o.econ.construction.building_up);
+        assert_eq!(o.econ.construction.entry, Some(w.tick));
+        assert_eq!(o.beh.current, None);
+        assert_eq!(o.beh.queued, Some(Behaviour::Construction));
+        assert!(!o.beh.ready_mark, "the ready mark clear at entry");
+    }
+}
+
+// spec: S-0406 Edge cases (quirks.placed_buildup_twice off: a place order sets the ready mark at entry on the building it names and on each of its filling buildings) (#310)
+#[test]
+fn claim_11_non_wall_fill_buildup_twice_off() {
+    let mut r = rules();
+    r.globals.quirks.placed_buildup_twice = false;
+    let (w, fill) = non_wall_fill(&mut r);
+    for id in fill {
+        assert!(w.obj(id).unwrap().beh.ready_mark);
+    }
+}
+
+// spec: S-0406 claim 17 and F7 (a filling building takes the placed building's results: R = T + (n − 1) × d_b, C = R + 1, H = T + 2(n − 1) × d_b + 1, with T the place order's tick) (#310)
+#[test]
+fn claim_11_non_wall_fill_timings() {
+    let mut r = rules();
+    let (mut w, fill) = non_wall_fill(&mut r);
+    // The place order is applied directly here, so the first turn is on T (see lone_placed).
+    let t = w.tick;
+    // The placed building and the other filling building build up in the
+    // same ticks, so the scenario stream is not watched here (claims 14
+    // and 17 are tested on a lone building above).
+    let mut seen: Vec<(Option<i32>, Option<i32>, Option<i32>)> = vec![(None, None, None); 2];
+    for _ in 0..300 {
+        let now = w.tick;
+        glasnost_sim::tick::step(&mut w);
+        for (k, &id) in fill.iter().enumerate() {
+            let o = w.obj(id).unwrap();
+            let s = &mut seen[k];
+            if s.0.is_none() && o.beh.current == Some(Behaviour::Construction) {
+                s.0 = Some(now);
+            }
+            if s.1.is_none() {
+                s.1 = o.econ.construction.first;
+            }
+            if s.2.is_none() && !o.econ.construction.building_up {
+                assert_eq!(o.beh.current, Some(Behaviour::Guard));
+                s.2 = Some(now);
+            }
+        }
+        if seen.iter().all(|s| s.2.is_some()) {
+            break;
+        }
+    }
+    for s in seen {
+        assert_eq!(s, (Some(t + 36), Some(t + 37), Some(t + 73)));
+    }
+}
+
 // spec: S-0406 claim 12 and F5 (an upgrade goes on an own building of the named type with room: count + 1, full health, recorded; power counts it)
 // spec: S-0406 claim 12 (no room: refused)
 #[test]
