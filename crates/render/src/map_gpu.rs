@@ -1050,6 +1050,38 @@ impl MapRenderer {
         q: &ComposeQuirks,
         alpha: Option<&[u8]>,
     ) -> usize {
+        let target_view = target.create_view(&Default::default());
+        self.render_lit_into(
+            device,
+            queue,
+            encoder,
+            (target, &target_view),
+            depth,
+            scene,
+            view,
+            filter,
+            q,
+            alpha,
+        )
+    }
+
+    /// [`Self::render_lit`] into `target` through `target.1`, a default
+    /// view of `target.0` that the caller keeps from frame to frame (#130).
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_lit_into(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: (&wgpu::Texture, &wgpu::TextureView),
+        depth: &wgpu::TextureView,
+        scene: &Scene,
+        view: &View,
+        filter: &Filter,
+        q: &ComposeQuirks,
+        alpha: Option<&[u8]>,
+    ) -> usize {
+        let (target, target_view) = target;
         self.set_alpha(device, queue, view.size, alpha);
         let uniform = ViewUniform {
             origin: [view.origin.0, view.origin.1],
@@ -1267,13 +1299,12 @@ impl MapRenderer {
             self.stats.upload_bytes += std::mem::size_of_val(list.as_slice()) as u64;
         }
         self.stats.instances += list.len();
-        let target_view = target.create_view(&Default::default());
         let begin = |encoder: &mut wgpu::CommandEncoder, first: bool| {
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("map"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &target_view,
+                        view: target_view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {

@@ -1046,7 +1046,7 @@ impl GpuDraw {
         }
         let m = self.map.as_mut().ok_or("no map renderer")?;
         let v = s.view();
-        if m.size != v.size || m.targets.is_none() {
+        if remake_targets(m.targets.as_ref().map(|_| m.size), v.size) {
             let (color, depth) = targets(device, v.size, COLOR_FORMAT);
             self.batch.set_image_view(
                 device,
@@ -1292,7 +1292,9 @@ impl Gfx {
         timing: Option<u64>,
     ) -> Result<(FrameEnd, Drawn), String> {
         let mut end = FrameEnd::default();
-        let t0 = bench::now();
+        let clock = frame_clock(timing);
+        let now = || clock.map_or(0.0, |c| c());
+        let t0 = now();
         let (frame, state) = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t) => (Some(t), SurfaceState::Success),
             wgpu::CurrentSurfaceTexture::Suboptimal(t) => (Some(t), SurfaceState::Suboptimal),
@@ -1321,7 +1323,7 @@ impl Gfx {
                 return Ok((end, Drawn::Again));
             }
         };
-        end.acquire = bench::now() - t0;
+        end.acquire = now() - t0;
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1338,7 +1340,7 @@ impl Gfx {
             .set_screen(factor, (self.config.width, self.config.height));
         self.draw
             .prepare(&self.device, &self.queue, client, view, &mut encoder);
-        let t1 = bench::now();
+        let t1 = now();
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor {
             format: Some(self.view_format),
             ..Default::default()
@@ -1363,7 +1365,7 @@ impl Gfx {
             t.end(&mut encoder);
         }
         let commands = encoder.finish();
-        let t2 = bench::now();
+        let t2 = now();
         self.queue.submit([commands]);
         if let (Some(t), Some(n)) = (self.timer.as_mut(), timing) {
             t.submitted(n);
@@ -1378,7 +1380,7 @@ impl Gfx {
         }
         if timing.is_some() {
             end.encode = t2 - t1;
-            end.submit = bench::now() - t2;
+            end.submit = now() - t2;
             end.laps = self.draw.laps;
             end.stats = self.draw.take_stats();
             if let Some(t) = self.timer.as_mut() {
@@ -1530,6 +1532,18 @@ fn surface_step(s: SurfaceState) -> (SurfaceStep, bool) {
         SurfaceState::Lost => (SurfaceStep::Lost, false),
         SurfaceState::Validation => (SurfaceStep::Invalid, false),
     }
+}
+
+/// Whether the battlefield's targets and their views are made again for a
+/// view of `size`, when they are kept for a view of `kept` (`None`: none
+/// are kept): only when there are none or the size changed (#130).
+fn remake_targets(kept: Option<(u32, u32)>, size: (u32, u32)) -> bool {
+    kept != Some(size)
+}
+
+/// The clock a frame of the window reads for its times, if any (#130).
+fn frame_clock(_timing: Option<u64>) -> Option<fn() -> f64> {
+    Some(bench::now)
 }
 
 /// The surface size for a window of `inner` physical pixels on a device
