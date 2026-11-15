@@ -28,12 +28,12 @@
 //! claim 3 (no sale), S-0518 claim 2 (no support), S-0215 claim 37 (d) (no
 //! ordinary approach), S-0308 table P row 8 and S-0309 claim 25 (h).
 //!
-//! The drain animation (claim 5) takes its creation draws here
-//! (`load::anim_created_at`); its playback over the drainer is the view's,
-//! which draws it on every drainer that has a partner, so it is removed when
-//! the link ends (claim 14) and an old animation never stays on a relinked
-//! drainer (Edge cases: a display defect our engine fixes in both positions
-//! of the switch).
+//! The drain animation (claim 5) is a simulation animation in play
+//! (`anims::spawn`, role `Drain` of the drainer), attached to the drainer.
+//! It is removed when the link ends (claim 14), and an old animation never
+//! stays on a relinked drainer (Edge cases: a display defect our engine
+//! fixes in both positions of the switch; with the switch on the stranded
+//! first link's animation is removed when the second link forms, #342).
 //!
 //! The places of the drainer's tests and of the payout within the turn are
 //! claim 15's (Q-1440): the position check before the erasure exit, the
@@ -178,6 +178,10 @@ pub fn attempt(w: &mut World, firer: ObjectId, target: Target) {
         if w.rules().quirks.drain_relink_strands_previous {
             // spec: S-0608 Edge cases (quirks.drain_relink_strands_previous on: the first link is not ended; it stays drained, and the drainer's partner becomes the second building)
             w.drain.partner.remove(&firer);
+            for id in crate::anims::with_role(w, crate::anims::Role::Drain(firer)) {
+                // spec: S-0608 Edge cases (a second link strands the first: the old animation is a display defect our engine removes whatever the switch says)
+                crate::anims::remove(w, id);
+            }
         } else {
             // spec: S-0608 Edge cases (quirks.drain_relink_strands_previous off: forming a new link first ends the old one with all of claim 14's effects)
             end(w, old);
@@ -230,11 +234,12 @@ pub fn end(w: &mut World, b: ObjectId) {
     // spec: S-0608 claim 14 (the drainer is no longer draining: table P row 8 can choose its draining weapon again and claim 3 a no longer refuses the building; the drain animation is removed)
     if partner(w, drainer) == Some(b) {
         w.drain.partner.remove(&drainer);
+        for id in crate::anims::with_role(w, crate::anims::Role::Drain(drainer)) {
+            // spec: S-0608 claim 14 (the drain animation is removed when the link ends)
+            crate::anims::remove(w, id);
+        }
     }
-    for id in crate::anims::with_role(w, crate::anims::Role::Drain(drainer)) {
-        // spec: S-0608 claim 14 (the drain animation is removed when the link ends)
-        crate::anims::remove(w, id);
-    }
+    // design: #342 (a stranded first link's animation was removed when the second link formed, S-0608 Edge cases; its end leaves the newest link's animation alone)
     // spec: S-0608 claim 14 (the building is no longer being drained, and its house is due to work out its power, S-0405 claim 7)
     if let Some(h) = w.obj(b).and_then(|o| o.owner) {
         crate::econ::power::make_due(w, h);

@@ -810,7 +810,8 @@ fn step_check_with(
         return false;
     };
     // The stored path as the check begins, which the track below reads.
-    let (e, steps_len) = (o.path.steps.get(1).copied(), o.path.steps.len());
+    let (mut e, steps_len) = (o.path.steps.get(1).copied(), o.path.steps.len());
+    let facing = o.body.value(t);
     let here = o.pos.cell();
     let first = neighbour(here, d);
     let outcome = checked_outcome(w, id, u, here, first);
@@ -896,6 +897,44 @@ fn step_check_with(
             return search_and_recheck(w, id, u);
         }
     }
+    // spec: S-0212 claim 20 (the driving locomotor recomputes as a step begins with no further step stored after it, once the step check of that step's cell has given clear, heading point beyond 512; a two-cell curve over the last two stored steps makes none)
+    // The new path of a recomputation with the switch on, kept for T5's moving-blocker row.
+    let mut refreshed: Option<Vec<u8>> = None;
+    if refresh && steps_len == 1 && refresh_due(w, id, first) {
+        let Some((old, keep_pos)) = w.obj(id).map(|o| (o.path.steps.clone(), o.pos)) else {
+            return false;
+        };
+        let found = path::compute(w, id, Mode::Fresh) == Search::Found;
+        let Some(ob) = w.obj_mut(id) else {
+            return false;
+        };
+        ob.pos = keep_pos;
+        let new = std::mem::take(&mut ob.path.steps);
+        match new.first() {
+            Some(&nd) if found => {
+                if r.quirks.path_refresh_keeps_old_step {
+                    // spec: S-0212 claim 20 (switch on: the unit still takes the old step and the new path's first step is dropped; the old step and the new path's second step choose the track as the current and next step of S-0207 claim 7)
+                    e = new.get(1).copied();
+                    ob.path.steps = std::iter::once(d)
+                        .chain(new.iter().skip(1).copied())
+                        .collect();
+                    refreshed = Some(new);
+                } else {
+                    // spec: S-0212 claim 20 and Edge cases (quirks.path_refresh_keeps_old_step off: the unit takes the new path's first step instead of the old one, after a turn when it does not face it, S-0207 claim 6; that step is checked without a recomputation of its own)
+                    ob.path.steps = new;
+                    if facing != facing_of(nd) {
+                        turn_in_place(w, id, u, nd);
+                        return false;
+                    }
+                    return step_check_with(w, id, u, repeated, no_curve, false);
+                }
+            }
+            _ => {
+                // design: S-0212 claim 20 (a search that finds nothing gives no new path, so the old step is taken in either switch position)
+                ob.path.steps = old;
+            }
+        }
+    }
     // spec: S-0207 claim 7 (the next step chooses the track; crush mode drives straight)
     let second = neighbour(first, e.unwrap_or(d));
     let crush = crush_mode(w, id, u, first, second);
@@ -911,6 +950,20 @@ fn step_check_with(
             Outcome::MovingBlocker => {
                 // spec: S-0207 claim 7 and table T5 (moving blocker: the straight or diagonal track into the first cell; path kept)
                 use_e = None;
+                if let Some(new) = refreshed.take() {
+                    // spec: S-0212 claim 20 (after a recomputation, T5's moving-blocker row takes the new path's first step from the unit's cell instead, after a turn when the unit does not face it and a step check of the cell it enters; no step of the new path is dropped)
+                    let nd = new[0];
+                    if let Some(ob) = w.obj_mut(id) {
+                        ob.path.steps = new;
+                    }
+                    if nd != d {
+                        if facing != facing_of(nd) {
+                            turn_in_place(w, id, u, nd);
+                            return false;
+                        }
+                        return step_check_with(w, id, u, repeated, true, false);
+                    }
+                }
             }
             Outcome::ClosedFriendlyGate => {
                 // spec: S-0207 table T5 (closed friendly gate: the gate is told to open; path discarded, stop at once with ρ = 0)
@@ -993,28 +1046,8 @@ fn step_check_with(
     } else {
         vec![first]
     };
-    // spec: S-0212 claim 20 (the drive locomotor recomputes as it begins the last stored step, heading point beyond 512)
+    // spec: S-0207 claim 7 (a straight or diagonal track takes one stored step, a two-cell curve two)
     let used = if two { 2 } else { 1 };
-    let last_step = steps_len <= used;
-    if refresh
-        && last_step
-        && !r.quirks.path_refresh_keeps_old_step
-        && refresh_due(w, id, target_cell)
-    {
-        // spec: S-0212 claim 20 and Edge cases (quirks.path_refresh_keeps_old_step off: the unit takes the new path's first step instead of the old one, so the recomputation comes before the old track begins; the new first step is checked once, without a recomputation of its own)
-        let Some((old, keep_pos)) = w.obj(id).map(|o| (o.path.steps.clone(), o.pos)) else {
-            return false;
-        };
-        let found = path::compute(w, id, Mode::Fresh) == Search::Found;
-        if let Some(ob) = w.obj_mut(id) {
-            ob.pos = keep_pos;
-            if !found {
-                // design: S-0212 claim 20 and Edge cases (switch off: a search that finds nothing gives no new first step, so the old step is taken, as with the switch on)
-                ob.path.steps = old;
-            }
-        }
-        return step_check_with(w, id, u, repeated, no_curve, false);
-    }
     let rho_t = target_fraction(w, id, u, first);
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.drain(..used.min(ob.path.steps.len()));
@@ -1043,14 +1076,6 @@ fn step_check_with(
     // spec: S-0210 claim 7 (a crusher warns the infantry of the first cell each time it begins a track, crush mode or not)
     if occupancy::is_crusher(w, id) {
         crate::crush::warn_ahead(w, id, first);
-    }
-    // spec: S-0212 claim 20 (switch on: the old track is begun, then the path is recomputed)
-    if refresh
-        && last_step
-        && r.quirks.path_refresh_keeps_old_step
-        && refresh_due(w, id, target_cell)
-    {
-        refresh_from_target(w, id);
     }
     true
 }
@@ -1374,29 +1399,6 @@ pub(crate) fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
     }
     // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
     crate::emitters::retarget_let_go(w, id);
-}
-
-/// The immediate recomputation of S-0212 claim 20 with
-/// `quirks.path_refresh_keeps_old_step` on, made just after the old track
-/// has begun: the search starts from the unit's own cell, and the new
-/// path's first step is dropped. (Off, the step check recomputes before the
-/// track begins.)
-fn refresh_from_target(w: &mut World, id: ObjectId) {
-    let Some(keep_pos) = w.obj(id).map(|o| o.pos) else {
-        return;
-    };
-    let res = path::compute(w, id, Mode::Fresh);
-    if res != Search::Found {
-        return;
-    }
-    if let Some(ob) = w.obj_mut(id) {
-        ob.pos = keep_pos;
-        if !ob.path.steps.is_empty() {
-            // spec: S-0212 claim 20 (the old step is still taken; the new path's first step is dropped)
-            // design: Q-3115 interim (one step is dropped also when the old track is a two-cell curve)
-            ob.path.steps.remove(0);
-        }
-    }
 }
 
 /// Crush mode (S-0207 claim 7).

@@ -33,7 +33,7 @@ use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 mod fly;
 
-pub use fly::{impact, start_crash, tick};
+pub use fly::{crash_end_fires, impact, start_crash, tick};
 
 /// The arrival radius: a cruising jumpjet arrives when ρ is below it.
 // spec: S-0502 claim 11 and Constants (arrival radius 20 leptons)

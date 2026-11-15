@@ -514,6 +514,64 @@ fn claim_2_permission_rows() {
     assert!(!bunker::permits(&w, shed, ok));
 }
 
+/// A bunker-eligible TANK with the hovering locomotor (its class is not
+/// hover), on a game with `quirks.bunker_hover_no_arrival` set to `on`.
+fn hover_loco_game(on: bool) -> (World, ObjectId, ObjectId) {
+    let mut r = quirked(|q| q.bunker_hover_no_arrival = on);
+    vehicle(&mut r, "SKIM", |t| {
+        t.locomotor = Some(glasnost_rules::sim::Locomotor::Hover);
+    });
+    let mut w = game_on(&r);
+    let b = pit(&mut w, "PIT");
+    let u = put(&mut w, Kind::Vehicle, "SKIM", 0, 6, 1);
+    (w, b, u)
+}
+
+// spec: S-0606 claim 22 and Edge cases (quirks.bunker_hover_no_arrival on: claims 1 and 2 have no locomotor test, so a bunker-eligible vehicle with the hovering locomotor is permitted and takes the contact)
+#[test]
+fn issue_272_on_a_hovering_locomotor_vehicle_is_eligible_and_takes_contact() {
+    let (mut w, b, u) = hover_loco_game(true);
+    assert!(
+        glasnost_sim::hover::is_hover(&w, u),
+        "the hovering locomotor"
+    );
+    assert!(bunker::eligible(&w, u));
+    assert!(bunker::permits(&w, b, u), "P10");
+    send(&mut w, u, b);
+    assert_eq!(w.obj(u).unwrap().contact, Some(b));
+}
+
+// spec: S-0606 claim 22 (Switch off: claim 1's test also requires a locomotor other than the hovering one; such a vehicle is refused at row P8, so no order sends it toward the bunker, and claim 3's repeated request ends any contact it holds)
+#[test]
+fn issue_272_off_a_hovering_locomotor_vehicle_is_refused_at_p8() {
+    let (mut w, b, u) = hover_loco_game(false);
+    assert!(!bunker::eligible(&w, u), "not bunker-eligible");
+    assert!(!bunker::permits(&w, b, u), "P8");
+    // No order sends it toward the bunker: a click on the bunker is not an
+    // enter (S-0214 table V value n asks claim 2's permission). An enter
+    // order given directly skips the click, and claim 3's first request
+    // has no eligibility test.
+    let house = w.obj(u).unwrap().owner.unwrap();
+    let click = targeting::action(
+        &w,
+        house,
+        u,
+        targeting::ClickOn::Object(b),
+        targeting::Modifiers::default(),
+    );
+    assert_ne!(click, targeting::Action::Enter, "the click is no enter");
+    // Claim 3: a repeated request from a vehicle in contact is refused once
+    // it is not bunker-eligible (the refusal ends the contact).
+    w.obj_mut(u).unwrap().contact = Some(b);
+    assert!(
+        !bunker::request(&mut w, u, b),
+        "the repeated request is refused"
+    );
+    // A vehicle with another locomotor keeps its eligibility.
+    let t = tank(&mut w, -5, 1);
+    assert!(bunker::eligible(&w, t));
+}
+
 // spec: S-0606 claim 2 row P4 and claim 3 (one contact place: a second vehicle given the bunker as destination has it cleared and gets no contact; no waiting queue)
 #[test]
 fn claim_3_second_vehicle_is_turned_away() {

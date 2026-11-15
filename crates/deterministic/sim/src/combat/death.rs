@@ -629,10 +629,11 @@ pub(crate) fn kill_in(
         crate::transport::kill_passengers(w, id, hit);
     }
     // spec: S-0312 table, step 2 (an exploding object: passengers die, then the death weapon); claim 11 (claim 6 skipped)
-    // spec: S-0312 claim 16 and Edge cases (quirks.crash_death_weapon_twice off: an exploding aircraft that starts to crash fires its death weapon only at the impact); Q-3112 interim (an aircraft above the terrain at its death or already crashing; not a rocket, S-0501 Terms)
+    // spec: S-0312 claim 16 and Edge cases (quirks.crash_death_weapon_twice off: an exploding object whose death starts a crash fires no death weapon at death, only the one at the impact, where that impact sets one off: a non-rocket aircraft in ordinary flying movement above the terrain at its death or already crashing, and a crashable vehicle of a balloon-hover type, whose Vehicle crash end sets it off; the switch reaches no other death)
     let crash_skips = !w.rules().quirks.crash_death_weapon_twice
-        && crate::air::is_aircraft(w, id)
-        && (crate::air::crashing(w, id) || crate::air::height(w, id) > 0);
+        && ((crate::air::is_aircraft(w, id)
+            && (crate::air::crashing(w, id) || crate::air::height(w, id) > 0))
+            || (!marked_water && crate::jump::crash_end_fires(w, id)));
     if !marked_water
         && !crash_skips
         && exploding(w, id)
