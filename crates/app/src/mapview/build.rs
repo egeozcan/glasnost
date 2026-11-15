@@ -6923,7 +6923,7 @@ impl Painter {
     /// the game's lit buildings ([`Painter::set_building_lights`], S-0405
     /// claim 9), except that a pulse never puts one out or on (no pulse
     /// exists in the game yet) and a building's light is never scaled for
-    /// its damage (S-0302 claim 12's factor is open) (#152). The named palettes' tables take
+    /// its damage (S-0302 claim 12's factor is open, Q-3146) (#152). The named palettes' tables take
     /// the effect tint with the house-colour tables (S-0103 claim 17). The
     /// house tables are all built when the game starts (S-0104 Open questions),
     /// so claim 2's third column, the tint of a table built while an effect
