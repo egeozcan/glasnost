@@ -1778,3 +1778,7 @@ mod touch_tests;
 #[cfg(test)]
 #[path = "client_display_tests.rs"]
 mod display_tests;
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "client_gpu_frame_tests.rs"]
+mod gpu_frame_tests;
