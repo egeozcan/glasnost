@@ -142,7 +142,7 @@ pub struct Session {
     /// for), made once and handed to the marks, the cursor, the tip and the
     /// drawing. `None` outside a frame, where every pick is made afresh.
     // design: render (#120)
-    picks: Option<Vec<(Pick, (CellXY, Option<ObjectId>))>>,
+    picks: Option<Vec<(Pick, Picked)>>,
     /// The tips' rest and the tip that shows: the name tip (S-0111 claims
     /// 20 to 26) or a sidebar tip (S-0411 claims 20 to 22).
     name_tip: name_tip::NameTip,
@@ -234,6 +234,9 @@ pub struct Session {
 /// What a frame's pointer pick was made for: the point, the view centre
 /// and the window size (design: render (#120)).
 type Pick = (Point, (i32, i32), (i32, i32));
+
+/// What a pointer pick found: the cell and the object under the point.
+type Picked = (CellXY, Option<ObjectId>);
 
 /// Host-clock times of one step's parts, in milliseconds, for the
 /// performance benchmark (M8 step C4; our own tooling, never game state).
