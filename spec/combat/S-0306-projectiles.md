@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 90
+revision: 91
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-14
+approved-on: 2026-11-15
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526, Q-2998, Q-3054, Q-3082]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763, Q-2111, Q-2157, Q-2158, Q-2212, Q-2216, Q-2231, Q-2232, Q-2417, Q-2466, Q-2467, Q-2526, Q-2998, Q-3054, Q-3082, Q-3114]
 supersedes: []
 ---
 
@@ -1046,7 +1046,13 @@ S-0501 claim 20.
       parts b and c for the first row with and without a firer). The rule that the rows of this spec
       never remove a steering projectile for leaving the map is `unmeasured`: what then happens to
       such a projectile is not established (Open questions), so no scenario could predict an outcome
-      that would confirm or falsify it.
+      that would confirm or falsify it. For the steering bridge-crossing row, the deck height taken
+      from the cell of *P*′ when the old and the new cell differ in terrain height (the height it
+      tests and the height it detonates at) is `unmeasured`: P33 run d does not set the terrain
+      heights of the cells in which the crossing falls, P9 run o expects the projectile to cruise
+      above the deck rather than cross it, and no setup is known that fixes the turn in which a
+      steering projectile crosses a deck height while it moves between cells of different terrain
+      height. Medium, as T1 rates the row.
     - Confidence: high for the rows marked high in T1 and for the high part of its first row,
       medium and low for the rows and parts that T1 marks so (the proximity row per cause of a
       lost firer as Terms rates it), and medium for T2
@@ -2125,7 +2131,7 @@ what happens when several rows apply. Straight and arcing projectiles share ever
 | steering | *h* ≤ 0 | detonate | high |
 | steering | no target (or a target point at the world origin, Terms) and *h* ≥ missile safety altitude | detonate | high |
 | steering, not airburst or very high | after its first 60 unlocked turns, the closing average (below) lies in 0 … 59 | detonate (orbiting missile) | medium |
-| steering, when none of the steering-distance, *h* ≤ 0, safety-altitude and closing-average rows applies | *P*′ strictly crosses the bridge deck height of a high-bridge cell (old or new cell) | detonate; z at the deck height | medium |
+| steering, when none of the steering-distance, *h* ≤ 0, safety-altitude and closing-average rows applies | *P*′ (after the cruise lift of claim 15) strictly crosses the bridge deck height of a high-bridge cell (old or new cell; deck height = terrain height of the cell of *P*′ + 416, whichever of the two cells is the high-bridge cell and whatever the other cell's terrain height): going up when *P* is below the deck height and *P*′ above it, going down when *P* is above it and *P*′ below it | detonate; z at that deck height | medium |
 | steering or ranged (or both) | past its arm time, and η < 32 where η = trunc(*d*₃(*P*′, *K*) / 2) | detonate (arrival) | high |
 | steering or ranged (or both) | past its arm time, η < 256 and larger than the recorded value Ω (below; until the first check past the arm time Ω is the full, unhalved *d*₃ from the projectile's position at placement to *K*) | detonate (passed by; counts as arrival when the firer's type is a jumpjet type) | high |
 | any, subject to cliffs or walls | the line-of-fire test of claim 22 for the single sample *P*′ blocks | detonate | high |
@@ -2193,7 +2199,7 @@ For a steering projectile:
 | Rows of T1 that apply in the turn | Outcome |
 |---|---|
 | the steering-distance row, while *h* > 0, the projectile is not airburst and it has a target | detonation at the target point |
-| the bridge-crossing row (by T1 it applies only when none of the steering-distance, *h* ≤ 0, safety-altitude and closing-average rows does) | detonation at *P*′ (after the cruise lift) with z at the deck height |
+| the bridge-crossing row (by T1 it applies only when none of the steering-distance, *h* ≤ 0, safety-altitude and closing-average rows does) | detonation at *P*′ (after the cruise lift) with z at the row's deck height, the terrain height of the cell of *P*′ + 416 |
 | any other row or set of rows | detonation at *P*′, after the cruise lift of claim 15 when one applied in that turn |
 
 No row of this spec removes a steering projectile for leaving the map (whether another part of
