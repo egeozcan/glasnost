@@ -1,8 +1,9 @@
 ---
 id: Q-3121
 title: The standing position and creation point of a moving infantry-making animation
-status: open
+status: answered
 related: [S-0611, S-0109, S-0319]
+answered-by: [S-0611]
 ---
 
 ## Need
