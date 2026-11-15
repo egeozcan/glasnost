@@ -233,6 +233,13 @@ pub struct Scene {
     pub items: Vec<Item>,
     /// Number of leading items that belong to the cell pass.
     pub cell_pass_len: usize,
+    /// Changed by whoever moves, adds, removes or regroups a cell-pass
+    /// item, or gives one another image, so that a renderer can keep what it
+    /// found out about the cell pass while this, [`Scene::cell_pass_len`]
+    /// and the sizes of the cell pass's images stay as they are (design:
+    /// render (#113)). A rewrite of an image or of an item's paint needs no
+    /// change.
+    pub cell_pass_rev: u64,
     /// Single-pixel drawings placed between items ([`spots`]), sorted by
     /// [`SpotGroup::at`]; groups at the same place are drawn in list order.
     pub spots: Vec<SpotGroup>,
