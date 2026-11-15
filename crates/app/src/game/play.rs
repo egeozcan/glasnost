@@ -456,15 +456,16 @@ impl Play {
                 .push(if on { UiCue::RadarOn } else { UiCue::RadarOff });
             self.radar_on = on;
         }
-        let model = self.hud_model(&|_| String::new(), &|_| None);
-        let waiting = model.tabs.iter().any(|t| t.waiting);
+        // design: render (#121) the tab buttons only, not the whole sidebar model
+        let tabs = hud::tabs(w, house);
+        let waiting = tabs.iter().any(|t| t.waiting);
         if waiting && !self.waiting {
             // spec: S-0411 claim 9 (a building item done: the construction-complete cue)
             self.cues.push(UiCue::ConstructionComplete);
         }
         self.waiting = waiting;
         let tick = w.tick;
-        for (f, tv) in self.flash.iter_mut().zip(model.tabs.iter()) {
+        for (f, tv) in self.flash.iter_mut().zip(tabs.iter()) {
             *f = match (*f, tv.flashes()) {
                 // spec: S-0411 claim 11 (with no ready subject on the tab the flash stops and clears)
                 (_, false) => None,
