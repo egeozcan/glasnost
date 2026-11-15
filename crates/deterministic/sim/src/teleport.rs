@@ -237,7 +237,8 @@ fn take_destination_with(w: &mut World, id: ObjectId, forced: bool) {
     }
     // spec: S-0207 claim 20 (a) (dropped while phasing in, held, S-0614 Terms, or being erased by a temporal beam, S-0514 claim 16; the electromagnetic pulse has no state in our engine; a superweapon warp's leaving stage is the warp-pending immobilization of part b below)
     // spec: S-0207 claim 27 (Q-1130 table, third row: with no suppression pending the order-level destination becomes empty and nothing is consumed)
-    if st.phasing.is_some() || crate::parasite::held(w, id) || crate::temporal::erased(w, id) {
+    // spec: S-0214 Terms and S-0513 Terms and claim 40 (phasing in is also a superweapon warp member's, from departure until its arrival hold ends, #361)
+    if phasing_in(w, id) || crate::parasite::held(w, id) || crate::temporal::erased(w, id) {
         st.for_dest = None;
         set_state(w, id, st);
         drop_destination(w, id);
