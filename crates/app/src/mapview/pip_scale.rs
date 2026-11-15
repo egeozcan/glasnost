@@ -663,10 +663,7 @@ mod tests {
     #[test]
     fn extreme_ammunition_does_not_overflow() {
         // a = −2³¹: no λ qualifies for any pip.
-        assert_eq!(
-            ammo_row(i32::MAX, i32::MIN, 3),
-            [(0, 14), (1, 14), (2, 14)]
-        );
+        assert_eq!(ammo_row(i32::MAX, i32::MIN, 3), [(0, 14), (1, 14), (2, 14)]);
         // w = 1, A = a = 2³¹ − 1: pip 0's λ is 2³¹ − 2, an image frame past any sprite.
         assert_eq!(
             ammo_row(i32::MAX, i32::MAX, 1),

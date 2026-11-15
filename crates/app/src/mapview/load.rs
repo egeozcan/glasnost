@@ -523,12 +523,21 @@ mod session_palette_tests {
         let fresh = pollster::block_on(game_palettes(&second, t, None));
         assert_ne!(fresh, game1, "the files differ");
         let game2 = pollster::block_on(game_palettes(&second, t, Some(game1.clone())));
-        assert_eq!(game2, game1, "same theater as the previous game: no palette file is read");
+        assert_eq!(
+            game2, game1,
+            "same theater as the previous game: no palette file is read"
+        );
         // Another theater without its tile palette file: the one in force stays.
         let s = Theater::Snow;
         let snow = install(&[(s.unit_palette(), 30), (s.theater_palette(), 30)]);
         let game3 = pollster::block_on(game_palettes(&snow, s, Some(game2)));
-        assert_eq!(game3.tile, game1.tile, "a missing tile palette keeps the one in force");
-        assert_ne!(game3.unit, game1.unit, "a new theater loads its unit palette");
+        assert_eq!(
+            game3.tile, game1.tile,
+            "a missing tile palette keeps the one in force"
+        );
+        assert_ne!(
+            game3.unit, game1.unit,
+            "a new theater loads its unit palette"
+        );
     }
 }

@@ -1200,7 +1200,11 @@ fn put_wall(live: &mut Live, c: glasnost_map::CellXY, data: u8) {
 
 /// Three clear level-0 cells of the synthetic map, away from its units.
 fn wall_cells() -> [glasnost_map::CellXY; 3] {
-    [testkit::cell(0, 6), testkit::cell(1, 6), testkit::cell(3, 6)]
+    [
+        testkit::cell(0, 6),
+        testkit::cell(1, 6),
+        testkit::cell(3, 6),
+    ]
 }
 
 /// design: render (#147) (the changed overlays are kept cell by cell: a redraw draws again only
@@ -1235,7 +1239,11 @@ fn one_changed_overlay_cell_is_drawn_alone() {
     }
     let before = live.overlay_cells_drawn();
     live.redraw(&inputs, &mut scene);
-    assert_eq!(live.overlay_cells_drawn(), before + 3, "the three new walls");
+    assert_eq!(
+        live.overlay_cells_drawn(),
+        before + 3,
+        "the three new walls"
+    );
     put_wall(&mut live, walls[1], 0);
     live.redraw(&inputs, &mut scene);
     assert_eq!(
@@ -1309,7 +1317,10 @@ fn a_kept_overlay_follows_its_cell_when_the_overlays_are_drawn_again() {
 #[test]
 fn kept_overlays_follow_the_options_when_drawn_again() {
     // FENCEX made a wall, so that it takes the local player's colour.
-    let rules = RULES.replace("[FENCEX]\nDrawFlat=no\n", "[FENCEX]\nWall=yes\nDrawFlat=no\n");
+    let rules = RULES.replace(
+        "[FENCEX]\nDrawFlat=no\n",
+        "[FENCEX]\nWall=yes\nDrawFlat=no\n",
+    );
     assert_ne!(rules, RULES);
     let (import, catalogue, assets) = context_with(&rules);
     let synthetic_live = || synthetic_live_on(&import, &catalogue, &assets);
@@ -9363,7 +9374,12 @@ fn claim_9_a_building_light_follows_the_game() {
     };
     let (mut built, painter) = build_parts(&inputs, true);
     let mut ruleset = testkit::combat_ruleset();
-    ruleset.sim.buildings.get_mut("TOWER").unwrap().needs_engineer = Some(true);
+    ruleset
+        .sim
+        .buildings
+        .get_mut("TOWER")
+        .unwrap()
+        .needs_engineer = Some(true);
     let mut world = testkit::game_with(&ruleset, 24, 3);
     let at = testkit::mid(24, 0, 0);
     let tower = testkit::spawn(&mut world, SimKind::Building, "TOWER", 0, at, 0);

@@ -264,9 +264,23 @@ fn an_extreme_delta_is_held_to_a_negatable_count() {
 #[test]
 fn an_extreme_drag_does_not_overflow() {
     let mut t = Touches::new();
-    ev(&mut t, Phase::Start, 1, at(i32::MIN, i32::MAX), 0, Region::Map);
+    ev(
+        &mut t,
+        Phase::Start,
+        1,
+        at(i32::MIN, i32::MAX),
+        0,
+        Region::Map,
+    );
     assert_eq!(
-        ev(&mut t, Phase::Move, 1, at(i32::MAX, i32::MIN), 5, Region::Map),
+        ev(
+            &mut t,
+            Phase::Move,
+            1,
+            at(i32::MAX, i32::MIN),
+            5,
+            Region::Map
+        ),
         Some(Gesture::Pan((-i32::MAX, i32::MAX)))
     );
 }

@@ -2355,12 +2355,7 @@ impl Live {
             let Some(o) = self.world.obj(id) else {
                 continue;
             };
-            let Some(idx) = self
-                .types
-                .get(&(o.kind, o.type_index))
-                .copied()
-                .flatten()
-            else {
+            let Some(idx) = self.types.get(&(o.kind, o.type_index)).copied().flatten() else {
                 continue;
             };
             let c = o.pos.cell();

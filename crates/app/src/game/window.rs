@@ -1558,7 +1558,10 @@ fn surface_point(p: (f64, f64), window: (u32, u32), surface: (u32, u32)) -> (f64
             v * f64::from(surface) / f64::from(window)
         }
     };
-    (axis(p.0, window.0, surface.0), axis(p.1, window.1, surface.1))
+    (
+        axis(p.0, window.0, surface.0),
+        axis(p.1, window.1, surface.1),
+    )
 }
 
 /// Whether a frame that came to `drawn` with `presented` frames presented
@@ -1669,7 +1672,10 @@ mod tests {
     /// before the graphics existed is not lost).
     #[test]
     fn a_surface_is_configured_again_at_the_windows_size() {
-        assert_eq!(reconfigured_size((800, 600), (1024, 768), 8192), (1024, 768));
+        assert_eq!(
+            reconfigured_size((800, 600), (1024, 768), 8192),
+            (1024, 768)
+        );
         assert_eq!(reconfigured_size((800, 600), (800, 600), 8192), (800, 600));
         assert_eq!(reconfigured_size((800, 600), (5000, 0), 4096), (4096, 1));
         assert_eq!(surface_size((5000, 3000), 4096), (4096, 3000));
@@ -1720,6 +1726,9 @@ mod tests {
             surface_formats(&[F::Rgba8UnormSrgb], F::Rgba8UnormSrgb),
             (F::Rgba8UnormSrgb, F::Rgba8Unorm)
         );
-        assert_eq!(surface_formats(&[], F::Rgba8Unorm), (F::Rgba8Unorm, F::Rgba8Unorm));
+        assert_eq!(
+            surface_formats(&[], F::Rgba8Unorm),
+            (F::Rgba8Unorm, F::Rgba8Unorm)
+        );
     }
 }

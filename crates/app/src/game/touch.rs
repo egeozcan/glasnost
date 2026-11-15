@@ -320,7 +320,8 @@ impl Touches {
                 match (all_up, spoilt, self.contacts.as_slice()) {
                     (true, false, [a, b]) => {
                         // In 64 bits, so two far points have their midpoint (#153).
-                        let mid = |u: i32, v: i32| (i64::from(u) + i64::from(v)).div_euclid(2) as i32;
+                        let mid =
+                            |u: i32, v: i32| (i64::from(u) + i64::from(v)).div_euclid(2) as i32;
                         Some(Gesture::Click(
                             Button::Right,
                             Point::new(mid(a.start.x, b.start.x), mid(a.start.y, b.start.y)),
