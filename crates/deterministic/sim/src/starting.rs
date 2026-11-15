@@ -219,8 +219,9 @@ pub fn give(w: &mut World, bases: &[Option<CellXY>], setup: &GameSetup) {
             .is_none_or(|c| c.passive)
     };
     // spec: S-0009 claim 45 (the budget pool: types allowed to start, owned by the country of a house that is not passive, tech level at most the game's, base units left out)
+    // spec: S-0009 claim 45 (a house that the cleanup of claim 28 removed is no longer in the game)
     let live_countries: Vec<u32> = (0..w.houses.len())
-        .filter(|&h| !passive(w, h))
+        .filter(|&h| !w.houses[h].removed && !passive(w, h))
         .map(|h| w.houses[h].country)
         .collect();
     let mut n: i32 = 0;
