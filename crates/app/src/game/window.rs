@@ -1627,7 +1627,10 @@ mod tests {
     /// benchmark times it.
     #[test]
     fn a_frame_reads_the_clock_only_when_timed() {
-        assert!(frame_clock(None).is_none(), "an untimed frame reads no clock");
+        assert!(
+            frame_clock(None).is_none(),
+            "an untimed frame reads no clock"
+        );
         assert!(frame_clock(Some(0)).is_some());
         assert!(frame_clock(Some(7)).is_some());
     }

@@ -8072,7 +8072,16 @@ fn pip_scale_live_with<T>(
         painter,
         (world, rules, testkit::setup(3), Vec::new()),
     );
-    (live, built.scene, map, import, catalogue, cart, walker, prepared)
+    (
+        live,
+        built.scene,
+        map,
+        import,
+        catalogue,
+        cart,
+        walker,
+        prepared,
+    )
 }
 
 /// spec: S-0111 claims 10, 11 and 12 (a transport's passenger row from the
