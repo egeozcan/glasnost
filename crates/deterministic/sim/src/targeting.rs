@@ -8,21 +8,22 @@
 //! keeps it and passes it in, in selection order. Call these functions
 //! between ticks (they read the regions that every tick leaves current).
 //!
-//! The tables are implemented row by row. Rows whose conditions need state
-//! our engine does not have yet evaluate as that state makes them: nothing is
-//! berserk, melee-linked, being erased, phasing in, disabled,
-//! disguised, bomb-carrying or a loaner; there is no shroud or fog of war
-//! (route mode's clicks are `crate::routes::click`); no docking answer is given (no contact exchange exists yet,
-//! so the answer is neither); weapon ranges, damage and warhead flags are
-//! weapon choice, ranges, healing weapons, veterancy abilities and the
-//! firing rules' legality answer come from the combat module (M4), with its
-//! own seams (garrison occupants, upgrades); the weapon cursor flags of rows
-//! I17 and I18 are not imported; the vehicle in-place rows V2, V3, VC4 and VC5
-//! are not built yet; the factory kinds of rows B9 to B12 are not applied yet; a carrier carries nothing. The rows that read these states are in place
-//! behind small predicates, so that the states plug in when their topics
-//! arrive. The nearby-cell search of claim 11 always uses the actor's reach
-//! region and own zone (S-0212 table T5's rows for a free mover's no-move
-//! and for zone *fly* on an object are not in `path::nearby` yet).
+//! The tables are implemented row by row. The states the rows read come
+//! from the modules that own them: berserk (`crate::psychic`), being erased
+//! (`crate::superweapons`), phasing in (`crate::teleport`), deactivated
+//! (`crate::econ::power`), disguise (`crate::cloak`), bombs (`crate::bomb`),
+//! docking answers (`crate::transport`, `crate::structures::absorb`),
+//! garrisons (`crate::structures::garrison`); weapon choice, ranges, healing
+//! weapons, veterancy abilities and the firing rules' legality answer come
+//! from the combat module. Route mode's clicks are `crate::routes::click`.
+//! The seams that remain answer as the state is never present: nothing is
+//! melee-linked, paralysed, playing a vehicle death sequence or a loaner;
+//! there is no shroud or fog of war; a carrier carries nothing. Rows not
+//! built yet: the weapon cursor flags of rows I17 and I18 are not imported;
+//! the vehicle in-place rows V2, V3, VC4 and VC5 are not built; the factory
+//! kinds of rows B9 to B12 are not applied. The rows that read seams are in
+//! place behind small predicates, so that the states plug in when their
+//! topics arrive.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -238,7 +239,8 @@ fn other_house(w: &World, actor: ObjectId, target: ObjectId) -> bool {
 /// a unit or building in play on the map whose type's selection flag
 /// permits it, but not a building whose type is invisible in the game.
 /// Zero health does not exclude a building still in play (awaiting
-/// removal, S-0214 claim 16); being erased does (no erasing weapon yet).
+/// removal, S-0214 claim 16); being erased does (the superweapon warp and
+/// the temporal beam, `being_erased`).
 /// Whether a unit below the surface can be selected is an open question of
 /// S-0214; such units count as selectable. The viewer-dependent cloak and
 /// scenery exclusions are [`selectable_by`].
@@ -551,8 +553,9 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
 }
 
 /// Armed (S-0214 Terms): a weapon in the weapon slot it currently uses
-/// (S-0308's choice with no target). Garrison occupants that may fire from
-/// inside are a seam (no garrisons yet).
+/// (S-0308's choice with no target). For a garrisoned building whose
+/// occupants may fire from inside, the slot lookup gives the occupant's
+/// weapon (S-0308 claim 13, `combat::weapon`).
 pub fn armed(w: &World, id: ObjectId) -> bool {
     match kind(w, id) {
         Some(Kind::Terrain) | None => false,
@@ -642,9 +645,9 @@ fn infiltrator_entry(w: &World, actor: ObjectId, t: ObjectId) -> bool {
         || (charges && b.raw.can_c4.unwrap_or(true))
 }
 
-// The states below have no place in our engine before combat (M4) and the
-// special-abilities topics: these seams keep the rows that read them in
-// place, and evaluate as the state is never present.
+// The states below are read from the modules that own them. `melee_held`
+// alone is still a seam (no melee link yet) and answers as the state is
+// never present; `disabled` further down reads the pulse seam.
 
 /// Berserk (S-0213 Terms; S-0610 claims 4 and 5).
 fn berserk(w: &World, id: ObjectId) -> bool {
