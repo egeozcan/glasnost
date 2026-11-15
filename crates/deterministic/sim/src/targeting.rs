@@ -1547,11 +1547,8 @@ fn infantry_on(
 
 /// A vehicle clicked on itself (S-0214 table VD).
 fn vehicle_deploy(w: &World, actor: ObjectId) -> Action {
-    let on_tunnel = w
-        .obj(actor)
-        .is_some_and(|o| crate::transport::tunnel_cell(w, o.pos.cell()));
-    // spec: S-0214 Terms (deploy readiness: never on a tunnel cell, the tunnel-marked or edge predicate of S-0507 claim 7)
-    let ready = !on_tunnel;
+    // spec: S-0214 table VD rows VD3 and VD5 (deploy if it has deploy readiness, Terms, the whole of it: never on a tunnel cell, not disabled, not inside a tunnel, and a transport's S-0507 claim 7 unload exclusions) (#416)
+    let ready = deploy_readiness(w, actor);
     let deploy_weapon = uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false));
     // S-0214 table VD row VD1 (route mode held: no-deploy) is applied by `in_route_mode`: route mode is the client's input state, and its clicks are `crate::routes::click`
     // spec: S-0214 table VD row VD2 (deploys into a building: deploy if the building could be placed where the vehicle stands, the vehicle not counting as an obstacle and a wide foundation anchored by the deploy anchor step S-0415 F3, and the vehicle has deploy readiness; else no-deploy). The placement test is the deploy order's own (econ::deploy::fits)
