@@ -9821,6 +9821,11 @@
           "type": "boolean",
           "default": true
         },
+        "infantry_animation_stale_marks": {
+          "description": "An infantry-making animation frees a standing position only at an end attempt, and only the one of its point then: a bouncing one leaves each position it marked in flight taken, a removal that is not a successful end attempt (a landing, the owner's removal, another rule's) frees nothing, and at a point 416 leptons or more above the surface in a cell no high bridge marks the end attempt's free misses the ground mark; off: it frees its earlier mark whenever it marks another standing position, and an end attempt or such a removal frees its last mark, each in the record it was made in.",
+          "type": "boolean",
+          "default": true
+        },
         "infantry_facing_sector_skew": {
           "description": "Infantry facing groups are skewed 1024 facing units counter-clockwise. Not consulted by the\nsimulation: the facing group picks a drawn frame only, and the map view applies the skew\n(`infantry_frame`) with no off position yet (#327).",
           "type": "boolean",
@@ -10238,6 +10243,11 @@
         },
         "passenger_weapon_needs_secondary": {
           "description": "A passenger weapon index is used only by a firer with weapons in both slots.",
+          "type": "boolean",
+          "default": true
+        },
+        "path_congestion_ground_record": {
+          "description": "Part (ii) of the congestion marks reads each cell of the 5 × 5 block\nfrom its ground record only; off: a bridge cell of the block reads\nthe record of the layer read for the units considered in the cell\nahead.",
           "type": "boolean",
           "default": true
         },
