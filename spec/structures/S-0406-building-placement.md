@@ -2,13 +2,13 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-14
+approved-on: 2026-11-15
 measurements: []
-requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282, Q-0798, Q-3087]
+requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282, Q-0798, Q-3087, Q-3128]
 supersedes: []
 ---
 
@@ -422,8 +422,14 @@ names the top-left cell of the foundation. In addition:
     For a type that is not a wall type (the building type itself has no wall flag, while its wall
     overlay has the wall flag of an overlay type), each filling building is created and put on the
     map as a building of that type in its gap cell, passing no further test than the cell test
-    just described; it follows claim 9 like any building put on the map, and whether it shows a
-    construction state is not established (Open questions 1). Otherwise nothing is filled in that direction, either because no
+    just described; it follows claim 9 like any building put on the map. It enters play in the
+    tick of the place order whose fill creates it, in its construction state, exactly as the
+    building that order names does (claim 17): with the ready mark clear at entry, so that its
+    construction timings are claim 17's and F7's for a placed building, with *T* the tick of that
+    place order, `quirks.placed_buildup_twice` included. Every fill is made while a place order is
+    applied, so this holds for a fill made in the same tick as the first placement of a wall line
+    and for one made by any later place order. Otherwise nothing is filled in that direction,
+    either because no
     such wall lies within *c*₁ to *c*<sub>*L*</sub>, or because a cell before the nearest one fails
     the cell test. The cell test here is the one of claim 3 without the place-anywhere exemption: a
     fill cell of a type with the place-anywhere flag still has to pass (a) to (d). A damaged wall
@@ -443,12 +449,14 @@ names the top-left cell of the foundation. In addition:
     - Backing: `measurable` (scenario PL8: parts a, g, h and i for the directions, the limit, the
       stop at a failing cell and the draws; part o for the cell test without the place-anywhere
       exemption; part p for an own damaged wall as the nearest wall; part q for a filling wall
-      not filling further; part r for a type that is not a wall type; part s for a wall overlay
-      without the wall flag of an overlay type, which fills nothing)
+      not filling further; part r for a type that is not a wall type, its filling buildings'
+      construction state and their build-up timings; part s for a wall overlay without the wall
+      flag of an overlay type, which fills nothing)
     - Confidence: high (directions, the fill, no cost); medium (the limit *L* − 1, the stop at a
       failing cell, the nearest own wall deciding, the no-exemption detail, the damaged wall as
       nearest, no chained fill); low (the draw count, the filling buildings of a type that is not a
-      wall type)
+      wall type, including their entry in the construction state with the ready mark clear and
+      their timings)
 
 ### Upgrades
 
@@ -639,8 +647,8 @@ names the top-left cell of the foundation. In addition:
 ### When construction begins and whether it ends
 
 17. **From entry to the first construction processing.** A building that enters play under
-    construction (claim 1, a restored replacement under S-0524 claim 15, or a deploy under
-    S-0415 claim 6) begins its construction state at
+    construction (claim 1, a filling building under claim 11, a restored replacement under S-0524
+    claim 15, or a deploy under S-0415 claim 6) begins its construction state at
     entry: its stage is 0 and its stage timing counts from the entry tick (S-0108 claim 5). At
     entry it has no current behaviour and *construction* queued. A rule that asks for its
     behaviour while none is current sees the queued *construction*. The queued *construction*
@@ -653,8 +661,10 @@ names the top-left cell of the foundation. In addition:
     onto the last stage of the range, stage *a* + *c* − 1 of S-0108 claim 5, or (b) the range's
     delay is 0, so that its stage does not advance. A stage that runs past the end and wraps
     (S-0108 claim 6) does not set it. A deploy also sets the ready mark when the building enters
-    play. A place order and a restored replacement instead leave the mark clear at entry,
-    even without a build-up sprite. Healing an existing building through restoration does not
+    play. A place order (for the building it names and for each of its filling buildings, claim 11)
+    and a restored replacement instead leave the mark clear at entry, even without a build-up
+    sprite. A filling building takes the placed building's results below. Healing an existing
+    building through restoration does not
     restart construction or change its mark (S-0524 claim 15). The results, for uninterrupted
     play (F7):
     - **Placed building, at least 2 stages and a positive delay.** The place order is applied in
@@ -687,10 +697,11 @@ names the top-left cell of the foundation. In addition:
     building's update does not run (S-0215 claim 2) delays the processing steps and the
     ready-mark turns. Stage timing still runs on the tick number (S-0203 claim 9).
     - Backing: `measurable` (PL11 a to d and f; S-0524 claim 15 for restored replacements,
-      with its proposed restoration readiness scenario)
+      with its proposed restoration readiness scenario; PL8 r for a filling building)
     - Confidence: medium (the second build-up run and resulting *R*, *C* and *H* for placed
       buildings and restored replacements); high (no draw; the clear entry mark for placement
-      and restoration, including missing art; the deploy's mark at entry and *C* = *U* + 1)
+      and restoration, including missing art; the deploy's mark at entry and *C* = *U* + 1); low
+      for a filling building's entry and results (claim 11, scenario PL8 r)
 
 18. **Ranges that never report completion.** The ready mark of claim 17 (a) needs the stage to
     land on the last stage, and the stage is advanced before it is compared. A range with a
@@ -822,7 +833,8 @@ names the top-left cell of the foundation. In addition:
 > and rounding that produce *d_b*. These expressions assume no interrupted building turns
 > or processing gates during the interval, and no intervening behaviour or animation change.
 
-> **F7. Construction times from entry.** For a building placed in the orders part of tick *T*,
+> **F7. Construction times from entry.** For a building placed in the orders part of tick *T*
+> (the building a place order names, or one of its filling buildings, claim 11),
 > with *n* ≥ 2 stages and *d_b* ≥ 1: *R* = *T* + (*n* − 1) × *d_b*, *C* = *R* + 1 and
 > *H* = *T* + 2(*n* − 1) × *d_b* + 1. Placed, zero-delay range: *C* = *T* + 2, *H* = *T* + 3.
 > Deployed, with *U* the building's first turn: *C* = *U* + 1, and *H* by F6. With
@@ -866,7 +878,7 @@ names the top-left cell of the foundation. In addition:
 | Item done, placement mode on (human input) | click | For ordinary placement, adjacency (claim 4) and the cursor shroud result (claims 5 and 6; with `quirks.placement_shroud_at_cursor` off, explored ground judged now) decide whether an order is issued. An upgrade uses claim 12's target condition instead of adjacency, retaining the shroud condition; on failure the placement refusal announcement is requested and no order is issued. Placement mode is offered only while the item is done (S-0411) |
 | Item done (an AI house) | place order issued | Ordinary placement judges adjacency and explored ground at issue (claim 6). An upgrade uses claim 12's target condition instead of adjacency, retaining explored ground |
 | Place order issued | order applied (order application of S-0213) | The order is applied only when the item is done and a factory building could make the type; without such a factory building it does nothing and no sound plays (claim 1). When it is applied, the cell test (claims 3 and 8), or for an upgrade type the upgrade rule (claim 12), decides the outcome; claims 4 and 5 are not judged again. If that test fails, nothing is placed and, for a local player's house, the placement refusal announcement is requested, without the game-wide refusal sound |
-| Placed or restored under construction, *construction* queued, no current behaviour | building turn lands on the last build-up stage, or any turn of a zero-delay range | Ready mark set; *construction* becomes current at the second per-tick start of that tick; first construction processing on the next tick, restarting at stage 0 (claims 14 and 17) |
+| Placed (filling buildings included) or restored under construction, *construction* queued, no current behaviour | building turn lands on the last build-up stage, or any turn of a zero-delay range | Ready mark set; *construction* becomes current at the second per-tick start of that tick; first construction processing on the next tick, restarting at stage 0 (claims 14 and 17) |
 | Deployed under construction, ready mark set at entry | the building's first turn | *construction* becomes current at its second per-tick start; first processing on the next tick (claim 17) |
 | Under construction, positive-delay range of 1 stage or fewer | any turn | No ready mark from the range; construction never completes (claim 18) |
 | *construction*, after its first processing | last build-up stage reached, or zero-delay completion report | Construction completes, idle body requested and guard becomes current in this tick (claim 15) |
@@ -920,7 +932,10 @@ Observable consequences:
   processing then restarts the build-up at stage 0, so the whole build-up of a placed building
   with at least 2 stages and a positive delay takes 2(*n* − 1) × *d_b* + 1 ticks from the order
   tick (F7). A deployed building runs it once. `quirks.placed_buildup_twice` (default on). Off: a
-  place order sets the ready mark at entry, as a deploy does. *construction* then becomes current
+  place order sets the ready mark at entry, as a deploy does, on the building it names and on each
+  of its filling buildings (claim 11; for the filling buildings a design rule, decided at the
+  delegated sign-off, 2026-11-15; `unmeasured`, since the original has no such form; medium).
+  *construction* then becomes current
   at the first turn, *T* + 1, *C* = *T* + 2, and the build-up is seen once, ending at
   *T* + 2 + (*n* − 1) × *d_b* (F7). The same switch covers restored replacements
   (S-0524 claim 15): on leaves their mark clear at entry, including absent build-up art.
@@ -1299,13 +1314,18 @@ Each scenario names its observed area, the cells in which the void rule applies.
   - (q) an own wall 4 cells east of the placed cell, and an own wall 3 cells north of the cell next
     to the placed cell on its east side, in the same column as that cell.
   - (r) a building type that is not a wall type, with *O* as its wall overlay, a guard range of 4
-    cells and no wall flag, placed 3 cells from an own wall of *O* in line (gap 2).
+    cells and no wall flag, placed 3 cells from an own wall of *O* in line (gap 2). Its build-up
+    has at least 4 stages and a delay of at least 3 ticks per stage (as in PL11 a). Note the tick
+    *T* of the place order and record each building's body stage every tick from *T* through the
+    handover of both gap buildings. Repeat in a later tick with a second place order of the type,
+    3 cells from another own wall of *O* in line (gap 2), away from the first line (a later fill).
   - (s) a wall type *W*n whose wall overlay is a test overlay type *O*n without the wall flag of
     an overlay type, at a registration index other than 0, 2, 26 and 126, with a guard range of 4
     cells; an own wall of *O*n is made by placing *W*n, then *W*n is placed 3 cells from it in
     line (gap 2).
 - Observable: overlay per cell and its owner; credits; the overlay's damage state; for part r the
-  recorder's buildings in the gap cells and their construction state; the sell sound,
+  recorder's buildings in the gap cells, their construction state and body stage per tick, and
+  the ordered building's; the sell sound,
   the draws taken in the placement tick, and in part n whether the laser-fence building is still in
   play afterwards.
 - Expected: (a) gap 2 filled with 2 walls at no extra cost, gap 4 not filled (*L* − 1 = 3); (b)
@@ -1329,10 +1349,14 @@ Each scenario names its observed area, the cells in which the void rule applies.
   damaged; (q) 3 walls added in the east line and no wall in the two cells between the east
   neighbour and the northern wall, 3 more draws than a placement that fills nothing; (r)
   hypothesis: the two gap cells each hold a building of the type (no overlay of *O* is created), with 2 more
-  draws than a placement that fills nothing; whether those buildings show a construction state is
-  recorded; (s) the placed *W*n becomes an overlay of *O*n in its cell (claim 10), the two gap cells
+  draws than a placement that fills nothing; each of them is in its construction state from *T*,
+  shows its build-up twice and has the ordered building's *R*, *C* and *H* (F7 with *T* the tick of
+  that place order), in the first order and in the later one; (s) the placed *W*n becomes an
+  overlay of *O*n in its cell (claim 10), the two gap cells
   stay empty, and the draws taken equal those of a placement that fills nothing.
-- Falsified if: in (r) the gap cells stay empty or hold walls of *O*; in (s) a gap cell receives a
+- Falsified if: in (r) the gap cells stay empty or hold walls of *O*, or a gap building appears
+  in its idle state, shows its build-up only once (a ready mark set at entry), or has an *R*, *C*
+  or *H* other than the ordered building's of the same order; in (s) a gap cell receives a
   wall or a building, or more draws are taken than by a placement that fills nothing; gap 4 fills, gap 3 does not fill, a fill goes past a tree or an enemy wall, fill
   walls cost credits, (d) succeeds, a refund or a sell sound appears, or (i) shows a draw count other
   than the number of walls added; (a) fills gap 2 with other than 2 walls, (*p*2) adds other than 2
@@ -1630,10 +1654,9 @@ Each scenario names its observed area, the cells in which the void rule applies.
 
 ## Open questions
 
-1. The firestorm-wall fill rule (claim 11), the fate of an own laser-fence building under a placed
-   laser-fence-post type (claim 3 b; scenario PL3 q) and whether the filling buildings of a type
-   that is not a wall type show a construction state (claim 11, scenario PL8 r) are not
-   described. No stock type is known to have the firestorm-wall or laser-fence flags.
+1. The firestorm-wall fill rule (claim 11) and the fate of an own laser-fence building under a
+   placed laser-fence-post type (claim 3 b; scenario PL3 q) are not described. No stock type is
+   known to have the firestorm-wall or laser-fence flags.
 2. Whether the occupancy-record part of claim 3 (b) can refuse a cell that has no object in it (for
    example a position still recorded by an infantry unit that has just left) was not established.
 3. The cursor shroud result when placement mode begins, before the cursor first changes cell
@@ -1659,6 +1682,8 @@ Each scenario names its observed area, the cells in which the void rule applies.
    data can place such a type, or deploy into one, was not established).
 8. Whether any building rule passes a building type's class to S-0212 claim 25's nearby search
    was not traced, and no such use is identified. This is the open part of Q-3087 question 5.
+9. Whether a filling building (claim 11) is discovered by the placing house in the way the
+   building that the place order names is, and what that shows, is not specified here.
 
 ## Changes for other specs
 
