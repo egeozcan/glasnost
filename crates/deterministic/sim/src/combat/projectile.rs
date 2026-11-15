@@ -82,6 +82,13 @@ pub fn d3(w: &World, a: Pos, b: Pos) -> i32 {
     root_n(w, dx * dx + dy * dy + dz * dz)
 }
 
+/// The flak distance *D*_f from the fire point `x` to the aim point or
+/// unscattered point `y` (S-0306 F17, claims 4 and 9).
+pub fn flak_distance(w: &World, x: Pos, y: Pos) -> i32 {
+    // spec: S-0306 claims 4 and 9 (Q-3129: the flak distance; for now d₃)
+    d3(w, x, y)
+}
+
 /// d₂ between two points (S-0306 Terms).
 pub fn d2(w: &World, a: Pos, b: Pos) -> i32 {
     let (dx, dy) = (i128::from(a.x - b.x), i128::from(a.y - b.y));
