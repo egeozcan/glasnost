@@ -1,9 +1,9 @@
 ---
 id: Q-3142
 title: Whether warp-pending immobilization also leaves a teleporting infantry unit's landing point unchanged
-status: open
+status: answered
 related: [S-0207, S-0208, S-0513]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
