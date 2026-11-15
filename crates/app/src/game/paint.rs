@@ -257,6 +257,21 @@ mod tests {
     use super::*;
     use glasnost_ui::draw::colour;
 
+    /// design: render (#123): a sprite frame changes the atlas and leaves
+    /// the palettes as they were sent; a palette row marks the palettes.
+    #[test]
+    fn a_sprite_leaves_the_palettes_clean() {
+        let mut p = Painter::new();
+        p.dirty = false;
+        p.atlas.uploaded();
+        let frame = IndexedImage::new(3, 2, vec![1, 2, 3, 4, 5, 6]).unwrap();
+        assert!(p.add_sprite(1, 0, &frame, 0));
+        assert!(p.atlas.dirty(), "the atlas changed");
+        assert!(!p.dirty, "the palettes did not");
+        p.add_palette([7; 1024]);
+        assert!(p.dirty, "a palette row marks the palettes");
+    }
+
     #[test]
     fn text_frames_and_images_become_quads() {
         let mut p = Painter::new();
