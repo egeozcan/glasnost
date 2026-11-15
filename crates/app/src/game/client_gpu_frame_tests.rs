@@ -144,7 +144,7 @@ fn an_unchanged_frame_keeps_the_battlefield_and_a_change_draws_it_anew() {
         frame(&device, &queue, &mut kept, &mut c);
     }
     let (mut last, stats) = frame(&device, &queue, &mut kept, &mut c);
-    assert_eq!(stats.map.items, 0, "an unchanged frame records no battlefield");
+    assert_eq!(stats.map.passes, 0, "an unchanged frame records no battlefield");
     let want = fresh(&device, &queue, &mut c);
     assert_eq!(
         battlefield(&c, &last),
@@ -172,9 +172,16 @@ fn an_unchanged_frame_keeps_the_battlefield_and_a_change_draws_it_anew() {
             "the view moved",
             true,
             Box::new(|c| {
+                // The centre is limited to the map (S-0101 claim 8): a step that it allows.
                 let s = session_mut(c);
                 let (x, y) = s.centre();
-                s.set_centre((x + 24, y + 12));
+                let moved = [(24, 12), (-24, -12), (24, -12), (-24, 12), (24, 0), (-24, 0)]
+                    .into_iter()
+                    .any(|(dx, dy)| {
+                        s.set_centre((x + dx, y + dy));
+                        s.centre() != (x, y)
+                    });
+                assert!(moved, "the view moves");
             }),
         ),
         (
@@ -188,7 +195,7 @@ fn an_unchanged_frame_keeps_the_battlefield_and_a_change_draws_it_anew() {
     for (what, shows, change) in changes {
         change(&mut c);
         let (got, stats) = frame(&device, &queue, &mut kept, &mut c);
-        assert!(stats.map.items > 0, "{what}: the battlefield is drawn anew");
+        assert!(stats.map.passes > 0, "{what}: the battlefield is drawn anew");
         let want = fresh(&device, &queue, &mut c);
         assert_eq!(
             battlefield(&c, &got),
@@ -199,7 +206,7 @@ fn an_unchanged_frame_keeps_the_battlefield_and_a_change_draws_it_anew() {
             assert_ne!(got, last, "{what}: the picture changed");
         }
         let (again, stats) = frame(&device, &queue, &mut kept, &mut c);
-        assert_eq!(stats.map.items, 0, "{what}: the frame after is kept");
+        assert_eq!(stats.map.passes, 0, "{what}: the frame after is kept");
         assert_eq!(again, got, "{what}: and shows the same");
         last = got;
     }
