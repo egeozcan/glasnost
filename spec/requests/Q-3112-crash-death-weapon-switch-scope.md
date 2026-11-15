@@ -1,9 +1,9 @@
 ---
 id: Q-3112
 title: Which deaths the crash death-weapon switch reaches when it is off
-status: open
+status: answered
 related: [S-0312, S-0502]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
