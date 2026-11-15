@@ -301,7 +301,33 @@ impl GameApp {
     /// place mouse and touch positions are converted
     /// (`super::display::Display::point`).
     fn view_point(&self, p: winit::dpi::PhysicalPosition<f64>) -> Point {
-        self.client.display().point(p.x, p.y)
+        let (x, y) = match (&self.gfx, &self.window) {
+            (Some(g), Some(w)) => {
+                let inner = w.inner_size();
+                surface_point(
+                    (p.x, p.y),
+                    (inner.width, inner.height),
+                    (g.config.width, g.config.height),
+                )
+            }
+            _ => (p.x, p.y),
+        };
+        self.client.display().point(x, y)
+    }
+
+    /// Gives the client the surface's new size after the surface was
+    /// configured again at another size during a frame.
+    fn after_reconfigure(&mut self) {
+        let Some(g) = self.gfx.as_mut() else {
+            return;
+        };
+        if !std::mem::take(&mut g.refit) {
+            return;
+        }
+        if let Some(b) = self.bench.as_mut() {
+            b.set_size((g.config.width, g.config.height));
+        }
+        self.fit_window();
     }
 
     fn after_input(&mut self) {
@@ -632,7 +658,7 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     w.set_cursor_visible(!hide);
                     self.cursor_hidden = hide;
                 }
-                if g.frames_presented == 1 {
+                if publishes_presented(drawn, g.frames_presented) {
                     Status::Presented {
                         backend: g.backend.to_owned(),
                         webgpu_extras: g.webgpu_extras,
@@ -652,6 +678,7 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 if self.hidden.after(drawn, now_ms()) {
                     g.window.request_redraw();
                 }
+                self.after_reconfigure();
                 self.run_jobs(true);
             }
             _ => {}
@@ -1076,6 +1103,9 @@ struct Gfx {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    /// The format the frame is drawn in: the surface's, or its non-sRGB
+    /// form (`surface_formats`).
+    view_format: wgpu::TextureFormat,
     draw: GpuDraw,
     backend: &'static str,
     webgpu_extras: bool,
@@ -1091,6 +1121,9 @@ struct Gfx {
     device_lost: Arc<AtomicBool>,
     /// The surface said it was lost (design: render (#100)).
     surface_lost: bool,
+    /// The surface was configured again at another size: the client is
+    /// given the new size (`GameApp::fit_window`).
+    refit: bool,
 }
 
 impl Gfx {
@@ -1170,16 +1203,16 @@ impl Gfx {
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
             .ok_or("the surface is not supported by this adapter")?;
         let caps = surface.get_capabilities(&adapter);
-        // The batch blends in gamma space, as the CPU reference does; a
-        // non-sRGB target keeps its colours exact.
-        if let Some(linear) = caps.formats.iter().copied().find(|f| !f.is_srgb()) {
-            config.format = linear;
+        let (format, view_format) = surface_formats(&caps.formats, config.format);
+        config.format = format;
+        if view_format != format {
+            config.view_formats.push(view_format);
         }
         config.present_mode = match timing {
             Some(false) => wgpu::PresentMode::AutoNoVsync,
             _ => wgpu::PresentMode::AutoVsync,
         };
-        let mut draw = GpuDraw::new(&device, config.format);
+        let mut draw = GpuDraw::new(&device, view_format);
         let timer = timing.and_then(|_| glasnost_render::timer::GpuTimer::new(&device, &queue));
         if timing.is_some() {
             draw.lap_clock = Some(bench::now);
@@ -1198,6 +1231,7 @@ impl Gfx {
             device,
             queue,
             config,
+            view_format,
             draw,
             backend: gpu::backend_label(info.backend),
             webgpu_extras,
@@ -1206,6 +1240,7 @@ impl Gfx {
             timing,
             device_lost,
             surface_lost: false,
+            refit: false,
         };
         gfx.resize(size.width, size.height);
         Ok(gfx)
@@ -1213,9 +1248,22 @@ impl Gfx {
 
     fn resize(&mut self, width: u32, height: u32) {
         let max = self.device.limits().max_texture_dimension_2d;
-        self.config.width = width.clamp(1, max);
-        self.config.height = height.clamp(1, max);
+        (self.config.width, self.config.height) = surface_size((width, height), max);
         self.surface.configure(&self.device, &self.config);
+    }
+
+    /// Configures the surface again after a frame that asked for it.
+    fn reconfigure(&mut self) {
+        let max = self.device.limits().max_texture_dimension_2d;
+        let inner = self.window.inner_size();
+        let (w, h) = reconfigured_size(
+            (self.config.width, self.config.height),
+            (inner.width, inner.height),
+            max,
+        );
+        let before = (self.config.width, self.config.height);
+        self.resize(w, h);
+        self.refit |= (self.config.width, self.config.height) != before;
     }
 
     /// Draws the client's frame; `timing` numbers a benchmark frame, whose
@@ -1227,22 +1275,32 @@ impl Gfx {
     ) -> Result<(FrameEnd, Drawn), String> {
         let mut end = FrameEnd::default();
         let t0 = bench::now();
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(t)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            wgpu::CurrentSurfaceTexture::Timeout => return Ok((end, Drawn::Again)),
-            wgpu::CurrentSurfaceTexture::Occluded => return Ok((end, Drawn::Hidden)),
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface.configure(&self.device, &self.config);
-                return Ok((end, Drawn::Again));
-            }
+        let (frame, state) = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(t) => (Some(t), SurfaceState::Success),
+            wgpu::CurrentSurfaceTexture::Suboptimal(t) => (Some(t), SurfaceState::Suboptimal),
+            wgpu::CurrentSurfaceTexture::Timeout => (None, SurfaceState::Timeout),
+            wgpu::CurrentSurfaceTexture::Occluded => (None, SurfaceState::Occluded),
+            wgpu::CurrentSurfaceTexture::Outdated => (None, SurfaceState::Outdated),
+            wgpu::CurrentSurfaceTexture::Lost => (None, SurfaceState::Lost),
+            wgpu::CurrentSurfaceTexture::Validation => (None, SurfaceState::Validation),
+        };
+        let (step, reconfigure) = surface_step(state);
+        let frame = match (step, frame) {
+            (SurfaceStep::Draw, Some(t)) => t,
+            (SurfaceStep::Hidden, _) => return Ok((end, Drawn::Hidden)),
             // design: render (#100): a lost surface is made anew with its device before the next frame, not reconfigured
-            wgpu::CurrentSurfaceTexture::Lost => {
+            (SurfaceStep::Lost, _) => {
                 self.surface_lost = true;
                 return Ok((end, Drawn::Again));
             }
-            wgpu::CurrentSurfaceTexture::Validation => {
+            (SurfaceStep::Invalid, _) => {
                 return Err("the surface texture failed validation".into());
+            }
+            _ => {
+                if reconfigure {
+                    self.reconfigure();
+                }
+                return Ok((end, Drawn::Again));
             }
         };
         end.acquire = bench::now() - t0;
@@ -1263,9 +1321,10 @@ impl Gfx {
         self.draw
             .prepare(&self.device, &self.queue, client, view, &mut encoder);
         let t1 = bench::now();
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.view_format),
+            ..Default::default()
+        });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("game frame"),
@@ -1294,6 +1353,11 @@ impl Gfx {
         self.window.pre_present_notify();
         self.queue.present(frame);
         self.frames_presented += 1;
+        // A drawn frame that asked for it (a suboptimal surface) configures
+        // the surface again once it is presented.
+        if reconfigure {
+            self.reconfigure();
+        }
         if timing.is_some() {
             end.encode = t2 - t1;
             end.submit = bench::now() - t2;
@@ -1406,6 +1470,86 @@ fn finish_bench(b: &Bench, save: Option<super::report::SaveReport>) {
             let _ = data.set("glasnostBench", state);
         }
     }
+}
+
+/// The state the surface gave the frame's texture in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SurfaceState {
+    Success,
+    Suboptimal,
+    Timeout,
+    Occluded,
+    Outdated,
+    Lost,
+    Validation,
+}
+
+/// What a frame does after asking the surface for its texture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SurfaceStep {
+    /// Draws and presents the frame.
+    Draw,
+    /// Draws nothing; tries again.
+    Again,
+    /// Draws nothing; the window is hidden.
+    Hidden,
+    /// Draws nothing; the surface is made anew (design: render (#100)).
+    Lost,
+    /// The surface failed validation: an error.
+    Invalid,
+}
+
+/// The frame's step for surface state `s`, and whether the surface is
+/// configured again after it (#150).
+fn surface_step(s: SurfaceState) -> (SurfaceStep, bool) {
+    match s {
+        SurfaceState::Success | SurfaceState::Suboptimal => (SurfaceStep::Draw, false),
+        SurfaceState::Timeout => (SurfaceStep::Again, false),
+        SurfaceState::Occluded => (SurfaceStep::Hidden, false),
+        SurfaceState::Outdated => (SurfaceStep::Again, true),
+        SurfaceState::Lost => (SurfaceStep::Lost, false),
+        SurfaceState::Validation => (SurfaceStep::Invalid, false),
+    }
+}
+
+/// The surface size for a window of `inner` physical pixels on a device
+/// whose textures are at most `max` pixels on a side.
+fn surface_size(inner: (u32, u32), max: u32) -> (u32, u32) {
+    (inner.0.clamp(1, max), inner.1.clamp(1, max))
+}
+
+/// The size a surface configured at `configured` is configured again at,
+/// for a window of `inner` on a device of `max` (#150).
+fn reconfigured_size(configured: (u32, u32), _inner: (u32, u32), _max: u32) -> (u32, u32) {
+    configured
+}
+
+/// A host position `p` in the window's physical pixels, as a position on
+/// a surface of `surface` pixels for a window of `window` (#150).
+fn surface_point(p: (f64, f64), _window: (u32, u32), _surface: (u32, u32)) -> (f64, f64) {
+    p
+}
+
+/// Whether a frame that came to `drawn` with `presented` frames presented
+/// so far publishes `Status::Presented` (#150).
+fn publishes_presented(_drawn: Drawn, presented: u64) -> bool {
+    presented == 1
+}
+
+/// The surface's format and the format the frame is drawn in, from the
+/// surface's `formats` and its default `default` (#150): the batch blends
+/// in gamma space, as the CPU reference does, so a non-sRGB target keeps
+/// its colours exact.
+fn surface_formats(
+    formats: &[wgpu::TextureFormat],
+    default: wgpu::TextureFormat,
+) -> (wgpu::TextureFormat, wgpu::TextureFormat) {
+    let format = formats
+        .iter()
+        .copied()
+        .find(|f| !f.is_srgb())
+        .unwrap_or(default);
+    (format, format)
 }
 
 #[cfg(test)]
