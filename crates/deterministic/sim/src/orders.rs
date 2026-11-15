@@ -856,11 +856,11 @@ pub fn attack_move_eligible(w: &World, id: ObjectId) -> bool {
     if !matches!(o.kind, Kind::Infantry | Kind::Vehicle) {
         return false;
     }
-    // spec: S-0214 claim 5 (a weapon in its first slot, no prevent-attack-move flag; the object's first slot, as the input side reads it, #357)
-    crate::combat::weapon::slot_weapon(w, id, 0).is_some()
-        && w.rules()
-            .unit(o.kind, o.type_index)
-            .is_some_and(|u| !u.raw.prevent_attack_move.unwrap_or(false))
+    // spec: S-0214 claim 5 (a weapon in its first slot, no prevent-attack-move flag)
+    // The type's first-slot field is read here; the input side reads the object's first slot (#357). They differ only where the object's slot 0 is substituted (elite, upgrade, garrison): a seam.
+    w.rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.primary.is_some() && !u.raw.prevent_attack_move.unwrap_or(false))
 }
 
 fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
