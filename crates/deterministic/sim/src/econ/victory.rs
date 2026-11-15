@@ -857,6 +857,8 @@ fn drop_allied_targets(w: &mut World, house: HouseId) {
         {
             // spec: S-0414 claim 12 (the target of a house A now allies is dropped)
             crate::spawn::clear_own_target(o);
+            // spec: S-0301 claim 4 (when the firer's target is cleared, its burst counter is set to 0)
+            o.combat.burst = 0;
         }
     }
 }
