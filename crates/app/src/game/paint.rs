@@ -26,7 +26,9 @@ pub struct Painter {
     pub atlas: Atlas,
     /// Palette rows (256 RGBA entries each).
     pub palettes: Vec<[u8; 1024]>,
-    /// Whether the atlas or palettes changed since the GPU copy.
+    /// Whether the palettes changed since the GPU copy. The atlas keeps
+    /// its own changed rows ([`Atlas::dirty`]), so a new sprite frame does
+    /// not send the palettes again (design: render (#123)).
     pub dirty: bool,
     glyphs: BTreeMap<char, [i32; 4]>,
     sprites: BTreeMap<(u32, u32), SpriteFrame>,
@@ -110,7 +112,6 @@ impl Painter {
         };
         self.sprites
             .insert((id, frame), SpriteFrame { region, row });
-        self.dirty = true;
         true
     }
 
