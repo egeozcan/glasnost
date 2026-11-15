@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 80
+revision: 83
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-04
+approved-on: 2026-11-15
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356, Q-2426]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356, Q-2426, Q-3131]
 supersedes: []
 ---
 
@@ -23,8 +23,9 @@ click for itself, and which order of S-0213 each action produces. The rules depe
 the acting object, its type's abilities, the relation of the target to it and the modifier keys
 held. These are input rules. They decide which orders are created, never how an order is applied
 (S-0213). This spec also covers battlefield pointer images, ordinary band-box selection,
-mouse-button gestures, the type-select role, control groups and the distinction between a
-right click and right-drag scrolling.
+mouse-button gestures (a held press when the pointer leaves the window included), the
+type-select role, control groups and the distinction between a right click and right-drag
+scrolling.
 Skirmish only; network games and campaigns are out of scope.
 
 ## Terms
@@ -1365,6 +1366,82 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
       group* end,
       and for beacon placement
 
+34. **A held press when the pointer leaves the window (Q-3131).** These are the original's rules
+    for a battlefield press of claims 18, 26 and 27 that is still held when the pointer leaves the
+    game's window. Our engine follows them, except as (f) and the off-view release quirk say. Claims 18, 19 and 26 to 28 and the
+    empty-box quirk (Edge cases) keep their ratings for a pointer inside the window; for the
+    cases below this claim's ratings apply.
+    (a) *The press stays held.* The pointer leaving or re-entering the window is not an event of
+    its own: the press keeps its anchor, and its release outside the window ends it as a release
+    inside would. While the press is held, the pointer the gesture samples is the *limited
+    pointer*: the pointer's client pixel (S-0101 Terms) with each coordinate limited to the
+    client area, *x* to 0 … *B* − 1 and *y* to 0 … *C* − 1, then taken relative to the battlefield
+    view as inside the window.
+    (b) *Band box (questions 1 and 2).* Claim 18's threshold applies to the limited pointer: a
+    left press becomes a band box at the first sample whose limited pointer lies more than 4
+    pixels (F6) from the press pixel. A sample with the pointer outside lies on the window's
+    edge, so it does so unless the press pixel lies within 4 pixels of the window's edge where
+    the pointer leaves. While the box is
+    active, its moving endpoint follows the limited pointer, further limited to the battlefield
+    view (claim 18), so with the pointer outside the endpoint stays on the view's boundary.
+    Released outside the window, the box is applied under claim 19 with the rectangle from the
+    press pixel to the endpoint as last updated before the release, not to the release pixel.
+    Brought back before the release, the box continues from its original press pixel and its
+    endpoint follows the pointer again. An unmodified box with no live box candidate continues
+    as the ordinary release click at the release pixel (claim 19 and the empty-box quirk), which
+    resolves as (c) gives.
+    (c) *Pending click (question 3).* A left press that has not become a band box under (b) is
+    still an ordinary click at its release: its limited pointer has stayed within claim 18's
+    distance of the press pixel at every sample up to the release, as when the release comes
+    before any sample with the pointer outside. A press that has already become a band box stays
+    one (claim 18, (b)). Such a click is neither dropped nor applied when the pointer leaves or
+    returns. Released outside the window, it resolves at the release
+    pixel (claim 26), not at the limited pointer, with no object under it. The same holds for
+    the release click that (b) continues from an unmodified box with no live box candidate. A
+    release pixel to the left of or above the battlefield view, on either axis, resolves as a
+    click on the cell at map cell coordinates (0, 0), with the action claims 26 to 28 give for a
+    click on that cell, unless the off-view release quirk is off. This holds even when the pixel
+    also lies to the right of or below the view, as beyond the view's upper-right and lower-left
+    corners. A release pixel neither to the left of nor above the view resolves as a click on the
+    cell under that pixel, projected beyond the view's edge as a pixel inside the view is
+    projected.
+    (d) *Right press and right-drag scroll (question 4).* A held right press keeps its anchor.
+    Until its scroll drag starts, F8's test applies to the limited pointer, so a press near the
+    edge where the pointer leaves may never start one. An active scroll drag goes on under
+    S-0101 claim 16, with the limited pointer as its sampled pointer, and with all of that
+    claim's conditions: it updates only when scrolling is permitted, and order blocks, frozen
+    cycles and stand-stills suppress its updates. Under scrolling method 0 each such update
+    scrolls the view at the limited pointer's displacement while the button is held. Under
+    methods 1 and 2 the pointer is returned to the anchor at each such update in which either
+    computed component is nonzero, which puts it back inside the window. After a return the drag continues with the pointer. A right release outside the
+    window without a scroll drag is the right click of claims 26 and 28: it cancels a targeting
+    mode under claim 28, or otherwise clears the selection, whatever the release pixel. After a
+    scroll drag it does what claim 27 gives.
+    (e) *Mouse input going to another window.* If, while a battlefield press is held and the
+    game's window is still the active window, another window starts receiving the mouse input,
+    the original abandons the press: an active band box disappears, no box, click, right click
+    or order results, and the later release does nothing. What the original does when its window
+    is deactivated while a press is held, whether or not the mouse input then goes to another
+    window, is an Open question.
+    (f) *Our engine (design rule, decided at the delegated sign-off, 2026-11-15).* With a host
+    that keeps reporting the pointer and the button's release while the pointer is outside the
+    window, our engine applies (a) to (e). With a host that cannot, it abandons a held
+    battlefield press when the pointer leaves the window, as in (e): nothing is applied, an
+    active band box disappears, a scroll drag stops, and the later release does nothing. With
+    either host it does the same when the game's window loses the input focus while a press is
+    held, and when the pointer is next reported with the button already up and no release was
+    reported. The next press starts afresh.
+    - Backing: `unmeasured` throughout. No scenario here moves the pointer outside the
+      original's window while a button is held. Part (f) is a design rule, with no original
+      counterpart for a host that loses the release.
+    - Confidence: medium for parts (a), (b), (d) and (e), and for part (c) for a release pixel
+      neither to the left of nor above the view. Low for part (c) for a release pixel to the left
+      of or above the view on either axis, beyond its upper-right and lower-left corners included:
+      no scenario here shows which cell, if any, such a release acts on, or what it does there.
+      Medium for part (f), a design rule chosen for fun, bug-free play and maintainability: it
+      follows the original wherever the host reports what the original's window receives, and
+      leaves no press held that no release can end.
+
 ## Formulas
 
 > **F1 (representative distance).** *d* = ⌊*r*(*n*)⌋, *n* = (*x*ₒ − *x*ₜ)² + (*y*ₒ − *y*ₜ)² +
@@ -1482,6 +1559,10 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 | Scroll drag active | Return to anchor, or reach view limit | Still classified as a scroll drag |
 | Scroll drag active | Right-button release | Drag ends, no deselection or mode cancellation |
 | Right press accepted, no scroll drag | Right-button release | Cancel targeting mode under claim 28, otherwise clear selection |
+| Battlefield press held, host of claim 34 (f) that reports the pointer and the release outside the window | Pointer leaves or re-enters the window | No change; the gesture samples the limited pointer (claim 34 (a), (f)) |
+| Battlefield press held, other host of claim 34 (f) | Pointer leaves the window | Press abandoned, nothing applied (claim 34 (f)) |
+| Battlefield press held, game's window active | Another window starts receiving the mouse input | Press abandoned, nothing applied (claim 34 (e)) |
+| Battlefield press held | Window loses the input focus, or pointer reported with the button up and no release reported | Press abandoned, nothing applied (claim 34 (f)) |
 
 **Table C: battlefield cursor frames** (claims 21 and 22). These are frame numbers in the
 imported cursor image, not action numbers. The frame range of each action and its length are
@@ -2151,6 +2232,13 @@ Ordering consequences:
   clearing the selection. Off: every unmodified box replaces the selection with its eligible
   contents, so an empty box clears it and creates no battlefield order. Additive empty boxes
   remain inert. Backing: `measurable` (T14), confidence high.
+- **Off-view release.** `quirks.offview_release_origin_cell` (default: original). A left
+  release outside the game's window, to the left of or above the battlefield view on either axis
+  (beyond its upper-right and lower-left corners included), of a click of claim 34 (c) resolves as
+  a click on the cell at map cell coordinates (0, 0) with no object under it. Off: such a release
+  gives no order and does not change the selection. Backing: `unmeasured`, for the reason of claim
+  34's Backing; the off form is a design form with no original counterpart. Confidence: low for
+  the original's form (claim 34's Confidence), medium for the off form.
 - **Damaging-entry cursor retention.** `quirks.damaging_entry_cursor_retained` (default:
   original). Hovering an engineer over a building above its capture threshold retains the
   preceding cursor rather than choosing a new image; the action and capture order do not
@@ -3694,6 +3782,13 @@ readiness*, and Edge cases).**
   exactly group *N*'s members (claim 33) is not stated. It is probably unreachable: a *select
   group* press that is not a repeat clears the selection, and adding an own object replaces
   another house's by the owner rule of *toggle select* (claim 12).
+- What the original does when its window is deactivated while a battlefield press is held,
+  whether or not the mouse input then goes to another window, is not established (claim 34
+  (e)).
+- A battlefield press released inside the window but off the battlefield view, over the strip
+  above it or over the sidebar, is not covered by claim 34, which covers releases outside the
+  window. Nor is a left press that the route mode takes at the press (S-0213 claim 16b), which
+  is not a press of claims 18 and 26, when the pointer leaves the window before its release.
 
 - **Coordinated hand-off checks (verifications for the hand-off, not decisions).** Confirm S-0212 claim 25 and P16 runs (u) and (r)
   preserve claim 11's direct-destination bypass, unrestricted free-mover no-move search
@@ -3754,3 +3849,9 @@ readiness*, and Edge cases).**
   response, that of the first object it adds, as a band box does (S-0214 claim 32). Scenario
   D3's expectation of no response for type-select should then cover the held role only, and
   expect one response, from the first object added, for a tap.
+- **S-0101, claim 16 and F10, a right drag with the pointer outside the window.** F10's sampled
+  pointer is then the limited pointer of S-0214 claim 34 (a), and S-0214 claim 34 (d) gives what
+  follows for the scroll, with the hosts of S-0214 claim 34 (f). Claim 16 or F10 should point to S-0214 claim 34 for that case.
+- **S-0111, claim 20, the name tip after an abandoned press.** No rule change. When S-0214
+  claim 34 (f) abandons a press, the button may still be down; claim 20 may want to say whether
+  the tip stays hidden until that button is reported up.
