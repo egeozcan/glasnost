@@ -59,7 +59,11 @@ fn issue_280_a_neighbour_step_leaves_a_gripped_unit_its_fixed_destination() {
     assert_eq!(phase(&w, v), Phase::Hovering);
     let over = w.obj(v).unwrap().pos.cell();
     assert_ne!(Some(Target::Cell(over)), fixed);
-    assert_eq!(w.obj(v).unwrap().dest, fixed, "no step: the destination is kept");
+    assert_eq!(
+        w.obj(v).unwrap().dest,
+        fixed,
+        "no step: the destination is kept"
+    );
 
     // The same scene with another jumpjet hovering over that cell.
     let (mut w, l, v) = scene(over);

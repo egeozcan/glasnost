@@ -36,8 +36,15 @@ fn issue_284_an_expiring_place_whose_crate_is_gone_leaves_the_cell_alone() {
     assert!(crates::is_crate(&w, c));
     // Action 130 for house 0: the foundation overlay (the crate) is removed.
     mp_triggers::restore_starting_buildings(&mut w, 9013, Some(HouseId(0)));
-    assert!(!crates::is_crate(&w, c), "set-up: the crate overlay is gone");
-    assert_eq!(w.crates.places.len(), 1, "set-up: its place is still occupied");
+    assert!(
+        !crates::is_crate(&w, c),
+        "set-up: the crate overlay is gone"
+    );
+    assert_eq!(
+        w.crates.places.len(),
+        1,
+        "set-up: its place is still occupied"
+    );
     assert_eq!(*w.crates.places.values().next().unwrap(), p);
     // The replacement building (if one was placed) is lost again and another
     // overlay, not a crate, comes to the cell; it stands for a wall or a

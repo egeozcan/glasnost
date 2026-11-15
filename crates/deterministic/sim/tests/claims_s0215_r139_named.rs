@@ -76,7 +76,11 @@ fn issue_232_named_area_fire_deployer_aims_at_nothing_new() {
     let r = rules(true, true, true, -1);
     let (target, _, d) = area_unload(&r);
     assert_eq!(target, None, "no new target");
-    assert_eq!(d, deploy_frames(&r) + 1, "its deploy sequence's frame count + 1");
+    assert_eq!(
+        d,
+        deploy_frames(&r) + 1,
+        "its deploy sequence's frame count + 1"
+    );
 }
 
 // spec: S-0215 r139 claim 30 (the delay table: undeployed with an undeploy delay of 0 or more gives the undeploy delay, whatever the area-fire flag and the type)
@@ -91,7 +95,11 @@ fn issue_232_named_area_fire_deployer_with_an_undeploy_delay_waits_that_delay() 
 #[test]
 fn issue_232_switch_off_ignores_the_named_flag() {
     let (target, cell, d) = area_unload(&rules(true, true, false, -1));
-    assert_eq!(target, Some(Target::Cell(cell)), "its own cell is its target");
+    assert_eq!(
+        target,
+        Some(Target::Cell(cell)),
+        "its own cell is its target"
+    );
     assert_eq!(d, 450, "450 ticks");
 }
 
@@ -107,6 +115,10 @@ fn issue_232_named_flag_without_area_fire_takes_the_last_row() {
 #[test]
 fn issue_232_unflagged_area_fire_deployer_takes_its_own_cell() {
     let (target, cell, d) = area_unload(&rules(true, false, true, -1));
-    assert_eq!(target, Some(Target::Cell(cell)), "its own cell is its target");
+    assert_eq!(
+        target,
+        Some(Target::Cell(cell)),
+        "its own cell is its target"
+    );
     assert_eq!(d, 450, "450 ticks");
 }

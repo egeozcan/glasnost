@@ -482,7 +482,8 @@ fn stopped(w: &mut World, id: ObjectId) {
 /// unit is alive, on the map and not falling (`crate::fall`).
 fn arrival_tests_apply(w: &World, id: ObjectId) -> bool {
     // spec: S-0208 claim 16 (only for a unit that is alive, on the map and not falling)
-    w.obj(id).is_some_and(|o| o.on_map && o.health > 0 && !o.fall.falling)
+    w.obj(id)
+        .is_some_and(|o| o.on_map && o.health > 0 && !o.fall.falling)
 }
 
 /// Whether an actor's target is in range for the arrival-time stop of a

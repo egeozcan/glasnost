@@ -40,7 +40,13 @@ fn put(w: &mut World, name: &str, house: u8, dx: i32, dy: i32) -> ObjectId {
 
 /// Runs a processing of `b` for `v` now, with `target` and `dest`, nothing
 /// queued: the behaviour part of its turn after the per-tick start.
-fn process(w: &mut World, v: ObjectId, b: Behaviour, target: Option<ObjectId>, dest: Option<Target>) {
+fn process(
+    w: &mut World,
+    v: ObjectId,
+    b: Behaviour,
+    target: Option<ObjectId>,
+    dest: Option<Target>,
+) {
     let o = w.obj_mut(v).unwrap();
     o.beh.current = Some(b);
     o.beh.queued = None;
@@ -62,7 +68,9 @@ fn nearby_dest(w: &World, v: ObjectId) -> Option<CellXY> {
     let o = w.obj(v).unwrap();
     let own = o.pos.cell();
     match o.dest {
-        Some(Target::Cell(c)) if c != own && (c.x - own.x).abs() <= 1 && (c.y - own.y).abs() <= 1 => {
+        Some(Target::Cell(c))
+            if c != own && (c.x - own.x).abs() <= 1 && (c.y - own.y).abs() <= 1 =>
+        {
             Some(c)
         }
         _ => None,
@@ -86,7 +94,11 @@ fn issue_234_attack_with_a_target_takes_a_nearby_cell() {
     // Control: the same type without the flag takes no cell.
     let plain = put(&mut w, "CRUSHER", 0, 0, 4);
     process(&mut w, plain, Behaviour::Attack, Some(enemy), None);
-    assert_eq!(w.obj(plain).unwrap().dest, None, "no hover-attack flag: no cell");
+    assert_eq!(
+        w.obj(plain).unwrap().dest,
+        None,
+        "no hover-attack flag: no cell"
+    );
 }
 
 // spec: S-0215 r139 claim 23 (the rule applies with or without a target; it is taken before the fall-back, which does not remove it by itself)
@@ -168,6 +180,14 @@ fn issue_234_an_unchanged_cell_keeps_the_route() {
         Some(enemy),
         Some(Target::Cell(first)),
     );
-    assert_eq!(nearby_dest(&w, v), Some(first), "the same cell in the same tick");
-    assert_eq!(w.obj(v).unwrap().path.steps, vec![2, 2], "the route is kept");
+    assert_eq!(
+        nearby_dest(&w, v),
+        Some(first),
+        "the same cell in the same tick"
+    );
+    assert_eq!(
+        w.obj(v).unwrap().path.steps,
+        vec![2, 2],
+        "the route is kept"
+    );
 }

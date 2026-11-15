@@ -68,14 +68,16 @@ fn issue_281_a_collector_killed_by_the_raise_into_its_death_sequence_cancels_the
     let home = at(0, 0);
     m.waypoints.insert(3, (home.x as i16, home.y as i16));
     let rules = Arc::new(SimRules::new(&r, "synthetic-test"));
-    let mut w =
-        glasnost_sim::load::new_game(rules, &m, testkit::catalogue(), &testkit::setup(7))
-            .expect("synthetic game loads");
+    let mut w = glasnost_sim::load::new_game(rules, &m, testkit::catalogue(), &testkit::setup(7))
+        .expect("synthetic game loads");
     w.econ.settings.crates = Some(false);
 
     let inf = spawn(&mut w, Kind::Infantry, "WALKER", 0, home);
     glasnost_sim::triggers::object_tag(&mut w, inf, Some(b"T"));
-    assert!(w.triggers.objects.contains_key(&inf), "set-up: the collector is tagged");
+    assert!(
+        w.triggers.objects.contains_key(&inf),
+        "set-up: the collector is tagged"
+    );
     let c = at(1, 0);
     crate_at(&mut w, c, TRIGGER, 0);
     let money = credits(&w, 0);
@@ -83,7 +85,11 @@ fn issue_281_a_collector_killed_by_the_raise_into_its_death_sequence_cancels_the
 
     let blocked = crates::pickup(&mut w, inf, c);
 
-    assert_eq!(w.triggers.fired, fired + 1, "set-up: the event-49 trigger fired");
+    assert_eq!(
+        w.triggers.fired,
+        fired + 1,
+        "set-up: the event-49 trigger fired"
+    );
     let o = w.obj(inf).expect("still in play, in its death sequence");
     assert!(damage::dead(o), "set-up: the raise killed the collector");
     assert!(crates::is_crate(&w, c), "the crate stays");
