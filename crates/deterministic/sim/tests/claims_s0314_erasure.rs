@@ -90,6 +90,44 @@ fn an_erased_building_does_not_start_automatic_repair() {
     assert!(!w.houses[0].combat.repair_hold, "and no hold");
 }
 
+// spec: S-0314 claim 8 (Being erased, Q-3113: a building being erased takes no step at a multiple of P_b, nothing is paid and health does not rise; the state does not turn repair off, and the steps resume at the first multiple after it ends)
+#[test]
+fn issue_256_an_erased_building_takes_no_paid_repair_step() {
+    let pb = |w: &World| w.rules().combat.general.repair_period;
+    // Runs to just past the next multiple of P_b.
+    let past_a_multiple = |w: &mut World| {
+        let p = pb(w);
+        glasnost_sim::tick::step(w);
+        while w.tick % p != 1 {
+            glasnost_sim::tick::step(w);
+        }
+    };
+    // Control: the repair, on by order, takes a paid step.
+    let (mut w, hut) = setup(false, 10_000);
+    w.obj_mut(hut).unwrap().econ.building.repairing = true;
+    past_a_multiple(&mut w);
+    assert!(w.houses[0].credits < 10_000, "control: the step is paid");
+    assert!(w.obj(hut).unwrap().health > 200, "control: health rises");
+
+    let (mut w, hut) = setup(true, 10_000);
+    w.obj_mut(hut).unwrap().econ.building.repairing = true;
+    past_a_multiple(&mut w);
+    assert!(temporal::erased(&w, hut), "still being erased");
+    assert_eq!(w.houses[0].credits, 10_000, "nothing is paid");
+    assert!(w.obj(hut).unwrap().health <= 200, "health does not rise");
+    assert!(
+        w.obj(hut).unwrap().econ.building.repairing,
+        "the erasure does not turn repair off"
+    );
+    // The lock ends: the steps resume at the next multiple.
+    w.temporal.locks.remove(&hut);
+    assert!(!temporal::erased(&w, hut));
+    let health = w.obj(hut).unwrap().health;
+    past_a_multiple(&mut w);
+    assert!(w.houses[0].credits < 10_000, "the step is paid again");
+    assert!(w.obj(hut).unwrap().health > health, "health rises again");
+}
+
 // spec: S-0314 claim 12 (buildings being erased do not reach this work) and claim 14 (the R(0, 50) draw on each eligible turn)
 #[test]
 fn an_erased_building_takes_no_sale_draw() {
