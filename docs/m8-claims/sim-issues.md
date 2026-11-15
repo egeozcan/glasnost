@@ -778,3 +778,65 @@ Seams left:
 - Q-3128 (#310's interim entry), Q-3129 (#317) and Q-3130 (the arm time of an airburst child, #315).
 - #321's multi-turret slots and VP29's would-use test.
 - Any other part of the own AI's think that gives a second starting order for a building or defence line in one think now has it refused. The AI suite shows no other case.
+
+## Batch S20: answered requests, creation sets, removed houses and wrapping
+
+Base main eb5d785, not rebased. Save format 153 and AI game format 129 (1c78a4a): #291 changes the saved infantry-making state of an animation (`mutation::Making`). The wire version is unchanged (12). Switches `quirks.infantry_animation_stale_marks` and `quirks.path_congestion_ground_record`, both on by default, with the regenerated schema (8f6fd0a). Each test is committed before its fix. #370's test went into #368's test commit (4a3d17b) by mistake. Request Q-3149 (0af009c). The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S20: answered requests, creation sets, removed houses and wrapping)* (e4502cf). Claim ledger rows: S-0611 claim 15, S-0406 claim 11, S-0409 claims 15 and 17 and S-0301 claim 4 (ba9baf3), and S-0412 claims 10 and 14 (2480d60). S-0212 has no claims ledger file, so claim 19's change is recorded here only.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #291 | An infantry-making animation marked a fixed spot and layer taken at its start, also when it moved (Q-3121) | fixed (998fba7) | S-0611 r11 claim 15: each update marks the standing position of the animation's point (`mutation::Stand`); with `quirks.infantry_animation_stale_marks` on an earlier mark is not freed and a removal other than a successful end attempt frees nothing; off, the earlier mark is freed in its own record. A bouncing conversion animation flies as an ordinary one | `claims_s0611_moving.rs` (`claim_15_bouncing_marks_stay_and_a_landing_makes_none`, `claim_15_bouncing_marks_freed_with_the_switch_off`, `claim_15_end_attempt_in_flight`, `claim_15_end_attempt_in_flight_switch_off`, `claim_15_attached_follows_its_owner`, `claim_15_owner_removed`, `claim_15_removed_by_another_rule`, `claim_15_high_free_misses_the_ground_mark`, `claim_15_save_load_mid_flight`) |
+| #305 | The congestion marks read the cell ahead and the 5 x 5 block in one layer (Q-3122 interim) | fixed (0f380f6) | S-0212 r107 claim 19: the cell ahead is read on its deck when it is a bridge cell and the blocked unit is on a deck or the levels differ by more than 3; an empty cell ahead considers the first unit of the block heading to it; part (ii) reads the ground record, or with `quirks.path_congestion_ground_record` off the layer read in the cell ahead. The 5 x 5 fallback and (ii)'s non-empty record (`Occ::empty`) also change ordinary ground play, and the switch does not cover them. They make duel-m6c's full run lose the charger orders and support beams (S-0518), and the own AI's land-cell test fail its coverage guard (11016 of 11016 found): 429f6ac passes and 0f380f6 fails | `claims_s0212_congestion_deck.rs` (`deck_blocker_cell_counts_by_the_ground_record`) |
+| #310 | A filling building of a type that is not a wall type took the entry of an insertion other than a place order (Q-3128 interim) | fixed (70503c4) | S-0406 r14 claim 11: it enters in its construction state exactly as the placed building, the ready mark clear at entry (`placement::put_with`) | `claims_s0406.rs` (`claim_11_non_wall_fill_enters_as_placed`, `claim_11_non_wall_fill_buildup_twice_off`, `claim_11_non_wall_fill_timings`) |
+| #366 | A map entry dropped for its cell, and a map wall building, left their slot objects, slaves and records | fixed (04d9173) | S-0611 claim 14 with S-0009 claim 38 and S-0112 claim 7: `objects::place_map_objects` calls `objects::discard_unplaced` | `claims_s0009.rs` (`claim_38_dropped_entry_takes_its_creation_set`), `claims_s0112.rs` (`claim_7_map_wall_building_leaves_no_creation_set`) |
+| #367 | The waypoint reveal reached a house with the whole map revealed | fixed (dba38b4); Q-3149 open | S-0011 claim 26 and S-0409 claim 17: `triggers::reveal` skips a player house whose whole-map-revealed mark is set. Whether it reaches one through an ally (S-0409 claim 2) is Q-3149 | `claims_s0409_reveal_action.rs` (`claim_17_reveal_action_skips_a_marked_house`, control `claim_17_reveal_action_reaches_an_unmarked_house`) |
+| #368 | With `quirks.entered_by_country_only` off the entered-by event still read a country | fixed (f692fa0) | S-0011 Edge cases and claim 23: off, the value is resolved by `mp_triggers::resolve_house` and matches the causing object's owner | `triggers.rs` (`entered_by_player_position_with_the_switch_on`, `entered_by_player_position_with_the_switch_off`) |
+| #369 | A starting unit or the base unit that found no cell left its creation set | fixed (04d9173) | S-0611 claim 14 with S-0009 claim 45: both branches of `starting::give` call `objects::discard_unplaced` | `claims_s0009.rs` (`claim_45_failed_start_leaves_no_creation_set`) |
+| #370 | The trigger coverage tables listed actions 6, 14 and 111 and event 49 as not built | fixed (4f0aebf) | S-0011 claim 24, S-0508 claims 10 to 13, S-0217 claim 1 and S-0520 claim 7: `action_coverage` and `event_coverage` say implemented; the `triggers.rs` module doc and the comment in `judge` are corrected. No behaviour change | `triggers.rs` (`coverage_counts_change_owner_eviction_hunt_and_the_crate_event`, in 4a3d17b) |
+| #371 | Making peace cleared a target of the new ally but kept the firer's burst counter | fixed (a8013e0) | S-0301 claim 4 with S-0414 claim 12: `victory::drop_allied_targets` sets the burst counter to 0 | `claims_s0414_peace_burst.rs` (`making_peace_drops_the_target_and_resets_the_burst_counter`) |
+| #372 | A failed trigger restoration left its creation set | fixed (04d9173) | S-0611 claim 14 with S-0524 claim 9: `mp_triggers::replace` calls `objects::discard_unplaced` | `claims_s0524.rs` (`claim9_failed_replacement_leaves_none_of_its_creation_set`) |
+| #373 | A satellite the defeat's own sweep took stayed active: `radar::on_defeat` cleared the recheck the sweep asked for | fixed (6750d96) | S-0409 claim 15: the recheck stays due | `claims_s0409.rs` (`claim_15_satellite_lost_by_the_defeat_itself`) |
+| #374 | The game-start crates ran through the whole count with no crate place free | fixed (89ca901) | S-0520 claim 1: `crates::place_at_start` ends its loop when no place is free or no crate overlay is named | `claims_s0520.rs` (`claim_1_start_placements_past_the_last_place_are_skipped`) |
+| #375 | A defeated house's buildings could go to a civilian house the cleanup removed | fixed (6750d96) | S-0414 Terms: the civilian house of `victory::destroy_all` skips removed houses | `claims_s0601.rs` (`claim_14_defeat_skips_a_removed_civilian_house`) |
+| #376 | A removed house's country widened the starting-unit budget pool | fixed (6750d96) | S-0009 claim 45: `starting::give`'s live countries skip removed and passive houses | `claims_s0009_removed_pool.rs` (`claim_45_removed_house_country_stays_out_of_the_budget_pool`) |
+| #377 | The radar's object tests read the flat grid whatever `quirks.shroud_on_flat_grid` said | fixed (221c7ed) | S-0410 claims 6 and 7 with S-0110 Edge cases: `compose` passes `View::on_flat_grid` (`winner_among_on`, `shown_on`); `listed_on` and `Arrivals::observe_on` give the listing under the switch; the plain forms keep the flat grid | `claims_s0410.rs` (`claim_7_draw_time_test_follows_the_flat_grid_switch`), `claims_s0410_flat_listing.rs` (`claim_6_listing_follows_the_flat_grid_switch`, committed after the fix as a check of the new listing forms) |
+| #378 | The setup comment and the S-0412 ledger called the game-start crates' draws a seam | fixed (2480d60) | S-0412 claims 10 and 14 with S-0520 claims 2 and 3: each crate is placed with its own draws, before the secret-lab draws. No behaviour change | none |
+| #379 | The loading reply compared reach regions left stale by a category change in the tick | fixed (f4ddab5) | S-0507 claim 5 with S-0212 claim 5: `transport::load_request` calls `regions::ensure` first | `claims_s0507_load_regions.rs` (`claim_5_loading_reply_reads_regions_after_a_category_change`) |
+| #380 | The protection's remaining time overflowed for a duration near the 32-bit limit | fixed (054d763) | S-0513 claims 25 and 29: `protect::start` and `tint_turn` compute duration - (t - start) | `claims_s0513_protect.rs` (`claim25_quirk_off_with_a_duration_at_the_integer_limit`, `claim29_envelope_with_a_duration_at_the_integer_limit`) |
+| #381 | Rules-fed sums and products overflowed in the dev profile | fixed (9a3d561) | S-0205 claim 1: wrapping arithmetic at the delayed-kill radius, the walker's frame and expiry, the kill value, the price sums and the flying search's far cells | `claims_s0205_rules_wrap.rs` (`delay_kill_radius_wraps_for_a_huge_spread`, `pad_term_sum_wraps`, `free_unit_sum_wraps`, `walker_frame_wraps_for_huge_running_frames`, `kill_value_wraps_for_a_huge_cost`, `flying_search_far_cell_wraps_for_a_huge_radius`) |
+
+The sim-gate fails on this batch. #305's ground rules (0f380f6) change duel-m6c's play: house 1 collapses and the game ends at tick 11757. The full run then no longer exercises the charger orders or the support beams (S-0518). A bisection gives the cause: 429f6ac passes and 0f380f6 fails.
+
+The goldens could be regenerated only for the six scenarios before duel-m6c, because update mode stops at its exercise check (170b645). The duel-m6c, duel-m7a and duel-m7b goldens are not regenerated. Neither the scenario nor the AI was retuned.
+
+The same change makes the own AI's land-cell test fail its coverage guard (`found < compared`, 11016 of 11016). All of that test's equality checks pass. Two test-only commits fix clippy in this batch's tests: cc123cc (#374, no thread) and 51a1e68 (#379).
+
+Lanes. Base is eb5d785. The after-lanes ran at 170b645 and 235c471; the commits after those change only two test files. The final checks ran at 51a1e68. Outputs are in `local-lane/sim-issues/s20/`; contents were compared by exit code only.
+
+| Lane | Base | After |
+|---|---|---|
+| Arena | exit 0 | exit 0 |
+| M6c, M7a and M7b sweeps (seeds 1 to 16) | exit 0 | exit 0 |
+| AI suite with ignored tests | exit 0 | exit 101 (`--no-fail-fast`): only `brain::land_cell_tests::the_land_cell_of_the_square_is_the_land_cell_of_the_map` fails; skirmish 7 of 7 pass |
+| Sim-gate with ignored tests | exit 0 | exit 101 (`--no-fail-fast`): `golden.rs` (`debug_prefix_matches_golden`, `full_run_matches_golden`) and `m6c.rs` (`every_m6c_ability_is_exercised_and_the_replay_reproduces_the_game`) fail, all at duel-m6c; m7a, m7b, margins and play_fixes pass |
+| AI quick lane, seeds 7 to 10 | exit 0 | exit 0; output differs from base (not traced) |
+
+Final checks:
+
+| Check | Result |
+|---|---|
+| Workspace tests | 8909 pass and three fail: the land-cell test, `golden.rs` `debug_prefix_matches_golden`, and `quirks::tests::every_spec_quirk_has_a_switch`. The last fails on main since S-0606 r14 (`bunker_hover_no_arrival`). |
+| clippy, fmt, the wasm32 build of glasnost-app, `cargo xtask check` | pass |
+| `cargo xtask gate` | exit 1 at duel-m6c |
+
+Seams left:
+- Q-3149 (#367).
+- #291: a bouncing conversion animation is given no infantry-making state; the mech locomotor maps to no layer rule; no path detaches an attached animation while it plays.
+- #305: the 5 x 5 search of `considered` has no test of its own.
+- #305: duel-m6c no longer exercises the charger orders or the support beams. The goldens for duel-m6c, duel-m7a and duel-m7b are not regenerated, and the sim-gate fails. The gate scenario has to be looked at again; this batch does not. For the same reason, `brain::land_cell_tests::the_land_cell_of_the_square_is_the_land_cell_of_the_map` (glasnost-ai) fails its guard `found < compared`. Its equality checks hold.
+- `slaves::civilian_recipient` and `garrison::civilian_house` still range over removed houses.
+- S-0009 claim 29's References rule is not built (#368).
+- The app's radar still calls the plain `observe` (the flat-grid reading, #377).
+- #381's walker expiry site has no test of its own.
+- Target clears other than `drop_allied_targets` were not audited for the burst counter (#371).
+- An in-play wall building turned into overlay is still removed raw (`placement.rs`), by design: it is not the newest creation and has no creation set.
