@@ -741,8 +741,8 @@ pub fn available_credits(w: &World, house: HouseId) -> i32 {
 /// by it, with no lower limit (claim 6).
 pub fn pay(w: &mut World, house: HouseId, amount: i32) {
     if let Some(h) = w.houses.get_mut(usize::from(house.0)) {
-        // spec: S-0404 claim 4 (a paid step reduces the credit balance by its payment)
-        h.credits = h.credits.saturating_sub(amount);
+        // spec: S-0404 claim 4 (a paid step reduces the credit balance by its payment, with no lower limit); S-0205 claim 1 (signed 32-bit arithmetic wraps)
+        h.credits = h.credits.wrapping_sub(amount);
     }
 }
 
@@ -918,14 +918,15 @@ fn cancel_item(w: &mut World, li: usize) {
         return;
     };
     // spec: S-0404 F4 (refund = P′ − B; quirks.refund_at_current_price off: P − B, the amount paid)
+    // spec: S-0205 claim 1 (signed 32-bit arithmetic wraps)
     let refund = if w.rules().quirks.refund_at_current_price {
-        price(w, house, item.t) - item.owed
+        price(w, house, item.t).wrapping_sub(item.owed)
     } else {
-        item.start_price - item.owed
+        item.start_price.wrapping_sub(item.owed)
     };
     let h = &mut w.houses[usize::from(house.0)];
-    // spec: S-0404 claim 6 (the refund is added with no upper or lower limit)
-    h.credits = h.credits.saturating_add(refund);
+    // spec: S-0404 claim 6 (the refund is added with no upper or lower limit, wrapping as S-0205 claim 1 states)
+    h.credits = h.credits.wrapping_add(refund);
     delete_item_object(w, item.object);
 }
 
