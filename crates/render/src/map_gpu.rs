@@ -391,7 +391,9 @@ impl Role {
 /// starts counting again.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MapStats {
-    /// Scene items (stack copies counted) looked at by the last render.
+    /// Scene items (stack copies counted) looked at by the last render: the
+    /// cell pass's items near the view and every item of the object pass
+    /// (design: render (#113)).
     pub items: usize,
     /// Instances drawn (each a six-vertex quad).
     pub instances: usize,
@@ -465,10 +467,170 @@ pub struct MapRenderer {
     backdrop: wgpu::Texture,
     /// The counters since the last [`MapRenderer::take_stats`].
     stats: MapStats,
-    /// The last frame's instance list and their view rectangles, kept for
-    /// their room.
+    /// The last frame's instance list, as the instance buffer holds it, and
+    /// their view rectangles, kept for their room.
     list: Vec<Instance>,
     rects: Vec<[u32; 4]>,
+    /// The list before the last, kept for its room.
+    spare: Vec<Instance>,
+    /// Whether the instance buffer holds `list` (false for a new buffer).
+    list_held: bool,
+    /// The cell pass's items by place, kept while the cell pass stays
+    /// (design: render (#113)).
+    cull: Option<CellCull>,
+    /// Images rewritten at another size since the last render.
+    resized: Vec<u32>,
+    /// A frame's cell-pass items near the view, kept for its room.
+    near: Vec<u32>,
+}
+
+/// The side of a [`CellCull`] bucket in world pixels (design: render
+/// (#113): about a cell's width, so that the buckets a view meets hold few
+/// items outside it; a 1920 × 1080 view meets about 560).
+const CULL_BUCKET: i32 = 64; // design: render (#113)
+
+/// The most buckets an item is filed in; a larger item is looked at in
+/// every frame (design: render (#113)).
+const CULL_SPAN: i64 = 256; // design: render (#113)
+
+/// The items of a cell pass filed by the world buckets their rectangles
+/// meet (design: render (#113)), so that a frame looks only at those near
+/// its view. It holds while the scene's [`Scene::cell_pass_rev`] and
+/// [`Scene::cell_pass_len`] are those it was made for and none of the
+/// images its items draw changed size.
+struct CellCull {
+    rev: u64,
+    len: usize,
+    /// Whether the cell pass draws image `i`.
+    images: Vec<bool>,
+    /// The bucket of the grid's first column and row.
+    origin: (i32, i32),
+    /// The grid's columns and rows.
+    dims: (i32, i32),
+    /// Each bucket's items, in scene order, row by row.
+    buckets: Vec<Vec<u32>>,
+    /// Items looked at in every frame: a stack (its copies depend on the
+    /// view) or an item larger than [`CULL_SPAN`] buckets.
+    always: Vec<u32>,
+}
+
+impl CellCull {
+    /// Files the cell pass of `scene`.
+    fn new(scene: &Scene) -> Self {
+        let len = scene.cell_pass_len.min(scene.items.len());
+        let mut images = vec![false; scene.images.len()];
+        let mut always = Vec::new();
+        let mut filed: Vec<(u32, (i32, i32, i32, i32))> = Vec::new();
+        let (mut lo, mut hi) = ((i32::MAX, i32::MAX), (i32::MIN, i32::MIN));
+        for (n, item) in scene.items[..len].iter().enumerate() {
+            let Some(seen) = images.get_mut(item.image as usize) else {
+                always.push(n as u32);
+                continue;
+            };
+            *seen = true;
+            let (l, t, r, b) = scene.bounds(item);
+            if r <= l || b <= t {
+                // Draws no pixel anywhere; looked at so that its count stays.
+                always.push(n as u32);
+                continue;
+            }
+            let span = (
+                l.div_euclid(CULL_BUCKET),
+                t.div_euclid(CULL_BUCKET),
+                (r - 1).div_euclid(CULL_BUCKET),
+                (b - 1).div_euclid(CULL_BUCKET),
+            );
+            let count = (i64::from(span.2) - i64::from(span.0) + 1)
+                * (i64::from(span.3) - i64::from(span.1) + 1);
+            if item.stack.is_some() || count > CULL_SPAN {
+                always.push(n as u32);
+                continue;
+            }
+            lo = (lo.0.min(span.0), lo.1.min(span.1));
+            hi = (hi.0.max(span.2), hi.1.max(span.3));
+            filed.push((n as u32, span));
+        }
+        let dims = if filed.is_empty() {
+            (0, 0)
+        } else {
+            (hi.0 - lo.0 + 1, hi.1 - lo.1 + 1)
+        };
+        let mut buckets = vec![Vec::new(); (dims.0 as usize) * (dims.1 as usize)];
+        for (n, (x0, y0, x1, y1)) in filed {
+            for by in y0..=y1 {
+                for bx in x0..=x1 {
+                    let at = (by - lo.1) as usize * dims.0 as usize + (bx - lo.0) as usize;
+                    buckets[at].push(n);
+                }
+            }
+        }
+        Self {
+            rev: scene.cell_pass_rev,
+            len: scene.cell_pass_len,
+            images,
+            origin: lo,
+            dims,
+            buckets,
+            always,
+        }
+    }
+
+    /// Whether the cull holds for `scene`, whose images `resized` changed
+    /// size since it was last asked.
+    fn holds(&self, scene: &Scene, resized: &[u32]) -> bool {
+        self.rev == scene.cell_pass_rev
+            && self.len == scene.cell_pass_len
+            && scene.items.len() >= self.len
+            && !resized
+                .iter()
+                .any(|&i| self.images.get(i as usize).copied().unwrap_or(false))
+    }
+
+    /// Puts into `out`, in scene order, the cell-pass items whose rectangle
+    /// may meet the view of `origin` and `size`: every one that does.
+    fn near(&self, origin: (i32, i32), size: (i32, i32), out: &mut Vec<u32>) {
+        out.clear();
+        out.extend_from_slice(&self.always);
+        if size.0 > 0 && size.1 > 0 && self.dims.0 > 0 {
+            let x0 = (origin.0.div_euclid(CULL_BUCKET) - self.origin.0).max(0);
+            let y0 = (origin.1.div_euclid(CULL_BUCKET) - self.origin.1).max(0);
+            let x1 = ((origin.0 + size.0 - 1).div_euclid(CULL_BUCKET) - self.origin.0)
+                .min(self.dims.0 - 1);
+            let y1 = ((origin.1 + size.1 - 1).div_euclid(CULL_BUCKET) - self.origin.1)
+                .min(self.dims.1 - 1);
+            for by in y0..=y1 {
+                for bx in x0..=x1 {
+                    out.extend_from_slice(&self.buckets[(by * self.dims.0 + bx) as usize]);
+                }
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+    }
+}
+
+/// Checks that `near` holds every cell-pass item of `scene` whose rectangle
+/// meets `view` (debug builds: a cell pass changed without a new
+/// [`Scene::cell_pass_rev`] shows here).
+#[cfg(debug_assertions)]
+fn check_near(scene: &Scene, view: &View, near: &[u32]) {
+    let (ox, oy) = view.origin;
+    let (w, h) = (view.size.0 as i32, view.size.1 as i32);
+    for (n, item) in scene.items[..scene.cell_pass_len.min(scene.items.len())]
+        .iter()
+        .enumerate()
+    {
+        if item.stack.is_some() || item.image as usize >= scene.images.len() {
+            continue;
+        }
+        let (l, t, r, b) = scene.bounds(item);
+        let meets = r > ox && b > oy && l < ox + w && t < oy + h;
+        assert!(
+            !meets || near.binary_search(&(n as u32)).is_ok(),
+            "cell-pass item {n} meets the view but the kept cull left it out: the cell pass \
+             changed without a new Scene::cell_pass_rev (design: render (#113))"
+        );
+    }
 }
 
 /// Why the scene could not be uploaded.
@@ -743,6 +905,11 @@ impl MapRenderer {
             stats: MapStats::default(),
             list: Vec::new(),
             rects: Vec::new(),
+            spare: Vec::new(),
+            list_held: false,
+            cull: None,
+            resized: Vec::new(),
+            near: Vec::new(),
         })
     }
 
@@ -803,6 +970,8 @@ impl MapRenderer {
                 }
                 self.slots[i] = Slot::ABSENT;
                 self.sizes[i] = size;
+                // design: render (#113): the items that draw it may cover other buckets now
+                self.resized.push(id);
                 let slot = self.place(device, queue, scene, size)?;
                 self.slots[i] = slot;
                 self.write(queue, slot, size.0, size.1, img.pixels());
@@ -1061,9 +1230,9 @@ impl MapRenderer {
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&uniform));
         let (ox, oy) = view.origin;
         let (w, h) = (view.size.0 as i32, view.size.1 as i32);
-        // The buffers of the last frame, emptied, so that a frame does not
-        // grow them again.
-        let mut list: Vec<Instance> = std::mem::take(&mut self.list);
+        // The buffers of the frame before the last, emptied, so that a frame
+        // does not grow them again; the last frame's list stays, to compare.
+        let mut list: Vec<Instance> = std::mem::take(&mut self.spare);
         list.clear();
         // The view rectangle each instance draws into, for placing the
         // backdrop copies (`passes`).
@@ -1079,8 +1248,32 @@ impl MapRenderer {
         // run of its own, with the view rectangle it covers.
         let mut batches: Vec<Batch> = Vec::new();
         let mut spot_groups = scene.spots.iter().peekable();
+        // design: render (#113): the cell pass's items that may meet the view, from the cull
+        // kept while the cell pass stays, then every item of the object pass; an item left out
+        // would draw no pixel, so the instances and their order are those of every item
+        let cell_len = scene.cell_pass_len.min(scene.items.len());
+        if !self
+            .cull
+            .as_ref()
+            .is_some_and(|c| c.holds(scene, &self.resized))
+        {
+            self.cull = (cell_len > 0).then(|| CellCull::new(scene));
+        }
+        self.resized.clear();
+        let mut near = std::mem::take(&mut self.near);
+        match &self.cull {
+            Some(c) => c.near(view.origin, (w, h), &mut near),
+            None => near.clear(),
+        }
+        #[cfg(debug_assertions)]
+        check_near(scene, view, &near);
+        let order = near
+            .iter()
+            .map(|&n| n as usize)
+            .chain(cell_len..scene.items.len());
         // spec: S-0109 claim 27 (a stack's copies, lowest first, as many as the view's top row allows)
-        let copies = scene.items.iter().enumerate().flat_map(|(n, i)| {
+        let copies = order.flat_map(|n| {
+            let i = &scene.items[n];
             let count = i.stack.map_or(1, |s| s.copies(oy));
             (0..count).map(move |j| (n, i, j))
         });
@@ -1245,6 +1438,7 @@ impl MapRenderer {
             spot_instances(g, view, &mut list, &mut batches);
             spot_rects(&list, &mut rects);
         }
+        self.near = near;
         if list.len() > self.instance_capacity {
             self.instance_capacity = list.len().next_power_of_two();
             self.instances = device.create_buffer(&wgpu::BufferDescriptor {
@@ -1253,12 +1447,25 @@ impl MapRenderer {
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
+            self.list_held = false;
         }
-        if !list.is_empty() {
-            queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(&list));
+        // design: render (#113): the instances the buffer already holds at their places (the
+        // last frame's, up to the first that differs) are not written again
+        let same = if self.list_held {
+            list.iter()
+                .zip(&self.list)
+                .take_while(|(a, b)| bytemuck::bytes_of(*a) == bytemuck::bytes_of(*b))
+                .count()
+        } else {
+            0
+        };
+        if same < list.len() {
+            let at = (same * std::mem::size_of::<Instance>()) as u64;
+            queue.write_buffer(&self.instances, at, bytemuck::cast_slice(&list[same..]));
             self.stats.uploads += 1;
-            self.stats.upload_bytes += std::mem::size_of_val(list.as_slice()) as u64;
+            self.stats.upload_bytes += std::mem::size_of_val(&list[same..]) as u64;
         }
+        self.list_held = true;
         self.stats.instances += list.len();
         let target_view = target.create_view(&Default::default());
         let begin = |encoder: &mut wgpu::CommandEncoder, first: bool| {
@@ -1343,7 +1550,7 @@ impl MapRenderer {
             }
         }
         let drawn = list.len();
-        self.list = list;
+        self.spare = std::mem::replace(&mut self.list, list);
         self.rects = rects;
         drawn
     }
