@@ -85,8 +85,23 @@ pub fn d3(w: &World, a: Pos, b: Pos) -> i32 {
 /// The flak distance *D*_f from the fire point `x` to the aim point or
 /// unscattered point `y` (S-0306 F17, claims 4 and 9).
 pub fn flak_distance(w: &World, x: Pos, y: Pos) -> i32 {
-    // spec: S-0306 claims 4 and 9 (Q-3129: the flak distance; for now d₃)
-    d3(w, x, y)
+    let mode = w.rules().mode;
+    // spec: S-0306 F17 (Δx, Δy, Δz: the components of Y − X, each a 32-bit integer difference that wraps modulo 2³²)
+    let (dx, dy, dz) = (
+        y.x.wrapping_sub(x.x),
+        y.y.wrapping_sub(x.y),
+        y.z.wrapping_sub(x.z),
+    );
+    // spec: S-0306 F17 (u = RZ₂₄(Δx), v = RZ₂₄(Δy): only the horizontal differences are narrowed to single precision; Δz enters double precision exactly)
+    let single = |d: i32| f(i64::from(d), mode).to_f32(mode).to_f64();
+    let (u, v, z) = (single(dx), single(dy), f(i64::from(dz), mode));
+    // spec: S-0306 F17 (n_f = RZ₅₃(RZ₅₃(RZ₅₃(u × u) + RZ₅₃(v × v)) + RZ₅₃(Δz × Δz)), the squares and partial sums in double precision, added in this order)
+    let n = u
+        .mul(u, mode)
+        .add(v.mul(v, mode), mode)
+        .add(z.mul(z, mode), mode);
+    // spec: S-0306 F17 (n_f is a whole number; D_f = trunc(RZ₂₄(r(n_f))), r the table square root of S-0204 F1 as for d₃, its own input narrowing included)
+    root_n(w, n.trunc_i128().unwrap_or(0))
 }
 
 /// d₂ between two points (S-0306 Terms).
@@ -426,9 +441,9 @@ pub fn launch(
             // spec: S-0306 claim 4 (σ = R(trunc(B / 2), B))
             w.rng.ranged(b / 2, b, half)
         } else {
-            // spec: S-0306 claim 4 (σ = trunc(R(0, B) × D / R_W), D the spatial distance in single precision)
+            // spec: S-0306 claim 4 (σ = trunc(R(0, B) × D / R_W), D the flak distance D_f of F17 from the fire point to the aim point; Q-3129)
             let rr = w.rng.ranged(0, b, half);
-            let dd = d3(w, fire_point, aim);
+            let dd = flak_distance(w, fire_point, aim);
             // spec: S-0306 claim 4 (R_W: the firer's weapon range of S-0307 claim 13 for that weapon, the slot that holds it)
             let slot = (0..crate::combat::data::SLOTS)
                 .find(|&i| crate::combat::weapon::slot_weapon(w, firer, i) == Some(weapon))
@@ -512,9 +527,9 @@ pub fn launch(
     let mut pos = start_point(w, start_pos);
     if p.inviso {
         if p.flak_scatter {
-            // spec: S-0306 claim 9 (an invisible flak projectile: K scattered by trunc(R(0, 2B) × D / R₀))
+            // spec: S-0306 claim 9 (an invisible flak projectile: K scattered by trunc(R(0, 2B) × D / R₀), D the flak distance D_f of F17 from the fire point to the unscattered point; Q-3129)
             let rr = w.rng.ranged(0, 2 * b, half);
-            let dd = d3(w, fire_point, stored);
+            let dd = flak_distance(w, fire_point, stored);
             let r0 = wr.range;
             let sigma = if r0 == 0 { 0 } else { rr.wrapping_mul(dd) / r0 };
             let xi = w.rng.ranged(0, 2147483646, half);
