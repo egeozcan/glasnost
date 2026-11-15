@@ -210,8 +210,8 @@ fn place_survivor(
     let Some(k) =
         crate::walk::choose_position(w, c, Layer::Ground, crate::cells::position::CENTRE, false)
     else {
-        // spec: S-0312 claim 18 (no position: it never enters play and takes no health draw; the creation draw is already taken)
-        w.objects.remove(&id);
+        // spec: S-0312 claim 18 (no position: it never enters play and takes no health draw; the creation draw is already taken); S-0611 claim 14 (nor does its creation set)
+        crate::objects::discard_unplaced(w, id);
         return None;
     };
     let (u, v) = crate::walk::standing_point(k);
@@ -382,7 +382,8 @@ pub fn sold(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0408 claim 7 (R(0, n − 1): one of the foundation cells)
         let k = w.rng.ranged(0, n - 1, half);
         let Some(&cell) = cells.get(k as usize) else {
-            w.objects.remove(&uid);
+            // spec: S-0611 claim 14 (a set that never enters play leaves with its creation set)
+            crate::objects::discard_unplaced(w, uid);
             continue;
         };
         // spec: S-0408 claim 7 and S-0208 claim 3 (the desired point 36 leptons from the cell centre, class centre: R(0, 3) unless the cell's record blocks every position, then the first free position of that row; no search of neighbouring cells)
@@ -393,8 +394,8 @@ pub fn sold(w: &mut World, id: ObjectId) -> i32 {
             crate::cells::position::CENTRE,
             false,
         ) else {
-            // spec: S-0408 claim 7 (no position free: no survivor, the attempt lost, its draws taken)
-            w.objects.remove(&uid);
+            // spec: S-0408 claim 7 (no position free: no survivor, the attempt lost, its draws taken); S-0611 claim 14 (nor does its creation set enter play)
+            crate::objects::discard_unplaced(w, uid);
             continue;
         };
         let (u, v) = crate::walk::standing_point(p);

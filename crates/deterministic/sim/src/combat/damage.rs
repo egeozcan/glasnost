@@ -1060,10 +1060,12 @@ fn killing_hit(
             h.spread,
             hit.distance,
         );
-        // spec: S-0312 claim 29 (a delayed-kill building's destruction raises come on the initial lethal hit, before its health is restored to 1 and the countdown is kept or started)
-        crate::combat::death::destruction_raises(w, id, hit);
-        let now = w.tick;
         let again = o_delay_kill_until.is_some();
+        // spec: S-0312 claim 29 (a delayed-kill building's destruction raises come on the initial lethal hit, before its health is restored to 1 and the countdown is kept or started); S-0302 claim 16 and Edge cases (a later lethal hit registers the destruction again only with quirks.delay_kill_credited_again)
+        if !again || rules.quirks.delay_kill_credited_again {
+            crate::combat::death::destruction_raises(w, id, hit);
+        }
+        let now = w.tick;
         if let Some(ob) = w.obj_mut(id) {
             if !again {
                 ob.combat.charge_planter = None;
@@ -1091,13 +1093,13 @@ fn killing_hit(
     }
     // spec: S-0504 claim 13 and S-0312 claim 32 (a further killing hit on a sinking vessel takes the ordinary path: destruction
     // registered again and the death effects; claim 10's conditions leave it at 1 health, otherwise 0 health, still sinking)
-    if o_delay_kill_until.is_some() && !rules.quirks.delay_kill_credited_again {
-        // spec: S-0302 Edge cases (delay_kill_credited_again off: no further credit)
-    } else {
+    // spec: S-0302 claim 16 and Edge cases (a lethal hit during a delayed-kill countdown, the expiry hit included, registers the destruction again, its credit and its destroyed-object events, only with quirks.delay_kill_credited_again)
+    let raises = o_delay_kill_until.is_none() || rules.quirks.delay_kill_credited_again;
+    if raises {
         credit(w, id, hit);
     }
     let _ = tc;
-    match crate::combat::death::kill_in(w, id, hit, chain) {
+    match crate::combat::death::kill_in(w, id, hit, chain, raises) {
         Flow::Done(()) => Flow::Done(HitResult::NowDead),
         Flow::Suspended => Flow::Suspended,
     }

@@ -1207,6 +1207,12 @@ pub fn order_applied(
             }
             return OrderEffect::NoDestination;
         }
+        if let Some(k) = target_depot
+            && !contacts(w, k).is_empty()
+        {
+            // spec: S-0314 claim 20 (a docked vehicle keeps contact and tether; otherwise the order runs normally) and claim 23 (an enter order on another depot that holds a contact runs as claim 23 says)
+            return held_depot_entry(w, id, k, full);
+        }
         if !w.rules().quirks.depot_remote_repair && matches!(b, Behaviour::Move | Behaviour::Attack)
         {
             // spec: S-0314 Edge cases (quirks.depot_remote_repair off: a docked vehicle given a move or attack order loses its contact as an approaching one does)
@@ -1230,18 +1236,24 @@ pub fn order_applied(
         return OrderEffect::Ordinary;
     };
     if !contacts(w, k).is_empty() {
-        if full {
-            // spec: S-0314 claim 23 (a full-health vehicle gets no destination and no queued entry: the order ends, and the vehicle stays put)
-            return OrderEffect::Ends;
-        }
-        if let Some(ob) = w.obj_mut(id) {
-            // spec: S-0314 claim 23 (a later enter order on a depot that holds any contact: a damaged vehicle gets no depot destination and no contact; the order queues enter without an immediate start, S-0215 claim 12, records the depot as the object it is entering and gives it a queued entry for that depot)
-            ob.depot.queued = Some(k);
-            ob.depot.entering = Some(k);
-        }
-        return OrderEffect::NoDestination;
+        return held_depot_entry(w, id, k, full);
     }
     OrderEffect::Ordinary
+}
+
+/// Claim 23 of S-0314 for vehicle `id` given an enter order on depot `k`
+/// that holds a contact; `full` is whether the vehicle is at full health.
+fn held_depot_entry(w: &mut World, id: ObjectId, k: ObjectId, full: bool) -> OrderEffect {
+    if full {
+        // spec: S-0314 claim 23 (a full-health vehicle gets no destination and no queued entry: the order ends, and the vehicle stays put)
+        return OrderEffect::Ends;
+    }
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0314 claim 23 (a later enter order on a depot that holds any contact: a damaged vehicle gets no depot destination and no contact; the order queues enter without an immediate start, S-0215 claim 12, records the depot as the object it is entering and gives it a queued entry for that depot)
+        ob.depot.queued = Some(k);
+        ob.depot.entering = Some(k);
+    }
+    OrderEffect::NoDestination
 }
 
 /// A stop order applied to vehicle `id` (S-0314 claims 20 and 23): an

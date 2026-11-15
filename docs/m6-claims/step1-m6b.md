@@ -54,7 +54,7 @@ open request.
 
 | Claim | Bucket | Change | Code location / evidence |
 |---|---|---|---|
-| Terms, 9 (rest row), 12 | (c) / (e) S-0607 | "Vehicle-seizing weapon" becomes *seized*; a seized unit does not spin or rest-turn, also after the grip ends. | Seam comment added in `turret.rs` rest row; `parasite::locomotor_replaced` doc reworded. |
+| Terms, 9 (rest row), 12 | (c) / (e) S-0607 | "Vehicle-seizing weapon" becomes *seized*; a seized unit does not spin (claim 12), and one with a movement destination does not rest-turn towards it, also after the grip ends; with no destination it rests on its body's facing (sim batch S13, #260). | `turret.rs` rest rows: the seized exception in the destination row only; `parasite::locomotor_replaced` doc reworded. |
 
 ## S-0212 Pathfinding (rev 36 to 37), S-0504 Naval units (rev 11 to 12)
 

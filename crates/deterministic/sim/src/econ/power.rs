@@ -3,12 +3,16 @@
 //! and what stops, the power switch, and the units that depend on a control
 //! centre.
 //!
-//! Seams (states that belong to topics not written yet, each a small
-//! function below that answers "no" or 0 until its topic arrives): pulses and
-//! electromagnetic locks, being erased, being drained, chargers, absorbed
-//! passengers, engineers inside a building, occupants of a garrisonable
-//! building, controlled and held units, superweapon charge (claim 15) and the
-//! super-gap's deploy behaviour (claim 16).
+//! The states other topics own are read through small functions below:
+//! being erased, being drained, chargers, absorbed passengers, the manned
+//! flag and the occupants of a garrisonable building each ask their owning
+//! module. Controlled and held units are released by `mind` and `lift` from
+//! [`building_turn`]. The charge hold of superweapons that depend on power
+//! (claim 15) is S-0512's, in `superweapons::charge`.
+//!
+//! Seams: pulses and electromagnetic locks ([`under_pulse`] answers "no"),
+//! and the super-gap's deploy behaviour (claim 16): nothing sets the
+//! super-gap state, which is only ever cleared here.
 
 use std::collections::BTreeMap;
 
@@ -239,7 +243,8 @@ pub struct BuildingSwitches {
 }
 
 // ---------------------------------------------------------------------------
-// Seams: states other topics own (each answers "no" or 0 until it exists).
+// States other topics own, read from their modules; `under_pulse` alone is
+// still a seam that answers "no".
 
 /// Under a pulse (S-0405 Terms; the combat and superweapon specs start and
 /// end it). Seam: no pulse exists yet.
@@ -317,12 +322,13 @@ pub fn building_output(w: &World, id: ObjectId) -> i32 {
         return 0;
     }
     // spec: S-0405 F1 (P = base output + [absorbing and extra output > 0] × extra output × n_a + Σ base output of the held upgrades)
+    // spec: S-0205 claim 1 (an integer result outside the range wraps)
     let mut p = t.output;
     if t.absorbing && t.extra_output > 0 {
-        p += t.extra_output * absorbed(w, id);
+        p = p.wrapping_add(t.extra_output.wrapping_mul(absorbed(w, id)));
     }
     for u in held_upgrades(w, id) {
-        p += bp(w, u).map_or(0, |b| b.output);
+        p = p.wrapping_add(bp(w, u).map_or(0, |b| b.output));
     }
     if p == 0 {
         return 0;
@@ -350,12 +356,13 @@ pub fn building_drain(w: &World, id: ObjectId) -> i32 {
         return 0;
     }
     // spec: S-0405 F2 (base drain + Σ base drain of the held upgrades + [super-gap active] × extra drain)
+    // spec: S-0205 claim 1 (an integer result outside the range wraps)
     let mut d = t.drain;
     for u in held_upgrades(w, id) {
-        d += bp(w, u).map_or(0, |b| b.drain);
+        d = d.wrapping_add(bp(w, u).map_or(0, |b| b.drain));
     }
     if o.econ.building.super_gap {
-        d += t.extra_drain;
+        d = d.wrapping_add(t.extra_drain);
     }
     d
 }
@@ -411,12 +418,12 @@ pub fn start_blackout(w: &mut World, h: HouseId, d: i32) {
     }
     let after = p.updated == t0;
     p.blackout_end = Some(if one_short {
-        // spec: S-0405 claim 6 (it ends at the beginning of the house update of tick t₀ + d − 1, quirks.blackout_one_short)
-        t0 + d - 1
+        // spec: S-0405 claim 6 (it ends at the beginning of the house update of tick t₀ + d − 1, quirks.blackout_one_short); S-0205 claim 1 (wrapping)
+        t0.wrapping_add(d).wrapping_sub(1)
     } else {
-        // spec: S-0405 Edge cases (switch off: exactly d house updates from the first one after the start)
-        let first = if after { t0 + 1 } else { t0 };
-        first + d
+        // spec: S-0405 Edge cases (switch off: exactly d house updates from the first one after the start); S-0205 claim 1 (wrapping)
+        let first = if after { t0.wrapping_add(1) } else { t0 };
+        first.wrapping_add(d)
     });
 }
 
@@ -528,8 +535,9 @@ pub fn house_update(w: &mut World, h: HouseId) -> bool {
     for &id in &ids {
         // spec: S-0405 claim 7 and F1 (each building's output uses its health at this moment)
         let out = building_output(w, id);
-        o = o.saturating_add(out);
-        d = d.saturating_add(building_drain(w, id));
+        // spec: S-0405 claim 7 (O and D: the sums over the counted buildings); S-0205 claim 1 (an integer result outside the range wraps)
+        o = o.wrapping_add(out);
+        d = d.wrapping_add(building_drain(w, id));
         // spec: S-0405 claim 5 (a counted building whose output is above 0 and that is being drained)
         if out > 0 && being_drained(w, id) {
             drained = true;
@@ -546,7 +554,7 @@ pub fn house_update(w: &mut World, h: HouseId) -> bool {
     let changed = before != (o, d);
     // spec: S-0405 claim 11 (the step period of each production line is worked out again at once, S-0403 claim 8)
     crate::econ::production::power_changed(w, h);
-    // S-0405 claim 15 (the charge hold of superweapons that depend on power) is a seam: superweapons are not written yet.
+    // S-0405 claim 15 (the charge hold of superweapons that depend on power) is S-0512's: `superweapons::charge::availability` suspends and resumes on the low-power state, and `charge::house_update` runs it when that state changed (S-0512 claims 2, 4 and 6).
     changed
 }
 

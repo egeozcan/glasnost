@@ -302,11 +302,24 @@ fn scatter(w: &World, p: (i32, i32), sigma: i32, xi: i32) -> (i32, i32) {
     (qx, qy)
 }
 
+/// The target point of a cell target (S-0306 Terms, points of a cell
+/// target, revision 89): a high-bridge cell's centre raised by the deck
+/// height; any other target's reference point, without a building's aim
+/// shift (that is [`aim_target_point`]'s).
+fn cell_target_point(w: &World, t: Target) -> Pos {
+    let p = ref_point(w, t);
+    match t {
+        // spec: S-0306 Terms (points of a cell target: a high-bridge cell's target point is its centre raised by the deck height of 416 leptons, S-0511, whatever layer the firer or any object stands on)
+        Target::Cell(c) if w.high_bridge(c) => Pos::new(p.x, p.y, p.z + 416),
+        _ => p,
+    }
+}
+
 /// A projectile's target point P_T (S-0306 Terms): the reference point,
-/// plus a building's aim shift.
+/// plus a building's aim shift; a high-bridge cell's at the deck height.
 // spec: S-0306 Terms (the aim shift, a lepton triple)
 fn aim_target_point(w: &World, t: Target) -> Pos {
-    let p = ref_point(w, t);
+    let p = cell_target_point(w, t);
     if let Target::Object(x) = t
         && let Some(o) = w.obj(x)
         && o.kind == Kind::Building
@@ -367,16 +380,25 @@ pub fn launch(
     let radial = crate::combat::veterancy::type_combat_in(&rules, o.kind, o.type_index)
         .map_or(0, |tc| tc.radial_segments);
     let g = ballistics::gravity(rules.combat.general.gravity, p.floater, mode);
-    let shot_tp = ref_point(w, shot_target);
+    // spec: S-0306 Terms (points of a cell target: K and the aim point take a high-bridge cell's target point where claims 3 and 9 say reference point)
+    let shot_tp = cell_target_point(w, shot_target);
     // spec: S-0306 claim 1 (the shot speed towards the shot target's target point)
     let s1 = shot_speed(w, weapon, fire_point, aim_target_point(w, shot_target));
     // spec: S-0306 claim 3 (the aim point: the firer's target's reference point, no aim shift; no target: the origin, quirks.aim_origin_without_target)
     let firer_target = o_target;
     let redirected = wr.area_fire || tc_spray(w, firer);
     let mut aim = match firer_target {
-        Some(t) => ref_point(w, t),
+        Some(t) => cell_target_point(w, t),
         None if q.aim_origin_without_target => Pos::default(),
         None => shot_tp,
+    };
+    // spec: S-0306 Terms (points of a cell target: the lob test of claim 6 (a), open in the spec, and the voxel pitch of claim 6 (b) take the reference point); the aim point's own fallbacks otherwise
+    let unaimed_ref = match firer_target {
+        Some(t) => ref_point(w, t),
+        None if q.aim_origin_without_target && !(redirected && !q.redirected_shot_aim) => {
+            Pos::default()
+        }
+        None => ref_point(w, shot_target),
     };
     if redirected && !q.redirected_shot_aim {
         // spec: S-0306 Edge cases (redirected_shot_aim off: the aim point is the redirected cell)
@@ -446,13 +468,13 @@ pub fn launch(
     let pitch = if p.arcing {
         let dz = impact.z - fire_point.z;
         let dist = d2(w, fire_point, impact);
-        let tgt_ref = firer_target.map(|t| ref_point(w, t)).unwrap_or(aim);
+        let tgt_ref = unaimed_ref;
         let horizontal = d2(w, o_pos, tgt_ref);
         // spec: S-0306 claim 6 a (a lob: the lobber flag, or the target higher above than it is far)
         let lob = wr.lobber || (tgt_ref.z - o_pos.z) > horizontal;
         arc_pitch(w, start, dist, dz, lob, g)?
     } else if p.voxel {
-        let tgt_z = firer_target.map_or(aim.z, |t| ref_point(w, t).z);
+        let tgt_z = unaimed_ref.z;
         // spec: S-0306 claim 6 b (32768 when the target is lower than the firer, else 16384)
         if tgt_z < o_pos.z { 32768 } else { 16384 }
     } else {
@@ -615,8 +637,8 @@ fn radial_yaw(w: &World, id: ObjectId, n: i32, k: i32) -> i32 {
 /// locomotor is moving. Read-only: the target line's end point (S-0301
 /// claim 24 e), recomputed in every drawn frame.
 pub fn led_aim_point(w: &World, firer: ObjectId, t: Target) -> Pos {
-    // spec: S-0306 claim 3 (the target's reference point, no aim shift)
-    let aim = ref_point(w, t);
+    // spec: S-0306 claim 3 (the target's reference point, no aim shift) and Terms (points of a cell target: a high-bridge cell's target point)
+    let aim = cell_target_point(w, t);
     match t {
         // spec: S-0306 claim 3 (a moving vehicle target is led, F6)
         Target::Object(x) if led(w, x) => lead(w, firer, x, aim),
@@ -1061,8 +1083,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if !q.stored_target_point
         && let Some(t) = pr.target
     {
-        // spec: S-0306 Edge cases (stored_target_point off: K follows the target while it is in play)
-        pr.stored = ref_point(w, t);
+        // spec: S-0306 Edge cases (stored_target_point off: K follows the target while it is in play) and Terms (points of a cell target: K is a high-bridge cell's target point)
+        pr.stored = cell_target_point(w, t);
     }
     let start = pr.pos;
     let h = start.z - w.surface_at(start.x, start.y);
@@ -1124,21 +1146,19 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let deck_new = w.high_bridge(nc).then(|| terrain_new + 416);
     let crossing = |a: i32, b: i32, deck: Option<i32>| -> Option<i32> {
         let d = deck?;
-        // spec: S-0306 T1 (crossing a bridge deck height going up (deck height) or down (20 below it))
+        // spec: S-0306 T1 row 1 (revision 89: crossing a bridge deck height going up, from P below it to P′ at or above it, gives 20 below it; going down, from P at or above it to P′ below it, the deck height)
         if a < d && b >= d {
-            Some(d)
-        } else if a >= d && b < d {
             Some(d - 20)
+        } else if a >= d && b < d {
+            Some(d)
         } else {
             None
         }
     };
-    let cross =
-        crossing(start.z, newpos.z, deck_old).or_else(|| crossing(start.z, newpos.z, deck_new));
-    // spec: S-0306 T1 (vertical: a high-bridge cell, old or new; deck height = terrain height of the cell of P′ + 416)
-    let deck_here = Some(terrain_new + 416);
-    let vertical_cross = (w.high_bridge(start.cell()) || w.high_bridge(nc))
-        && crossing(start.z, newpos.z, deck_here).is_some();
+    // spec: S-0306 T1 rows 1 and vertical (a high-bridge cell, old or new; the deck height is the terrain height of the cell of P′ + 416)
+    let deck_here = (w.high_bridge(start.cell()) || w.high_bridge(nc)).then_some(terrain_new + 416);
+    let cross = crossing(start.z, newpos.z, deck_here);
+    let vertical_cross = cross.is_some();
     let in_map = w.cells.cell(nc).is_some();
     if matches!(kind, ProjectileKind::Straight | ProjectileKind::Arcing) {
         let owned = has_firer(w, &pr);
@@ -1224,7 +1244,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
             }
         }
         if !(rows.steering_dist || rows.steer_ground || rows.safety || rows.orbit) {
-            // spec: S-0306 T1 (steering: P′ strictly crosses the deck height of a high-bridge cell, old or new; z at the deck height)
+            // spec: S-0306 T1 (steering: P′ strictly crosses the deck height of a high-bridge cell, old or new; z at the deck height); Q-3114 interim (each cell's own deck height when the two differ)
             let strict = |deck: Option<i32>| {
                 deck.filter(|&d| (start.z < d && newpos.z > d) || (start.z > d && newpos.z < d))
             };
@@ -1257,8 +1277,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if p.flak_scatter
         && let Some(t) = pr.target
     {
-        // spec: S-0306 T1 (flak: P′ below the target's reference height and h′ < 0)
-        rows.flak = newpos.z < ref_point(w, t).z && hp < 0;
+        // spec: S-0306 T1 (flak: P′ below the target's reference height and h′ < 0) and Terms (points of a cell target: a high-bridge cell's target point gives the height)
+        rows.flak = newpos.z < cell_target_point(w, t).z && hp < 0;
     }
     if p.level {
         // spec: S-0306 T1 (level: the cell of P′ is not one of the 14 water tiles)
@@ -1493,12 +1513,14 @@ fn detonation_point(
         return (pt, pt);
     }
     let rp = ref_point(w, t);
+    // spec: S-0306 Terms (points of a cell target: P_R of F9 is a high-bridge cell's target point; claim 20 (b)'s snap, D_R and D_S take the reference point)
+    let f9_point = cell_target_point(w, t);
     // spec: S-0306 claim 20 (b) (arrival always; a reached row when ν′ ≤ max(2|V|, 128))
     let snap = if arrival {
         true
     } else if reached {
-        let zeta = (rp.z + pt.z) / 2 - rp.z; // spec: S-0306 F9 (ζ = trunc((P_R.z + P.z) / 2) − P_R.z)
-        let (dx, dy) = (i128::from(pt.x - rp.x), i128::from(pt.y - rp.y));
+        let zeta = (f9_point.z + pt.z) / 2 - f9_point.z; // spec: S-0306 F9 (ζ = trunc((P_R.z + P.z) / 2) − P_R.z)
+        let (dx, dy) = (i128::from(pt.x - f9_point.x), i128::from(pt.y - f9_point.y));
         let nu = root_n(w, dx * dx + dy * dy + i128::from(zeta) * i128::from(zeta));
         let nup = nu / 3; // spec: S-0306 F9 (ν′ = trunc(ν / 3))
         let thr = speed_start.mul(f(2, mode), mode).max(f(128, mode));
@@ -1680,7 +1702,8 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             pos: at,
             vel: [F64::ZERO, F64::ZERO, f(-i64::from(sw / 10), mode)],
             target: Some(Target::Cell(cell)),
-            stored: Pos::new(cc.x, cc.y, w.surface_at(cc.x, cc.y)),
+            // spec: S-0306 claim 21 (each child is aimed at its cell) and Terms (points of a cell target: K is the cell's target point, a high-bridge cell's at the deck height)
+            stored: cell_target_point(w, Target::Cell(cell)),
             placed_at: at,
             arm: 0,
             placed: w.tick,

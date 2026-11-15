@@ -127,7 +127,8 @@ pub fn is_target_object(w: &World, t: Target) -> bool {
 /// The weapon in slot `i` of an object (S-0308 Terms, claim 2): the elite
 /// slot's weapon for an elite object when that slot holds one, else the
 /// ordinary slot's. A building takes it first from its installed upgrades
-/// (claim 12); occupants (claim 13) are not modelled (garrisons are a seam).
+/// (claim 12), then, while its occupants fire, from its current occupant
+/// (claim 13, [`occupant_weapon`]).
 pub fn slot_weapon(w: &World, id: ObjectId, i: usize) -> Option<WeaponId> {
     let tc = veterancy::type_combat(w, id)?;
     if i >= SLOTS {

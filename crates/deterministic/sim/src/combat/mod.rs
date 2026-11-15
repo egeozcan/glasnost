@@ -5,13 +5,13 @@
 //! veterancy (S-0311), death and destruction (S-0312), firing positions
 //! (S-0313), healing (S-0314) and fear (S-0315).
 //!
-//! Features whose own topics are not written yet (garrisons, bunkers,
-//! transports, cloaking, berserk and other special warheads, spawned
-//! aircraft, aircraft flight, crates, bridges, smudges, particles and the
-//! playback of animations) are seams: the state that would switch their
-//! rows on is never set, and each rule that reads such a state keeps its
-//! place so that the rows land where the specs put them once the topic is
-//! written.
+//! The rules here call the modules of the features they meet (garrisons,
+//! bunkers, transports, cloaking, psychic and other special warheads,
+//! spawned aircraft, aircraft flight, crates, bridges and particles) and
+//! read their state. Where a row of a combat claim is still missing, the
+//! comment at its site says that the row is not implemented, and names the
+//! state it would read; it is a seam only where that state is not modelled
+//! at all (rubble and smudges, for example).
 
 pub mod acquire;
 pub mod area;

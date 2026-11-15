@@ -79,7 +79,8 @@ pub struct DriveState {
     pub track: Option<Track>,
     /// Turning in place before a step (S-0206 claim 12).
     pub turning_in_place: bool,
-    /// Tick in which the turn in place was given, and its duration.
+    /// The body's turn start for the turn in place (the tick of the order
+    /// for a turn that completes at once), and its duration.
     pub turn: Option<(i32, i32)>,
     /// Cells whose vehicle-present flag it set, each with the record layer
     /// it was set in (S-0209 claim 1).
@@ -767,11 +768,13 @@ fn turn_in_place(w: &mut World, id: ObjectId, u: &UnitRules, d: u8) {
     let mut body = o.body;
     body.turn_to(want, t, u.turn_rate);
     let dur = body.duration;
+    // spec: S-0206 claims 3 and 12 (the same target again keeps the body's turn, its start included; the track begins in the tick the body reaches the step's facing, t₀ + 1 for a turn that completes at once, the tick of the order)
+    let t0 = if dur == 0 { t } else { body.t0 };
     if let Some(ob) = w.obj_mut(id) {
         ob.body = body;
         if let Some(dd) = ob.drive.as_mut() {
             dd.turning_in_place = true;
-            dd.turn = Some((t, dur));
+            dd.turn = Some((t0, dur));
             // spec: S-0207 claim 3 (the budget is set to 0 in every tick of a turn in place)
             dd.budget = 0;
         }
@@ -1849,15 +1852,16 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         let s = progress(w, id, u);
         record_step(w, id, s);
         add_budget(w, id, s);
-        let ended = spend_and_stop(w, id);
+        let mut ended = spend_and_stop(w, id);
         let mut more = ended && move_goes_on(w, id);
-        // spec: S-0207 claim 12 (a tick begun without a track finishes at most one; quirks.drive_track_end_cap off: no limit)
+        // spec: S-0207 claim 12 (a tick begun without a track finishes at most one; quirks.drive_track_end_cap off: no limit) and claim 11 (rest with ρ = 0 only when the last track worked on ended at a track target with no further step)
         while more && !cap {
             if !begin_track(w, id, u) {
                 break;
             }
             update_rho(w, id, u);
-            more = spend_and_stop(w, id) && move_goes_on(w, id);
+            ended = spend_and_stop(w, id);
+            more = ended && move_goes_on(w, id);
         }
         if ended && !move_goes_on(w, id) {
             arrive_or_rest(w, id);

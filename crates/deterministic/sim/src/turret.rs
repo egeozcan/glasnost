@@ -40,19 +40,21 @@ pub fn tick(w: &mut World, id: ObjectId, facing_error: bool) {
             && !crate::structures::bunker::bunkered(w, id)
             && !crate::econ::inplace::deployed(w, id);
         if rested {
-            if crate::lift::seized(w, id) {
-                // spec: S-0206 claim 9 (no change while the vehicle is seized, S-0607 claims 5 and 20)
-            } else if let Some(dest) = o.dest {
-                let p = match dest {
-                    Target::Cell(c) => Pos::centre(c, 0),
-                    Target::Object(x) => w.obj(x).map_or(o.pos, |d| d.pos),
-                };
-                // spec: S-0206 claim 9 (a movement destination: its direction, S-0204 claim 8)
-                targets.push(direction(
-                    i64::from(p.x - o.pos.x),
-                    i64::from(p.y - o.pos.y),
-                    r.quirks.table_direction,
-                ));
+            if let Some(dest) = o.dest {
+                if crate::lift::seized(w, id) {
+                    // spec: S-0206 claim 9 (the destination row: no change while the vehicle is seized, S-0607 claims 5 and 20)
+                } else {
+                    let p = match dest {
+                        Target::Cell(c) => Pos::centre(c, 0),
+                        Target::Object(x) => w.obj(x).map_or(o.pos, |d| d.pos),
+                    };
+                    // spec: S-0206 claim 9 (a movement destination: its direction, S-0204 claim 8)
+                    targets.push(direction(
+                        i64::from(p.x - o.pos.x),
+                        i64::from(p.y - o.pos.y),
+                        r.quirks.table_direction,
+                    ));
+                }
             } else {
                 // spec: S-0206 claim 9 (no movement destination: the body's current facing)
                 targets.push(o.body.value(t));

@@ -570,13 +570,22 @@ fn wake_and_splash(w: &mut World, pos: Pos) {
 
 /// The death effects of a killing hit (S-0312 claim 1 and its table).
 pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
-    let _ = kill_in(w, id, hit, false);
+    let _ = kill_in(w, id, hit, false, true);
 }
 
 /// [`kill`]; with `chain` (S-0312 claim 33) an exploding object's death
 /// weapon is recorded as pending and the rest of the death effects kept as
-/// a frame, for [`set_off_death_weapon`] to go on with.
-pub(crate) fn kill_in(w: &mut World, id: ObjectId, hit: &Hit, chain: bool) -> Flow<()> {
+/// a frame, for [`set_off_death_weapon`] to go on with. Without `raises`
+/// (a delayed kill's later lethal hit with
+/// `quirks.delay_kill_credited_again` off, S-0302 claim 16) the
+/// destruction raises of claim 29 are not made again.
+pub(crate) fn kill_in(
+    w: &mut World,
+    id: ObjectId,
+    hit: &Hit,
+    chain: bool,
+    raises: bool,
+) -> Flow<()> {
     let Some(o) = w.obj(id).cloned() else {
         return Flow::Done(());
     };
@@ -595,8 +604,10 @@ pub(crate) fn kill_in(w: &mut World, id: ObjectId, hit: &Hit, chain: bool) -> Fl
         // Q-0193 (interim: no other death effect, no draws; it stays on its line with health 0)
         return Flow::Done(());
     }
-    // spec: S-0312 claim 29 and table, before step 1 (the destruction raises and the actions they fire, before the debris)
-    destruction_raises(w, id, hit);
+    // spec: S-0312 claim 29 and table, before step 1 (the destruction raises and the actions they fire, before the debris); S-0302 claim 16 and Edge cases (not again at a delayed kill's later lethal hit with quirks.delay_kill_credited_again off)
+    if raises {
+        destruction_raises(w, id, hit);
+    }
     // spec: S-0312 claim 30 (a killing hit ends a master's slave group before claims 4 to 7)
     crate::econ::slaves::master_killed(w, id, hit);
     // spec: S-0402 claim 14 (a killed slave is lost to its master: the regeneration delay starts)
@@ -616,7 +627,12 @@ pub(crate) fn kill_in(w: &mut World, id: ObjectId, hit: &Hit, chain: bool) -> Fl
         crate::transport::kill_passengers(w, id, hit);
     }
     // spec: S-0312 table, step 2 (an exploding object: passengers die, then the death weapon); claim 11 (claim 6 skipped)
+    // spec: S-0312 claim 16 and Edge cases (quirks.crash_death_weapon_twice off: an exploding aircraft that starts to crash fires its death weapon only at the impact); Q-3112 interim (an aircraft above the terrain at its death or already crashing; not a rocket, S-0501 Terms)
+    let crash_skips = !w.rules().quirks.crash_death_weapon_twice
+        && crate::air::is_aircraft(w, id)
+        && (crate::air::crashing(w, id) || crate::air::height(w, id) > 0);
     if !marked_water
+        && !crash_skips
         && exploding(w, id)
         && let Some((wp, dmg)) = death_weapon(w, id)
     {
@@ -1170,8 +1186,8 @@ fn crew(w: &mut World, id: ObjectId, hit: &Hit) {
     // spec: S-0312 claim 13 (a crew that is due takes the creation draw whether or not it can then be placed)
     let cid = crate::objects::create(w, Kind::Infantry, crew_type, o.owner);
     let Some((pos, layer)) = crew_position(w, id, cid) else {
-        // spec: S-0312 claim 13 (a crew that gets no position, or whose placement is refused, never enters play and takes no health draw)
-        w.objects.remove(&cid);
+        // spec: S-0312 claim 13 (a crew that gets no position, or whose placement is refused, never enters play and takes no health draw); S-0611 claim 14 (nor does its creation set)
+        crate::objects::discard_unplaced(w, cid);
         return;
     };
     crate::combat::survivors::put_infantry(w, cid, pos, layer, top);
@@ -1223,13 +1239,8 @@ fn crew_position(w: &mut World, id: ObjectId, cid: ObjectId) -> Option<(Pos, Lay
             (Pos::new(x, y, w.surface_at(x, y)), Layer::Ground)
         })
     } else {
-        // spec: S-0312 claim 13 (another height, a bridge deck for example: no choice and no draw, the vehicle's exact position)
-        let layer = if w.high_bridge(c) && p.z > surface {
-            Layer::Deck
-        } else {
-            Layer::Ground
-        };
-        Some((p, layer))
+        // spec: S-0312 claim 13 (another height, a bridge deck for example: no choice and no draw, the vehicle's exact position) and S-0209 Terms (cell layer: the crew at the vehicle's position is on the vehicle's layer)
+        Some((p, o.layer))
     };
     // spec: S-0312 claim 13 and S-0209 Terms (one entry test, an ordinary return placement: S-0209 claim 4's infantry table, no approach direction and no source elevation; only clear accepts the crew, moving blocker included in the refusals)
     let chosen = chosen.filter(|_| {
