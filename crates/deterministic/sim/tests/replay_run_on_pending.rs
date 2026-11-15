@@ -88,6 +88,7 @@ fn issue_333_run_on_a_save_holding_its_ticks_orders_does_not_issue_them_again() 
 fn issue_333_run_on_at_a_tick_boundary_issues_the_ticks_orders() {
     let (mut w, hut, rep) = game();
     assert_eq!(pending(&w), 0);
-    rep.run_on(&mut w, glasnost_sim::tick::ticks_run(&w) + 1, |_| {});
+    let until = glasnost_sim::tick::ticks_run(&w) + 1;
+    rep.run_on(&mut w, until, |_| {});
     assert!(w.obj(hut).unwrap().econ.building.repairing);
 }
