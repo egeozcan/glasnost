@@ -165,45 +165,121 @@ pub struct Maker {
     pub conversion: bool,
 }
 
-/// What an ordinary animation of an infantry-making type holds for claims
-/// 8 to 11 (#291; [`crate::anims::Anim::making`]): one that is neither
-/// attached to an owner nor of a bouncing type at its creation (Q-3121).
+/// One standing position of one cell in one occupancy record (claim 15):
+/// the same position of the same cell in the other record is another one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Making {
-    /// Its surface (claim 8: the occupancy record of its surface).
+pub struct Stand {
+    /// The cell.
+    pub cell: CellXY,
+    /// The occupancy record (ground or deck).
     pub layer: Layer,
-    /// Its owner: none from its creator; claim 9's fallback gives it one.
-    pub owner: Option<HouseId>,
-    /// The standing position it holds: its cell and position.
-    pub spot: (CellXY, u8),
+    /// The standing position (S-0208 table P).
+    pub position: u8,
 }
 
-impl Making {
-    /// The making state of an animation created at `p`, with no owner.
-    pub(crate) fn at(w: &World, p: Pos) -> Making {
-        Making {
-            // spec: S-0611 claims 8 and 10 (the occupancy record of its surface: the deck on a high-bridge cell above the terrain height)
-            layer: surface_of(w, p),
-            // spec: S-0611 claim 9 (an animation with no owner)
-            owner: None,
-            // spec: S-0611 claim 8 (the standing position its world point is in)
-            spot: spot_of(w, p),
-        }
+/// What an ordinary animation of an infantry-making type holds for claims
+/// 8 to 11 and 15 (#291; [`crate::anims::Anim::making`]), whether it is
+/// fixed, attached to an owner or bouncing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Making {
+    /// Its owner: none from its creator; claim 9's fallback gives it one.
+    pub owner: Option<HouseId>,
+    /// The standing position it marked last, until the animation itself
+    /// frees it (claim 15).
+    pub marked: Option<Stand>,
+}
+
+/// The standing position of point `p` in the occupancy record of its
+/// surface (claims 8, 10 and 15); none for a point outside the legal map.
+fn stand_of(w: &World, p: Pos) -> Option<Stand> {
+    let (cell, position) = spot_of(w, p);
+    // spec: S-0611 claim 15 (in our engine a point outside the legal map has no standing position)
+    w.cells.idx(cell)?;
+    Some(Stand {
+        cell,
+        // spec: S-0611 claims 8 and 10 (the occupancy record of its surface: the deck on a high-bridge cell above the terrain height)
+        layer: surface_of(w, p),
+        position,
+    })
+}
+
+/// The height above the terrain surface from which an end attempt's free
+/// is made in the deck record of a cell that no high bridge marks.
+const HIGH_FREE: i32 = 416; // spec: S-0611 claim 15 and Edge cases (at least 416 leptons above the terrain surface height there, S-0106 F1)
+
+/// The record an end attempt at point `p` frees in with
+/// `quirks.infantry_animation_stale_marks` on, for an animation whose marks
+/// there use record `layer` (claim 15).
+fn end_layer(w: &World, p: Pos, layer: Layer) -> Layer {
+    if !w.high_bridge(p.cell()) && p.z >= w.surface_at(p.x, p.y) + HIGH_FREE {
+        // spec: S-0611 claim 15 (at a point at least 416 leptons above the terrain surface in a cell that no high bridge marks, the mark is made in the ground record but the free in the deck record)
+        Layer::Deck
+    } else {
+        layer
     }
 }
 
-/// Marks an infantry-making animation's standing position taken in one of
-/// its updates (claim 8).
-pub(crate) fn mark(w: &mut World, id: ObjectId, m: &Making) {
+/// One update of an ordinary infantry-making animation `id` whose point is
+/// `p` (claims 8 and 15): it marks the standing position of its point and,
+/// when that is another one than it marked last, first frees the earlier
+/// one if `follows` (an attached animation that is not bouncing) or
+/// `quirks.infantry_animation_stale_marks` is off.
+pub(crate) fn update(w: &mut World, id: ObjectId, m: &mut Making, p: Pos, follows: bool) {
+    // spec: S-0611 claim 15 (an update at a point outside the legal map marks nothing and frees no earlier mark)
+    let Some(s) = stand_of(w, p) else { return };
+    let stale = w.rules().quirks.infantry_animation_stale_marks;
+    if let Some(old) = m.marked
+        && old != s
+        && (follows || !stale)
+    {
+        // spec: S-0611 claim 15 (an attached animation that is not bouncing, whatever the switch, and with the switch off any animation: an update that marks another standing position first frees the earlier one, in the record it was made in)
+        free_stand(w, id, old);
+    }
     let seize = w.rules().quirks.infantry_animation_occupancy;
-    let (c, p) = m.spot;
     // spec: S-0611 claim 8 (in each of its updates its position is marked taken and the cell's infantry house becomes its owner)
-    w.cells.mark_anim(c, m.layer, p, id, m.owner, seize);
+    w.cells
+        .mark_anim(s.cell, s.layer, s.position, id, m.owner, seize);
+    m.marked = Some(s);
 }
 
-/// Frees an ordinary infantry-making animation's position (claim 8).
-pub(crate) fn free(w: &mut World, id: ObjectId, m: &Making) {
-    free_at(w, id, m.layer, m.spot);
+/// The free of an ordinary infantry-making animation `id`'s end attempt at
+/// its point `p`, before the placement (claims 8 and 15).
+pub(crate) fn free_for_attempt(w: &mut World, id: ObjectId, m: &mut Making, p: Pos) {
+    if w.rules().quirks.infantry_animation_stale_marks {
+        let Some(mut s) = stand_of(w, p) else {
+            // spec: S-0611 claim 15 (a free of the standing position of a point outside the legal map frees nothing)
+            return;
+        };
+        s.layer = end_layer(w, p, s.layer);
+        // spec: S-0611 claim 15 (switch on: an end attempt frees the standing position of its point at that attempt, whatever else has marked it, which need not be one the animation marked)
+        free_stand(w, id, s);
+        if m.marked == Some(s) {
+            m.marked = None;
+        }
+    } else if let Some(s) = m.marked.take() {
+        // spec: S-0611 claim 15 (switch off: an end attempt frees the standing position the animation marked last, in the record it was made in, if that mark is still standing)
+        free_stand(w, id, s);
+    }
+}
+
+/// An ordinary infantry-making animation `id` leaves play other than by a
+/// successful end attempt (claim 15): a landing, its owner's removal or
+/// another rule's removal. It makes no infantry.
+pub(crate) fn release(w: &mut World, id: ObjectId, m: &Making) {
+    if w.rules().quirks.infantry_animation_stale_marks {
+        // spec: S-0611 claim 15 (switch on: such a removal frees nothing; each standing position it marked stays taken)
+        return;
+    }
+    if let Some(s) = m.marked {
+        // spec: S-0611 claim 15 (switch off: such a removal frees the mark the animation made last, in the record it was made in, if that mark is still standing)
+        free_stand(w, id, s);
+    }
+}
+
+/// Frees standing position `s` for infantry-making animation `id` under
+/// claim 8's rule for its end (claim 15).
+fn free_stand(w: &mut World, id: ObjectId, s: Stand) {
+    free_at(w, id, s.layer, (s.cell, s.position));
 }
 
 /// A refused victim's freed standing position (claim 7).
@@ -625,9 +701,19 @@ pub fn removing(w: &mut World, id: ObjectId) {
     w.cells.clear_position(f.cell, f.layer, f.position, oq);
 }
 
-/// Frees an infantry-making animation's position at its end (claim 8).
+/// Frees an infantry-making animation's position at an end attempt, before
+/// the placement (claims 8 and 15): its point never moves, so with
+/// `quirks.infantry_animation_stale_marks` off that is the position it
+/// marked, in its record, and with it on the position of its point in the
+/// record claim 15 gives.
 fn free_spot(w: &mut World, id: ObjectId, m: &Maker) {
-    free_at(w, id, m.layer, m.spot);
+    let layer = if w.rules().quirks.infantry_animation_stale_marks {
+        end_layer(w, m.pos, m.layer)
+    } else {
+        // spec: S-0611 claim 15 (switch off: the free is made in the record the mark was made in)
+        m.layer
+    };
+    free_at(w, id, layer, m.spot);
 }
 
 /// Frees the standing position `spot` of surface `layer` an
@@ -639,8 +725,8 @@ fn free_at(w: &mut World, id: ObjectId, layer: Layer, spot: (CellXY, u8)) {
         // spec: S-0611 claim 8 and Edge cases (at its end the position is shown free again, whatever else has marked it)
         w.cells.clear_position(c, layer, p, oq);
     } else {
-        // spec: S-0611 Edge cases (quirks.infantry_animation_occupancy off: it frees only its own mark)
-        w.cells.clear_infantry(c, layer, id, oq);
+        // spec: S-0611 Edge cases (quirks.infantry_animation_occupancy off: it frees only its own mark); claim 15 (each free is of one standing position, so its marks at the cell's other positions stay)
+        w.cells.clear_anim_position(c, layer, p, id, oq);
     }
 }
 

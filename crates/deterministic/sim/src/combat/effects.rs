@@ -837,7 +837,13 @@ fn anim_with(
     looped: bool,
 ) {
     let index = w.rules().anim_index(name.as_bytes());
+    let rules = w.rules_arc();
+    // spec: S-0611 claim 15 and S-0319 claim 1 (a bouncing infantry-making animation flies: an ordinary animation with its flight, claim 15's point)
+    let bouncing = index
+        .and_then(|i| rules.animations.get(i as usize))
+        .is_some_and(|a| a.bouncing);
     if !reverse
+        && !bouncing
         && let Some(i) = index
         && crate::mutation::makes_infantry(w, i)
     {
