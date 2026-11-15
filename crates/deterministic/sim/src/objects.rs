@@ -553,6 +553,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     crate::drain::stored(w, id);
     // spec: S-0614 claim 15 (a host taken off the map releases its parasite at once)
     crate::parasite::leaving(w, id);
+    // spec: S-0518 claim 12 and S-0203 Terms and claim 3 (going inside something is leaving play, an open-topped transport's passenger included: a charger leaves every charger list at once)
+    crate::linked::leaving(w, id);
     // spec: S-0502 claims 4, 13 and 14 (a jumpjet going inside releases its marks, its landing reservation and its hover slot)
     crate::jump::leaving(w, id);
     // spec: S-0507 claim 15 (an open-topped transport leaving the map: its passengers lose their targets)
