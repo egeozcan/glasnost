@@ -564,6 +564,8 @@ fn lift_off(w: &mut World, id: ObjectId) {
     if o.kind == Kind::Vehicle {
         crate::drive::release_claims(w, id);
     }
+    // spec: S-0502 claim 29 (going off the map for any reason ends the flying registration) and claims 4, 7, 13, 14 and 18 (a jumpjet leaving the map releases its marks, listing, landing reservation and hover slot); S-0513 claim 39 (the departure takes the member off the map, #360)
+    crate::jump::leaving(w, id);
     let cell = o.pos.cell();
     w.cells.leave_both(cell, id);
     let q = crate::objects::occ_quirks(w);
