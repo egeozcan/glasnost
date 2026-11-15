@@ -329,6 +329,32 @@ mod tests {
         );
     }
 
+    /// design: render (#151): a frame draws each pixel of its edge once,
+    /// one pixel high or wide included (a translucent frame shows a pixel
+    /// drawn twice)
+    #[test]
+    fn a_frame_draws_each_edge_pixel_once() {
+        let p = Painter::new();
+        for (w, h) in [(1, 1), (5, 1), (1, 5), (2, 2), (5, 4)] {
+            let mut d = DrawList::new();
+            d.frame(Rect::new(3, 2, w, h), colour::EDGE);
+            let q = p.quads(&d);
+            for y in 2..2 + h {
+                for x in 3..3 + w {
+                    let edge = x == 3 || y == 2 || x == 2 + w || y == 1 + h;
+                    let covering = q
+                        .iter()
+                        .filter(|q| {
+                            let [qx, qy, qw, qh] = q.dst;
+                            (qx..qx + qw).contains(&x) && (qy..qy + qh).contains(&y)
+                        })
+                        .count();
+                    assert_eq!(covering, usize::from(edge), "{w} × {h} at {x},{y}");
+                }
+            }
+        }
+    }
+
     #[test]
     fn a_scaled_layer_enlarges_its_quads_after_clipping() {
         use glasnost_ui::geom::Scale;

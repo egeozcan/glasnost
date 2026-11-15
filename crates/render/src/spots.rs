@@ -430,4 +430,29 @@ mod tests {
         assert_eq!(f.color[3 * 8 + 4], wave(grey, k));
         assert_eq!(f.color[3 * 8 + 2], grey);
     }
+
+    /// design: render (#151): a wave source pixel beyond the view (a shift
+    /// larger than the view-edge margin of S-0607 claim 25) is the nearest
+    /// view pixel, on the CPU and the GPU alike
+    #[test]
+    fn a_wave_source_beyond_the_view_is_the_nearest_view_pixel() {
+        let mut f = frame(8, 8);
+        f.color = (0..64u32)
+            .map(|i| pack([(i % 8) * 32, (i / 8) * 32, 0]))
+            .collect();
+        let k = 110;
+        let g = group(vec![
+            // Right: (4 + 10, 3) is held to (7, 3).
+            spot(4, 3, SpotKind::Wave { shift: (10, 0), k }),
+            // Down from the last row the wave draws: (3, 4 + 20) is held to (3, 7).
+            spot(3, 4, SpotKind::Wave { shift: (0, 20), k }),
+            // Up and left: (4 − 9, 4 − 9) is held to (0, 0).
+            spot(4, 4, SpotKind::Wave { shift: (-9, -9), k }),
+        ]);
+        let before = f.color.clone();
+        apply(&mut f, &g, (0, 0));
+        assert_eq!(f.color[3 * 8 + 4], wave(before[3 * 8 + 7], k));
+        assert_eq!(f.color[4 * 8 + 3], wave(before[7 * 8 + 3], k));
+        assert_eq!(f.color[4 * 8 + 4], wave(before[0], k));
+    }
 }

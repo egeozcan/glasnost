@@ -1124,6 +1124,163 @@ fn gpu_protection_mask_matches_cpu() {
 /// Spot groups of every kind, some overlapping, some failing depth, one
 /// between items and the rest after them, draw the same on the GPU as on the
 /// CPU, exactly.
+/// How many pixels of `r`'s drawing of `s` differ from the CPU reference,
+/// for a 64 × 32 view whose top-left world pixel is `origin`.
+fn differing_in_view(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    s: &Scene,
+    origin: (i32, i32),
+) -> usize {
+    let mut r = MapRenderer::new(device, queue, s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let size = (64, 32);
+    let view = View {
+        origin,
+        size,
+        reference: DEPTH_REFERENCE,
+    };
+    let filter = Filter::default();
+    let q = ComposeQuirks::default();
+    let cpu = s.compose(&view, &filter, &q).to_rgba();
+    let (color, depth) = targets(device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    r.render(
+        device,
+        queue,
+        &mut encoder,
+        &color,
+        &depth.create_view(&Default::default()),
+        s,
+        &view,
+        &filter,
+        &q,
+    );
+    queue.submit([encoder.finish()]);
+    let gpu = read_texture(device, queue, &color, size.0, size.1);
+    cpu.chunks(4)
+        .zip(gpu.chunks(4))
+        .filter(|(a, b)| a[..3] != b[..3])
+        .count()
+}
+
+/// The three palette rows of [`scene`] and nothing else.
+fn rows_only() -> Scene {
+    let mut s = Scene::default();
+    for r in 0..3u16 {
+        s.add_row(std::array::from_fn(|i| {
+            (i as u16).wrapping_mul(97).wrapping_add(r * 1000 + 1)
+        }));
+    }
+    s
+}
+
+/// spec: S-0102 F1 (d = (C − w) mod 65536 for every world row), F2 (d is reduced before β is
+/// added), F3 (tile depth (e + d(t + 30)) mod 65536): far from the depth reference's rows the
+/// GPU path wraps the depth as the CPU reference does
+#[test]
+fn gpu_depth_wraps_as_the_cpu_does() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    // World rows near 40000: d = (32768 − w) mod 65536 is near 58304,
+    // while C − w is negative.
+    let top = 40000;
+    let mut s = rows_only();
+    let body = s.add_image(image(40, 20, 7));
+    let drawing = |test, bias, row, y| Item {
+        image: body,
+        x: 4,
+        y,
+        test,
+        depth: ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias,
+            companion: None,
+        },
+        paint: Paint::Row(row),
+        group: Group::Buildings,
+        provisional: false,
+        object: None,
+        stack: None,
+    };
+    s.items.push(drawing(DepthTest::Writer, 0, 1, top + 4));
+    // A nearer reader over the writer: drawn where its depth is less.
+    s.items.push(drawing(DepthTest::Reader, -5, 2, top + 4));
+    // A writer near world row 0, then a tile whose e + d(t + 30) passes
+    // 65535 over it: reduced, the tile is nearer and drawn.
+    s.items.push(drawing(DepthTest::Writer, 0, 1, 6));
+    let td = s.add_image(IndexedImage::new(20, 10, vec![200; 200]).unwrap());
+    let tile = s.add_image(image(20, 10, 3));
+    s.items.push(Item {
+        image: tile,
+        x: 30,
+        y: 10,
+        test: DepthTest::Tile,
+        depth: ItemDepth::Tile {
+            depth: Some(td),
+            // d(t + 30) = 65435, so e + d(t + 30) = 65635.
+            reference_row: DEPTH_REFERENCE - 65435 - 30,
+        },
+        paint: Paint::Row(0),
+        group: Group::Tiles,
+        provisional: false,
+        object: None,
+        stack: None,
+    });
+    assert_eq!(differing_in_view(&device, &queue, &s, (0, top)), 0);
+    assert_eq!(differing_in_view(&device, &queue, &s, (0, 0)), 0);
+}
+
+/// A drawing whose first palette row is missing is not drawn
+/// (`compose::Frame::draw`), on the GPU path as on the CPU reference
+#[test]
+fn gpu_skips_a_drawing_without_its_palette_row() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = rows_only();
+    let body = s.add_image(image(30, 20, 11));
+    s.items.push(flat_item(body, 2, 2));
+    s.items.push(Item {
+        paint: Paint::Row(40),
+        ..flat_item(body, 10, 6)
+    });
+    assert_eq!(differing_in_view(&device, &queue, &s, (0, 0)), 0);
+}
+
+/// design: render (#151): a magnetic wave pixel whose source lies beyond
+/// the view reads the nearest view pixel, on the GPU path as on the CPU
+/// reference
+#[test]
+fn gpu_wave_sources_beyond_the_view_match_cpu() {
+    use glasnost_render::spots::{Spot, SpotGroup, SpotKind};
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = rows_only();
+    let ground = s.add_image(image(64, 32, 5));
+    s.items.push(flat_item(ground, 0, 0));
+    let mut spots = Vec::new();
+    for y in 3..29 {
+        for (x, shift) in [(60, (20, 0)), (3, (-30, 0)), (20, (0, 60)), (40, (0, -60))] {
+            spots.push(Spot {
+                x,
+                y,
+                bias: -100,
+                kind: SpotKind::Wave { shift, k: 126 },
+            });
+        }
+    }
+    s.spots.push(SpotGroup {
+        at: usize::MAX,
+        group: Group::Effects,
+        provisional: false,
+        spots,
+    });
+    assert_eq!(differing_in_view(&device, &queue, &s, (0, 0)), 0);
+}
+
 #[test]
 fn gpu_spots_match_cpu() {
     use glasnost_render::spots::{Spot, SpotGroup, SpotKind, easing};

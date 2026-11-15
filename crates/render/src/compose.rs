@@ -1495,4 +1495,98 @@ mod tests {
         assert_eq!(g.depth, h.depth);
         assert_eq!(h.color[0], g.color[0] | k);
     }
+
+    /// spec: S-0102 F3 (depth = (e + d(t + 30)) mod 65536, then drawn and stored iff depth ≤
+    /// stored depth): a tile whose e + d(t + 30) passes 65535 compares its reduced depth
+    #[test]
+    fn f3_tile_depth_is_reduced_before_the_test() {
+        let q = ComposeQuirks::default();
+        let mut f = Frame::new(1, 1, 0, DEPTH_REFERENCE);
+        let a = img(1, 1, 1);
+        let td = img(1, 1, 10);
+        // d(t + 30) = 65535 at t + 30 = 32768 − 65535.
+        let reference_row = DEPTH_REFERENCE - 65535 - TILE_DEPTH_SHIFT;
+        assert_eq!(f.row_depth(reference_row + TILE_DEPTH_SHIFT), 65535);
+        let tile = Drawing {
+            image: &a,
+            x: 0,
+            y: 0,
+            test: DepthTest::Tile,
+            depth: DepthSource::Tile {
+                tile_depth: Some(&td),
+                reference_row,
+            },
+            paint: Paint::Row(2),
+        };
+        f.depth[0] = 100;
+        assert_eq!(f.draw(&tile, &rows(), &q), 1);
+        // (10 + 65535) mod 65536 = 9 ≤ 100.
+        assert_eq!((f.color[0], f.depth[0]), (0x001F, 9));
+    }
+
+    /// spec: S-0104 claim 15 (the pixel takes the row its light-alpha value gives), S-0102 F2
+    /// (a writer stores the depth of a pixel it draws): a pixel whose shade row is missing is
+    /// not drawn, so it stores no depth and is not counted as painted
+    #[test]
+    fn a_missing_shade_row_paints_nothing_and_stores_no_depth() {
+        let q = ComposeQuirks::default();
+        let a = img(1, 1, 1);
+        // The table's first row exists; the row of light-alpha 127 (its
+        // last, 199) does not.
+        let shade = Shade {
+            base: 0,
+            rows: 200,
+            rho: 254,
+            mask: 0,
+        };
+        assert_eq!(shade.row(127), 199);
+        for paint in [
+            Paint::Lit(shade),
+            Paint::LitDiamond(shade),
+            Paint::Translucent(shade, Translucency::Half),
+        ] {
+            let mut f = Frame::new(1, 1, 0, DEPTH_REFERENCE);
+            f.color[0] = 0x1234;
+            let d = Drawing {
+                image: &a,
+                x: 0,
+                y: 0,
+                test: DepthTest::Writer,
+                depth: profile(Profile::Flat, 0),
+                paint,
+            };
+            assert_eq!(f.draw(&d, &rows(), &q), 0, "{paint:?}");
+            assert_eq!((f.color[0], f.depth[0]), (0x1234, DEPTH_CLEAR), "{paint:?}");
+        }
+    }
+
+    /// spec: S-0616 claim 28 (a pixel particle is not drawn where light-alpha is 0): such a
+    /// pixel is not counted as painted
+    #[test]
+    fn a_pixel_particle_in_full_shroud_paints_nothing() {
+        let q = ComposeQuirks::default();
+        let a = img(1, 1, 1);
+        let mut f = Frame::new(1, 1, 0, DEPTH_REFERENCE);
+        f.set_light_alpha(vec![0]);
+        let d = Drawing {
+            image: &a,
+            x: 0,
+            y: 0,
+            test: DepthTest::Reader,
+            depth: profile(Profile::Flat, -50),
+            paint: Paint::Pixel(Rgb8 { r: 9, g: 9, b: 9 }),
+        };
+        assert_eq!(f.draw(&d, &rows(), &q), 0);
+        assert_eq!(f.color[0], 0);
+    }
+
+    /// design: render (#151): a light-alpha buffer of another size than the
+    /// frame is a caller's error, caught in debug builds
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "light-alpha")]
+    fn a_light_alpha_buffer_of_another_size_is_an_error() {
+        let mut f = Frame::new(2, 2, 0, DEPTH_REFERENCE);
+        f.set_light_alpha(vec![127; 3]);
+    }
 }
