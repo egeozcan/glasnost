@@ -69,7 +69,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0512](superweapons/S-0512-superweapon-charge.md) | "Superweapons: charge and readiness" | superweapons | 21 | approved | — |
 | [S-0515](structures/S-0515-tech-buildings.md) | Tech buildings (manned state, acquisition bonus, periodic income, ownership changes) | structures | 5 | approved | — |
 | [S-0525](combat/S-0525-radiation-fields.md) | Radiation fields | combat | 4 | approved | — |
-| [S-0520](economy/S-0520-crates.md) | Crates (placement, replacement, pickup and power-up effects) | economy | 12 | approved | — |
+| [S-0520](economy/S-0520-crates.md) | Crates (placement, replacement, pickup and power-up effects) | economy | 16 | approved | — |
 | [S-0609](combat/S-0609-gattling-spin-up.md) | Gattling spin-up | combat | 7 | approved | — |
 | [S-0612](superweapons/S-0612-psychic-dominator.md) | Psychic Dominator superweapon | superweapons | 4 | approved | — |
 | [S-0614](combat/S-0614-parasites.md) | Parasites | combat | 32 | approved | — |
@@ -134,7 +134,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0306](combat/S-0306-projectiles.md) | Projectiles (launch, flight, homing, scatter, detonation) | combat | 93 | approved | — |
 | [S-0514](combat/S-0514-chrono-weapons.md) | Chrono weapons (temporal erasure) | combat | 17 | approved | — |
 | [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers, depth compositing, sprite placement and shadow pixels | rendering | 47 | approved | — |
-| [S-0506](combat/S-0506-missiles.md) | Missiles (spawned missiles, launch cycle and rocket flight) | combat | 43 | approved | — |
+| [S-0506](combat/S-0506-missiles.md) | Missiles (spawned missiles, launch cycle and rocket flight) | combat | 45 | approved | — |
 | [S-0316](combat/S-0316-electric-bolt-shots.md) | Electric-bolt shots (the shot, its sparks, and how the bolt is drawn) | combat | 35 | approved | — |
 | [S-0703](ui/S-0703-music-playback.md) | Music playback (track eligibility, next-track order, shuffle and repeat) | ui | 58 | approved | — |
 | [S-0318](combat/S-0318-shrapnel-fragments.md) | Shrapnel fragments (when a detonation bursts into further shots, how many, and where they go) | combat | 29 | approved | — |
