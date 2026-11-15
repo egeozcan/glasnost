@@ -1669,6 +1669,9 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
         let cc = Pos::centre(cell, pr.pos.z);
         // spec: S-0306 claim 8 (revision 45: a projectile a burst releases is raised to 1 lepton above the terrain of its own x and y when not above it)
         let at = start_point(w, cc);
+        let stored = Pos::new(cc.x, cc.y, w.surface_at(cc.x, cc.y));
+        // spec: S-0306 T1 (Ω at placement is the full spatial distance from the placed position to K, for every placed projectile; claim 21: the children are placed as claim 8 gives)
+        let omega = d3(w, at, stored);
         let id = w.new_id();
         let child = Projectile {
             id,
@@ -1680,12 +1683,13 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             pos: at,
             vel: [F64::ZERO, F64::ZERO, f(-i64::from(sw / 10), mode)],
             target: Some(Target::Cell(cell)),
-            stored: Pos::new(cc.x, cc.y, w.surface_at(cc.x, cc.y)),
+            stored,
             placed_at: at,
+            // spec: S-0306 claims 9 and 21 (whether a child takes its type's arm field is not stated, Q-3130; interim: every child is armed at once)
             arm: 0,
             placed: w.tick,
             damage: rules.combat.weapon(aw).damage,
-            omega: 0,
+            omega,
             top_speed: sw,
             turns: 0,
             unlocked: 0,
