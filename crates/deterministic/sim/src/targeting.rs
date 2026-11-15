@@ -1934,10 +1934,17 @@ fn cell_action(
             if dipd && g == Action::Move {
                 return Action::NoMove;
             }
-            // spec: S-0214 table IC row IC7
+            // spec: S-0214 table IC row IC7 (does not fire while deployed, or the cell centre out of range of its first weapon, #354)
             if dipd
                 && g == Action::Attack
-                && !uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false))
+                && (!uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false))
+                    || !range::in_range(
+                        w,
+                        actor,
+                        first_weapon(w, actor),
+                        Some(Target::Cell(c)),
+                        None,
+                    ))
             {
                 return Action::NoMove;
             }
