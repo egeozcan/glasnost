@@ -516,8 +516,8 @@ fn replace(w: &mut World, b: &StartingBuilding) {
             }
         }
     } else {
-        // spec: S-0524 claim 9 (a blocking building or other placement failure leaves no replacement)
-        w.objects.remove(&id);
+        // spec: S-0524 claim 9 (a blocking building or other placement failure leaves no replacement) and S-0611 claim 14 (none of its creation set: the newest creation, the cell test creates nothing)
+        crate::objects::discard_unplaced(w, id);
         // spec: S-0524 claim 13 (previously lifted occupants are offered their original positions, facing 0; a failed return placement removes that occupant: quirks.restoration_failed_return_removes_unit)
         let mut taken: BTreeSet<CellXY> = BTreeSet::new();
         for d in lifted.iter().rev() {

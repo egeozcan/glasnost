@@ -1030,8 +1030,8 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             }
             let id = create(w, kind, ti, Some(owner));
             if w.cells.idx(p.cell).is_none() {
-                // spec: S-0009 claim 38 (a non-legal cell: the creation draw is taken, the object dropped)
-                w.objects.remove(&id);
+                // spec: S-0009 claim 38 (a non-legal cell: the creation draw is taken, the object dropped) and S-0611 claim 14 (with its creation set: the newest creation, never placed)
+                discard_unplaced(w, id);
                 w.note("S-0009 claim 38: an object entry on a non-legal cell was dropped after its creation draw (a departure)");
                 if kind == Kind::Vehicle {
                     follow.push(FollowEntry {
@@ -1048,7 +1048,8 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                 {
                     // spec: S-0112 claim 7 (a wall building of the map's building list is placed as a wall built in play: stage 0, owned by the building's owner; c and its four edge neighbours recomputed); S-0406 claim 10 (no building remains)
                     // spec: S-0210 claim 14 (a) (the building's owner is only the initial owner: the nearest-building rule replaces it before play starts, even with no owner as the result; the converted wall building cannot itself qualify; Q-0684 answered)
-                    w.objects.remove(&id);
+                    // spec: S-0611 claim 14 (the building is the newest creation, never placed: its creation set goes with it)
+                    discard_unplaced(w, id);
                     // As for a wall placed in play, an overlay already in the cell stays (S-0406 claim 10's interim rule).
                     if w.cells
                         .cell(p.cell)

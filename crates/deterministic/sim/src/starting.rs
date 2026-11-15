@@ -282,8 +282,8 @@ pub fn give(w: &mut World, bases: &[Option<CellXY>], setup: &GameSetup) {
                 search(w, b, BASE_RADIUS, false)
             };
             let Some(c) = at else {
-                // spec: S-0009 claim 45 (early stop: the base unit cannot be placed; it is removed again)
-                w.objects.remove(&id);
+                // spec: S-0009 claim 45 (early stop: the base unit cannot be placed; it is removed again) and S-0611 claim 14 (with its creation set: the newest creation, the search creates nothing)
+                objects::discard_unplaced(w, id);
                 return;
             };
             put(w, id, c, crate::cells::position::CENTRE);
@@ -342,8 +342,8 @@ pub fn give(w: &mut World, bases: &[Option<CellXY>], setup: &GameSetup) {
                     left = next;
                 }
                 None => {
-                    // spec: S-0009 claim 45 (a failed placement: the unit is removed, its creation draw stays taken)
-                    w.objects.remove(&id);
+                    // spec: S-0009 claim 45 (a failed placement: the unit is removed, its creation draw stays taken) and S-0611 claim 14 (with its creation set: the newest creation, the search creates nothing)
+                    objects::discard_unplaced(w, id);
                     failures += 1;
                 }
             }
