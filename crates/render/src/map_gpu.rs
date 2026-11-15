@@ -50,7 +50,9 @@ struct ViewUniform {
     size: [i32; 2],
     reference: i32,
     rows_per_column: i32,
-    pad: [i32; 2],
+    /// The number of palette rows the scene has (#151).
+    rows: i32,
+    pad: i32,
 }
 
 #[repr(C)]
@@ -1088,7 +1090,9 @@ impl MapRenderer {
             size: [view.size.0 as i32, view.size.1 as i32],
             reference: view.reference,
             rows_per_column: self.rows_per_column as i32,
-            pad: [0; 2],
+            // design: render (#151): a pixel whose shade row is past the scene's rows is not drawn, as on the CPU (compose::Frame::paint)
+            rows: i32::try_from(scene.rows.len()).unwrap_or(i32::MAX),
+            pad: 0,
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&uniform));
         let (ox, oy) = view.origin;
@@ -1147,6 +1151,12 @@ impl MapRenderer {
                 continue;
             }
             let mut companion_rect = [0; 4];
+            if let ItemDepth::Tile { depth: Some(d), .. } = item.depth
+                && let Some(di) = scene.images.get(d as usize)
+            {
+                // design: render (#151): a tile's depth image size in `companion` (z, w); past it e = 0, as the CPU reads (compose::Frame::draw)
+                companion_rect = [0, 0, di.width() as i32, di.height() as i32];
+            }
             let (role, flags, bias, reference_row, depth_slot) = match item.depth {
                 ItemDepth::Tile {
                     depth,

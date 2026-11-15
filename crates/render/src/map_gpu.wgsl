@@ -11,7 +11,8 @@ struct View {
     reference: i32,
     // Number of palette rows per column of the rows texture.
     rows_per_column: i32,
-    pad0: i32,
+    // Number of palette rows the scene has (#151).
+    rows: i32,
     pad1: i32,
 };
 
@@ -41,7 +42,8 @@ struct Instance {
     // (S-0102 claim 34, F9); z the shade table's row count N for a drawing
     // that reads the light-alpha values, else 0; w its rho.
     @location(3) paint: vec4<u32>,
-    // The companion depth image's world x, y, width and height.
+    // The companion depth image's world x, y, width and height; for a tile
+    // with depth data, its depth image's width and height in z and w.
     @location(4) companion: vec4<i32>,
 };
 
@@ -157,7 +159,8 @@ fn fs_main(in: Varyings) -> Fragment {
         // Tile (S-0102 F3): (e + d(t + 30)) mod 65536, before the test.
         let t = in.place.w - view.origin.y;
         var e = 0;
-        if in.depth.z != 0xFFFFFFFFu {
+        // design: render (#151): past a depth image smaller than its tile, e = 0, as the CPU reads
+        if in.depth.z != 0xFFFFFFFFu && local.x < in.companion.z && local.y < in.companion.w {
             e = i32(textureLoad(atlas, vec2<i32>(in.depth.xy) + local, i32(in.depth.z), 0).r);
         }
         depth = wrap_depth(e + row_depth(t + 30));
@@ -204,6 +207,10 @@ fn fs_main(in: Varyings) -> Fragment {
         let a = i32(textureLoad(light_alpha, px, 0).r);
         let span = i32(in.paint.z) - 1;
         row = row + min(span, (a * i32(in.paint.w) * span) / 32258);
+    }
+    // design: render (#151): a pixel whose row is past the scene's rows is not drawn and stores no depth, as on the CPU
+    if row >= view.rows {
+        discard;
     }
     let column = row / view.rows_per_column;
     let y = row - column * view.rows_per_column;
