@@ -2176,6 +2176,57 @@ fn an_area_search_skips_a_bridge_cell_by_its_deck_read() {
     assert_eq!(found, None, "the bridge cell is skipped by its deck read");
 }
 
+// spec: S-0309 claim 11 (revision 144, Q-3109 answered: in an area search the skip of the visited cell is the only reach-region test; table C's row zone does not apply to the object a cell offers, so an object on the ground under a bridge cell whose deck holds no object is not rejected when the visited cell's deck read lies in the searcher's region and the ground does not) and table C row zone
+#[test]
+fn issue_245_an_area_search_applies_no_zone_row_to_an_object_under_a_deck() {
+    use glasnost_sim::combat::acquire::{self, SearchContext, SearchKind};
+    let z = MovementZone::Normal;
+    // Open ground at x = 2 to 4, rows −2 to 7, walled in by rock: a reach
+    // region F of its own, not the banks'. Rows −2 to 1 lie under the deck.
+    let island: Vec<CellXY> = (2..=4)
+        .flat_map(|x| (-2..=7).map(move |y| cell(x, y)))
+        .collect();
+    let mut s = scene();
+    let c = glasnost_sim::testkit::combat_ruleset();
+    s.ruleset.sim.weapons = c.sim.weapons;
+    s.ruleset.sim.projectiles = c.sim.projectiles;
+    s.ruleset.sim.warheads = c.sim.warheads;
+    s.ruleset.sim.vehicles.get_mut(CAR).unwrap().primary = Some("Rifle".into());
+    s.vehicle("TESTVAN", unit_type(WHEEL, 40, 6));
+    // The armed car of house 0 on bank A at (0, 2), off the bridge cells;
+    // the unarmed van of house 1 on the ground under the empty deck at
+    // (3, 1), 3 cells away.
+    s.place_unit(0, CAR, cell(0, 2), 64);
+    s.place_unit(1, "TESTVAN", cell(3, 1), 64);
+    let (mut w, _) = river_in_with(s, &[], &island);
+    let at = |w: &World, c: CellXY| {
+        vehicles(w)
+            .into_iter()
+            .find(|&v| w.obj(v).unwrap().pos.cell() == c)
+            .unwrap()
+    };
+    let (car, van) = (at(&w, cell(0, 2)), at(&w, cell(3, 1)));
+    let bank = regions::reach_read(&w, cell(0, 2), z, true);
+    assert!(matches!(bank, Reach::Region(_)), "{bank:?}");
+    assert_eq!(
+        regions::reach_read(&w, cell(3, 1), z, true),
+        bank,
+        "the visited cell's deck read lies in the car's region: not skipped"
+    );
+    assert_ne!(
+        regions::reach_in(&w, cell(3, 1), z),
+        bank,
+        "the van's own cell and layer, the ground, lie in F"
+    );
+    assert_eq!(w.obj(van).unwrap().layer, glasnost_sim::world::Layer::Ground);
+    let found = acquire::search(&mut w, car, SearchKind::Area, SearchContext::Area);
+    assert_eq!(
+        found,
+        Some(van),
+        "no zone row in an area search: the van under the deck is a candidate"
+    );
+}
+
 // spec: S-0215 claim 37 (a1) (revision 91, Q-2171 question 4: the per-tick test is S-0212 claim 6's comparison; the actor's cell read for its deck when it is on a bridge deck, the target's cell whenever that cell carries a high bridge, whichever layer the target is on; B32 h runs 1 to 4)
 #[test]
 fn the_per_tick_reach_test_reads_decks() {
