@@ -936,6 +936,48 @@ fn a_unit_made_in_play_gets_one_selection_mark() {
     assert_eq!(marks, 0, "no fallback corner marks");
 }
 
+/// #81: a game put in place of the session's (a rejoin's game as a live peer sent it) times
+/// each vehicle's barrel turn from the placement tick the game keeps, though the drawing never
+/// saw the vehicle placed. spec: S-0105 claim 6 (When the turn starts; First appearance: a
+/// drawn frame shows ε = n − t₀). design: render (#81) (joining a game in progress is outside
+/// the spec; the joined game's placement ticks are read as a loaded game's are)
+#[test]
+fn a_joined_games_vehicle_turns_from_its_placement() {
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let mcv = own(&c, Kind::Vehicle)[0];
+    let s = session_mut(&mut c);
+    let me = s.play.me();
+    let at = s.play.world().obj(mcv).unwrap().pos.cell();
+    // The peer's game runs 10 ticks, places a vehicle and runs that tick;
+    // the drawing here sees none of it.
+    for _ in 0..10 {
+        s.play.game.step();
+    }
+    let made = glasnost_sim::testkit::spawn(
+        &mut s.play.game.world,
+        Kind::Vehicle,
+        "GUNR",
+        me.0,
+        CellXY::new(at.x + 2, at.y + 2),
+        0,
+    );
+    s.play.game.step();
+    let bytes = s.play.game.save();
+    let w = &s.play.game.world;
+    let catalogue = w.catalogue.clone().expect("a catalogue");
+    let game = glasnost_ai::game::Game::load(&bytes, w.rules_arc(), catalogue).expect("loads");
+    s.replace_game(game);
+    let (turned, on_map) = s
+        .with_live(|live, _, _| {
+            let on_map = live.world.obj(made).is_some_and(|o| o.on_map);
+            (live.ticks_since_placed(made), on_map)
+        })
+        .expect("a live drawing");
+    assert!(on_map, "the vehicle is on the map");
+    assert_eq!(turned, 1, "first drawn at ε = 1 after the join");
+}
+
 /// #78: a view that moves between ticks (a radar click, a jump to a group, a scroll) culls the
 /// status extras against itself before the next tick, not against the view the last tick drew.
 /// spec: S-0111 claim 1 (status extras are drawn only while the status anchor lies within the

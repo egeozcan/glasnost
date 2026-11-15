@@ -50,7 +50,9 @@ struct ViewUniform {
     size: [i32; 2],
     reference: i32,
     rows_per_column: i32,
-    pad: [i32; 2],
+    /// The number of palette rows the scene has (#151).
+    rows: i32,
+    pad: i32,
 }
 
 #[repr(C)]
@@ -623,7 +625,7 @@ impl MapRenderer {
                 },
             ],
         });
-        let alpha = alpha_texture(device, queue, (1, 1));
+        let alpha = alpha_texture(device, queue, (1, 1), true);
         let backdrop = backdrop_texture(device, (1, 1));
         let bind_group = bind_group(
             device,
@@ -1089,13 +1091,48 @@ impl MapRenderer {
         q: &ComposeQuirks,
         alpha: Option<(&[u8], Option<u64>)>,
     ) -> usize {
+        let target_view = target.create_view(&Default::default());
+        self.render_lit_into(
+            device,
+            queue,
+            encoder,
+            (target, &target_view),
+            depth,
+            scene,
+            view,
+            filter,
+            q,
+            alpha,
+        )
+    }
+
+    /// [`Self::render_lit_tagged`] into `target` through `target.1`, a
+    /// default view of `target.0` that the caller keeps from frame to
+    /// frame (#130).
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_lit_into(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: (&wgpu::Texture, &wgpu::TextureView),
+        depth: &wgpu::TextureView,
+        scene: &Scene,
+        view: &View,
+        filter: &Filter,
+        q: &ComposeQuirks,
+        alpha: Option<(&[u8], Option<u64>)>,
+    ) -> usize {
+        let (target, target_view) = target;
         self.set_alpha(device, queue, view.size, alpha);
         let uniform = ViewUniform {
             origin: [view.origin.0, view.origin.1],
             size: [view.size.0 as i32, view.size.1 as i32],
             reference: view.reference,
             rows_per_column: self.rows_per_column as i32,
-            pad: [0; 2],
+            // design: render (#151): a pixel whose shade row is past the scene's rows is not drawn, as on the CPU (compose::Frame::paint)
+            rows: i32::try_from(scene.rows.len()).unwrap_or(i32::MAX),
+            pad: 0,
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&uniform));
         let (ox, oy) = view.origin;
@@ -1154,6 +1191,12 @@ impl MapRenderer {
                 continue;
             }
             let mut companion_rect = [0; 4];
+            if let ItemDepth::Tile { depth: Some(d), .. } = item.depth
+                && let Some(di) = scene.images.get(d as usize)
+            {
+                // design: render (#151): a tile's depth image size in `companion` (z, w); past it e = 0, as the CPU reads (compose::Frame::draw)
+                companion_rect = [0, 0, di.width() as i32, di.height() as i32];
+            }
             let (role, flags, bias, reference_row, depth_slot) = match item.depth {
                 ItemDepth::Tile {
                     depth,
@@ -1306,13 +1349,12 @@ impl MapRenderer {
             self.stats.upload_bytes += std::mem::size_of_val(list.as_slice()) as u64;
         }
         self.stats.instances += list.len();
-        let target_view = target.create_view(&Default::default());
         let begin = |encoder: &mut wgpu::CommandEncoder, first: bool| {
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("map"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &target_view,
+                        view: target_view,
                         depth_slice: None,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -1544,7 +1586,15 @@ impl MapRenderer {
         let tag = alpha.and_then(|(_, t)| t);
         let alpha = alpha.map(|(a, _)| a);
         if self.alpha.1 != size {
-            let t = alpha_texture(device, queue, size);
+            // design: render (#152): when values follow, the texture is made
+            // without the 127 fill and the values are its one write
+            let filled = alpha.is_none();
+            let t = alpha_texture(device, queue, size, filled);
+            if filled {
+                // design: render (#152): the texture's first fill is an upload too
+                self.stats.uploads += 1;
+                self.stats.upload_bytes += n as u64;
+            }
             let backdrop = backdrop_texture(device, size);
             self.bind_group = bind_group(
                 device,
@@ -1557,7 +1607,10 @@ impl MapRenderer {
             );
             self.alpha = (t, size);
             self.backdrop = backdrop;
-            self.alpha_default = true;
+            // Unfilled, the texture holds neither 127 nor any held values:
+            // the write below gives it `alpha`.
+            self.alpha_default = filled;
+            self.alpha_held.clear();
             self.alpha_tag = None;
         }
         let bytes = match alpha {
@@ -1608,24 +1661,35 @@ impl MapRenderer {
     }
 }
 
-/// A light-alpha texture of `size`, 127 everywhere (S-0110 claim 5).
-fn alpha_texture(device: &wgpu::Device, queue: &wgpu::Queue, size: (u32, u32)) -> wgpu::Texture {
+/// A light-alpha texture of `size`: 127 everywhere (S-0110 claim 5) when
+/// `filled`, else left for the caller to write before it is drawn with
+/// (#152).
+fn alpha_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    size: (u32, u32),
+    filled: bool,
+) -> wgpu::Texture {
+    let desc = wgpu::TextureDescriptor {
+        label: Some("map light-alpha"),
+        size: wgpu::Extent3d {
+            width: size.0,
+            height: size.1,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R8Uint,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    };
+    if !filled {
+        return device.create_texture(&desc);
+    }
     device.create_texture_with_data(
         queue,
-        &wgpu::TextureDescriptor {
-            label: Some("map light-alpha"),
-            size: wgpu::Extent3d {
-                width: size.0,
-                height: size.1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Uint,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        },
+        &desc,
         wgpu::util::TextureDataOrder::LayerMajor,
         &vec![crate::light::DEFAULT_LIGHT_ALPHA as u8; size.0 as usize * size.1 as usize],
     )

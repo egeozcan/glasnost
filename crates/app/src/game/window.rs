@@ -736,7 +736,7 @@ struct MapGpu {
     serial: u64,
     renderer: MapRenderer,
     size: (u32, u32),
-    targets: Option<(wgpu::Texture, wgpu::Texture)>,
+    targets: Option<MapTargets>,
     /// The last frame's light alpha with the covers and view it came from:
     /// the values depend on nothing else in a game, so a frame with the
     /// same covers and view keeps them (M8 step C4).
@@ -744,6 +744,17 @@ struct MapGpu {
     /// The tags given to the light alpha so far: each new [`LightKept`]
     /// takes the next (design: render (#119)).
     light_tags: u64,
+}
+
+/// The battlefield's colour target and depth buffer with their views,
+/// made together for one view size and kept until the size changes
+/// (design: render (#130)).
+struct MapTargets {
+    color: wgpu::Texture,
+    color_view: wgpu::TextureView,
+    /// Kept with its view, which it backs.
+    _depth: wgpu::Texture,
+    depth_view: wgpu::TextureView,
 }
 
 /// The game, if any, whose battlefield is composed on the CPU because its
@@ -1053,18 +1064,22 @@ impl GpuDraw {
         }
         let m = self.map.as_mut().ok_or("no map renderer")?;
         let v = s.view();
-        if m.size != v.size || m.targets.is_none() {
+        if remake_targets(m.targets.as_ref().map(|_| m.size), v.size) {
+            // design: render (#130): the targets' views are made with them, not every frame
             let (color, depth) = targets(device, v.size, COLOR_FORMAT);
-            self.batch.set_image_view(
-                device,
-                MAP_IMAGE,
-                &color.create_view(&Default::default()),
-                v.size,
-            );
-            m.targets = Some((color, depth));
+            let color_view = color.create_view(&Default::default());
+            let depth_view = depth.create_view(&Default::default());
+            self.batch
+                .set_image_view(device, MAP_IMAGE, &color_view, v.size);
+            m.targets = Some(MapTargets {
+                color,
+                color_view,
+                _depth: depth,
+                depth_view,
+            });
             m.size = v.size;
         }
-        let (color, depth) = m.targets.as_ref().ok_or("no map targets")?;
+        let t = m.targets.as_ref().ok_or("no map targets")?;
         let clock = self.lap_clock;
         let lap = || clock.map_or(0.0, |c| c());
         let lit = lap();
@@ -1088,12 +1103,12 @@ impl GpuDraw {
         let alpha = m.light.as_ref().map(|l| (l.alpha.as_slice(), Some(l.tag)));
         let drawn = lap();
         self.laps.light = drawn - lit;
-        m.renderer.render_lit_tagged(
+        m.renderer.render_lit_into(
             device,
             queue,
             encoder,
-            color,
-            &depth.create_view(&Default::default()),
+            (&t.color, &t.color_view),
+            &t.depth_view,
             &s.scene,
             &v,
             s.filter(),
@@ -1301,7 +1316,26 @@ impl Gfx {
         timing: Option<u64>,
     ) -> Result<(FrameEnd, Drawn), String> {
         let mut end = FrameEnd::default();
-        let t0 = bench::now();
+        let clock = frame_clock(timing);
+        let now = || clock.map_or(0.0, |c| c());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("game frame"),
+            });
+        if let Some(t) = self.timer.as_mut().filter(|_| timing.is_some()) {
+            t.begin(&mut encoder);
+        }
+        // The picture is drawn in view pixels and shown at the display
+        // factor (`super::display`).
+        let factor = client.display().factor.max(1) as u32;
+        let view = (client.size.0.max(1) as u32, client.size.1.max(1) as u32);
+        self.draw
+            .set_screen(factor, (self.config.width, self.config.height));
+        self.draw
+            .prepare(&self.device, &self.queue, client, view, &mut encoder);
+        // design: render (#130): the surface texture is taken after the frame's CPU work, just before the final pass, so it is held as briefly as can be. A frame that gets none drops its encoder; its uploads are queued writes and go with the next submission, and the next frame records the battlefield again.
+        let t0 = now();
         let (frame, state) = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t) => (Some(t), SurfaceState::Success),
             wgpu::CurrentSurfaceTexture::Suboptimal(t) => (Some(t), SurfaceState::Suboptimal),
@@ -1330,24 +1364,8 @@ impl Gfx {
                 return Ok((end, Drawn::Again));
             }
         };
-        end.acquire = bench::now() - t0;
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("game frame"),
-            });
-        if let Some(t) = self.timer.as_mut().filter(|_| timing.is_some()) {
-            t.begin(&mut encoder);
-        }
-        // The picture is drawn in view pixels and shown at the display
-        // factor (`super::display`).
-        let factor = client.display().factor.max(1) as u32;
-        let view = (client.size.0.max(1) as u32, client.size.1.max(1) as u32);
-        self.draw
-            .set_screen(factor, (self.config.width, self.config.height));
-        self.draw
-            .prepare(&self.device, &self.queue, client, view, &mut encoder);
-        let t1 = bench::now();
+        let t1 = now();
+        end.acquire = t1 - t0;
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor {
             format: Some(self.view_format),
             ..Default::default()
@@ -1372,7 +1390,7 @@ impl Gfx {
             t.end(&mut encoder);
         }
         let commands = encoder.finish();
-        let t2 = bench::now();
+        let t2 = now();
         self.queue.submit([commands]);
         if let (Some(t), Some(n)) = (self.timer.as_mut(), timing) {
             t.submitted(n);
@@ -1387,7 +1405,7 @@ impl Gfx {
         }
         if timing.is_some() {
             end.encode = t2 - t1;
-            end.submit = bench::now() - t2;
+            end.submit = now() - t2;
             end.laps = self.draw.laps;
             end.stats = self.draw.take_stats();
             if let Some(t) = self.timer.as_mut() {
@@ -1541,6 +1559,20 @@ fn surface_step(s: SurfaceState) -> (SurfaceStep, bool) {
     }
 }
 
+/// Whether the battlefield's targets and their views are made again for a
+/// view of `size`, when they are kept for a view of `kept` (`None`: none
+/// are kept): only when there are none or the size changed (#130).
+fn remake_targets(kept: Option<(u32, u32)>, size: (u32, u32)) -> bool {
+    kept != Some(size)
+}
+
+/// The clock a frame of the window reads for its times, if any (#130):
+/// the benchmark's for a frame it times, none otherwise.
+fn frame_clock(timing: Option<u64>) -> Option<fn() -> f64> {
+    // design: render (#130): an untimed frame reads no clock
+    timing.map(|_| bench::now as fn() -> f64)
+}
+
 /// The surface size for a window of `inner` physical pixels on a device
 /// whose textures are at most `max` pixels on a side.
 fn surface_size(inner: (u32, u32), max: u32) -> (u32, u32) {
@@ -1599,6 +1631,29 @@ fn surface_formats(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #130. design: render (#130): a frame reads the clock only when the
+    /// benchmark times it.
+    #[test]
+    fn a_frame_reads_the_clock_only_when_timed() {
+        assert!(
+            frame_clock(None).is_none(),
+            "an untimed frame reads no clock"
+        );
+        assert!(frame_clock(Some(0)).is_some());
+        assert!(frame_clock(Some(7)).is_some());
+    }
+
+    /// #130. design: render (#130): the battlefield's targets and their
+    /// views are kept from frame to frame and made again only for a view of
+    /// another size (or when none are kept).
+    #[test]
+    fn a_resize_remakes_the_kept_targets_and_views() {
+        assert!(remake_targets(None, (640, 480)), "none kept: made");
+        assert!(!remake_targets(Some((640, 480)), (640, 480)), "kept");
+        assert!(remake_targets(Some((640, 480)), (800, 480)), "wider");
+        assert!(remake_targets(Some((640, 480)), (640, 360)), "lower");
+    }
 
     /// #101. design: render (#101): a failed GPU battlefield puts only its
     /// own game on the CPU; the next game tries the GPU again.

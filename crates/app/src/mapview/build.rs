@@ -4624,11 +4624,14 @@ impl<'a> Builder<'a> {
         Some(self.mobile(&m))
     }
 
-    /// The terrain surface height at a position, from the map's cells
-    /// (S-0106 claim 2, F1 with its default switch).
+    /// The terrain surface height at a position, from the cells after
+    /// loading when a game was set up, else the map's (S-0106 claim 2, F1
+    /// with its default switch).
     fn terrain_height(&self, x: i32, y: i32) -> i32 {
         let c = CellXY::new(x.div_euclid(256), y.div_euclid(256)); // spec: S-0204 claim 2 (the cell holding a position)
-        self.map.cells.get(c).map_or(0, |cell| {
+        // spec: S-0010 claims 6 and 12 (a cell's slope shape is the one its recalculation at map load gives: the grid the tiles are drawn from)
+        let grid = self.cells_loaded.unwrap_or(&self.map.cells);
+        grid.get(c).map_or(0, |cell| {
             glasnost_sim::surface::surface_height(
                 i32::from(cell.level),
                 cell.slope,
@@ -4645,10 +4648,10 @@ impl<'a> Builder<'a> {
     /// bridges, columns and tunnels need specs not written yet, so their
     /// factors are 0.
     fn unit_depth(&self, kind: Kind, idx: usize, c: CellXY, z: i32, deck: bool) -> i32 {
+        // spec: S-0010 claim 12 (the cells after map load, when a game was set up: the grid the tiles are drawn from)
+        let grid = self.cells_loaded.unwrap_or(&self.map.cells);
         let level = |dx: i32| {
-            self.map
-                .cells
-                .get(CellXY::new(c.x + dx, c.y + dx))
+            grid.get(CellXY::new(c.x + dx, c.y + dx))
                 .map(|cell| i32::from(cell.level))
         };
         let own = level(0).unwrap_or(0);
@@ -6920,7 +6923,7 @@ impl Painter {
     /// the game's lit buildings ([`Painter::set_building_lights`], S-0405
     /// claim 9), except that a pulse never puts one out or on (no pulse
     /// exists in the game yet) and a building's light is never scaled for
-    /// its damage (S-0302 claim 12's factor is open) (#152). The named palettes' tables take
+    /// its damage (S-0302 claim 12's factor is open, Q-3146) (#152). The named palettes' tables take
     /// the effect tint with the house-colour tables (S-0103 claim 17). The
     /// house tables are all built when the game starts (S-0104 Open questions),
     /// so claim 2's third column, the tint of a table built while an effect
