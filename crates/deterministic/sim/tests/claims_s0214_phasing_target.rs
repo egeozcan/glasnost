@@ -71,3 +71,47 @@ fn issue_358_a_phasing_in_transport_gives_no_transport_verdict() {
         click.orders
     );
 }
+
+// spec: S-0214 table I value e (defined only when the target is a building allied with the actor and not being erased; row e4: a hospital, no force-fire, the actor with all its hit points: no-enter) and Terms (being erased: a superweapon warp member in its leaving stage)
+#[test]
+fn issue_358_a_hospital_being_erased_gives_no_entry_verdict() {
+    let mut r = testkit::combat_ruleset();
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("CLINIC".into());
+    r.sim.buildings.insert(
+        "CLINIC".into(),
+        glasnost_rules::sim::BuildingType {
+            strength: Some(1000),
+            foundation: Some([1, 1]),
+            hospital: Some(true),
+            ..Default::default()
+        },
+    );
+    let mut w = testkit::game_with(&r, SIZE, 7);
+    let h = at(&mut w, Kind::Building, "CLINIC", 0, 0);
+    let p = at(&mut w, Kind::Infantry, "WALKER", 3, 0);
+    testkit::run(&mut w, 5);
+    assert_eq!(cursor(&w, &[p], h), Action::NoEnter, "control: row e4");
+    let pos = w.obj(h).unwrap().pos;
+    let now = w.tick;
+    w.obj_mut(h).unwrap().sw.warp = Some(glasnost_sim::superweapons::warp::Member {
+        stage: glasnost_sim::superweapons::warp::Stage::Leaving(now),
+        house: ALPHA,
+        landing: pos,
+        redirected: false,
+        fell_back: false,
+        refused: false,
+        entry_ok: false,
+    });
+    assert!(
+        glasnost_sim::superweapons::being_erased(&w, h),
+        "set-up: being erased"
+    );
+    assert_ne!(
+        cursor(&w, &[p], h),
+        Action::NoEnter,
+        "value e is undefined for a hospital being erased"
+    );
+}
