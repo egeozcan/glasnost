@@ -84,8 +84,9 @@ fn eligible(w: &World, master: ObjectId, b: ObjectId, reach: i32) -> bool {
     if t < o.combat.rearm_until {
         return false;
     }
-    // spec: S-0518 claim 2 (the delayed-fire countdown is 0: a pending beam keeps a building out, except one whose countdown was set to 0, quirks.prism_zero_delay_double_count)
-    if o.combat.support_beam.is_some() && (delay_field(w) > 0 || !q.prism_zero_delay_double_count) {
+    // spec: S-0518 claim 2 (the delayed-fire countdown is 0: a pending beam or shot keeps a building out, except one whose countdown was set to 0, quirks.prism_zero_delay_double_count)
+    let pending = o.combat.support_beam.is_some() || o.combat.delayed_shot.is_some();
+    if pending && (delay_field(w) > 0 || !q.prism_zero_delay_double_count) {
         return false;
     }
     // spec: S-0518 claim 2 (not being drained, S-0608) and (current behaviour not attack)
