@@ -167,7 +167,23 @@ fn s0213_table_t3() {
 // spec: S-0213 claim 6 (attack-move: an eligible actor gets move with the memory of the destination, or attack with the memory of the target)
 #[test]
 fn s0213_attack_move() {
-    let mut w = ready(1);
+    // Eligibility reads the object's first slot (S-0214 claim 5), so the
+    // cart's weapon must exist: the synthetic combat rules define it. Their
+    // crusher is armed, so it loses its weapon here to stay ineligible.
+    let mut r = testkit::combat_ruleset();
+    if let Some(v) = r.sim.vehicles.get_mut("CRUSHER") {
+        v.primary = None;
+    }
+    let mut w = new_game(
+        Arc::new(SimRules::new(&r, "synthetic-test")),
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(1),
+    )
+    .expect("synthetic scenario loads");
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
     let cart = of(&w, 0, Kind::Vehicle, 0)[0];
     let crusher = of(&w, 0, Kind::Vehicle, 1)[0];
     let enemy = of(&w, 1, Kind::Vehicle, 0)[0];
