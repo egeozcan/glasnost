@@ -3295,7 +3295,7 @@ mod land_cell_tests {
                         .filter(|o| o.owner == Some(HouseId(h as u8)) && o.on_map)
                         .filter(|o| w.rules().unit(o.kind, o.type_index).is_some())
                         .map(|o| o.id)
-                        .take(3)
+                        .take(4)
                         .collect();
                     for &f in &units {
                         let Some(o) = w.obj(f) else { continue };
