@@ -1,9 +1,9 @@
 ---
 id: Q-3146
 title: How a building's light source changes when a hit reports now yellow
-status: open
+status: answered
 related: [S-0302, S-0104, S-0405]
-answered-by: []
+answered-by: [S-0302]
 ---
 
 ## Need

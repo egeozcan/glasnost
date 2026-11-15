@@ -2,13 +2,13 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 43
+revision: 45
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-15
 measurements: []
-requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648, Q-2626]
+requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648, Q-2626, Q-3146]
 supersedes: []
 ---
 
@@ -785,14 +785,22 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     target whose type can disguise itself but does not keep its disguise permanently, the loss of
     its current disguise and a disguise-disruption countdown of 2*m*′ ticks, *m*′ the health it
     lost, after any hit that reports *unchanged*, *now yellow* or *now red* (S-0516 claims 33–34 own
-    disguise loss and re-disguise eligibility). It also owns one reaction of a building: on *now
-    yellow* the intensity of its light source is scaled by a fixed factor (D11, part c). Two more
-    are pointers only, owned elsewhere and not claims of this spec: the trigger events that a hit
+    disguise loss and re-disguise eligibility). Three more
+    are pointers only, owned elsewhere and not claims of this spec: the factor that a *now yellow*
+    hit on a building applies to its natural smoke's emission timer (S-0616 claim 1, natural-smoke
+    row), the trigger events that a hit
     sets off through the target's tag, whose list S-0011 leaves to a later revision, and the
     building's sound reactions, owned by S-0701 claims 20 and 37. Claim 37 specifies the any-owner
     building damage fallback on *now yellow* or *now red* and the death fallback when a lethal hit
     begins the destruction reaction, not at later removal. Quirk `quirks.yellow_state_at_half` (Edge
     cases).
+
+    **The building's light.** A hit that the building survives, whatever it reports, does not
+    itself change its light source (S-0104 claim 12: intensity, radius and tints) or the light of
+    the cells that light reaches. A change that follows from one of S-0405 claim 9's events, such
+    as a switch-off, is that claim's (a building short of power keeps its light there). So no
+    later event, such as a repair, a capture, a power shortage or a switch-off and on, finds a
+    changed value from the hit to keep or to bring back.
     - *Post-mortem when a reaction removes the target.* When one of those reactions takes the
       target out of play (a trigger that the hit sets off can destroy it, S-0011), the hit reports
       *post-mortem* instead of the result above. Only the source of the hit receives this result,
@@ -800,13 +808,22 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       other results. An engine need not represent this result (it may report the result above)
       until an effect of it is found; the claim records the original's value only.
     - Backing: `measurable` (scenario D11 for the thresholds, its parts a to c for the yellow
-      threshold, the red threshold and the precedence of red, and for the light source; part d
+      threshold, the red threshold and the precedence of red, and part c for the building's light
+      staying as it was, read at one lit cell within its radius once the hit's animations have
+      ended; part d
       for the imported precision and the 601 to 600 crossing; D23 for
       the loss of the disguise and, in part h with S-0516 scenario CS14 part c, the length of
       the disguise-disruption countdown); `unmeasured` (the post-mortem result after a reaction removes the target: the result that a hit reports then
       has no further effect that this spec or its owners could observe, so it stays a documented
-      behaviour in case an effect is found)
-    - Confidence: high (the thresholds); medium (the light source, the loss of the disguise and the countdown); low (post-mortem after a reaction)
+      behaviour in case an effect is found); `unmeasured` for the building's light for other
+      building types and for the light source's own intensity, radius and tints, which no run
+      reads, and for the absence of a changed value at a later repair, capture, power shortage or
+      switch-off and on, which no run combines with a hit
+    - Confidence: high (the thresholds; the light of a lit cell within the light's radius staying
+      as it was once the hit's animations have ended, for the test building type of D11 part c
+      with a positive or a negative light intensity); medium (the building's light for other
+      building types; the light source's own intensity, radius and tints; the absence of a
+      changed value at a later repair, capture, power shortage or switch-off and on; the loss of the disguise and the countdown); low (post-mortem after a reaction)
 
 13. **Damage effect and its draw.** After a hit that reports *now yellow* or *now red*, an object
     whose health ratio (S-0214, Terms) is at or below the game-wide yellow ratio (Import mapping; unlike the fixed half of claim 12, this is the imported ratio) and that has no damage
@@ -1284,7 +1301,6 @@ integer boundaries; D11 part d deliberately tests the non-exact decimal input.
 | Building fire bands | 1 to 5, 6 to 8, 9 | draw values | Claim 13: first, second, third damage-fire animation; other values none |
 | Building fire loop draw range | 1 … 3 | loops | Claim 13, for fires of the first and second kind |
 | Ore burst damage | 100 | health points | Claim 20: the detonation, with the demolition warhead, of an ore-spawning terrain object that is destroyed |
-| Building light-source factor on *now yellow* | not stated (Open questions) | factor | Claim 12; scenario D11 part c records it |
 
 ## State and ordering
 
@@ -1564,7 +1580,9 @@ parts use their stated replay checks and rejection thresholds instead.
 - **D11 (claims 12, 13: thresholds and damage effect).** All parts use a stock vehicle type whose
   type lists damage particle systems, at least one of them of smoke behaviour (strength set to 1000
   in the test map), hit by hits of exactly 100 (damage 100, versus 100 %) from 1000 down, except
-  part c and the second run of part b, which say their own strength. *Observable:* the tick at which a damage effect first appears, and the health then.
+  part c and the second run of part d, which use their own building type, and the second run of
+  part b, which says its own strength. *Observable:* the tick at which a damage effect first
+  appears, and the health then (part c gives its own).
   - (a) *Yellow threshold.* The test map sets the yellow ratio to 0.75 and the red ratio to 0.25.
     *Expected:* no effect appears at 800 or 700 (the bar becomes yellow at 750, but no hit crosses
     half the strength), the effect appears on the hit to 400 (now yellow: from 500 to 400), and
@@ -1581,24 +1599,46 @@ parts use their stated replay checks and rejection thresholds instead.
     does not cross it, and the next hit starts on it. *Falsified if* the first run shows the effect only at 400 or later (a red
     threshold fixed at half the strength would give that), or at
     800; or if the second run shows it at 1000 (non-strict comparison) or 900.
-  - (c) *Red takes precedence over yellow.* A test building type with a light source (S-0104), of
-    strength 1000, is hit once by a hit of 600 (1000 to 400, which crosses half the strength, so
-    it crosses the yellow threshold). The recorder reads the intensity of the building's light
-    source before and after. In run c1 the red ratio is 0.25 (the hit crosses only the yellow
-    threshold, *now yellow*); in run c2 it is 0.75 (the hit crosses both, *now red*). *Expected:*
-    in c1 the intensity changes by the fixed factor of claim 12 (the recorded ratio is the same
-    in repeated runs and differs from 1); in c2 it does not change. *Falsified if* the intensity
-    changes in c2 (yellow wins over red), or not in c1.
+  - (c) *Red takes precedence over yellow; the building's light.* A test building type of
+    strength 1000 has a light source (S-0104 claim 12) of intensity 0.5 and tints of 0.5 each,
+    written in every rules layer that holds the type's section (S-0104 claim 12 truncates an
+    omitted key on re-reading), and a natural particle system with the
+    values of S-0616 scenario P15's test rules file (emission interval 8, slow-down 0, spawn
+    cut-off 100). It lists no damage particle systems, and the hits' warhead sets off no building
+    fires (claim 13). The type produces and consumes no power. The game runs at high detail (detail level 2, S-0104),
+    since building lights contribute nothing at low and medium detail (S-0104 claim 11). The building is pre-placed for a neutral or computer house (S-0009 claim 27)
+    on flat ground at height 0. The map's normal lighting set has ambient 0.75, ground bias 0 and
+    tint 1.0 in each channel, with no global effect during the run, so that no reading reaches
+    a clamp of S-0104 claim 9. It is hit by a hit of 600 (1000 to 400, which crosses
+    half the strength, so it crosses the yellow threshold). In run c1 the red ratio is 0.25 (the
+    hit crosses only the yellow threshold, *now yellow*), and a second hit of 100 follows (400 to
+    300, above the red threshold of 250: *unchanged*); in run c2 it is 0.75 (the hit crosses both,
+    *now red*). Run c3 repeats c1 with the light intensity −0.5. *Observable:* the
+    natural smoke's emission ticks before and after the first hit; the ground light level and raw
+    cell tint (S-0104 claim 9) of a cell within the light's radius before the first hit and after
+    each hit, read once the hit's animations have ended. The emission parts count only if the
+    smoke emits before the hit. The light part counts only if the cell's level before the hit
+    differs from its level on the same map without the building; otherwise it is repeated with a
+    nearer cell. Neither condition sets aside a light reading that differs from the first.
+    *Expected:* in c1 and c3, emissions on multiples of 8
+    before the hit and on multiples of 12 after it (S-0616 claim 1, natural-smoke row); in c2,
+    on multiples of 8 throughout; in every run, each light reading equals the one before the
+    first hit. *Falsified if,* after the tick of the first hit, an emission comes on a multiple
+    of 8 that is not a multiple of 12 in c1 or c3 (yellow not reported), none comes in the 48
+    ticks after it in c1 or c3 while the system is in play, or one comes on a multiple of 12 that is not a multiple of 8 in
+    c2 (yellow wins over red); or if any light reading differs from the one before the first
+    hit.
   - (d) *Decimal input precision (Q-0075).* A test vehicle with strength 1000, a single smoke
     damage particle system, red ratio written as 0.6 without a percent sign and yellow ratio
     0.75 starts at health 601 with no damage effect. A weapon of damage 1, versus 100 %, hits
     it twice. Record health and the first tick of the smoke effect, not just health-bar colour:
     the latter uses a different comparison. *Expected:* the hit to 600 reports *now red* and
     starts the smoke effect, because F5's threshold is just above 600. *Falsified if* it first
-    appears at 599, or no effect appears. As a second run, a test building with a light source,
-    strength 1000 and red ratio 0.25 starts at 601 and takes a hit to 600, with yellow ratio
-    written as 0.6. On our engine only, with `quirks.yellow_state_at_half` off, that hit scales
-    the light source (the widened-single yellow threshold), whereas on the original it does not
+    appears at 599, or no effect appears. As a second run, the test building type of part c,
+    with red ratio 0.25, starts at 601 and takes a hit to 600, with yellow ratio
+    written as 0.6. On our engine only, with `quirks.yellow_state_at_half` off, that hit reports
+    *now yellow* and moves the natural smoke's emissions from multiples of 8 to multiples of 12
+    (the widened-single yellow threshold), whereas on the original it does not
     (fixed half). This second run checks the yellow-ratio import, not the original's red claim.
 - **D12 (claim 15).** A test map marks a stock infantry type as a cyborg and sets its strength to
   200. (a) A cyborg of that type that is not prone is killed
@@ -2261,9 +2301,6 @@ parts use their stated replay checks and rejection thresholds instead.
   the hit; this spec does not cover them further.
 - How long a crumbling terrain object stays in play, and when it leaves (claim 20), is not traced; a
   terrain spec should own it.
-- The value of the fixed factor by which a building's light-source intensity is scaled on *now
-  yellow* (claim 12) is not stated in this spec. Scenario D11, part c, records the ratio; the value
-  belongs in Constants as an engine constant once known.
 - Whether the sources of claim 1 that no filter of another spec covers (the sonic wave, the
   contact destruction, the elimination of a house's objects, the destruction of a bridge section
   and the train crush) skip an object that has no health (claim 8, *No-health targets*) is for
