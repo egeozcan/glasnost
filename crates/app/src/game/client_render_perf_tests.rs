@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use super::access_tests::{client, own, session_mut, start_by_keyboard_with};
+use super::access_tests::{client, own, session, session_mut, start_by_keyboard_with};
 use super::*;
 use glasnost_ai::fixture;
 use glasnost_map::CellXY;
@@ -83,4 +83,136 @@ fn render_perf_122_the_rings_in_object_order() {
     let mut want = vec![RING; 8];
     want.extend([PERMA; 16]);
     assert_eq!(ring_inks(&d), want);
+}
+
+/// An invented shroud sprite: piece 15 (full cover) dark, every other
+/// piece clear, over the whole canvas.
+fn shroud_sprite() -> crate::mapview::cover::CoverSprites {
+    use glasnost_fmt::image::IndexedImage;
+    use glasnost_render::shroud::{
+        CANVAS_HEIGHT, CANVAS_WIDTH, CoverFrame, CoverSprite, FULL_COVER, PIECES,
+    };
+    let (w, h) = (CANVAS_WIDTH as u32, CANVAS_HEIGHT as u32);
+    let frames = (0..PIECES)
+        .map(|i| {
+            let v = if i == usize::from(FULL_COVER) { 0 } else { 254 };
+            Some(CoverFrame {
+                image: IndexedImage::new(w, h, vec![v; (w * h) as usize]).unwrap(),
+                x: 0,
+                y: 0,
+            })
+        })
+        .collect();
+    crate::mapview::cover::CoverSprites {
+        shroud: Some(CoverSprite { frames }),
+        fog: None,
+    }
+}
+
+/// A frame of `c` drawn through `draw` offscreen, RGBA.
+fn gpu_frame(
+    device: &glasnost_render::wgpu::Device,
+    queue: &glasnost_render::wgpu::Queue,
+    draw: &mut crate::game::GpuDraw,
+    c: &mut Client,
+) -> Vec<u8> {
+    let (w, h) = (c.size.0 as u32, c.size.1 as u32);
+    // The batch's palettes and atlas go to every draw's device.
+    c.painter.dirty = true;
+    let mut encoder = device.create_command_encoder(&Default::default());
+    draw.prepare(device, queue, c, (w, h), &mut encoder);
+    queue.submit([encoder.finish()]);
+    glasnost_render::offscreen::render_rgba(device, queue, w, h, |pass| draw.draw(pass))
+}
+
+/// A lit item (S-0110 claims 5 and 6: its row follows the light alpha)
+/// over twice the view around it, of three rows of plain colours, so that
+/// every light-alpha change shows on the battlefield.
+fn draw_lit_ground(s: &mut Session) {
+    use glasnost_render::compose::{DepthTest, Paint, Profile, Shade};
+    use glasnost_render::scene::{Group, Item, ItemDepth};
+    let v = s.view();
+    let (w, h) = (v.size.0 * 2, v.size.1 * 2);
+    let image = s.scene.add_image(
+        glasnost_fmt::image::IndexedImage::new(w, h, vec![1; (w * h) as usize]).unwrap(),
+    );
+    let base = s.scene.add_row([0x001F; 256]);
+    assert_eq!(s.scene.add_row([0x07E0; 256]), base + 1);
+    assert_eq!(s.scene.add_row([0xF800; 256]), base + 2);
+    s.scene.items.push(Item {
+        image,
+        x: v.origin.0 - v.size.0 as i32 / 2,
+        y: v.origin.1 - v.size.1 as i32 / 2,
+        test: DepthTest::Ignore,
+        depth: ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias: 0,
+            companion: None,
+        },
+        paint: Paint::Lit(Shade::new(base, 3, 1000)),
+        group: Group::Vehicles,
+        provisional: false,
+        object: None,
+        stack: None,
+    });
+}
+
+/// design: render (#119) (the light alpha kept between frames): a draw
+/// that keeps its light alpha from frame to frame shows what a new draw
+/// shows, after the shroud closes and opens again, after the view
+/// scrolls, and on a frame where nothing changed.
+#[test]
+fn render_perf_119_a_kept_light_alpha_follows_the_shroud_and_the_view() {
+    use glasnost_render::offscreen::OFFSCREEN_FORMAT;
+    let Ok(g) = glasnost_render::gpu::shared_device() else {
+        eprintln!("skipping: no GPU adapter");
+        return;
+    };
+    let (device, queue) = (g.device, g.queue);
+    let size = (800, 600);
+    let mut c = client(size, 100);
+    start_by_keyboard_with(&mut c, fixture::rules());
+    let mcv = own(&c, Kind::Vehicle)[0];
+    let s = session_mut(&mut c);
+    s.loaded.covers = shroud_sprite();
+    draw_lit_ground(s);
+    let mut kept = crate::game::GpuDraw::new(&device, OFFSCREEN_FORMAT);
+    // The battlefield's pixels only: the client hands its changed images
+    // (the radar's) to one draw alone.
+    let m = session(&c).map_rect();
+    let field = move |rgba: &[u8]| -> Vec<u8> {
+        let w = size.0;
+        (m.y..m.y + m.h)
+            .flat_map(|y| {
+                let at = ((y * w + m.x) * 4) as usize;
+                rgba[at..at + (m.w * 4) as usize].to_vec()
+            })
+            .collect()
+    };
+    let mut check = |c: &mut Client, what: &str| {
+        let k = field(&gpu_frame(&device, &queue, &mut kept, c));
+        let mut fresh = crate::game::GpuDraw::new(&device, OFFSCREEN_FORMAT);
+        let f = field(&gpu_frame(&device, &queue, &mut fresh, c));
+        let first = k.chunks(4).zip(f.chunks(4)).position(|(a, b)| a != b);
+        assert!(first.is_none(), "{what}: pixel {first:?} differs");
+        k
+    };
+    // Nothing is explored before the first tick: the view is all dark.
+    let before = check(&mut c, "the first frame");
+    let s = session_mut(&mut c);
+    let me = s.play.me();
+    let at = s.play.world().obj(mcv).unwrap().pos;
+    glasnost_sim::econ::shroud::area_reveal(&mut s.play.game.world, me, at, 4);
+    let opened = check(&mut c, "the shroud opened");
+    assert!(before != opened, "the opened shroud shows");
+    assert!(opened == check(&mut c, "nothing changed"));
+    // A scroll draws the scene again, without the item.
+    session_mut(&mut c).scroll((90, 45));
+    let _ = c.frame();
+    draw_lit_ground(session_mut(&mut c));
+    let scrolled = check(&mut c, "the view scrolled");
+    let s = session_mut(&mut c);
+    glasnost_sim::econ::shroud::crate_darkness(&mut s.play.game.world, me);
+    let closed = check(&mut c, "the shroud closed");
+    assert!(closed != scrolled, "the closed shroud shows");
 }
