@@ -162,8 +162,12 @@ impl Default for Touches {
 }
 
 fn past_slop(a: Point, b: Point) -> bool {
-    let (dx, dy) = (i64::from(b.x - a.x), i64::from(b.y - a.y));
-    let slop = i64::from(SLOP);
+    // Exact for every pair of points (#153).
+    let (dx, dy) = (
+        i128::from(b.x) - i128::from(a.x),
+        i128::from(b.y) - i128::from(a.y),
+    );
+    let slop = i128::from(SLOP);
     dx * dx + dy * dy > slop * slop
 }
 
@@ -265,20 +269,23 @@ impl Touches {
         let start = c.start;
         match &mut self.mode {
             Mode::One { region, dragging } if first == Some(id) => {
+                // Held to the 32-bit range (#153).
                 let d = if *dragging {
-                    (p.x - last.x, p.y - last.y)
+                    (p.x.saturating_sub(last.x), p.y.saturating_sub(last.y))
                 } else if past_slop(start, p) {
                     // The whole way from the touch point, so that what was
                     // under the finger stays under it.
                     *dragging = true;
-                    (p.x - start.x, p.y - start.y)
+                    (p.x.saturating_sub(start.x), p.y.saturating_sub(start.y))
                 } else {
                     return None;
                 };
                 match region {
                     // The content follows the finger: the view centre
                     // moves the other way.
-                    Region::Map if d != (0, 0) => Some(Gesture::Pan((-d.0, -d.1))),
+                    Region::Map if d != (0, 0) => {
+                        Some(Gesture::Pan((d.0.saturating_neg(), d.1.saturating_neg())))
+                    }
                     Region::Bar => match self.strip.add(d.1, pitch) {
                         0 => None,
                         n => Some(Gesture::Rows(n)),
@@ -311,13 +318,15 @@ impl Touches {
                 let spoilt = spoilt || moved || now_ms - since > TWO_FINGER_TAP_MS;
                 self.mode = Mode::Two { since, spoilt };
                 match (all_up, spoilt, self.contacts.as_slice()) {
-                    (true, false, [a, b]) => Some(Gesture::Click(
-                        Button::Right,
-                        Point::new(
-                            (a.start.x + b.start.x).div_euclid(2),
-                            (a.start.y + b.start.y).div_euclid(2),
-                        ),
-                    )),
+                    (true, false, [a, b]) => {
+                        // In 64 bits, so two far points have their midpoint (#153).
+                        let mid =
+                            |u: i32, v: i32| (i64::from(u) + i64::from(v)).div_euclid(2) as i32;
+                        Some(Gesture::Click(
+                            Button::Right,
+                            Point::new(mid(a.start.x, b.start.x), mid(a.start.y, b.start.y)),
+                        ))
+                    }
                     _ => None,
                 }
             }
@@ -365,21 +374,20 @@ impl Carry {
     /// Adds a delta and returns its whole pixels (toward zero), keeping the
     /// rest for the next event.
     pub fn take(&mut self, d: (f64, f64)) -> (i32, i32) {
+        // Held to ±(2³¹ − 1), so the count's negative is a count too (#153).
         let whole = |v: f64| {
             if v.is_finite() {
-                v.trunc().clamp(f64::from(i32::MIN), f64::from(i32::MAX))
+                v.trunc().clamp(-f64::from(i32::MAX), f64::from(i32::MAX))
             } else {
                 0.0
             }
         };
+        // Only the fraction carries, not the pixels a held delta drops.
+        let rest = |v: f64| if v.is_finite() { v.fract() } else { 0.0 };
         let x = self.rest.0 + d.0;
         let y = self.rest.1 + d.1;
-        let (wx, wy) = (whole(x), whole(y));
-        self.rest = (
-            if x.is_finite() { x - wx } else { 0.0 },
-            if y.is_finite() { y - wy } else { 0.0 },
-        );
-        (wx as i32, wy as i32)
+        self.rest = (rest(x), rest(y));
+        (whole(x) as i32, whole(y) as i32)
     }
 }
 

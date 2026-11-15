@@ -97,6 +97,23 @@ impl Quad {
     fn mode(&self) -> u32 {
         self.mode_row & 255
     }
+
+    /// Whether the quad draws anything: a positive destination and source
+    /// size (design: render (#151): a quad with an empty or negative size
+    /// draws nothing, never mirrored).
+    pub fn drawable(&self) -> bool {
+        self.dst[2] > 0 && self.dst[3] > 0 && self.src[2] > 0 && self.src[3] > 0
+    }
+}
+
+/// `quads` without the ones that draw nothing ([`Quad::drawable`]),
+/// borrowed when every one draws.
+pub fn drawable(quads: &[Quad]) -> std::borrow::Cow<'_, [Quad]> {
+    if quads.iter().all(Quad::drawable) {
+        std::borrow::Cow::Borrowed(quads)
+    } else {
+        std::borrow::Cow::Owned(quads.iter().copied().filter(Quad::drawable).collect())
+    }
 }
 
 /// Clips a 1:1 quad (solid, sprite or glyph) to `clip` by moving its
@@ -287,7 +304,7 @@ pub fn reference(
     let mut out: Vec<u8> = std::iter::repeat_n([0u8, 0, 0, 255], (width * height) as usize)
         .flatten()
         .collect();
-    for q in quads {
+    for q in quads.iter().filter(|q| q.drawable()) {
         let [x, y, w, h] = q.dst;
         for py in y.max(0)..(y + h).min(height) {
             for px in x.max(0)..(x + w).min(width) {
@@ -746,6 +763,10 @@ impl Batch2d {
     ) {
         let s: [f32; 4] = [size.0 as f32, size.1 as f32, 0.0, 0.0];
         queue.write_buffer(&self.screen, 0, bytemuck::cast_slice(&s));
+        // As `reference`: a quad without size draws nothing (the shader
+        // would mirror a negative size and clamp a zero source wrongly).
+        let quads = drawable(quads);
+        let quads: &[Quad] = &quads;
         let n = quads.len() as u64;
         if n > self.capacity {
             self.capacity = n.next_power_of_two();
@@ -861,5 +882,49 @@ mod tests {
         assert_eq!(&px[4..8], &[10, 20, 30, 255]);
         // Index 0 is transparent: the red stays under the translucent blue.
         assert_eq!(&px[0..4], &[100, 0, 128, 255]);
+    }
+
+    /// design: render (#151): a quad with an empty or negative source or
+    /// destination size draws nothing, in the reference as in the shader's
+    /// upload (no mirrored drawing)
+    #[test]
+    fn a_quad_without_size_draws_nothing() {
+        let mut a = Atlas::new(8);
+        let r = a.add(2, 2, &[3; 4]).unwrap();
+        let mut pal = [0u8; 1024];
+        pal[12..16].copy_from_slice(&[10, 20, 30, 255]);
+        let mut image = BTreeMap::new();
+        image.insert(
+            4,
+            CpuImage {
+                w: 2,
+                h: 2,
+                rgba: vec![255; 16],
+            },
+        );
+        let sprite = Quad::sprite(0, 0, r, 0);
+        for q in [
+            Quad {
+                src: [r[0], r[1], 0, 2],
+                ..sprite
+            },
+            Quad {
+                src: [r[0], r[1], 2, 0],
+                ..sprite
+            },
+            Quad {
+                src: [r[0], r[1], 0, 0],
+                ..Quad::glyph(0, 0, r, [255; 4])
+            },
+            Quad::image(4, (0, 2), [0, 0, 2, 2]),
+            Quad::image(4, (2, 2), [2, 2, -2, -2]),
+            Quad::solid([2, 0, -2, 2], [255; 4]),
+        ] {
+            let px = reference(&[q], &a, &[pal], &image, 2, 2);
+            assert!(
+                px.chunks(4).all(|p| p == [0, 0, 0, 255]),
+                "{q:?} draws nothing"
+            );
+        }
     }
 }

@@ -149,13 +149,19 @@ impl Stack {
     /// The number of copies *C* in a view whose top row is world row `top`
     /// (S-0109 claim 27).
     pub fn copies(&self, top: i32) -> i32 {
-        let above = self.base_row - top;
+        if self.spacing <= 0 {
+            // design: render (#153) (no spacing above 0, which the builder never makes: the lowest copy alone)
+            return 1;
+        }
+        // Exact in 64 bits for every 32-bit row (#153).
+        let above = i64::from(self.base_row) - i64::from(top);
         if above < 0 {
             // spec: S-0109 claim 27 (C = 1 when pᵧ − ⌊h/2⌋ < 0)
             1
         } else {
             // spec: S-0109 claim 27 (C = ⌊(pᵧ − ⌊h/2⌋) / h⌋ + 2; both operands are non-negative here)
-            above / self.spacing + 2
+            // design: render (#153) (a count beyond the 32-bit range is the most it holds)
+            i32::try_from(above / i64::from(self.spacing) + 2).unwrap_or(i32::MAX)
         }
     }
 }
@@ -717,6 +723,37 @@ mod tests {
         // A status extra alone over empty ground names no object.
         s.items.remove(0);
         assert_eq!(pick(&s, 0, 0, 0), None);
+    }
+
+    /// design: render (#153) (a stack with no spacing above 0, which the builder never makes, is
+    /// its lowest copy alone); spec: S-0109 claim 27 (C = 1 when pᵧ − ⌊h/2⌋ < 0) at the ends of
+    /// the 32-bit range
+    #[test]
+    fn a_stack_without_spacing_is_one_copy() {
+        for spacing in [0, -1, i32::MIN] {
+            let s = Stack {
+                spacing,
+                base_row: 250,
+            };
+            assert_eq!(s.copies(0), 1, "spacing {spacing}");
+        }
+        let far = Stack {
+            spacing: 1 << 20,
+            base_row: i32::MAX,
+        };
+        // pᵧ − ⌊h/2⌋ = 2³² − 1, exactly.
+        assert_eq!(far.copies(i32::MIN), 4095 + 2);
+        let one = Stack {
+            spacing: 1,
+            base_row: i32::MAX,
+        };
+        // 2³² + 1 copies are more than a count holds: as many as it holds.
+        assert_eq!(one.copies(i32::MIN), i32::MAX);
+        let low = Stack {
+            spacing: 10,
+            base_row: i32::MIN,
+        };
+        assert_eq!(low.copies(i32::MAX), 1);
     }
 
     /// spec: S-0109 claim 27 (C = 1 when pᵧ − ⌊h/2⌋ < 0, else ⌊(pᵧ − ⌊h/2⌋) / h⌋ + 2, with pᵧ

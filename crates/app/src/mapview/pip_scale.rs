@@ -90,7 +90,8 @@ pub fn pip_frame(stored: Option<&[u8]>, initial: usize) -> usize {
     let Some(v) = stored else {
         return initial;
     };
-    let words: Vec<&str> = PIP_WORDS.iter().map(|(w, _)| *w).collect();
+    // On the stack: this runs per passenger and occupant at each status redraw (#153).
+    let words: [&str; PIP_WORDS.len()] = std::array::from_fn(|i| PIP_WORDS[i].0);
     value::named(v, NAMED_LIMIT, &words).map_or(PIP_UNKNOWN, |i| PIP_WORDS[i].1)
 }
 
@@ -172,6 +173,17 @@ pub enum Passenger {
     Other,
 }
 
+/// The most pips a row is built with: a longer row is cut here. 1024 pips
+/// are at least 4096 pixels, wider than the views we draw; no stock row
+/// comes near.
+pub const PIP_ROW_LIMIT: i32 = 1024; // design: render (#153)
+
+/// A row length held to `0 ..= PIP_ROW_LIMIT`.
+fn bounded(r: i32) -> usize {
+    // design: render (#153) (a row is built with at most PIP_ROW_LIMIT pips)
+    r.clamp(0, PIP_ROW_LIMIT) as usize
+}
+
 /// The empty pip (S-0111 T1).
 const EMPTY: usize = 0; // spec: S-0111 T1 (image frame 0: empty pip)
 /// A passenger's extra pip (S-0111 claim 12).
@@ -195,7 +207,7 @@ fn trunc(v: F64) -> i64 {
 /// they entered, each with its size *z* (binary64); `mode` is the rounding
 /// mode of S-0205.
 pub fn passenger_row(r: i32, entered: &[(Passenger, F64)], mode: Rounding) -> Vec<usize> {
-    let r = r.max(0) as usize;
+    let r = bounded(r);
     // spec: S-0111 claim 12 (total size: Z_{m+1} = 0, Z_k = trunc(Z_{k+1} + z_k) for k = m … 1, each sum in binary64 under the rounding mode of S-0205)
     let z = entered.iter().rev().fold(0i64, |acc, &(_, size)| {
         trunc(F64::from_i64(acc, mode).add(size, mode))
@@ -207,23 +219,23 @@ pub fn passenger_row(r: i32, entered: &[(Passenger, F64)], mode: Rounding) -> Ve
     for &(p, size) in entered.iter().rev() {
         // spec: S-0111 claim 12 (b = 1 + max(0, trunc(z − 1)) for infantry or vehicle, z − 1 in binary64 with the S-0205 mode; b = 1 for any other)
         let b = match p {
-            Passenger::Infantry(_) | Passenger::Vehicle => 1 + trunc(size.sub(one, mode)).max(0),
+            Passenger::Infantry(_) | Passenger::Vehicle => {
+                trunc(size.sub(one, mode)).max(0).saturating_add(1)
+            }
             Passenger::Other => 1,
         };
-        let s = top - b;
+        // design: render (#153) (a block below −2⁶³ is held there: it shows nothing either way)
+        let s = top.saturating_sub(b);
         // spec: S-0111 claim 12 (the lowest pip shows its colour pip: the infantry type's passenger pip colour, 5 for a vehicle, 1 for any other; its other pips image frame 3)
         let colour = match p {
             Passenger::Infantry(c) => c,
             Passenger::Vehicle => VEHICLE_PASSENGER,
             Passenger::Other => OTHER_PASSENGER,
         };
-        for j in s..top {
-            // spec: S-0111 claim 12 (only pips 0 ≤ j < R are drawn: a block reaching below pip 0 shows nothing there, and Z > R clips; a departure)
-            if let Ok(i) = usize::try_from(j)
-                && i < r
-            {
-                frames[i] = if j == s { colour } else { EXTRA_SPACE };
-            }
+        // spec: S-0111 claim 12 (only pips 0 ≤ j < R are drawn: a block reaching below pip 0 shows nothing there, and Z > R clips; a departure)
+        // The block's pips within the row only (#153): r fits in an i64.
+        for j in s.max(0)..top.min(r as i64) {
+            frames[j as usize] = if j == s { colour } else { EXTRA_SPACE };
         }
         top = s;
     }
@@ -234,7 +246,7 @@ pub fn passenger_row(r: i32, entered: &[(Passenger, F64)], mode: Rounding) -> Ve
 /// `r` (S-0111 claim 12), pip 0 first; `recent_first` holds the passengers,
 /// the most recent first.
 pub fn absorbed_row(r: i32, recent_first: &[Passenger]) -> Vec<usize> {
-    let r = r.max(0) as usize;
+    let r = bounded(r);
     // spec: S-0111 claim 12 (absorbing buildings: one pip per passenger upwards from pip 0, the most recent at pip 0; infantry its pip colour, a vehicle 4, anything else 1; the rest 0; more than R passengers: only the R most recent, our engine)
     (0..r)
         .map(|j| match recent_first.get(j) {
@@ -262,7 +274,8 @@ const SPAWN_FULL: usize = 1; // spec: S-0111 claim 11 (spawned aircraft: the fir
 pub fn spawn_row(full: &[bool]) -> Vec<usize> {
     // spec: S-0111 claim 11 (f = the slots docked or reloading; pips 0 to f-1 frame 1, the rest frame 0, packed from pip 0 whatever the slot indices)
     let f = full.iter().filter(|&&x| x).count();
-    (0..full.len())
+    // design: render (#153) (at most PIP_ROW_LIMIT pips)
+    (0..full.len().min(bounded(PIP_ROW_LIMIT)))
         .map(|k| if k < f { SPAWN_FULL } else { EMPTY })
         .collect()
 }
@@ -274,7 +287,7 @@ const OCCUPANT_EMPTY: usize = 6; // spec: S-0111 claim 11 and T1 (image frame 6 
 /// 11): each occupant's occupant pip image frame, then empty slots.
 pub fn occupant_row(slots: i32, occupants: &[usize]) -> Vec<usize> {
     // spec: S-0111 claim 11 (pip k shows the occupant at list position k in S-0508's list order, frame 6 when none; a dead place is closed up, S-0508 claim 23)
-    (0..slots.max(0) as usize)
+    (0..bounded(slots))
         .map(|k| occupants.get(k).copied().unwrap_or(OCCUPANT_EMPTY))
         .collect()
 }
@@ -290,7 +303,8 @@ const OVERLOAD: usize = 4; // spec: S-0111 claim 13 (otherwise image frame 4)
 /// `m` pips, `count` controlled, and with `overload` (its highlight on or
 /// off) one more pip at index `m`.
 pub fn mind_row(m: i32, count: usize, overload: Option<bool>) -> Vec<(i32, usize)> {
-    let mut out: Vec<(i32, usize)> = (0..m.max(0))
+    // design: render (#153) (at most PIP_ROW_LIMIT pips; the overload pip stays at index M)
+    let mut out: Vec<(i32, usize)> = (0..m.clamp(0, PIP_ROW_LIMIT))
         .map(|j| {
             let controlled = usize::try_from(j).is_ok_and(|j| j < count);
             (j, if controlled { CONTROLLED } else { EMPTY })
@@ -362,20 +376,26 @@ pub fn ammo_row(cap: i32, a: i32, w: i32) -> Vec<(i32, usize)> {
         if w < 0 {
             return Vec::new();
         }
-        return (0..cap.min(a)).map(|j| (j, AMMO)).collect();
+        // design: render (#153) (at most PIP_ROW_LIMIT pips)
+        return (0..cap.min(a).min(PIP_ROW_LIMIT))
+            .map(|j| (j, AMMO))
+            .collect();
     }
-    let layers = cap / w;
-    (0..w)
+    // Exact in 64 bits for every 32-bit argument (#153).
+    let (a, w64) = (i64::from(a), i64::from(w));
+    let layers = i64::from(cap / w);
+    // design: render (#153) (at most PIP_ROW_LIMIT pips)
+    (0..w.min(PIP_ROW_LIMIT))
         .map(|j| {
             // spec: S-0111 F3 (the largest λ in 0 … ⌊A / w⌋ − 1 with λ·w + j < a gives 15 + λ; none gives 14)
-            let below = a - 1 - j;
+            let below = a - 1 - i64::from(j);
             let lambda = if below < 0 {
                 -1
             } else {
-                (below / w).min(layers - 1)
+                (below / w64).min(layers - 1)
             };
             let frame = if lambda >= 0 {
-                (AMMO_WRAP_FIRST + lambda) as usize
+                usize::try_from(i64::from(AMMO_WRAP_FIRST) + lambda).unwrap_or(usize::MAX)
             } else {
                 AMMO_WRAP_EMPTY
             };
@@ -615,6 +635,57 @@ mod tests {
         assert_eq!(ammo_row(6, 0, 2), [(0, 14), (1, 14)]);
         // ⌊A / w⌋ = 0: no λ qualifies.
         assert_eq!(ammo_row(1, 1, 2), [(0, 14), (1, 14)]);
+    }
+
+    /// design: render (#153) (a pip row is built with at most PIP_ROW_LIMIT pips); spec: S-0111
+    /// claims 11 to 15 (the pips within the bound as before; the overload pip at index M)
+    #[test]
+    fn a_pip_row_is_cut_at_its_bound() {
+        let n = PIP_ROW_LIMIT as usize;
+        let long = PIP_ROW_LIMIT + 4000;
+        assert_eq!(passenger_row(long, &[], RZ).len(), n);
+        assert_eq!(absorbed_row(long, &[]).len(), n);
+        assert_eq!(occupant_row(long, &[]).len(), n);
+        assert_eq!(spawn_row(&vec![true; n + 4000]).len(), n);
+        assert_eq!(mind_row(long, 3, None).len(), n);
+        let overloaded = mind_row(long, 3, Some(false));
+        assert_eq!(overloaded.len(), n + 1);
+        assert_eq!(overloaded.last(), Some(&(long, 4)));
+        assert_eq!(ammo_row(long, long, 0).len(), n);
+        assert_eq!(ammo_row(long, long, long).len(), n);
+        // At the bound nothing is cut.
+        assert_eq!(mind_row(PIP_ROW_LIMIT, 0, None).len(), n);
+        assert_eq!(ammo_row(PIP_ROW_LIMIT, PIP_ROW_LIMIT, 0).len(), n);
+    }
+
+    /// spec: S-0111 F3 (the largest λ in 0 … ⌊A / w⌋ − 1 with λ·w + j < a gives 15 + λ; none
+    /// gives 14) — exact at the ends of the 32-bit range (#153)
+    #[test]
+    fn extreme_ammunition_does_not_overflow() {
+        // a = −2³¹: no λ qualifies for any pip.
+        assert_eq!(ammo_row(i32::MAX, i32::MIN, 3), [(0, 14), (1, 14), (2, 14)]);
+        // w = 1, A = a = 2³¹ − 1: pip 0's λ is 2³¹ − 2, an image frame past any sprite.
+        assert_eq!(
+            ammo_row(i32::MAX, i32::MAX, 1),
+            [(0, 15 + (i32::MAX as usize - 1))]
+        );
+    }
+
+    /// spec: S-0111 claim 12 (blocks from pip Z − 1 downwards; only pips 0 ≤ j < R drawn) — a block
+    /// far beyond the row costs no more than the row (#153). Not run against the code before the
+    /// fix, which walks every pip of such a block.
+    #[test]
+    fn a_huge_passenger_block_is_met_with_the_row_only() {
+        // One vehicle of size 2⁴⁰: its block runs from pip 0 to pip 2⁴⁰ − 1.
+        let huge = (Passenger::Vehicle, F64::from_i64(1 << 40, RZ));
+        assert_eq!(passenger_row(4, &[huge], RZ), [5, 3, 3, 3]);
+        // Then a vehicle of size 1 on top: Z = 2⁴⁰ + 1, its block at pip 2⁴⁰, above the row.
+        let one = (Passenger::Vehicle, F64::from_i64(1, RZ));
+        assert_eq!(passenger_row(4, &[huge, one], RZ), [5, 3, 3, 3]);
+        // Two of 3 · 2⁶¹: their total leaves the 64-bit range and truncates to 0 (as `trunc`
+        // does), so both blocks lie below pip 0, the second's lowest pip below −2⁶³.
+        let big = (Passenger::Vehicle, F64::from_i64(3 << 61, RZ));
+        assert_eq!(passenger_row(4, &[big, big], RZ), [0, 0, 0, 0]);
     }
 
     /// spec: S-0111 claim 16 (image frame by ability, place by kind, the shadow blink while damaged and t mod |T| ≤ 5; T = 0 never blinks)

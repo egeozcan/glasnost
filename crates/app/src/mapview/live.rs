@@ -35,7 +35,7 @@ use super::anims::{self, AnimQuirks, Playback, Player};
 use super::beams;
 use super::build::{
     AnimDraw, Attitude, Buildup, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding,
-    Mobile, Painter, ShadowAnchor, find_type, rule_int,
+    Mobile, Options, Painter, ShadowAnchor, find_type, rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
 use super::pip_scale;
@@ -388,6 +388,18 @@ struct DrawnLines {
     spots: [Vec<glasnost_render::spots::Spot>; 3],
 }
 
+/// One changed overlay cell's drawings, kept with the cell they were drawn
+/// from (design: render (#147)).
+#[derive(Clone, Copy, Debug)]
+struct KeptOverlay {
+    /// The cell as drawn: its overlay, data value, level and slope.
+    cell: glasnost_map::Cell,
+    /// The overlay's body, if drawn.
+    body: Option<Item>,
+    /// The overlay's shadow, if drawn.
+    shadow: Option<Item>,
+}
+
 /// A live sandbox game on a loaded map.
 pub struct Live {
     /// The game state.
@@ -417,6 +429,11 @@ pub struct Live {
     /// The effect tint (hundredths) the kept drawings' house-colour tables
     /// were last shaded with, `None` for none (S-0104 claims 3 and 5, #75).
     house_tint: Option<[i32; 3]>,
+    /// The buildings' lights as last seen (S-0405 claim 9, #152).
+    building_lights: super::building_lights::Tracker,
+    /// The light source of a building type (import index) at a top-left
+    /// foundation cell, read once (S-0104 claim 12).
+    building_light_of: BTreeMap<(usize, (i32, i32)), Option<glasnost_render::light::LightSource>>,
     /// Static objects ([`Built::objects`] indices) left out of the cell
     /// pass, as last drawn: buildings whose simulation object is gone, the
     /// map's gates (drawn live) and the overlays of cells that changed.
@@ -453,6 +470,15 @@ pub struct Live {
     changed_overlays: BTreeMap<CellXY, (u8, u8)>,
     /// The overlay items of the changed cells, as last drawn.
     live_overlays: Vec<Item>,
+    /// Each changed cell's drawings as last drawn, by cell (design: render
+    /// (#147)): a redraw draws again only the cells that changed since. A
+    /// relight, a retint or a change of the view's options empties it.
+    kept_overlays: BTreeMap<CellXY, KeptOverlay>,
+    /// The view's options the kept drawings were drawn with (#147).
+    kept_options: Option<Options>,
+    /// How many changed cells the painter has drawn since the view was
+    /// made (design: render (#147), for tests).
+    overlay_cells_drawn: u64,
     /// End of the object pass in the scene's items; the combat tail follows.
     objects_end: usize,
     /// End of the effects in the scene's items; the status extras follow.
@@ -1380,6 +1406,8 @@ impl Live {
             ),
             // spec: S-0104 claim 3 (with no effect the house-colour tables were shaded with white light)
             house_tint: None,
+            building_lights: super::building_lights::Tracker::default(),
+            building_light_of: BTreeMap::new(),
             gone: BTreeSet::new(),
             live_gates,
             map_start,
@@ -1390,6 +1418,9 @@ impl Live {
             legal_cells,
             changed_overlays: BTreeMap::new(),
             live_overlays: Vec::new(),
+            kept_overlays: BTreeMap::new(),
+            kept_options: None,
+            overlay_cells_drawn: 0,
             objects_end: built.scene.items.len(),
             effects_end: built.scene.items.len(),
             ground: GroundLayer::default(),
@@ -2292,6 +2323,65 @@ impl Live {
     #[cfg(test)]
     pub(super) fn protection_look_of(&self, id: ObjectId) -> Option<super::protection::Look> {
         self.protection_look(self.world.obj(id)?)
+    }
+
+    /// The light sources of the buildings lit now (S-0405 claim 9, S-0104
+    /// claim 12), in object ID order, the lights followed to this frame.
+    fn building_light_sources(
+        &mut self,
+        inputs: &Inputs,
+    ) -> Vec<glasnost_render::light::LightSource> {
+        let map_placed: BTreeSet<ObjectId> = self.building_ids.values().copied().collect();
+        let power = &self.rules.econ.power.buildings;
+        let on_map: Vec<super::building_lights::Building> = self
+            .world
+            .objects
+            .values()
+            .filter(|o| o.kind == SimKind::Building && o.on_map)
+            .map(|o| super::building_lights::Building {
+                id: o.id,
+                switched_off: o.econ.building.switched_off,
+                owner: o.owner,
+                needs_engineer: power
+                    .get(o.type_index as usize)
+                    .is_some_and(|b| b.needs_engineer),
+                manned: o.econ.building.manned,
+                map_placed: map_placed.contains(&o.id),
+            })
+            .collect();
+        let lit = self.building_lights.update(&on_map);
+        let mut sources = Vec::new();
+        for id in lit {
+            let Some(o) = self.world.obj(id) else {
+                continue;
+            };
+            let Some(idx) = self.types.get(&(o.kind, o.type_index)).copied().flatten() else {
+                continue;
+            };
+            let c = o.pos.cell();
+            if inputs.map.cells.get(c).is_none() {
+                continue;
+            }
+            let painter = &self.painter;
+            let source = *self
+                .building_light_of
+                .entry((idx, (c.x, c.y)))
+                .or_insert_with(|| painter.building_light(inputs.import, idx, (c.x, c.y)));
+            sources.extend(source);
+        }
+        sources
+    }
+
+    /// How many changed overlay cells the painter has drawn (tests).
+    #[cfg(test)]
+    pub(super) fn overlay_cells_drawn(&self) -> u64 {
+        self.overlay_cells_drawn
+    }
+
+    /// The light of cell `c` as the view last computed it (tests).
+    #[cfg(test)]
+    pub(super) fn cell_light(&self, c: CellXY) -> Option<glasnost_render::light::CellLight> {
+        self.painter.cell_light(c)
     }
 
     /// The shadowed cells the last redraw lit its mobiles by (tests).
@@ -3689,6 +3779,10 @@ impl Live {
         // S-0104 claims 4 and 5; the psychic domination's and the storm's
         // lighting among them): the cells and the terrain are lit again,
         // before this frame's drawings take their cells' light (#152).
+        // spec: S-0104 claim 12 (each lit building is a light source; a light added, removed or changed
+        // relights the same tick), S-0405 claim 9 (which buildings are lit)
+        let buildings = self.building_light_sources(inputs);
+        let buildings_changed = self.painter.set_building_lights(buildings);
         let l = &self.world.lighting;
         let key = (l.current, l.choice);
         // spec: S-0525 claim 13 (each field is a light source; every change of it relights the cells it reaches)
@@ -3704,7 +3798,7 @@ impl Live {
             })
             .collect();
         let fields_changed = self.painter.set_field_lights(fields);
-        let relit = key != self.lit || fields_changed;
+        let relit = key != self.lit || fields_changed || buildings_changed;
         if relit {
             let set =
                 glasnost_sim::lighting::set_of(l, key.1).unwrap_or(inputs.map.lighting.normal);
@@ -3856,14 +3950,56 @@ impl Live {
         // A relight draws the changed overlays again too, so that they take
         // their cells' new light (S-0104 claims 4, 5 and 9, S-0112 claim 1;
         // #152).
+        // design: render (#147): the kept drawings hold while the light, the
+        // house tint and the view's options (its detail among them) stay as
+        // they were drawn with; a change of any draws every changed cell again
+        if relit || retinted || self.kept_options.as_ref() != Some(inputs.options) {
+            self.kept_overlays.clear();
+            self.kept_options = Some(inputs.options.clone());
+        }
         if changed != self.changed_overlays || relit {
+            // design: render (#147): only the changed cells whose whole cell differs from the one
+            // their kept drawings were drawn from, or that have none, are drawn again
+            let grid = &self.world.cells.grid;
+            let kept = &self.kept_overlays;
             let cells: Vec<(CellXY, glasnost_map::Cell)> = changed
                 .keys()
-                .filter_map(|&c| Some((c, *self.world.cells.grid.get(c)?)))
+                .filter_map(|&c| Some((c, *grid.get(c)?)))
+                .filter(|(c, cell)| kept.get(c).is_none_or(|k| k.cell != *cell))
                 .collect();
-            let (items, notes) = self.painter.live_overlays(inputs, scene, cells);
+            self.overlay_cells_drawn += cells.len() as u64;
+            // Every cell asked for is kept, drawn or not (an empty cell, a
+            // type beyond the list), so that it is not asked for again
+            // while it stays as it is.
+            for &(c, cell) in &cells {
+                let empty = KeptOverlay {
+                    cell,
+                    body: None,
+                    shadow: None,
+                };
+                self.kept_overlays.insert(c, empty);
+            }
+            let (drawn, notes) = self.painter.live_overlays(inputs, scene, cells);
             self.notes.extend(notes);
-            self.live_overlays = items;
+            for d in drawn {
+                if let Some(k) = self.kept_overlays.get_mut(&d.cell) {
+                    k.body = d.body;
+                    k.shadow = d.shadow;
+                }
+            }
+            self.kept_overlays.retain(|c, _| changed.contains_key(c));
+            // The kept drawings in cell order, as drawing every changed cell
+            // gives them.
+            let kept: Vec<&KeptOverlay> = changed
+                .keys()
+                .filter_map(|c| self.kept_overlays.get(c))
+                .collect();
+            // spec: S-0102 claim 16 rank 3 (every overlay of the repainted area ranks before every overlay shadow of that area)
+            self.live_overlays = kept
+                .iter()
+                .filter_map(|k| k.body)
+                .chain(kept.iter().filter_map(|k| k.shadow))
+                .collect();
             self.changed_overlays = changed;
         }
         for c in self.changed_overlays.keys() {
@@ -5138,7 +5274,7 @@ impl Live {
                             inputs.assets,
                             anchor,
                             (w, d),
-                            levels * combat::LEVEL_HEIGHT,
+                            combat::box_height(levels),
                             index,
                             Some(sim_code(o.id)),
                         ));

@@ -103,6 +103,7 @@ fn start(c: &mut Client, map: usize, seed: u32, ai: bool) -> Result<(), String> 
         speech: Default::default(),
         local: if ai { None } else { Some(HouseId(0)) },
         cursor: install.cursor_palette.clone(),
+        palettes: c.palettes.clone(),
         colour_blind: false,
         watch: ai,
     };

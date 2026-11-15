@@ -148,6 +148,47 @@ fn the_fixes_box_turns_the_layer_off() {
     }
 }
 
+/// The start job hands the session's palette state to the next game, and
+/// another install's first game starts from none (#152).
+/// spec: S-0103 claim 3 (the palettes are reloaded only when a game starts in a different theater
+/// from the previous game of the session; the first game of a session always loads them)
+#[test]
+fn claim_3_the_start_job_carries_the_session_palettes() {
+    use glasnost_render::palette::{PaletteQuirks, PaletteState};
+    let mut c = Client::new();
+    c.done(Done::Prepared(
+        Vfs::default(),
+        Ok(Box::new(synthetic_install())),
+    ));
+    assert!(c.palettes.is_none(), "no game yet");
+    let mut kept = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    kept.start_game(glasnost_vfs::theater::Theater::Snow, |_| None);
+    c.palettes = Some(kept.clone());
+    let _ = c.frame_rgba();
+    let r = c.menu_targets.rect_of(&MenuHit::Skirmish).unwrap();
+    click(&mut c, r);
+    let _ = c.frame_rgba();
+    let r = c.setup_targets.rect_of(&SetupHit::Start_).unwrap();
+    click(&mut c, r);
+    match c.job.take() {
+        Some(Job::Start { palettes, .. }) => assert_eq!(palettes, Some(kept)),
+        _ => panic!("Start hands out a start job"),
+    }
+    // A failed start keeps the session's palettes.
+    c.done(Done::Started(
+        Vfs::default(),
+        Box::new(Err("no map".into())),
+        glasnost_audio::bank::SoundBank::new(),
+    ));
+    assert!(c.palettes.is_some());
+    // Another install read: its first game starts from none.
+    c.done(Done::Prepared(
+        Vfs::default(),
+        Ok(Box::new(synthetic_install())),
+    ));
+    assert!(c.palettes.is_none());
+}
+
 /// spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer) and claim 23 (Escape opens the options menu; the arrows are view keys, not commands)
 #[test]
 fn claims_22_23_default_keys() {

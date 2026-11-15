@@ -287,7 +287,9 @@ impl Session {
     /// (presentation only, M8 step C3). With `watch`, `local` may be an AI
     /// house, watched rather than played (the performance benchmark, M8
     /// step C4). The rules are resolved with our own patch layers `layers`
-    /// (M8 step C7), which the game's pathing reports record.
+    /// (M8 step C7), which the game's pathing reports record. `palettes` is
+    /// the session's palette state after its previous game, `None` for its
+    /// first (S-0103 claims 2 and 3).
     #[allow(clippy::too_many_arguments)]
     pub async fn start(
         vfs: &mut Vfs,
@@ -295,6 +297,7 @@ impl Session {
         make: live::MakeSetup<'_>,
         local: Option<HouseId>,
         cursor: &CursorPaletteKeep,
+        palettes: Option<glasnost_render::palette::PaletteState>,
         colour_blind: bool,
         watch: bool,
         layers: Layers,
@@ -321,6 +324,7 @@ impl Session {
             &options,
             true,
             glasnost_render::voxel::VoxelCanvas::new(),
+            palettes,
             Some(make),
             layers,
         )
@@ -884,7 +888,11 @@ impl Session {
     /// Scrolls the view by `d` pixels.
     pub fn scroll(&mut self, d: (i32, i32)) {
         if d != (0, 0) {
-            let c = (self.centre.0 + d.0, self.centre.1 + d.1);
+            // design: render (#153) (a request beyond the 32-bit range is the nearest one; F5 limits it as any other)
+            let c = (
+                self.centre.0.saturating_add(d.0),
+                self.centre.1.saturating_add(d.1),
+            );
             self.set_centre(c);
         }
     }
@@ -970,7 +978,10 @@ impl Session {
         let a = scroll::arrows(held);
         let before = self.centre;
         // spec: S-0101 claims 14 and 16 (mouse and arrow requests add before the next view position, subject to F5)
-        self.scroll((e.0 + d.0 + a.0, e.1 + d.1 + a.1));
+        self.scroll((
+            e.0.saturating_add(d.0).saturating_add(a.0),
+            e.1.saturating_add(d.1).saturating_add(a.1),
+        ));
         // spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll) and S-0101 claims 13 to 15 (the view moves once per unfrozen cycle): a cycle that moved it keeps it moving until the next cycle (#84)
         self.scroll_moved = self.centre != before;
     }
@@ -1000,7 +1011,8 @@ impl Session {
         // spec: S-0101 F9 (a one-pixel request in the direction blocked by F5)
         // spec: S-0213 claim 24 (blocked when a one-pixel trial cannot move the view under S-0101's limits)
         move |d: (i32, i32)| {
-            limit_centre((centre.0 + d.0, centre.1 + d.1), size, f.width, f.local) == centre
+            let to = (centre.0.saturating_add(d.0), centre.1.saturating_add(d.1));
+            limit_centre(to, size, f.width, f.local) == centre
         }
     }
 

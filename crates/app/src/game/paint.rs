@@ -146,11 +146,15 @@ impl Painter {
                     if r.is_empty() {
                         continue;
                     }
+                    // design: render (#151): each edge pixel once; a frame
+                    // one pixel high or wide has no second row or column.
+                    let bottom = i32::from(r.h > 1);
+                    let right = i32::from(r.w > 1);
                     for e in [
                         Rect::new(r.x, r.y, r.w, 1),
-                        Rect::new(r.x, r.bottom() - 1, r.w, 1),
+                        Rect::new(r.x, r.bottom() - 1, r.w, bottom),
                         Rect::new(r.x, r.y + 1, 1, r.h - 2),
-                        Rect::new(r.right() - 1, r.y + 1, 1, r.h - 2),
+                        Rect::new(r.right() - 1, r.y + 1, right, r.h - 2),
                     ] {
                         if !e.is_empty() {
                             out.push(Quad::solid(r4(e), *rgba));
@@ -327,6 +331,32 @@ mod tests {
             inked > 0 && ringed_px > inked,
             "{inked} ink, {ringed_px} ring"
         );
+    }
+
+    /// design: render (#151): a frame draws each pixel of its edge once,
+    /// one pixel high or wide included (a translucent frame shows a pixel
+    /// drawn twice)
+    #[test]
+    fn a_frame_draws_each_edge_pixel_once() {
+        let p = Painter::new();
+        for (w, h) in [(1, 1), (5, 1), (1, 5), (2, 2), (5, 4)] {
+            let mut d = DrawList::new();
+            d.frame(Rect::new(3, 2, w, h), colour::EDGE);
+            let q = p.quads(&d);
+            for y in 2..2 + h {
+                for x in 3..3 + w {
+                    let edge = x == 3 || y == 2 || x == 2 + w || y == 1 + h;
+                    let covering = q
+                        .iter()
+                        .filter(|q| {
+                            let [qx, qy, qw, qh] = q.dst;
+                            (qx..qx + qw).contains(&x) && (qy..qy + qh).contains(&y)
+                        })
+                        .count();
+                    assert_eq!(covering, usize::from(edge), "{w} × {h} at {x},{y}");
+                }
+            }
+        }
     }
 
     #[test]

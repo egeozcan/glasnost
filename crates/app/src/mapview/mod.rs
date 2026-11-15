@@ -6,6 +6,7 @@ pub mod anims;
 pub mod beams;
 pub mod bolts;
 pub mod build;
+pub mod building_lights;
 #[cfg(test)]
 mod buildup_tests;
 #[cfg(test)]

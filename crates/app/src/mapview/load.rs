@@ -231,9 +231,55 @@ pub async fn load(
         play,
         canvas,
         None,
+        None,
         Layers::REFERENCE,
     )
     .await
+}
+
+/// The palettes of a game in `theater` (S-0103 claims 2 and 3), read from
+/// the install mounted in `vfs`. `kept` is the session's palette state as
+/// its previous game left it ([`Loaded::palettes`]), `None` for the
+/// session's first game, whose state is made as at program start.
+pub async fn game_palettes(
+    vfs: &Vfs,
+    theater: Theater,
+    kept: Option<PaletteState>,
+) -> PaletteState {
+    let pal = |b: Option<Vec<u8>>| b.and_then(|b| Palette6::parse(&b).ok());
+    let mut palettes = match kept {
+        // spec: S-0103 claim 3 (one palette state for the session: a later game continues from the previous game's)
+        Some(p) => p,
+        None => {
+            // spec: S-0103 State and ordering (program start: the snow unit palette and the anim palette)
+            let mut p = PaletteState::at_program_start(
+                pal(read_named(vfs, &Theater::Snow.unit_palette()).await).as_ref(),
+                pal(read_named(vfs, ANIM_PALETTE_FILE).await).as_ref(),
+                PaletteQuirks::default(),
+            );
+            // spec: S-0112 claim 2 (the start-up resource table: the temperate theater palette, read at program start);
+            // S-0103 Terms and claim 8 (ore and gem overlays use it; later theater loads leave it)
+            p.set_startup_resource(
+                pal(read_named(vfs, &Theater::Temperate.theater_palette()).await).as_ref(),
+            );
+            p
+        }
+    };
+    // spec: S-0103 claim 3 (same theater as the previous game of the session: no palette file is read)
+    if palettes.loaded_theater() == Some(theater) {
+        return palettes;
+    }
+    let mut files = std::collections::BTreeMap::new();
+    for name in [
+        theater.unit_palette(),
+        theater.tile_palette(),
+        theater.theater_palette(),
+    ] {
+        files.insert(name.clone(), pal(read_named(vfs, &name).await));
+    }
+    // spec: S-0103 claim 3 (a game in a new theater loads its palettes)
+    palettes.start_game(theater, |n| files.get(n).cloned().flatten());
+    palettes
 }
 
 /// The lobby colour slot of the local house that `choice` picks in
@@ -251,7 +297,8 @@ pub(super) fn local_slot(
 /// [`load`] with the game's setup made by `make` from the map's typed
 /// rules (the game client's skirmish); `options.game` should then be
 /// [`build::GameMode::Skirmish`] so the skirmish files are read. The rules
-/// are resolved with our own patch layers `layers` (M8 step C7).
+/// are resolved with our own patch layers `layers` (M8 step C7). `kept` is
+/// the session's palette state ([`game_palettes`]).
 #[allow(clippy::too_many_arguments)]
 pub async fn load_with(
     vfs: &mut Vfs,
@@ -260,6 +307,7 @@ pub async fn load_with(
     options: &Options,
     play: bool,
     canvas: VoxelCanvas,
+    kept: Option<PaletteState>,
     make: Option<live::MakeSetup<'_>>,
     layers: Layers,
 ) -> Loaded {
@@ -276,28 +324,7 @@ pub async fn load_with(
         mut problems,
     } = glasnost_convert::game::load(vfs, bytes, origin, layers).await;
     let theater: Theater = to_vfs_theater(map.theater);
-    let pal = |b: Option<Vec<u8>>| b.and_then(|b| Palette6::parse(&b).ok());
-    // spec: S-0103 State and ordering (program start: the snow unit palette and the anim palette)
-    let mut palettes = PaletteState::at_program_start(
-        pal(read_named(vfs, &Theater::Snow.unit_palette()).await).as_ref(),
-        pal(read_named(vfs, ANIM_PALETTE_FILE).await).as_ref(),
-        PaletteQuirks::default(),
-    );
-    // spec: S-0112 claim 2 (the start-up resource table: the temperate theater palette, read at program start);
-    // S-0103 Terms and claim 8 (ore and gem overlays use it; later theater loads leave it)
-    palettes.set_startup_resource(
-        pal(read_named(vfs, &Theater::Temperate.theater_palette()).await).as_ref(),
-    );
-    let mut files = std::collections::BTreeMap::new();
-    for name in [
-        theater.unit_palette(),
-        theater.tile_palette(),
-        theater.theater_palette(),
-    ] {
-        files.insert(name.clone(), pal(read_named(vfs, &name).await));
-    }
-    // spec: S-0103 claim 3 (a game in a new theater loads its palettes)
-    palettes.start_game(theater, |n| files.get(n).cloned().flatten());
+    let palettes = game_palettes(vfs, theater, kept).await;
     let started = if play {
         match (&resolved, tiles) {
             (Err(e), _) => Err(format!("the rules did not resolve: {e}")),
@@ -437,5 +464,80 @@ pub async fn load_with(
         canvas,
         covers,
         theme,
+    }
+}
+
+#[cfg(test)]
+mod session_palette_tests {
+    use std::rc::Rc;
+
+    use glasnost_fmt::image::Palette;
+    use glasnost_fmt::mix::{MixWriter, WriteLayout, id_hash};
+    use glasnost_vfs::{GameOptions, MemSource, PickedFile};
+
+    use super::*;
+
+    /// A mounted install whose main archive holds each named palette file,
+    /// every component of it `value`. The bytes are invented.
+    fn install(files: &[(String, u8)]) -> Vfs {
+        let mut entries = vec![(id_hash("filler.ini"), b"[Filler]\n".to_vec())];
+        for (name, value) in files {
+            entries.push((id_hash(name), vec![*value; 768]));
+        }
+        let main = MixWriter {
+            layout: WriteLayout::Plain,
+            files: entries,
+        }
+        .write();
+        let mut vfs = Vfs::default();
+        pollster::block_on(vfs.mount_install(vec![PickedFile {
+            path: "ra2md.mix".into(),
+            source: Rc::new(MemSource(main)),
+        }]));
+        pollster::block_on(vfs.mount_startup(GameOptions::default()));
+        vfs
+    }
+
+    fn theater_files(t: Theater, value: u8) -> Vec<(String, u8)> {
+        vec![
+            (t.unit_palette(), value),
+            (t.tile_palette(), value),
+            (t.theater_palette(), value),
+        ]
+    }
+
+    /// The session's second game in the same theater reads no palette
+    /// file, and one in another theater keeps the tile palette in force
+    /// when its own is missing (#152).
+    /// spec: S-0103 claim 3 (the palettes are reloaded only when a game starts in a different theater
+    /// from the previous game of the session; the first game of a session always loads them) and
+    /// claim 2 (a missing tile palette file: the one in force stays)
+    #[test]
+    fn claims_2_3_the_session_keeps_its_palettes_across_games() {
+        let t = Theater::Temperate;
+        let first = install(&theater_files(t, 10));
+        let game1 = pollster::block_on(game_palettes(&first, t, None));
+        assert_ne!(game1.tile, Palette::default(), "the first game loads");
+        // Same theater, other files: not read.
+        let second = install(&theater_files(t, 20));
+        let fresh = pollster::block_on(game_palettes(&second, t, None));
+        assert_ne!(fresh, game1, "the files differ");
+        let game2 = pollster::block_on(game_palettes(&second, t, Some(game1.clone())));
+        assert_eq!(
+            game2, game1,
+            "same theater as the previous game: no palette file is read"
+        );
+        // Another theater without its tile palette file: the one in force stays.
+        let s = Theater::Snow;
+        let snow = install(&[(s.unit_palette(), 30), (s.theater_palette(), 30)]);
+        let game3 = pollster::block_on(game_palettes(&snow, s, Some(game2)));
+        assert_eq!(
+            game3.tile, game1.tile,
+            "a missing tile palette keeps the one in force"
+        );
+        assert_ne!(
+            game3.unit, game1.unit,
+            "a new theater loads its unit palette"
+        );
     }
 }

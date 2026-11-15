@@ -565,6 +565,7 @@ impl Bench {
                 .unwrap_or_default(),
             local: None,
             cursor: install.cursor_palette.clone(),
+            palettes: c.palettes.clone(),
             colour_blind: false,
             watch: true,
         };

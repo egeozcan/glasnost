@@ -2130,7 +2130,8 @@ fn fixed_column_steps(
         // height; only cells 0 … Nz − 1 contribute)
         // Only whole groups are decoded: a group cut off by the start of the
         // column data has no empty count to anchor it (our engine's choice).
-        let (mut end, mut d) = (data.len(), 0u32);
+        // Counted in 64 bits: no column data holds 2⁶⁴ cells, so the count is exact (#153).
+        let (mut end, mut d) = (data.len(), 0u64);
         let mut placed = Vec::new();
         while let Some(at) = end.checked_sub(1) {
             let n = usize::from(data[at]);
@@ -2141,29 +2142,30 @@ fn fixed_column_steps(
                 placed.push((d, voxel(&data[at - 1 - l..at - l])));
                 d += 1;
             }
-            d += u32::from(data[e_at]);
+            d += u64::from(data[e_at]);
             end = e_at;
         }
         let total = d;
         for (d, v) in placed.into_iter().rev() {
             let cell = total - 1 - d;
-            if cell < u32::from(nz) {
-                cells.push((cell, v));
+            if cell < u64::from(nz) {
+                cells.push((cell as u32, v));
             }
         }
     }
-    let (mut pos, mut cell) = (0usize, 0u32);
+    // Counted in 64 bits, as above (#153).
+    let (mut pos, mut cell) = (0usize, 0u64);
     while !(top_down && per == 1)
         && let (Some(&e), Some(&n)) = (data.get(pos), data.get(pos + 1))
     {
         pos += 2;
-        cell += u32::from(e);
+        cell += u64::from(e);
         for _ in 0..n {
             let Some(v) = data.get(pos..pos + per) else {
                 break;
             };
-            if cell < u32::from(nz) {
-                cells.push((cell, voxel(v)));
+            if cell < u64::from(nz) {
+                cells.push((cell as u32, voxel(v)));
             }
             pos += per;
             cell += 1;
@@ -5255,6 +5257,34 @@ mod tests {
                 .count()
         };
         assert_eq!((voxels(false), voxels(true)), (260, 261));
+    }
+
+    /// spec: S-0105 claim 35 and Edge cases (with quirks.voxel_topdown_column_origin off: cells
+    /// 0 … Nz − 1 only, a top-down mode-0 column anchored to its decoded total height) — the
+    /// cells are counted exactly past 2³² empty cells (#153)
+    #[test]
+    fn fixed_origin_counts_past_the_32_bit_range() {
+        let fixed = VoxelQuirks {
+            voxel_topdown_column_origin: false,
+            voxel_mode0_misread: true,
+            ..q()
+        };
+        // 255 · 16 843 010 empty cells are more than 2³² − 1.
+        let runs = 16_843_010;
+        let empty: Vec<u8> = std::iter::repeat_n([255, 0, 0], runs).flatten().collect();
+        // Bottom-up, two values a voxel: a voxel after the runs lies far above cell Nz − 1.
+        let mut up = empty.clone();
+        up.extend([0, 1, 7, 3, 0]);
+        let voxels = column_steps(&up, 4, false, 1, false, &fixed)
+            .into_iter()
+            .filter(|s| matches!(s, Step::Voxel { .. }))
+            .count();
+        assert_eq!(voxels, 0);
+        // Top-down, one value a voxel: the voxel read last is the column's lowest, cell 0,
+        // however many empty cells lie above it.
+        let mut down = vec![0, 0, 7, 1];
+        down.extend(empty);
+        assert_eq!(mode0_cells(&down, 4, true, false, &fixed), [(0, 7)]);
     }
 
     /// spec: S-0105 claim 35 (with quirks.voxel_topdown_column_origin off a top-down mode-0

@@ -200,30 +200,58 @@ fn pixel(frame: &Frame, s: &Spot, origin: (i32, i32)) -> Option<(i32, i32)> {
 }
 
 /// The depth a spot at view row `r` is compared with: the row's depth plus
-/// the bias, modulo 65536 for a beam flash (S-0514 F8), otherwise held to
-/// the depth range as every drawing's depth is.
+/// the bias, modulo 65536 for a beam flash (S-0514 F8), otherwise a plain
+/// integer as a drawing's depth is (S-0102 F2). The stored depth lies in
+/// 0 … 65535, so the GPU path's clamp to that range gives the same strict
+/// test.
 pub fn spot_depth(frame: &Frame, r: i32, s: &Spot) -> i32 {
     let v = frame.row_depth(r) + s.bias;
     match s.kind {
         // spec: S-0514 F8 (a pixel on row r passes when (d(r) + b) mod 65536 is less than the stored depth)
         SpotKind::Flash { .. } => v.rem_euclid(65536),
-        _ => v.clamp(0, 65535),
+        // spec: S-0102 F2 (d is reduced modulo 65536 before the bias is added; the comparison is between plain integers)
+        _ => v,
     }
+}
+
+/// The view pixel a wave spot at view pixel (`x`, `y`) takes its source
+/// from: shifted by `shift`, held to the view (design: render (#151): a
+/// shift beyond the view-edge margin of S-0607 claim 25 reads the nearest
+/// view pixel).
+fn wave_source(frame: &Frame, x: i32, y: i32, shift: (i8, i8)) -> usize {
+    let (w, h) = (frame.width as i32, frame.height as i32);
+    let sx = (x + i32::from(shift.0)).clamp(0, w - 1);
+    let sy = (y + i32::from(shift.1)).clamp(0, h - 1);
+    (sy * w + sx) as usize
 }
 
 /// Applies `group` to `frame`, a view whose top-left world pixel is
 /// `origin` (the CPU reference).
 pub fn apply(frame: &mut Frame, group: &SpotGroup, origin: (i32, i32)) {
     // spec: S-0607 claim 25 (source pixels are read from the picture as it stood before the wave drew)
-    let before = group
+    // Each wave spot's source, read before any spot of the group draws, in
+    // the group's order.
+    let sources: Vec<u16> = group
         .spots
         .iter()
-        .any(|s| matches!(s.kind, SpotKind::Wave { .. }))
-        .then(|| frame.color.clone());
+        .filter_map(|s| match s.kind {
+            SpotKind::Wave { shift, .. } => {
+                let (x, y) = pixel(frame, s, origin)?;
+                Some(frame.color[wave_source(frame, x, y, shift)])
+            }
+            _ => None,
+        })
+        .collect();
+    let mut sources = sources.into_iter();
     let w = frame.width as i32;
     for s in &group.spots {
         let Some((x, y)) = pixel(frame, s, origin) else {
             continue;
+        };
+        // Taken here, before any test, as the sources were gathered.
+        let source = match s.kind {
+            SpotKind::Wave { .. } => sources.next(),
+            _ => None,
         };
         let i = (y * w + x) as usize;
         // spec: S-0518 claim 20 (a sample contributes only where its depth is strictly less than the stored depth; no depth write)
@@ -253,11 +281,7 @@ pub fn apply(frame: &mut Frame, group: &SpotGroup, origin: (i32, i32)) {
                 Some(c) => c,
                 None => continue,
             },
-            SpotKind::Wave { shift: (dx, dy), k } => {
-                let (sx, sy) = (x + i32::from(dx), y + i32::from(dy));
-                let src = before.as_ref().map_or(d, |b| b[(sy * w + sx) as usize]);
-                wave(src, k)
-            }
+            SpotKind::Wave { k, .. } => wave(source.unwrap_or(d), k),
         };
     }
 }
@@ -429,5 +453,30 @@ mod tests {
         assert_eq!(f.color[3 * 8 + 3], wave(grey, k));
         assert_eq!(f.color[3 * 8 + 4], wave(grey, k));
         assert_eq!(f.color[3 * 8 + 2], grey);
+    }
+
+    /// design: render (#151): a wave source pixel beyond the view (a shift
+    /// larger than the view-edge margin of S-0607 claim 25) is the nearest
+    /// view pixel, on the CPU and the GPU alike
+    #[test]
+    fn a_wave_source_beyond_the_view_is_the_nearest_view_pixel() {
+        let mut f = frame(8, 8);
+        f.color = (0..64u32)
+            .map(|i| pack([(i % 8) * 32, (i / 8) * 32, 0]))
+            .collect();
+        let k = 110;
+        let g = group(vec![
+            // Right: (4 + 10, 3) is held to (7, 3).
+            spot(4, 3, SpotKind::Wave { shift: (10, 0), k }),
+            // Down from the last row the wave draws: (3, 4 + 20) is held to (3, 7).
+            spot(3, 4, SpotKind::Wave { shift: (0, 20), k }),
+            // Up and left: (4 − 9, 4 − 9) is held to (0, 0).
+            spot(4, 4, SpotKind::Wave { shift: (-9, -9), k }),
+        ]);
+        let before = f.color.clone();
+        apply(&mut f, &g, (0, 0));
+        assert_eq!(f.color[3 * 8 + 4], wave(before[3 * 8 + 7], k));
+        assert_eq!(f.color[4 * 8 + 3], wave(before[7 * 8 + 3], k));
+        assert_eq!(f.color[4 * 8 + 4], wave(before[0], k));
     }
 }

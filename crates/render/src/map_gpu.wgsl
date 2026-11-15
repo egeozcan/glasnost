@@ -76,9 +76,16 @@ fn vs_main(@builtin(vertex_index) v: u32, inst: Instance) -> Varyings {
     return out;
 }
 
-// d(r) of S-0102 F1 for view row r. In play C − w stays inside 0 … 65535.
+// d(r) of S-0102 F1 for view row r: (C − w) mod 65536, as the CPU's
+// Frame::row_depth. In play C − w stays inside 0 … 65535.
 fn row_depth(r: i32) -> i32 {
-    return view.reference - (r + view.origin.y);
+    return wrap_depth(view.reference - (r + view.origin.y));
+}
+
+// v mod 65536 with a non-negative remainder (S-0102 Constants: values wrap
+// modulo 65536).
+fn wrap_depth(v: i32) -> i32 {
+    return ((v % 65536) + 65536) % 65536;
 }
 
 // Q(v) = trunc(v / 3) × 3 (S-0102 F2); v is positive in play.
@@ -147,13 +154,13 @@ fn fs_main(in: Varyings) -> Fragment {
         }
         depth = anchor - a;
     } else if kind == 0u {
-        // Tile (S-0102 F3): e + d(t + 30).
+        // Tile (S-0102 F3): (e + d(t + 30)) mod 65536, before the test.
         let t = in.place.w - view.origin.y;
         var e = 0;
         if in.depth.z != 0xFFFFFFFFu {
             e = i32(textureLoad(atlas, vec2<i32>(in.depth.xy) + local, i32(in.depth.z), 0).r);
         }
-        depth = e + row_depth(t + 30);
+        depth = wrap_depth(e + row_depth(t + 30));
     } else if kind == 1u {
         // Flat: d(r) + β.
         depth = row_depth(px.y) + in.place.z;
@@ -168,6 +175,10 @@ fn fs_main(in: Varyings) -> Fragment {
         let r1 = top_left.y + height - 1;
         depth = quantise(row_depth(r1) + in.place.z) - (r1 - px.y) / 3;
     }
+    // A profile depth is a plain integer (S-0102 F2) and in play stays in
+    // 0 … 65535, where the clamp changes nothing. Outside it the two paths
+    // part only for a depth below 0: the CPU stores it modulo 65536 and
+    // draws it over a stored 0, the GPU stores 0 and does not.
     depth = clamp(depth, 0, 65535);
     if (in.paint.y & 8u) != 0u {
         // S-0616 claim 28: a pixel particle's own colour (x = R << 16 |
@@ -349,8 +360,10 @@ fn fs_spot(in: Varyings) -> Fragment {
             c = min((l * a) / 128u, vec3<u32>(255u));
         }
     } else {
-        // S-0607 F5: the source pixel as before the wave drew, boosted.
-        let s = widened(px + in.companion.xy);
+        // S-0607 F5: the source pixel as before the wave drew, boosted; a
+        // source beyond the view is the nearest view pixel (design: render
+        // (#151), spots.rs wave_source).
+        let s = widened(clamp(px + in.companion.xy, vec2<i32>(0), view.size - vec2<i32>(1)));
         let k = in.paint.z;
         c = vec3<u32>(min(s.r + ((k / 2u) * s.r) / 256u, 255u), s.g, min(s.b + (4u * k * s.b) / 256u, 255u));
     }

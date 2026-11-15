@@ -643,15 +643,24 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
 /// so nothing is drawn; the plumbing is what is tested).
 fn synthetic_live() -> (Live, Scene) {
     let (import, catalogue, assets) = context();
+    synthetic_live_on(&import, &catalogue, &assets)
+}
+
+/// [`synthetic_live`] on the given import, catalogue and assets.
+fn synthetic_live_on(
+    import: &glasnost_convert::Import,
+    catalogue: &glasnost_convert::theater::Catalogue,
+    assets: &super::build::Assets,
+) -> (Live, Scene) {
     let map = testkit::map();
     let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
     let options = Options::default();
     let inputs = Inputs {
         map: &map,
-        import: &import,
-        catalogue: &catalogue,
+        import,
+        catalogue,
         palettes: &palettes,
-        assets: &assets,
+        assets,
         options: &options,
         rules: None,
         cells: None,
@@ -1156,6 +1165,209 @@ fn a_relight_draws_the_changed_overlays_again() {
     assert!(!drawn.is_empty(), "the wall is drawn lit");
     assert!(drawn != old, "the new light shades the wall otherwise");
     assert!(overlays(&scene_before) == drawn, "the wall built before");
+}
+
+/// The changed overlays as drawn: each drawing after the cell pass that
+/// names no object, by its place, depth, group, image pixels and the
+/// palette rows it takes, so that two scenes compare by what they show.
+fn overlay_picture(scene: &Scene) -> Vec<String> {
+    scene.items[scene.cell_pass_len..]
+        .iter()
+        .filter(|i| i.object.is_none())
+        .map(|i| {
+            let image = &scene.images[i.image as usize];
+            format!(
+                "{:?} {:?} {:?} {:?} {:?} {:?} {:?}",
+                (i.x, i.y),
+                i.test,
+                i.depth,
+                i.group,
+                (image.width(), image.height()),
+                image.pixels(),
+                drawn_rows(scene, std::iter::once(i)),
+            )
+        })
+        .collect()
+}
+
+/// Puts FENCEX (the import's overlay 2) with data value `data` on cell `c`
+/// of the live game.
+fn put_wall(live: &mut Live, c: glasnost_map::CellXY, data: u8) {
+    let cell = live.world.cells.grid.get_mut(c).unwrap();
+    cell.overlay = 2;
+    cell.overlay_data = data;
+}
+
+/// Three clear level-0 cells of the synthetic map, away from its units.
+fn wall_cells() -> [glasnost_map::CellXY; 3] {
+    [
+        testkit::cell(0, 6),
+        testkit::cell(1, 6),
+        testkit::cell(3, 6),
+    ]
+}
+
+/// design: render (#147) (the changed overlays are kept cell by cell: a redraw draws again only
+/// the cells whose cell changed since they were drawn, and the picture is the one that drawing
+/// every changed cell gives); spec: S-0112 claims 1 to 9 (drawn from the game's cells), S-0102
+/// claim 16 rank 3 (every overlay before every overlay shadow)
+#[test]
+fn one_changed_overlay_cell_is_drawn_alone() {
+    let (import, catalogue, assets) = context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let walls = wall_cells();
+    let (mut live, mut scene) = synthetic_live();
+    live.redraw(&inputs, &mut scene);
+    for c in walls {
+        assert_eq!(
+            live.world.cells.grid.get(c).unwrap().overlay,
+            glasnost_map::NO_OVERLAY
+        );
+        put_wall(&mut live, c, 1);
+    }
+    let before = live.overlay_cells_drawn();
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(
+        live.overlay_cells_drawn(),
+        before + 3,
+        "the three new walls"
+    );
+    put_wall(&mut live, walls[1], 0);
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(
+        live.overlay_cells_drawn(),
+        before + 4,
+        "the changed cell alone"
+    );
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.overlay_cells_drawn(), before + 4, "nothing changed");
+    // The picture of a view that drew the three walls at once.
+    let (mut once, mut scene_once) = synthetic_live();
+    once.redraw(&inputs, &mut scene_once);
+    for (c, data) in walls.into_iter().zip([1, 0, 1]) {
+        put_wall(&mut once, c, data);
+    }
+    once.redraw(&inputs, &mut scene_once);
+    let picture = overlay_picture(&scene_once);
+    assert!(picture.len() >= 3, "the walls are drawn");
+    assert_eq!(overlay_picture(&scene), picture);
+}
+
+/// design: render (#147) (a changed cell's drawing is kept only while its whole cell stays as it
+/// was drawn from): a changed cell whose level changes alone is drawn at its new level when the
+/// overlays are next drawn again, as drawing every changed cell gives; spec: S-0102 claims 13 and
+/// 24 (the level lifts the overlay and its depth)
+#[test]
+fn a_kept_overlay_follows_its_cell_when_the_overlays_are_drawn_again() {
+    let (import, catalogue, assets) = context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let [a, b, _] = wall_cells();
+    let raise = |live: &mut Live| live.world.cells.grid.get_mut(a).unwrap().level = 2;
+    let (mut live, mut scene) = synthetic_live();
+    live.redraw(&inputs, &mut scene);
+    put_wall(&mut live, a, 1);
+    live.redraw(&inputs, &mut scene);
+    let low = overlay_picture(&scene);
+    raise(&mut live);
+    put_wall(&mut live, b, 1);
+    live.redraw(&inputs, &mut scene);
+    // The picture of a view that drew both walls with the cell raised.
+    let (mut once, mut scene_once) = synthetic_live();
+    once.redraw(&inputs, &mut scene_once);
+    raise(&mut once);
+    put_wall(&mut once, a, 1);
+    put_wall(&mut once, b, 1);
+    once.redraw(&inputs, &mut scene_once);
+    let picture = overlay_picture(&scene_once);
+    assert!(
+        !picture.iter().any(|p| low.contains(p)),
+        "the raised wall is drawn otherwise"
+    );
+    assert_eq!(overlay_picture(&scene), picture);
+}
+
+/// design: render (#147) (the kept drawings are made again after a change of the view's options):
+/// a changed wall kept from before the local player's colours changed takes the new colours when
+/// the overlays are next drawn again, as drawing every changed cell gives; spec: S-0112 claim 1
+/// row 4 (walls: the local player's house colour)
+#[test]
+fn kept_overlays_follow_the_options_when_drawn_again() {
+    // FENCEX made a wall, so that it takes the local player's colour.
+    let rules = RULES.replace(
+        "[FENCEX]\nDrawFlat=no\n",
+        "[FENCEX]\nWall=yes\nDrawFlat=no\n",
+    );
+    assert_ne!(rules, RULES);
+    let (import, catalogue, assets) = context_with(&rules);
+    let synthetic_live = || synthetic_live_on(&import, &catalogue, &assets);
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let recoloured = Options {
+        colour_blind: true,
+        human_slot: 3,
+        ..Options::default()
+    };
+    let with = |options| Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options,
+        rules: None,
+        cells: None,
+    };
+    let [a, b, _] = wall_cells();
+    let (mut live, mut scene) = synthetic_live();
+    live.redraw(&with(&options), &mut scene);
+    put_wall(&mut live, a, 1);
+    live.redraw(&with(&options), &mut scene);
+    let first = overlay_picture(&scene);
+    live.redraw(&with(&recoloured), &mut scene);
+    put_wall(&mut live, b, 1);
+    live.redraw(&with(&recoloured), &mut scene);
+    // The picture of a view drawn with the new colours throughout.
+    let (mut once, mut scene_once) = synthetic_live();
+    once.redraw(&with(&recoloured), &mut scene_once);
+    put_wall(&mut once, a, 1);
+    put_wall(&mut once, b, 1);
+    once.redraw(&with(&recoloured), &mut scene_once);
+    // The wall alone, drawn with the new colours throughout.
+    let (mut alone, mut scene_alone) = synthetic_live();
+    alone.redraw(&with(&recoloured), &mut scene_alone);
+    put_wall(&mut alone, a, 1);
+    alone.redraw(&with(&recoloured), &mut scene_alone);
+    assert_ne!(
+        overlay_picture(&scene_alone),
+        first,
+        "the new colours draw the wall otherwise"
+    );
+    assert_eq!(overlay_picture(&scene), overlay_picture(&scene_once));
 }
 
 /// spec: S-0104 claims 4, 5 and 9 (the game's lighting changed: the cells are
@@ -9126,4 +9338,97 @@ fn a_view_animation_draws_its_follow_up_types_art() {
         seen.extend(widths(&scene));
     }
     assert!(seen.contains(&5), "TAILX's art after the switch: {seen:?}");
+}
+
+/// A lit building the game puts on the map lights the cells around it, and
+/// its light follows the events of S-0405 claim 9 (#152).
+/// spec: S-0104 claim 12 (building light sources; added, removed or changed relights the same
+/// tick), S-0405 claim 9 (the light goes out at a switch-off and when the building leaves the map;
+/// it comes on at a switch-on and at every ownership change of a needs-engineer type, even on a
+/// switched-off building)
+#[test]
+fn claim_9_a_building_light_follows_the_game() {
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    // Invented light values for the test's tower.
+    let rules = format!(
+        "{}[TOWER]\nLightIntensity=0.5\nLightVisibility=2048\n",
+        RULES.replace(
+            "[BuildingTypes]\n1=HUTX\n",
+            "[BuildingTypes]\n1=HUTX\n2=TOWER\n"
+        )
+    );
+    let (import, catalogue, _) = context_with(&rules);
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut ruleset = testkit::combat_ruleset();
+    ruleset
+        .sim
+        .buildings
+        .get_mut("TOWER")
+        .unwrap()
+        .needs_engineer = Some(true);
+    let mut world = testkit::game_with(&ruleset, 24, 3);
+    let at = testkit::mid(24, 0, 0);
+    let tower = testkit::spawn(&mut world, SimKind::Building, "TOWER", 0, at, 0);
+    let rules = world.rules_arc();
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(3), Vec::new()),
+    );
+    let mut scene = built.scene;
+    // The map places no building; the view's first frame (drawn by
+    // `Live::new`) has the tower the game placed light its cell.
+    live.redraw(&inputs, &mut scene);
+    let lit = live.cell_light(at);
+    assert!(
+        lit.is_some_and(|l| l.source_sum > 0),
+        "the tower the game placed lights its cell: {lit:?}"
+    );
+    let mut set = |live: &mut Live, f: &dyn Fn(&mut glasnost_sim::world::Object)| {
+        f(live.world.obj_mut(tower).unwrap());
+        live.redraw(&inputs, &mut scene);
+        live.cell_light(at)
+    };
+    let dark = set(&mut live, &|o| o.econ.building.switched_off = true);
+    assert!(
+        dark.is_some_and(|l| l.source_sum == 0),
+        "out at the switch-off: {dark:?}"
+    );
+    assert_eq!(
+        set(&mut live, &|o| o.econ.building.switched_off = false),
+        lit,
+        "on at the switch-on"
+    );
+    assert_eq!(
+        set(&mut live, &|o| o.econ.building.switched_off = true),
+        dark
+    );
+    assert_eq!(
+        set(&mut live, &|o| {
+            o.owner = Some(HouseId(1));
+            o.econ.building.manned = true;
+        }),
+        lit,
+        "on at a needs-engineer type's ownership change, though switched off"
+    );
+    assert_eq!(
+        set(&mut live, &|o| o.on_map = false),
+        dark,
+        "out when the building leaves the map"
+    );
 }

@@ -87,11 +87,13 @@ pub fn wrench_frame(t: i32, speed: u8, normalise: bool) -> usize {
 /// The image frame of a bomb icon in tick `n` for a bomb planted in tick
 /// `t`, with timed delay `delay` and flicker rate `flicker` (S-0519 F3).
 pub fn bomb_frame(n: i32, t: i32, delay: i32, flicker: i32) -> usize {
+    // Exact in 64 bits for every 32-bit argument (#153).
+    let (n, t, flicker) = (i64::from(n), i64::from(t), i64::from(flicker));
     // spec: S-0519 F3 (q = ⌊D / 6⌋; when q = 0 our engine substitutes q = 1)
-    let q = (delay / 6).max(1);
+    let q = i64::from((delay / 6).max(1));
     // spec: S-0519 F3 (b = 1 when (n mod 2F) ≥ F, else 0; when F = 0 our engine uses b = 0)
     let b = if flicker > 0 {
-        i32::from((n % (2 * flicker)) >= flicker)
+        i64::from((n % (2 * flicker)) >= flicker)
     } else {
         0
     };
@@ -109,6 +111,18 @@ pub const LEVEL_HEIGHT: i32 = 104; // spec: S-0111 Constants (height of one leve
 /// The art height field's absent-key default, in levels (S-0111 Import
 /// mapping).
 pub const DEFAULT_ART_HEIGHT: i32 = 2; // spec: S-0111 Import mapping (building art Height absent: 2)
+/// The most levels a building box rises or sinks: an art height field
+/// beyond it is held to it. 128 levels are 1920 pixels of box, taller than
+/// the views we draw; no building art comes near.
+pub const LEVEL_LIMIT: i32 = 128; // design: render (#153)
+
+/// The building box's height *V* in leptons for an art height field of
+/// `levels` (S-0111 Terms), the field held to [`LEVEL_LIMIT`].
+pub fn box_height(levels: i32) -> i32 {
+    // design: render (#153) (the field held to ±LEVEL_LIMIT levels)
+    // spec: S-0111 Terms (V = art height × 104 leptons)
+    levels.clamp(-LEVEL_LIMIT, LEVEL_LIMIT) * LEVEL_HEIGHT
+}
 
 /// A health colour (S-0111 claim 5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -296,8 +310,8 @@ pub fn building_bar(
     strength: i32,
     r: &Ratios,
 ) -> Vec<Pip> {
-    // spec: S-0111 Terms (α = 128·W, β = 128·D; V = art height × 104 leptons)
-    let (alpha, beta, v) = (128 * w, 128 * d, levels * LEVEL_HEIGHT);
+    // spec: S-0111 Terms (α = 128·W, β = 128·D; V = art height × 104 leptons, held as box_height holds it)
+    let (alpha, beta, v) = (128 * w, 128 * d, box_height(levels));
     // spec: S-0111 F5 (Q = P(−α, β, V), Q′ = P(−α, −β, V), n = trunc((Q_y − Q′_y) / 2))
     let q = displacement(-alpha, beta, v);
     let q2 = displacement(-alpha, -beta, v);
@@ -888,7 +902,9 @@ pub fn corner_segments(w: i32, d: i32, v: i32) -> Vec<((i32, i32), (i32, i32))> 
 /// `v`) in palette index `index`, and the displacement of its top-left
 /// pixel from the status anchor; `None` when there is nothing to draw.
 pub fn corner_image(w: i32, d: i32, v: i32, index: u8) -> Option<(IndexedImage, (i32, i32))> {
-    let segs = corner_segments(w, d, v);
+    // design: render (#153) (a box at most LEVEL_LIMIT levels high or deep)
+    let most = LEVEL_LIMIT * LEVEL_HEIGHT;
+    let segs = corner_segments(w, d, v.clamp(-most, most));
     let pts = || segs.iter().flat_map(|&(a, b)| [a, b]);
     let (x0, x1) = (pts().map(|p| p.0).min()?, pts().map(|p| p.0).max()?);
     let (y0, y1) = (pts().map(|p| p.1).min()?, pts().map(|p| p.1).max()?);
@@ -1550,6 +1566,38 @@ mod tests {
         let mut no_x = raw;
         no_x.map_unit(88, None);
         assert_eq!(GroupFont::new(&no_x), None);
+    }
+
+    /// spec: S-0519 F3 (frame = min(11, 2⌊(n − t) / q⌋ + b), b = 1 when (n mod 2F) ≥ F) — exact
+    /// at a flicker rate above 2³⁰ and for n − t beyond the 32-bit range (#153)
+    #[test]
+    fn bomb_frames_at_extreme_values() {
+        // 2F = 2³¹: n mod 2F is n, so b = 1 from n = F on.
+        assert_eq!(bomb_frame(1 << 30, 0, 600, 1 << 30), 11);
+        assert_eq!(bomb_frame(5, 0, 6, i32::MAX), 10);
+        assert_eq!(bomb_frame(0, 0, 6, i32::MAX), 0);
+        // n − t = 2³² − 1 and its negative.
+        assert_eq!(bomb_frame(i32::MAX, i32::MIN, 6, 0), 11);
+        assert_eq!(bomb_frame(i32::MIN, i32::MAX, 6, 0), 0);
+        // The ordinary range as before.
+        assert_eq!(bomb_frame(16, 10, 12, 3), 2 * 3 + 1);
+        assert_eq!(bomb_frame(14, 10, 12, 3), 2 * 2);
+    }
+
+    /// design: render (#153) (an art height field beyond LEVEL_LIMIT levels is held to it); spec:
+    /// S-0111 claims 7 and 8 (the box, its bar and its corner brackets as before within it)
+    #[test]
+    fn an_extreme_art_height_is_held_to_the_level_bound() {
+        let v = |levels: i32| levels * LEVEL_HEIGHT;
+        let corners = |v| corner_image(1, 1, v, CORNER_INDEX);
+        assert_eq!(corners(v(32 * LEVEL_LIMIT)), corners(v(LEVEL_LIMIT)));
+        assert_eq!(corners(v(-32 * LEVEL_LIMIT)), corners(v(-LEVEL_LIMIT)));
+        assert_ne!(corners(v(LEVEL_LIMIT)), corners(v(LEVEL_LIMIT - 1)));
+        let r = ratios("0.5", "0.25");
+        let bar = |levels| building_bar(2, 2, levels, 10, 10, &r);
+        assert_eq!(bar(i32::MAX), bar(LEVEL_LIMIT));
+        assert_eq!(bar(i32::MIN), bar(-LEVEL_LIMIT));
+        assert_ne!(bar(LEVEL_LIMIT), bar(LEVEL_LIMIT - 1));
     }
 
     /// Our placeholder lifetimes and burst sizes.

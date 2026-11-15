@@ -1868,35 +1868,8 @@ impl<'a> Builder<'a> {
             if !self.owner_kept(&s.placed.owner) || self.map.cells.get(s.placed.cell).is_none() {
                 continue;
             }
-            let intensity =
-                derived(self.import, Kind::Buildings, i, b"LightIntensity").unwrap_or(0);
-            if intensity == 0 {
-                continue;
-            }
-            let (w, h) = self.foundation(i);
-            // spec: S-0104 claim 12 (an absent tint's default, quirks.building_light_tint_default_1000)
-            let absent = light::building_light_tint_default(&LightQuirks::default());
-            let tint =
-                |k: &[u8]| derived(self.import, Kind::Buildings, i, k).map_or(absent, |v| v as i32);
             let c = s.placed.cell;
-            // spec: S-0104 claim 12 (one light at the building's centre, counting at detail 2)
-            sources.push(LightSource::building(
-                (c.x, c.y),
-                (w, h),
-                rule_int(
-                    self.import,
-                    Kind::Buildings,
-                    i,
-                    b"LightVisibility",
-                    DEFAULT_LIGHT_RADIUS,
-                ),
-                intensity as i32,
-                [
-                    tint(b"LightRedTint"),
-                    tint(b"LightGreenTint"),
-                    tint(b"LightBlueTint"),
-                ],
-            ));
+            sources.extend(self.p.building_light(self.import, i, (c.x, c.y)));
         }
         self.p.sources = sources;
         // spec: S-0104 claim 1 (the map's normal set; current, base and target ambient start equal; tint in hundredths)
@@ -2292,13 +2265,20 @@ impl<'a> Builder<'a> {
         let grid = self.cells_loaded.unwrap_or(&self.map.cells);
         let cells: Vec<(CellXY, glasnost_map::Cell)> =
             grid.iter().map(|(c, cell)| (c, *cell)).collect();
-        self.overlays_in(cells, false);
+        self.overlays_in(cells, false, None);
     }
 
     /// The overlays and shadows of `cells`, as [`Builder::overlays`] draws
     /// them; `live` cells (redrawn during play) are not added to the
-    /// object list, so their items name no object.
-    fn overlays_in(&mut self, cells: Vec<(CellXY, glasnost_map::Cell)>, live: bool) {
+    /// object list, so their items name no object. With `per_cell` each
+    /// cell's body and shadow items go there, in cell order, instead of
+    /// into the scene (#147).
+    fn overlays_in(
+        &mut self,
+        cells: Vec<(CellXY, glasnost_map::Cell)>,
+        live: bool,
+        mut per_cell: Option<&mut Vec<OverlayCellItems>>,
+    ) {
         let q = OverlayQuirks::default();
         let k = Kind::Overlays;
         let list_len = self.import.outcome.registries.get(&k).map_or(0, Vec::len);
@@ -2428,6 +2408,7 @@ impl<'a> Builder<'a> {
                     notes: Vec::new(),
                 })
             });
+            let mut body_item = None;
             // spec: S-0112 claim 9 (an image frame beyond the sprite draws nothing)
             if let (Some((sprite, frame)), Some(row)) = (&body, paint_row)
                 && self.sprite_frames(sprite).is_some_and(|n| *frame < n)
@@ -2451,7 +2432,7 @@ impl<'a> Builder<'a> {
                     object,
                 )
             {
-                self.built.scene.items.push(item);
+                body_item = Some(item);
             }
             // spec: S-0112 claim 8 (the shadow: crate N/2; rubble none; otherwise the stored type, d + N/2)
             let shadow: Option<(Vec<u8>, usize)> = if flags.crate_ {
@@ -2478,6 +2459,7 @@ impl<'a> Builder<'a> {
             // never the deck's 4 levels nor the upright −15; flat; writes), S-0112 claim 8
             // (every overlay kind)
             let shadow_bias = -2 - overlay_depth_lift(level);
+            let mut shadow_item = None;
             if let Some((sprite, frame)) = shadow
                 && self.sprite_frames(&sprite).is_some_and(|n| frame < n)
                 && let Some(item) = self.place_sprite(
@@ -2496,7 +2478,17 @@ impl<'a> Builder<'a> {
                     object,
                 )
             {
-                shadows.push(item);
+                shadow_item = Some(item);
+            }
+            if let Some(out) = per_cell.as_deref_mut() {
+                out.push(OverlayCellItems {
+                    cell: c,
+                    body: body_item,
+                    shadow: shadow_item,
+                });
+            } else {
+                self.built.scene.items.extend(body_item);
+                shadows.extend(shadow_item);
             }
         }
         // spec: S-0102 claim 16 rank 3 (every overlay of the repainted area ranks before every overlay
@@ -2779,6 +2771,20 @@ impl<'a> Builder<'a> {
 
     /// The foundation W × H of a building (S-0108 Import mapping).
     fn foundation(&self, idx: usize) -> (i32, i32) {
+        self.p.foundation(self.import, idx)
+    }
+
+    fn art_value(&self, kind: Kind, idx: usize, key: &[u8]) -> Option<&[u8]> {
+        let image = self.import.arts.get(&(kind, idx))?.image.clone();
+        let doc: &Document = &self.p.art;
+        doc.value(&image, key)
+    }
+}
+
+impl Painter {
+    /// The foundation W × H of building type `idx` of `import` (S-0108
+    /// Import mapping).
+    pub fn foundation(&self, import: &Import, idx: usize) -> (i32, i32) {
         const WORDS: [(&str, (i32, i32)); 22] = [
             ("1x1", (1, 1)),
             ("2x1", (2, 1)),
@@ -2804,7 +2810,7 @@ impl<'a> Builder<'a> {
             ("0x0", (0, 0)),
         ]; // spec: S-0108 Import mapping (foundation vocabulary)
         let read = |section: &[u8]| {
-            let v = self.p.art.value(section, b"Foundation")?;
+            let v = self.art.value(section, b"Foundation")?;
             // spec: S-0108 Import mapping (text cut to 31 bytes, compared ignoring case)
             let v = value::text(v, 31);
             Some(
@@ -2814,9 +2820,8 @@ impl<'a> Builder<'a> {
                     .map_or((1, 1), |(_, s)| *s),
             )
         };
-        let name = &self.import.outcome.registries[&Kind::Buildings][idx].name;
-        let image = self
-            .import
+        let name = &import.outcome.registries[&Kind::Buildings][idx].name;
+        let image = import
             .arts
             .get(&(Kind::Buildings, idx))
             .map_or(name.clone(), |a| a.image.clone());
@@ -2827,12 +2832,44 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn art_value(&self, kind: Kind, idx: usize, key: &[u8]) -> Option<&[u8]> {
-        let image = self.import.arts.get(&(kind, idx))?.image.clone();
-        let doc: &Document = &self.p.art;
-        doc.value(&image, key)
+    /// The light source of a building of type `idx` of `import` whose
+    /// top-left foundation cell is `cell` (S-0104 claim 12), `None` for a
+    /// type without light intensity.
+    pub fn building_light(
+        &self,
+        import: &Import,
+        idx: usize,
+        cell: (i32, i32),
+    ) -> Option<LightSource> {
+        let intensity = derived(import, Kind::Buildings, idx, b"LightIntensity").unwrap_or(0);
+        if intensity == 0 {
+            return None;
+        }
+        // spec: S-0104 claim 12 (an absent tint's default, quirks.building_light_tint_default_1000)
+        let absent = light::building_light_tint_default(&LightQuirks::default());
+        let tint = |k: &[u8]| derived(import, Kind::Buildings, idx, k).map_or(absent, |v| v as i32);
+        // spec: S-0104 claim 12 (one light at the building's centre, counting at detail 2)
+        Some(LightSource::building(
+            cell,
+            self.foundation(import, idx),
+            rule_int(
+                import,
+                Kind::Buildings,
+                idx,
+                b"LightVisibility",
+                DEFAULT_LIGHT_RADIUS,
+            ),
+            intensity as i32,
+            [
+                tint(b"LightRedTint"),
+                tint(b"LightGreenTint"),
+                tint(b"LightBlueTint"),
+            ],
+        ))
     }
+}
 
+impl<'a> Builder<'a> {
     /// The shared building companion depth image, read once into
     /// [`Scene::signed`] (S-0102 claims 31 and 33, F5). An unavailable
     /// image is warned about once, when it is first needed.
@@ -6536,6 +6573,17 @@ pub struct Inputs<'a> {
     pub cells: Option<&'a CellGrid>,
 }
 
+/// One cell's overlay drawings during play ([`Painter::live_overlays`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OverlayCellItems {
+    /// The cell.
+    pub cell: CellXY,
+    /// The overlay's body, when it draws one.
+    pub body: Option<Item>,
+    /// The overlay's shadow, when it draws one.
+    pub shadow: Option<Item>,
+}
+
 impl Painter {
     /// Whether a type's image cache holds an image for `key` (S-0105
     /// claim 26), for tests.
@@ -6869,9 +6917,10 @@ impl Painter {
     /// frame are shaded again by [`Painter::retint_houses`]); claim 10's
     /// and claim 16's height terms and the cell light of the static objects
     /// of the cell pass are not followed. The building light sources are
-    /// those of the map's placed structures, collected when the view is
-    /// built: a lit building built or lost in play adds or removes no
-    /// source, though claim 12 relights on both (#152). The named palettes' tables take
+    /// the game's lit buildings ([`Painter::set_building_lights`], S-0405
+    /// claim 9), except that a pulse never puts one out or on (no pulse
+    /// exists in the game yet) and a building's light is never scaled for
+    /// its damage (S-0302 claim 12's factor is open) (#152). The named palettes' tables take
     /// the effect tint with the house-colour tables (S-0103 claim 17). The
     /// house tables are all built when the game starts (S-0104 Open questions),
     /// so claim 2's third column, the tint of a table built while an effect
@@ -6983,6 +7032,23 @@ impl Painter {
         true
     }
 
+    /// Sets the lit buildings' light sources (S-0104 claim 12, S-0405
+    /// claim 9); returns whether they changed, so that the caller relights
+    /// (claim 12: a light added, removed or changed relights the same
+    /// tick).
+    pub fn set_building_lights(&mut self, lights: Vec<LightSource>) -> bool {
+        if lights == self.sources {
+            return false;
+        }
+        self.sources = lights;
+        true
+    }
+
+    /// The light of cell `c` as last computed, `None` outside the map.
+    pub fn cell_light(&self, c: CellXY) -> Option<light::CellLight> {
+        self.lights.get(c).copied()
+    }
+
     /// The voxel buffer, for the next game of the program (S-0105 claim
     /// 34, S2).
     pub fn canvas(&self) -> &voxel::VoxelCanvas {
@@ -7046,14 +7112,16 @@ impl Painter {
         (entries, b.built.notes)
     }
     /// The overlay and overlay-shadow items of `cells` as they stand during
-    /// play (S-0112 claims 1 to 9): every body before every shadow (S-0102
-    /// claim 16 rank 3). The items name no object.
+    /// play (S-0112 claims 1 to 9), cell by cell in the order of `cells`;
+    /// a cell that draws nothing has no entry. Drawn together, every body
+    /// goes before every shadow (S-0102 claim 16 rank 3). The items name no
+    /// object.
     pub fn live_overlays(
         &mut self,
         inputs: &Inputs,
         scene: &mut Scene,
         cells: Vec<(CellXY, glasnost_map::Cell)>,
-    ) -> (Vec<Item>, BTreeSet<String>) {
+    ) -> (Vec<OverlayCellItems>, BTreeSet<String>) {
         let mut b = Builder {
             map: inputs.map,
             rules: inputs.rules,
@@ -7077,9 +7145,8 @@ impl Painter {
             live_slots: None,
             owners_checked: false,
         };
-        let start = b.built.scene.items.len();
-        b.overlays_in(cells, true);
-        let items = b.built.scene.items.split_off(start);
+        let mut items = Vec::new();
+        b.overlays_in(cells, true, Some(&mut items));
         *self = b.p;
         *scene = b.built.scene;
         (items, b.built.notes)
