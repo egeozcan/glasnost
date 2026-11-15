@@ -463,3 +463,47 @@ The checks all ran on the final tree.
 - The workspace tests pass except main's `quirks::tests::every_spec_quirk_has_a_switch`, which fails on `gas_through_bridge_deck` only. The new switch `crate_beneath_overlay_refusal` is read.
 
 Seams left (also in the design section): Q-3109 (#245's zone row in an area search). A building's guard range is read as S-0309's Import mapping gives it (single-precision decimal × 256, truncated), while a mobile type's still reads S-0215's (the double × 256, truncated). The two can differ for a value that a single cannot hold exactly; whether they are one read is not settled here. Rubble beneath a building (S-0312 claim 20) is still not modelled. A seeking slave miner slave holds its own master as target with the attack flag set, on base and in the batch. Whether a spec gives that has not been checked.
+
+## Batch P3 (sim perf)
+
+Base main fd702c6, not rebased. Performance only, with no behaviour change: the sim goldens, the oracle arena's output files, the M6c, M7a and M7b sweeps (seeds 1–16) and the tick-bench state hashes (synthetic, and the map run's per-tick hash file) are byte-identical to base. Save format 140, AI game format 117 and wire version 12 are unchanged. No requests.
+
+Issue #402: an ordinary removal walked the whole object table nine times, and a killing hit walked it more. Two walks of the held-target drop are merged into one pass. Six walks are skipped when no object holds the reference they look for. To know that, the drop's first walk (the target holders, which keeps its timer draws in key order) also takes a census: whether any object is an aircraft or has aircraft state, a spawn controller, a bomb, a charger list or a dropper. The census is not an index:
+- It lives only inside one removal, or inside one drop at a killing hit or a departure from the map.
+- The end of the removal forgets it, and so does every place that can make such a reference: an object's creation, a spawn controller's, a bomb's planting, a charger's registration, a drop, and the put-back of a removed object for a credit or a leftover's bookkeeping.
+- It is `#[serde(skip)]`, empty between actions, so it is neither saved nor hashed.
+- A debug assertion checks every skip against the whole table. The debug workspace suite (8706 tests) ran with it and never tripped it.
+
+With none of those references, a removal now walks the table twice (the holders, and the merged pass), not nine times. Where a reference exists its walk runs as before.
+
+The bench `tests/removal_cost.rs` (ignored, release) removes or kills 64 infantry, one at a time, out of a square of synthetic infantry. It gives the median µs per object over 5 runs. Each pair below is base 4d6e2e3 → final, from interleaved runs (base, after, base, after). The figures cover the whole batch; no walk is timed alone.
+
+| Objects | One removal | One killing hit with its removal |
+|---|---|---|
+| 484 | 13.6/11.7 → 7.6/8.5 | 22.6/20.0 → 15.9/16.7 |
+| 2025 | 61.2/52.6 → 29.8/33.4 | 100.5/90.3 → 69.1/72.1 |
+| 4096 | 167.3/148.3 → 63.7/69.1 | 280.3/257.0 → 156.8/162.3 |
+
+| Walk | Finding | Status | Fix | Before → after | Tests |
+|---|---|---|---|---|---|
+| Put-aside slots and attack-move memories (`held::holders_drop`) | Two walks, one after the other, at every removal and killing hit | fixed (20edf08) | One pass clears the put-aside target and destination and converts a remembered target to its cell, the same per object; `aside_lost` stays for cloaking | Not isolated (in the table above) | `removal_walks.rs::one_pass_clears_put_aside_slots_and_converts_memories` (158fed4, committed first; fails with a merge that keeps the destination) |
+| Aircraft destination (`air::destination_lost`) and heading pad (`air::heading_pad_gone`) | Walked at every removal and killing hit, and at a building's removal, with no aircraft in play | fixed (d119762, with the census) | Skipped when the census has no aircraft and no aircraft state | Not isolated | `removal_walks.rs::every_rarer_back_reference_is_dropped_after_a_removal_without_them` (d7536df, committed first; fails with the aircraft census wrong); `claims_s0501_r176.rs::claim_21_a_destroyed_or_removed_pad_leaves_no_record` |
+| Bomb planter (`bomb::removed`) | Walked at every removal with no bomb in play | fixed (1fff4c1) | Skipped when the census has no bomb; a planting forgets the census | Not isolated | the same test (fails with the bomb census wrong) |
+| Charger lists (`linked::leaving`) | Walked at every removal with no charger list | fixed (f9ef214) | Skipped when the census has no charger list; a registration forgets it | Not isolated | the same test, and `…::a_save_and_load_between_removals_changes_nothing` (both fail with the charger census wrong) |
+| Dropped units (`lift::removing`) | Walked at every removal with no dropped unit | fixed (fe227c7) | Skipped when the census has no dropper; a drop forgets it, so the drop a lifter makes as it leaves play is undone in the same removal | Not isolated | the same test (fails with the dropper census wrong); `…::a_drop_made_inside_the_removal_is_still_undone` (fails without the drop's forget) |
+| Spawn clear requests and controller targets (`spawn::removing`) | Two walks at every removal with no spawner | fixed (ec0199b) | Both skipped when the census has no spawn controller; a new controller forgets it | Not isolated | the same test (fails with the spawner census wrong) |
+
+The census lifetime has a test of its own: `removal_walks.rs::no_census_outlives_its_action` (a743b6e) fails when the end of a removal does not forget it. The save and load test compares the state hashes of a game saved and loaded between two removals with those of the game never saved. The guard tests of d7536df pass on base. Each break above was made temporarily with debug assertions off, so that the test's own assertion is the one that fails, and then undone. The bench's lints are allowed in b07b45c, and 4cb3171 is rustfmt.
+
+Lanes, base fd702c6 (4d6e2e3, which adds only the bench) against the batch at a743b6e. Synthetic tick bench (2000 ticks, interleaved pairs): mean 61/48 → 46/45 µs, median 46/41 → 37/37 µs, at 21 objects; state hash 3a025dbb… on all four runs. Map bench (map 9, seed 7, 8 players, 11399 ticks, interleaved pairs at load about 14): mean 4843/4111 → 4229/4139 µs, median 3320/2840 → 2878/2969. That is within noise, since few objects leave play in a tick. Final hash 382bff1a… on all four runs, and the per-tick hash files are identical. Oracle arena (`--record all`, two threads): every output file is identical; wall time M-0001 963 → 1085 s, M-0003 241 → 263 s, under a shared machine's load. The three sweeps print the same lines as base.
+
+The checks all ran on the final tree.
+- The sim gate with its ignored tests passes 17 against the unchanged goldens.
+- The AI suite with its ignored tests passes 362.
+- The workspace tests (debug) pass 8706 and fail none.
+- `cargo clippy --workspace --all-targets -- -D warnings` (after b07b45c) and `cargo fmt --check` (after 4cb3171) are clean.
+- The wasm32 build of `glasnost-app` succeeds.
+- `xtask check` passes. `xtask gate` passes, and on wasm32 it matches all nine goldens.
+- The release lanes and the AI suite ran before b07b45c and 4cb3171, which touch only the two test files.
+
+Seams left: a killing hit still walks the table for the target holders, the merged pass, and `spawn::target_lost`'s settle and controller walks (the census is forgotten at the end of the drop, before `spawn::killed` runs), and for a building its heading-pad walk; keeping the census across the whole killing hit was left out. Each skipped walk still runs in full when one object anywhere holds its reference. `grinder::removing` (buildings only) and the target-holder walk itself are unchanged.
