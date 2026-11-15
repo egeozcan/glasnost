@@ -84,8 +84,9 @@ fn eligible(w: &World, master: ObjectId, b: ObjectId, reach: i32) -> bool {
     if t < o.combat.rearm_until {
         return false;
     }
-    // spec: S-0518 claim 2 (the delayed-fire countdown is 0: a pending beam keeps a building out, except one whose countdown was set to 0, quirks.prism_zero_delay_double_count)
-    if o.combat.support_beam.is_some() && (delay_field(w) > 0 || !q.prism_zero_delay_double_count) {
+    // spec: S-0518 claim 2 (the delayed-fire countdown is 0: a pending beam or shot keeps a building out, except one whose countdown was set to 0, quirks.prism_zero_delay_double_count)
+    let pending = o.combat.support_beam.is_some() || o.combat.delayed_shot.is_some();
+    if pending && (delay_field(w) > 0 || !q.prism_zero_delay_double_count) {
         return false;
     }
     // spec: S-0518 claim 2 (not being drained, S-0608) and (current behaviour not attack)
@@ -127,7 +128,20 @@ pub fn recruit(w: &mut World, master: ObjectId) -> bool {
         });
     let Some(s) = best else { return false };
     let to = crate::combat::position::fire_point(w, master, 0, 0);
-    let due = w.tick.wrapping_add((delay_field(w) - 1).max(0));
+    let order = &w.update.order;
+    let before = match (
+        order.iter().position(|&x| x == s),
+        order.iter().position(|&x| x == master),
+    ) {
+        (Some(ps), Some(pm)) => ps < pm,
+        // design: #339 (a supporter or master not in the update order: no extra tick, as before)
+        _ => false,
+    };
+    // spec: S-0518 claim 6 (max(d − 1, 0) ticks after recruitment for a supporter that takes its turns after the master in the update order, S-0203 claim 3; one tick later for one before it)
+    let due = w
+        .tick
+        .wrapping_add((delay_field(w) - 1).max(0))
+        .wrapping_add(i32::from(before));
     if let Some(ob) = w.obj_mut(master) {
         // spec: S-0518 claim 4 (the support count rises by 1; no shot in this processing)
         ob.combat.support = ob.combat.support.wrapping_add(1);
@@ -387,8 +401,7 @@ pub fn start_charging(w: &mut World, id: ObjectId) -> bool {
 
 /// An infantry unit's *attack* processing while its charging mark is set
 /// (claim 15): an automatic range search without the timer gate; a unit
-/// that finds a target takes it and the mark clears. Returns whether the
-/// mark was set (the search ran).
+/// that finds a target takes it and the mark clears.
 pub fn break_off(w: &mut World, id: ObjectId) {
     // spec: S-0518 claim 15 and Edge cases (the break-off search belongs to infantry; quirks.vehicle_charge_no_break_off off: vehicles break off too)
     let no_vehicles = w.rules().quirks.vehicle_charge_no_break_off;

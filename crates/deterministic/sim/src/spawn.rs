@@ -482,6 +482,35 @@ pub fn kamikaze(w: &World, id: ObjectId) -> bool {
 // Creation and slot objects
 // ---------------------------------------------------------------------
 
+/// The most slot objects, and the most slaves, one object is created with
+/// (#344): a limit of our engine, not game behaviour. A larger spawn count
+/// (S-0506 claim 1) or slave count (S-0402 claim 19) in the rules is used
+/// as this one, and the importer warns ([`count_limits`]).
+// nocite: our own input validation (#344): far above any count game data uses; it keeps one rules key from sizing an allocation and a creation loop without bound
+pub const MAX_CREATED_COUNT: i32 = 100;
+
+/// The importer's warnings of #344: each type whose spawn count or slave
+/// count is above [`MAX_CREATED_COUNT`].
+pub(crate) fn count_limits(
+    missiles: &MissileRules,
+    harvest: &crate::econ::harvest::Rules,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for (&(kind, i), s) in &missiles.spawners {
+        if s.count > MAX_CREATED_COUNT {
+            out.push(format!("the {kind:?} type at index {i} has a spawn count of {}; our engine creates at most {MAX_CREATED_COUNT} slot objects", s.count));
+        }
+    }
+    for (kind, i) in harvest.masters() {
+        if let Some(g) = harvest.group_of(kind, i)
+            && g.count > MAX_CREATED_COUNT
+        {
+            out.push(format!("the {kind:?} type at index {i} has a slave count of {}; our engine creates at most {MAX_CREATED_COUNT} slaves", g.count));
+        }
+    }
+    out
+}
+
 /// Gives a newly created object its spawn controller (S-0506 claim 1):
 /// N slots, each with a new docked slot object of the spawned type, owned
 /// by the spawner's house and off the map; the first pass 20 ticks later
@@ -491,7 +520,8 @@ pub(crate) fn created_in(w: &mut World, id: ObjectId, chain: &mut crate::objects
     let Some(r) = spawn_rules(w, id) else { return };
     let t = w.tick;
     let mut c = SpawnController {
-        slots: vec![Slot::default(); r.count as usize],
+        // design: #344 (a spawn count above our engine's limit creates the limit's number of slots)
+        slots: vec![Slot::default(); r.count.min(MAX_CREATED_COUNT) as usize],
         // spec: S-0506 claim 2 (the first pass 20 ticks after the controller is created)
         next_pass: t.wrapping_add(20),
         ..Default::default()

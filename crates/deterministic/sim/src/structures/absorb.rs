@@ -595,9 +595,8 @@ fn power_due(w: &mut World, b: ObjectId) {
 /// infantry entry; otherwise claim 8's vehicle entry.
 fn go_in(w: &mut World, u: ObjectId, b: ObjectId, infantry: bool) {
     if !infantry && let Some(ob) = w.obj_mut(u) {
-        // spec: S-0605 claim 8 (it forgets the object it remembers entering and leaves any bridge deck)
+        // spec: S-0605 claim 8 (it forgets the object it remembers entering; it leaves any bridge deck below, after `take_inside` has released its claims in the layer of its position, S-0209 claim 1, as boarding does)
         ob.dest = None;
-        ob.layer = Layer::Ground;
     }
     // spec: S-0605 claims 7 and 8 and S-0609 claim 11 (spin value, stage and elapsed-tick count become 0)
     crate::gattling::reset(w, u);
@@ -626,6 +625,7 @@ fn go_in(w: &mut World, u: ObjectId, b: ObjectId, infantry: bool) {
         ob.contact = None;
         ob.structure.absorbed_in = Some(b);
         ob.structure.waiting = None;
+        // spec: S-0605 claims 7 and 8 (it leaves any bridge deck; #346: set after the claims are released in the deck record)
         ob.layer = Layer::Ground;
         if !keep {
             // spec: S-0605 Edge cases (quirks.enter_nearest_survives_absorption off: going in clears the enter-nearest instruction)

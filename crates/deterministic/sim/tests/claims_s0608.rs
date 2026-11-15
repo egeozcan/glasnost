@@ -537,6 +537,50 @@ fn quirk_relink_strands_previous_both_positions() {
     }
 }
 
+// spec: S-0608 Edge cases (a second link strands the first: the old drain animation does not stay on a relinked drainer, whatever quirks.drain_relink_strands_previous says)
+#[test]
+fn issue_342_relink_keeps_one_drain_animation_both_positions() {
+    for strands in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.drain_relink_strands_previous = strands;
+        let (mut w, d, first) = linked_in(game_of(&r), "REF");
+        let role = glasnost_sim::anims::Role::Drain(d);
+        assert_eq!(
+            glasnost_sim::anims::with_role(&w, role).len(),
+            1,
+            "one after the first link, strands {strands}"
+        );
+        let second = put(&mut w, Kind::Building, "PLANT", BETA, 6, 0);
+        // The drainer moves over the second building; no position check has
+        // run yet. Set directly: `shift` takes it inside, which ends the link.
+        let p = Pos::centre(at(6, 0), 0);
+        let ground = w.surface_at(p.x, p.y);
+        w.obj_mut(d).unwrap().pos = Pos::new(p.x, p.y, ground);
+        attempt(&mut w, d, second);
+        assert_eq!(drain::partner(&w, d), Some(second), "strands {strands}");
+        assert_eq!(
+            drain::being_drained(&w, first),
+            strands,
+            "strands {strands}"
+        );
+        assert_eq!(
+            glasnost_sim::anims::with_role(&w, role).len(),
+            1,
+            "one drain animation on the relinked drainer, strands {strands}"
+        );
+        if strands {
+            // The stranded first link ends: the second link keeps its animation.
+            drain::end(&mut w, first);
+            assert_eq!(drain::partner(&w, d), Some(second));
+            assert_eq!(
+                glasnost_sim::anims::with_role(&w, role).len(),
+                1,
+                "the second link's animation after the first link ended"
+            );
+        }
+    }
+}
+
 // spec: S-0608 claim 5 (at the attempt that forms a link: the building's house is due to work out its power, a controller building releases all its victims, the drain animation starts on the drainer with its creation draw; with no drain animation nothing is shown; a failed attempt releases nothing)
 #[test]
 fn claim_5_when_the_link_forms() {

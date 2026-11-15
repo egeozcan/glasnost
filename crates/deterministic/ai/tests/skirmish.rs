@@ -169,7 +169,17 @@ fn opening_by_orders() {
 // 18 000, with its launcher on the line. So house 1 is now kept on its
 // island ([`climb_rules`]): only house 0 may build what crosses the water or
 // strikes across it. House 1 still climbs to LAB, and its waves wait on its
-// own shore, within the launcher's range of house 0's shore.
+// own shore, within the launcher's range of house 0's shore. Since sim
+// issues S18 (#263, S-0212 r100 claim 20: the refresh as the last stored
+// step begins keeps the old step and takes the track from the new path's
+// second step) the game went otherwise from tick 12 080 (a house 1 vehicle
+// took a curve where it had driven straight): house 0's two boats destroyed
+// house 1's war factory, pillbox and power plant between ticks 17 000 and
+// 17 700, house 1's waves were gone by tick 23 000, and house 0 won at tick
+// 37 168 with its launcher never within 18 cells of an enemy, so no rocket
+// flew. So the naval yard and its boat are now closed to both houses (the
+// naval game is played by `builds_a_navy_on_a_water_map`), and house 1's
+// waves again wait on its shore until the launchers fire at them.
 #[test]
 #[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
 fn climbs_to_the_launcher_and_fires() {
@@ -219,18 +229,33 @@ fn climbs_to_the_launcher_and_fires() {
     assert!(rockets > 0, "a rocket flew");
 }
 
-/// The climb's rules: the skirmish rules with every type that crosses the
-/// island map's water or strikes across it open to house 0's country
-/// (Alphaland) only. These are the naval yard and its boat, the hovercraft,
-/// the hovering transport, the aircraft pad and its jet, the missile silo
-/// and the launcher. What house 1 keeps cannot reach house 0's island: its
-/// ground units and wheeled transport keep to their own island, and the gun
-/// (5.5 cells) is short of the 9-column strait.
+/// The climb's rules: the skirmish rules with the naval yard and its boat
+/// closed to both houses, and every other type that crosses the island
+/// map's water or strikes across it open to house 0's country (Alphaland)
+/// only. These are the hovercraft, the hovering transport, the aircraft pad
+/// and its jet, the missile silo and the launcher. What house 1 keeps cannot
+/// reach house 0's island: its ground units and wheeled transport keep to
+/// their own island, and the gun (5.5 cells) is short of the 9-column
+/// strait.
 fn climb_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
     let mut r = fixture::ruleset();
+    // spec: S-0407 claim 5 (c) (a required list of only unknown names is an empty set: no house may build the type)
+    let nobody = || Some(vec!["Nowhere".to_string()]);
+    r.sim
+        .buildings
+        .get_mut("NAVY")
+        .expect("the naval yard")
+        .econ
+        .required_houses = nobody();
+    r.sim
+        .vehicles
+        .get_mut("BOAT")
+        .expect("the boat")
+        .econ
+        .required_houses = nobody();
     let only_alpha = || Some(vec!["Alphaland".to_string()]);
     // spec: S-0407 claim 5 (b) (a required list refuses a type unless the house's country is in it)
-    for n in ["NAVY", "HPAD", "SILO"] {
+    for n in ["HPAD", "SILO"] {
         r.sim
             .buildings
             .get_mut(n)
@@ -238,7 +263,7 @@ fn climb_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
             .econ
             .required_houses = only_alpha();
     }
-    for n in ["BOAT", "HOVR", "LIFT", "LNCH"] {
+    for n in ["HOVR", "LIFT", "LNCH"] {
         r.sim
             .vehicles
             .get_mut(n)
