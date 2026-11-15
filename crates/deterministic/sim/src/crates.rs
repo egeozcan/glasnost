@@ -453,6 +453,10 @@ pub fn place_beneath(w: &mut World, at: CellXY, money: bool) -> bool {
 /// The game-start placements (claim 2): `n` random placements in order.
 pub fn place_at_start(w: &mut World, n: i32) {
     for _ in 0..n {
+        if free_place(w).is_none() || !overlays_named(w) {
+            // spec: S-0520 claim 1 (a placement that finds every place occupied does nothing and takes no draw; nothing at game start frees a place, so every later placement would do nothing too)
+            break;
+        }
         place_random(w);
     }
 }
