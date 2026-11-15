@@ -1301,9 +1301,10 @@ fn infantry_on(
     let r = w.rules();
     let tb = building(w, t);
     let is_bld = tb.is_some();
-    // spec: S-0214 table I value e (row e4: a hospital, no force-fire, the actor at full health; armories and docking answers need contact exchanges)
+    // spec: S-0214 table I value e (defined only for an allied building not being erased, #358; row e4: a hospital, no force-fire, the actor at full health; armories and docking answers need contact exchanges)
     let e = (is_bld
         && allied(w, actor, t)
+        && !being_erased(w, t)
         && tb.is_some_and(|b| b.raw.hospital.unwrap_or(false))
         && !mods.force_fire
         && !below_full(w, actor))
@@ -1318,9 +1319,11 @@ fn infantry_on(
     } else {
         Action::Nothing
     };
-    // spec: S-0214 table I value x (rows x1 to x4)
+    // spec: S-0214 table I value x (rows x1 to x4; defined only for a target not being erased and not phasing in, #358)
     let x = (unit_or_building(w, t)
         && allied(w, actor, t)
+        && !being_erased(w, t)
+        && !crate::teleport::phasing_in(w, t)
         && passengers(w, t)
         && movable(w, house, actor)
         && !matches!(v, Action::Attack | Action::AreaGuard | Action::NoEnter))
@@ -1659,13 +1662,15 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
         // spec: S-0214 table V row n3 (an accepting allied building: enter)
         Action::Enter
     };
-    // spec: S-0214 table V value q (rows q1 to q3 apply to an allied passenger-carrying target other than the actor)
+    // spec: S-0214 table V value q (rows q1 to q3 apply to an allied passenger-carrying target other than the actor, not being erased and not phasing in, #358)
     let q = if !matches!(
         n,
         Action::Attack | Action::RepairVehicle | Action::AreaGuard | Action::NoEnter
     ) && unit_or_building(w, t)
         && allied(w, actor, t)
         && t != actor
+        && !being_erased(w, t)
+        && !crate::teleport::phasing_in(w, t)
         && passengers(w, t)
     {
         if kind(w, t).is_some_and(Kind::is_mobile) && moving(w, t) {
