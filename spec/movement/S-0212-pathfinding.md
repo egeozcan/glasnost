@@ -2,14 +2,14 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 98
+revision: 100
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-09
+approved-on: 2026-11-15
 measurements: []
 requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280, Q-1751, Q-1771,
-Q-1870, Q-1975, Q-2896]
+Q-1870, Q-1975, Q-2896, Q-3115]
 supersedes: []
 ---
 
@@ -69,7 +69,7 @@ independent evidence:
 |---|---|---|
 | Search selection | first-recorded route retention and its margin (11), original tie differences (12a), corridor progress, free-part and closure predicates, individual sector and connection choices (13 to 13b), flattening precedence and straight-run V's (17), threat and post-tunnel transformations (18) | These jointly predict a stored path, but no proposed scenario separates each remaining predicate from the others. They are unmeasured route hypotheses, not settled observations of intermediate work. Their exact definitions keep the reference predictions falsifiable as a family. |
 | Unreachable or oversized cases | comparisons involving off-map cells (2, 4), unobservable connectivity changes and same-tick update timing (3, 5), unknown-zone gate exception (6), unusual train start state (7), exact gate and remaining train cost entries (8), permanent marks (9), same-cell computation and search limits (12, 13), absent-link bridge reads and estimate legs (3, 4, 13b, 24), loaner and retreat conditions (14), duplicate/hidden-centre and hidden-ring limits (25) | Normal input cannot force the relevant state, or no discriminating fixture is known. Limits and undefined-result departures still need deterministic answers in our engine. The local backing states which parts are original hypotheses and which are design rules. |
-| Remaining caller/state distinctions | lepton-scale refresh boundary and table-root distinction, ship retained-step and ship/hover/walker chase-cut isolation (20), post-substitution gate and jumpjet estimate zone (14, 24), mode-2 path-length conditions and independently existing marks (19), remaining locomotors' failure retention (23), untested no-move/object-order parameters (25) | The scenarios do not isolate these states from other reactions. They remain explicitly unmeasured; ordinary caller observations are no backing for them. |
+| Remaining caller/state distinctions | lepton-scale refresh boundary and table-root distinction, the dropped first step, the absence of a refresh at a curve over the last two stored steps, ship retained-step and ship/hover/walker chase-cut isolation (20), post-substitution gate and jumpjet estimate zone (14, 24), mode-2 path-length conditions and independently existing marks (19), remaining locomotors' failure retention (23), untested no-move/object-order parameters (25) | The scenarios do not isolate these states from other reactions. They remain explicitly unmeasured; ordinary caller observations are no backing for them. |
 
 Scenarios P20 to P25 add separate probes of reachable height, nearby-search, blocker-chain,
 cost and timing rules. Their qualification conditions are checked against observable state.
@@ -1565,14 +1565,37 @@ Terms specific to this spec:
     order-level destination. S-0503 claim 16 owns when stop retains that point and the
     stored path; clearing the order-level destination alone does not require a new path.
 
+    The recomputation of the first case is made only as a step begins with no further step stored
+    after it, once the step check of that step's cell has given *clear* (S-0207 claim 15). It is not
+    made inside a track, nor at a chain point (S-0207 claim 8). A two-cell curve that uses the last
+    two stored steps (S-0207 claim 7) therefore begins as usual and makes no recomputation, whatever
+    the switch below. The curve uses both steps, so the stored path is empty when it ends. When the
+    unit has not arrived then (S-0207 claims 25 and 26), it makes the fresh search of the second
+    case from the cell the curve ended in, subject to claim 21's delay, and follows that path from
+    its first step.
+
     When a path is recomputed as the last stored step begins, the unit still takes that old step,
-    and the new path's first step is dropped: the unit continues with the new path's second step
-    from the cell the old step reached (`quirks.path_refresh_keeps_old_step`). When the new path's
-    first step is the old step, as is usual, this has no visible effect. Otherwise every later step
-    is taken from a cell one step away from the cell it was planned from, until a step is refused or
-    the path is computed again. For a train type, the step in progress is kept on purpose: the search
-    starts where that step leads and its result is stored after it, still up to 24 steps in total,
-    so the quirk does not arise.
+    and the new path's first step is dropped (`quirks.path_refresh_keeps_old_step`). The old step
+    and the new path's second step choose the track as the current and the next step of S-0207
+    claim 7. A straight or diagonal track takes the old step, and the unit continues with the new
+    path's second step from the cell the old step reached. A two-cell curve takes the old step and
+    then the new path's second step, and the unit continues with the new path's third step. When the
+    new path's first step is the old step, as is usual, this has no visible effect. Otherwise, once
+    that track has begun, every later step is taken from a cell one step away from the cell it was
+    planned from, until a step is refused or the path is computed again. When the curve's second cell
+    does not give *clear*, S-0207 table T5 applies, with one difference: where its *moving blocker*
+    row begins the straight or diagonal track into the first cell instead, the step taken is the new
+    path's first step, from the unit's cell, after a turn when the unit does not face it (S-0207
+    claim 6) and a step check of the cell that step enters. No step of the new path is dropped then.
+    In T5's other rows the stored path they discard is the new path, and neither the old step nor
+    any step of the new path is taken. The search that follows is a fresh search, not the
+    recomputation above, so none of its steps is dropped: it is made at once for *stationary
+    friendly* and *blocked*, once the path retry timer has run out for an obstacle, as in T4 for a
+    *cloaked blocker*, and after a *closed friendly gate* as for any unit with no stored steps. The
+    step check after it is S-0207 claim 15's: after the search made at once, a check of the found
+    path's first step, made when the unit faces that step. For a train type, the step in progress
+    is kept on purpose: the search starts where that step leads and its result is stored after it,
+    still up to 24 steps in total, so the quirk does not arise.
 
     When a unit with the driving, ship or hovering locomotor has a vehicle or an infantry unit rather than a cell as its
     destination, the stored path
@@ -1601,11 +1624,36 @@ Terms specific to this spec:
       hovering unit's other step-point reactions. `unmeasured` for the absence of the
       chase cut in the walk locomotor: a walker that follows a moving unit meets it within a few
       cells as a moving blocker or a stationary friendly, and S-0209's reactions then make new
-      paths of their own, so the absence of the cut cannot be isolated
+      paths of their own, so the absence of the cut cannot be isolated. P5 run 4 and the control of
+      P9's train refresh run back one thing about a recomputation whose new path turns away from
+      the old step: the old step's own straight track is not begun (the vehicle never enters (*x*,
+      row 24)). They also back the reading of T5's *stationary friendly* and *blocked* rows at that
+      curve's second cell given above: the step check after the search made at once is of the new
+      path's first step, not a second look at the curve's second cell (which would give up the move
+      or send a scatter request). They do not tell the track chosen from the old step and the new
+      path's second step from a choice made afresh from the new path's first two steps (the
+      switch-off form), which enters the same cells. `unmeasured` for that track choice, for the
+      dropped first step itself and for the *moving blocker* difference: no setup is known that is
+      sure to give a new first step that differs from the old step while the track chosen with the
+      new second step begins. `unmeasured` for when the recomputation is made (once the step check
+      of the step's cell has given *clear*, not inside a track, not at a chain point): no scenario
+      here refuses the cell of a lone last stored step while the heading point is far, or lets a
+      passive vehicle chain into its last stored step. `unmeasured` for the absence of a
+      recomputation at a curve that uses the last two stored steps, and the fresh search after it:
+      on a map that does not change, that search gives the cells a recomputation at the curve's
+      start that dropped both steps would give, and which stored steps form the curve depends on
+      the straightening of claims 17 and 18, which no scenario here fixes for steps 23 and 24.
+      `unmeasured` for the switch-off form: the original has no such form
     - Confidence: high for the 24-step limit. Medium for the 512-lepton trigger, the chase cut, the
       train rule and their absence in the walk locomotor. High for destination presence
       independent of search success and goal-cell inequality (S-0207 claim 25). High for the cell/object distinction and the cleanup conditions of the object and guard rows, as S-0207 claim 26 gives them.
-      Low for the dropped first step
+      Low for the dropped first step, for the track chosen at a recomputation from the old step
+      and the new path's second step, and for the T5 cases after it (S-0207 claim 15 rates T5
+      low). Medium for when the recomputation is made (once the step check has given *clear*, not
+      inside a track, not at a chain point; S-0207 claim 15 rates T4 medium and claim 8 rates the
+      details of chaining medium), for the absence of a recomputation at a curve that uses the last
+      two stored steps, and for the fresh search after that curve. Medium for the switch-off form
+      (design rule, decided at the delegated sign-off, 2026-11-15)
 
 21. **Retry delay.** The retry delay is *R* = trunc(*P* × 900) ticks (F3), where *P* is the
 path-retry delay field in game minutes. The path retry timer of S-0209 counts it down. A unit
@@ -2656,7 +2704,8 @@ south and west.
 | stored path | next step *clear* | follows it (movement specs) |
 | stored path, driving or ship locomotor | next step of another outcome, neither *moving blocker* nor *blocked* | reacts as S-0209 and the movement specs say: opens a gate, attacks an obstacle or waits (claim 22) |
 | stored path, more than one step | the next step begins | the step is taken |
-| stored path, one step left, driving or ship locomotor | that step begins, heading point more than 512 leptons away | immediate recomputation in mode 0 (claim 20), the old step is still taken |
+| stored path, one step left, driving or ship locomotor | that step begins, heading point more than 512 leptons away | immediate recomputation in mode 0 (claim 20): the old step and the new path's second step choose the track, and the old step is still taken |
+| stored path, two steps left, driving or ship locomotor | they begin as one two-cell curve | no recomputation; the curve uses both steps, and when the unit has not arrived, the empty stored path gets a fresh search where the curve ends (claim 20) |
 | stored path, driving or ship locomotor | next step *moving blocker* | blockage timer starts if not running. When the retry delay is over, re-path in mode 1, or 2 once the blockage timer has run out |
 | stored path, driving or ship locomotor | first check of the track's first cell: outcome *blocked* | stored path cleared, fresh search on this tick regardless of the retry timer; a found path gets a repeated check on this tick (claim 22) |
 | stored path, walk locomotor | next step of any outcome other than *clear* | reacts as S-0209 claims 7 to 10 say, with the delays of claim 21 |
@@ -2767,7 +2816,12 @@ Ordering consequences:
 - **`quirks.path_refresh_keeps_old_step`** (default: on). When a path is recomputed as the last stored
   step begins (claim 20), the unit takes the old step and drops the new path's first step, so the
   rest of the new path is followed from a cell one step away from where it was planned whenever the
-  two first steps differ. Off: the unit takes the new path's first step instead of the old one.
+  two first steps differ. The old step and the new path's second step choose the track (claim 20
+  gives the cases in which a curve chosen then is refused at its second cell). Off: the
+  recomputation is made at the same moment, and the step check starts again from the new path's
+  first step as for any stored path: the unit turns to it if needed (S-0207 claim 6), checks its
+  cell (S-0207 claim 15), and the new path's first two steps choose the track (S-0207 claim 7). A
+  two-cell curve that uses the last two stored steps makes no recomputation with either setting.
 - **`quirks.nearby_centre_twice`** (default: on). The nearby-cell search of claim 25 examines its
   centre cell twice, so a qualifying centre is collected twice: it takes two of the 24 places and,
   when the rule gives no reference cell, two of the *n* positions of the choice by tick number.
@@ -3340,7 +3394,9 @@ acquisition, not a path computation's gate or subsequent route search.
   - Observable: runs 1 and 2: the cell at which the vehicle stops and the tick its destination is
     cleared. Run 1i: the first cell at which the infantry unit stops. Run 3: the number of steps between successive recomputations, and the separation in
     cells at the earlier one. Run 4: the cell the test vehicle enters from row 23, and the one
-    after it.
+    after it; the tick its destination is cleared, if it is; and whether any of the three vehicles
+    on row 25 moves between the test vehicle's arrival on row 23 and its arrival on (*x* + 2, row
+    25).
   - Expected: run 2: it drives on until its stored path, which still crosses the bridge, reaches the
     gap. There the next step is refused, the fresh search fails the gate and the destination is
     cleared. Run 1: the bridge lies beyond its 24 stored steps. It computes a new path at once as it
@@ -3353,19 +3409,31 @@ acquisition, not a path computation's gate or subsequent route search.
     Run 3: the number of steps between
     recomputations is ⌊separation in leptons / 256⌋ at the earlier recomputation, within 2 steps
     (the chased vehicle moves a little meanwhile), and never more than 24. Run 4 (low
-    confidence): the recomputation from row 23 finds a new path whose first step is diagonal, to
-    (*x* + 1, row 24), the cheapest way past the three vehicles (the mirror-image detour has the same
-    length and loses on the direction terms). The vehicle still takes the old straight step to
-    (*x*, row 24), and then the new path's second step, diagonal from there towards
-    (*x* + 1, row 25), which holds a friendly vehicle.
+    confidence): the recomputation from row 23 finds a new path whose first two steps are diagonal,
+    to (*x* + 1, row 24) and (*x* + 2, row 25), the cheapest way past the three vehicles (the
+    mirror-image detour has the same length and loses on the direction terms). The old straight
+    step and the new path's second step choose a two-cell curve through (*x*, row 24) to
+    (*x* + 1, row 25) (claim 20, S-0207 claim 7). That cell holds a stationary friendly vehicle, so at
+    this first check of the curve's second cell the vehicle discards its stored path and searches
+    again at once from row 23 (S-0207 table T5). It finds the same path. The step check that follows
+    is of that path's first step and is made only when the vehicle faces it (S-0207 claim 15): facing
+    north, it first turns (S-0207 claim 6), and its first check of (*x* + 1, row 24) on a later tick
+    gives *clear*. It drives diagonally from row 23 to (*x* + 1, row 24) and on to (*x* + 2, row 25).
+    It never enters (*x*, row 24), it does not give up the move, and none of the three vehicles on
+    row 25 moves meanwhile. With `quirks.path_refresh_keeps_old_step` off it enters the same
+    cells, so this run does not test the dropped first step.
   - Falsified if: in run 1 the destination is cleared before the 23rd step is done, or only once
     the vehicle has reached the cell 24 steps from the start (which would mean the path is recomputed
     only when it is used up), or in run 1i the infantry unit first stops before the cell 24 steps
     from the start (which would mean the walk locomotor recomputes early too), or in run 2 before the vehicle reaches the gap. In run 3 the steps
     between recomputations are 24 whatever the separation, or differ from ⌊separation in leptons /
-    256⌋ by more than 2 steps. In run 4 the vehicle moves from row 23 directly to
-    (*x* + 1, row 24) and on to (*x* + 2, row 25), which would mean the new path's first step is
-    taken (`quirks.path_refresh_keeps_old_step` off).
+    256⌋ by more than 2 steps. In run 4 the vehicle enters (*x*, row 24) from row 23, which would
+    mean that the old step's own straight track is begun at the recomputation, or that T5 does not
+    apply to that curve's second cell. In run 4 the test vehicle's destination is cleared on row
+    23, or a vehicle on row 25 moves between the test vehicle's arrival on row 23 and its arrival
+    on (*x* + 2, row 25), which would mean that the check after T5's
+    search made at once looks at the curve's second cell again (a give-up or a scatter request)
+    rather than at the new path's first step.
 - **P6 (claims 19, 21, 22, 27): retry delay and blockage modes.**
   - Setup: test override in the test map's override section for the game-wide AI fields (Import
     mapping here and in S-0209): the path-retry delay set to a value *P* with trunc(*P* × 900) = 90
@@ -3542,8 +3610,8 @@ acquisition, not a path computation's gate or subsequent route search.
     *blocked* (claim 27).
   - Observable: whether the tunnel is used, the cells the train enters in train runs 1 to 4 and the
     tick its destination is cleared in run 1, the destinations and final cells of the two follower
-    cars. Train refresh run: the cells entered from row 23 on, and whether the stored path is
-    emptied by a refused step (recorder).
+    cars. Train refresh run: the cells entered from row 23 on, and the tick the control's
+    destination is cleared, if it is.
   - Map layout for the tunnel: an overland route of *n* clear straight steps, and a tunnel route of
     *a* clear straight steps to the entrance, a tunnel of Chebyshev length *t* and *e* clear straight
     steps after the exit, chosen so that *n* − (*a* + *t* + *e*) = 2.
@@ -3569,12 +3637,16 @@ acquisition, not a path computation's gate or subsequent route search.
     of the found path is (which a reference implementation of claims 7 to 18 gives for the map).
     Train refresh run: the walls give outcome *blocked* (claim 27), the only outcome a train's
     search avoids (claim 8). The control behaves as in P5 run 4: as it begins the step from row 23
-    to (*x*, row 24) it computes a new path from row 23, whose first step is diagonal to (*x* + 1,
-    row 24). It still takes the old step and then the new path's second step, diagonal towards (*x*
-    + 1, row 25), a wall cell: that step is refused, its stored path is emptied and a fresh search
-    follows (claim 22). The train computes its new path from (*x*, row 24), where the step in
-    progress leads, and keeps that step: from (*x*, row 24) it steps sideways and passes the walls
-    without a refused step.
+    to (*x*, row 24) it computes a new path from row 23, whose first two steps are diagonal, to
+    (*x* + 1, row 24) and (*x* + 2, row 25). The old step and that second step choose a two-cell
+    curve whose second cell, (*x* + 1, row 25), is a wall cell and gives *blocked*. At this first
+    check the control discards its stored path and searches again at once from row 23 (S-0207
+    table T5). The step check that follows is of the new path's first step, made once the control
+    has turned to it (S-0207 claim 15), and it drives diagonally to (*x* + 1, row 24): it never
+    enters (*x*, row 24), and it does not give up the move. The train
+    computes its new path from (*x*, row 24), where the step in progress leads, and keeps that
+    step: it enters (*x*, row 24), steps sideways from there and passes the walls without a
+    refused step.
   - Falsified if: the vehicle drives overland (which would mean the entrance, or the tunnel step,
     costs more than claim 9 says), the train of run 1 reaches its destination by any route (claim
     16), the train of run 2, 3 or 4 enters other cells than expected (7 or more cells in run 2 or 3
@@ -3582,11 +3654,13 @@ acquisition, not a path computation's gate or subsequent route search.
     first step cannot enter the cells the search excluded; in run 4, the 5 cells (*x* + 1, *y* + 1),
     (*x* + 2, *y* + 1), (*x* + 1, *y* + 2), (*x* + 1, *y* + 3), (*x* + 1, *y* + 4) would contradict
     `quirks.detour_mirrored_reference`, and any other sequence the stretch selection of claim 18),
-    or the cars' cells differ from the expectation. In the train refresh run, the train's stored
-    path is emptied by a refused step into a wall cell (which would mean a train drops a step like
-    other vehicles). If the control shows no refused step either,
-    `quirks.path_refresh_keeps_old_step` is contradicted (P5 run 4) and the train refresh run says
-    nothing about trains.
+    or the cars' cells differ from the expectation. In the train refresh run, the train does not
+    enter (*x*, row 24) from row 23 (which would mean a train computes its new path from its own
+    cell, like other vehicles). If the control enters (*x*, row 24) as well, the track choice at a
+    recomputation (claim 20) is contradicted, as in P5 run 4, and the train refresh run says nothing
+    about trains. If the control's destination is cleared on row 23 (it gives up the move), the check
+    after T5's search made at once looks at the curve's second cell again rather than at the new
+    path's first step.
 - **P10 (claim 13): threat avoidance.**
   - Setup: test override giving a vehicle type a threat coefficient of 1.0, and an otherwise equal
     type with 0, both of the human house. Two routes from the start to a goal, separated by
@@ -4757,6 +4831,25 @@ proposed recorder runs, not completed measurements.
   delay" can add that S-0212 scenario P25(e) run 1 reads the end of the retry delay for an order
   to the walker's present destination cell. Level and backing: medium, `measurable` (S-0212
   P25(e) run 1).
+- **S-0207, claim 7 and table T5, row *moving blocker*.** "The straight or diagonal track into
+  the first cell begins instead (claim 7); the stored path is kept" can add the case of a curve
+  chosen at a recomputation of S-0212 claim 20 from the old step and the new path's second step:
+  the track begun instead is that of the new path's first step, from the vehicle's cell, after a
+  turn when needed and a step check of the cell that step enters, so no step of the new path is
+  dropped. With
+  `quirks.path_refresh_keeps_old_step` on, as stated; off, the curve is chosen from the new path's
+  first two steps and the row applies unchanged. Claim 7 can also say that at such a
+  recomputation the old step and the new path's second step are its current and next step, and
+  that a curve which uses the last two stored steps makes no recomputation (S-0212 claim 20).
+  Level and backing: low, `unmeasured` for the row's case (S-0212 claim 20); low, `unmeasured` for
+  the track choice at a recomputation (S-0212 P5 run 4 shows only that the old step's own straight
+  track is not begun when the new path turns away); medium, `unmeasured` for the absence of a
+  recomputation at such a curve.
+- **S-0504, claim 9.** "The ship keeps the old step already chosen and drops the first step of
+  the replacement path, just as a driver does" can point to S-0212 claim 20 for the track chosen
+  at that moment and for a curve over the last two stored steps, which makes no recomputation.
+  The ship uses S-0207 claims 7 and 15 unchanged (S-0504 claim 1). Level and backing: as S-0212
+  claim 20 rates them.
 
 ## Questions for the project lead
 
