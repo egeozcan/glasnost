@@ -781,7 +781,7 @@ fn candidate(
     if w.height_above_surface(t) < -20 {
         return Verdict::Reject;
     }
-    // spec: S-0309 table C (zone, in the searches claims 7 and 11 restrict)
+    // spec: S-0309 r144 table C (zone, in the ground-layer pass of a map-wide search that claim 7 restricts)
     if zone && ao.kind.is_mobile() && ao.kind != Kind::Aircraft && !same_zone(w, a, t) {
         return Verdict::Reject;
     }
@@ -965,12 +965,12 @@ fn rho2(w: &World, a: ObjectId, b: ObjectId) -> i64 {
 /// Whether T's cell lies in the connected region of A's movement zone that
 /// holds A's cell: table C's row *zone*, read as claim 7 gives (S-0309
 /// claim 7; S-0212 claim 4). A's own cell is read for its deck whenever it
-/// is a bridge cell, whatever layer A is in; T's cell is read in the layer T
-/// occupies, always for A's movement zone. Two cells of no reach region
-/// count as the same region. When A's deck read finds no bridge link, the
-/// restriction is omitted. Claim 11's skip of a visited cell, read for its
-/// deck, is the area search's own (`search`); which read the row uses in an
-/// area search is asked in Q-3109.
+/// is a bridge cell, whatever layer A is in; T's cell, the cell that holds
+/// T's reference point, is read in the layer T occupies, always for A's
+/// movement zone. Two cells of no reach region count as the same region.
+/// When A's deck read finds no bridge link, the restriction is omitted. The
+/// row applies only in the ground-layer pass of a map-wide search; an area
+/// search has claim 11's skip of a visited cell instead (`search`).
 pub fn same_zone(w: &World, a: ObjectId, t: ObjectId) -> bool {
     use crate::regions::{Reach, reach_read};
     let (Some(ao), Some(to)) = (w.obj(a), w.obj(t)) else {
@@ -986,9 +986,10 @@ pub fn same_zone(w: &World, a: ObjectId, t: ObjectId) -> bool {
         return true;
     }
     // spec: S-0309 claim 7 (the object's cell is read in the layer the object occupies, for the searcher's movement zone)
+    // spec: S-0309 r144 claim 7 (the object's cell is the cell that holds its reference point: for a building, the centre of its foundation without a bib row, the larger-coordinate cell on an even-length side)
     let other = reach_read(
         w,
-        to.pos.cell(),
+        w.reference_point(t).cell(),
         u.zone,
         to.layer == crate::world::Layer::Deck,
     );
@@ -1383,8 +1384,9 @@ pub fn search(
                     for x in cands_here {
                         let allied = w.allied(ao.owner, w.obj(x).and_then(|o| o.owner));
                         let tested = !allied || s.healer || s.any;
+                        // spec: S-0309 r144 table C row "zone" (no zone row in an area search, whose only reach-region test is claim 11's skip of the visited cell, nor in a range search)
                         if tested
-                            && admit(w, a, x, c, big_r, kind, kind == SearchKind::Area)
+                            && admit(w, a, x, c, big_r, kind, false)
                             && let Some(s) = score(w, a, x, false)
                         {
                             cands.push((x, s));
