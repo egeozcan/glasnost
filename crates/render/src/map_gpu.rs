@@ -8,8 +8,10 @@
 //! the pipelines that store depth. Items are drawn in scene order, batched
 //! into runs that share a pipeline, so the result matches
 //! [`Scene::compose`] pixel for pixel. The one exception is shadows: the GPU
-//! halves the expanded 8-bit channels by blending, rounded down (the blend
-//! constant `SHADOW_FACTOR`), so a shadowed pixel packs to the CPU's 5-6-5
+//! halves the expanded 8-bit channels by blending, rounded down (a shadow's
+//! source alpha `SHADOW_FACTOR` in the shader, the opaque pipelines blending
+//! source + target × source alpha so bodies and their shadows share a
+//! pipeline and a draw), so a shadowed pixel packs to the CPU's 5-6-5
 //! halving and a later translucent drawing reads the same backdrop, but its
 //! low display bits can differ from the CPU's re-expanded channels (S-0102
 //! claim 26, F7: an engine that keeps 8-bit channels packs to the same
@@ -30,16 +32,6 @@ pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
 /// Colour format of the map pass target.
 pub const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-
-/// The blend constant a shadow multiplies the target's 8-bit channels by.
-/// With *c* = 127/255, round(*v*·*c*) = ⌊*v*/2⌋ for every *v* in 0 … 255
-/// (*v*/2 − *v*/510 is within ½ − 1/510 of ⌊*v*/2⌋), and 127/255 is exact
-/// in an 8-bit fixed-point blend unit. ⌊*v*/2⌋ keeps the top 5 (6) bits of
-/// a halved expanded channel equal to the halved 5-bit (6-bit) channel, at
-/// every repeat, so `packed` reads the CPU's pixel.
-// spec: S-0102 claim 26, F7 (each channel halved, rounded down)
-// design: render (#79) (a factor under one half, so the blend's rounding to nearest gives the floor)
-const SHADOW_FACTOR: f64 = 127.0 / 255.0;
 
 const NO_IMAGE: u32 = u32::MAX;
 
@@ -329,15 +321,14 @@ fn row_side(device: &wgpu::Device) -> u32 {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Role {
     Tile,
+    /// Writer, reader and a drawing that ignores depth (neither reads nor
+    /// writes it, S-0102 claim 25): opaque drawings and shadows alike, a
+    /// shadow darkening what is under it by the blend (design: render
+    /// (#114)); a shadow that stores its depth where it darkens (S-0102
+    /// claim 27) is a writer.
     Writer,
     Reader,
-    Shadow,
-    /// Neither reads nor writes depth (S-0102 claim 25).
     Ignore,
-    /// A shadow that stores its depth where it darkens (S-0102 claim 27).
-    ShadowWriter,
-    /// A shadow that neither reads nor writes depth (S-0102 claim 25).
-    ShadowIgnore,
     /// Translucent drawings (S-0102 claim 32, F8) with the depth tests of
     /// a tile, a writer, a reader and a drawing that ignores depth: the
     /// shader blends with a copy of the target.
@@ -351,14 +342,11 @@ enum Role {
 }
 
 /// Every role, in pipeline order.
-const ROLES: [Role; 12] = [
+const ROLES: [Role; 9] = [
     Role::Tile,
     Role::Writer,
     Role::Reader,
-    Role::Shadow,
     Role::Ignore,
-    Role::ShadowWriter,
-    Role::ShadowIgnore,
     Role::BlendTile,
     Role::BlendWriter,
     Role::BlendReader,
@@ -809,11 +797,9 @@ impl MapRenderer {
             let (compare, write) = match role {
                 Role::Tile => (wgpu::CompareFunction::LessEqual, true),
                 Role::Writer => (wgpu::CompareFunction::Less, true),
-                Role::Reader | Role::Shadow => (wgpu::CompareFunction::Less, false),
-                Role::Ignore => (wgpu::CompareFunction::Always, false),
-                Role::ShadowWriter => (wgpu::CompareFunction::Less, true),
+                Role::Reader => (wgpu::CompareFunction::Less, false),
                 // spec: S-0102 claim 25 (a drawing with no depth test neither reads nor writes depth)
-                Role::ShadowIgnore => (wgpu::CompareFunction::Always, false),
+                Role::Ignore => (wgpu::CompareFunction::Always, false),
                 Role::BlendTile => (wgpu::CompareFunction::LessEqual, true),
                 Role::BlendWriter => (wgpu::CompareFunction::Less, true),
                 Role::BlendReader => (wgpu::CompareFunction::Less, false),
@@ -821,15 +807,19 @@ impl MapRenderer {
                 // spec: S-0518 claim 20 (a beam reads depth and never writes it; strictly less passes)
                 Role::Spot => (wgpu::CompareFunction::Less, false),
             };
-            let blend = matches!(role, Role::Shadow | Role::ShadowWriter | Role::ShadowIgnore)
-                .then_some(wgpu::BlendState {
+            // design: render (#114): source + target × source alpha; `fs_main` gives an opaque
+            // drawing alpha 0 (its own colour) and a shadow black with alpha `SHADOW_FACTOR`
+            // (the target darkened), so bodies and shadows share a pipeline and a draw
+            let blend = matches!(role, Role::Writer | Role::Reader | Role::Ignore).then_some(
+                wgpu::BlendState {
                     color: wgpu::BlendComponent {
-                        src_factor: wgpu::BlendFactor::Zero,
-                        dst_factor: wgpu::BlendFactor::Constant,
+                        src_factor: wgpu::BlendFactor::One,
+                        dst_factor: wgpu::BlendFactor::SrcAlpha,
                         operation: wgpu::BlendOperation::Add,
                     },
                     alpha: wgpu::BlendComponent::OVER,
-                });
+                },
+            );
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("map"),
                 layout: Some(&pipeline_layout),
@@ -1345,11 +1335,12 @@ impl MapRenderer {
                     let role = match (item.paint, item.test) {
                         // spec: S-0102 claim 27 (a cell-pass shadow stores its depth, quirks.cell_pass_shadows_write_depth)
                         (Paint::Shadow, DepthTest::Writer) if q.cell_pass_shadows_write_depth => {
-                            Role::ShadowWriter
+                            Role::Writer
                         }
                         // spec: S-0102 claim 25 (no depth test: drawn whatever the stored depth), S-0111 claim 16 (the self-heal marker)
-                        (Paint::Shadow, DepthTest::Ignore) => Role::ShadowIgnore,
-                        (Paint::Shadow, _) => Role::Shadow,
+                        (Paint::Shadow, DepthTest::Ignore) => Role::Ignore,
+                        // A shadow otherwise reads depth and stores none.
+                        (Paint::Shadow, _) => Role::Reader,
                         (Paint::Translucent(..), DepthTest::Reader) => Role::BlendReader,
                         (Paint::Translucent(..), DepthTest::Tile) => Role::BlendTile,
                         (Paint::Translucent(..), DepthTest::Writer) => Role::BlendWriter,
@@ -1363,7 +1354,8 @@ impl MapRenderer {
                 }
             };
             // `diamond` holds the diamond flag in bit 0, the translucency
-            // code in bits 1 and 2 and the protection colour mask in bits 16
+            // code in bits 1 and 2, the pixel-particle flag in bit 3, the
+            // shadow flag in bit 4 and the protection colour mask in bits 16
             // to 31.
             let (row, diamond, shade_rows, rho) = match item.paint {
                 Paint::Row(r) => (r as u32, 0, 0, 0),
@@ -1386,7 +1378,8 @@ impl MapRenderer {
                 Paint::Translucent(s, t) => {
                     (s.base, t.code() << 1, u32::from(s.rows), u32::from(s.rho))
                 }
-                Paint::Shadow => (0, 0, 0, 0),
+                // design: render (#114): bit 4 marks a shadow
+                Paint::Shadow => (0, 1 << 4, 0, 0),
                 // spec: S-0616 claim 28 (a pixel particle's own colour, flagged by bit 3)
                 Paint::Pixel(c) => (
                     (u32::from(c.r) << 16) | (u32::from(c.g) << 8) | u32::from(c.b),
@@ -1505,12 +1498,6 @@ impl MapRenderer {
                 .forget_lifetime();
             pass.set_bind_group(0, &self.bind_group, &[]);
             pass.set_vertex_buffer(0, self.instances.slice(..));
-            pass.set_blend_constant(wgpu::Color {
-                r: SHADOW_FACTOR,
-                g: SHADOW_FACTOR,
-                b: SHADOW_FACTOR,
-                a: 1.0,
-            });
             pass
         };
         self.stats.draws += batches.len();
