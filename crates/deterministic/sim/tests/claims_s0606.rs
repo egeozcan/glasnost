@@ -544,9 +544,19 @@ fn issue_272_off_a_hovering_locomotor_vehicle_is_refused_at_p8() {
     let (mut w, b, u) = hover_loco_game(false);
     assert!(!bunker::eligible(&w, u), "not bunker-eligible");
     assert!(!bunker::permits(&w, b, u), "P8");
-    send(&mut w, u, b);
-    assert_eq!(w.obj(u).unwrap().contact, None, "no contact");
-    assert_eq!(w.obj(u).unwrap().dest, None, "not sent toward the bunker");
+    // No order sends it toward the bunker: a click on the bunker is not an
+    // enter (S-0214 table V value n asks claim 2's permission). An enter
+    // order given directly skips the click, and claim 3's first request
+    // has no eligibility test.
+    let house = w.obj(u).unwrap().owner.unwrap();
+    let click = targeting::action(
+        &w,
+        house,
+        u,
+        targeting::ClickOn::Object(b),
+        targeting::Modifiers::default(),
+    );
+    assert_ne!(click, targeting::Action::Enter, "the click is no enter");
     // Claim 3: a repeated request from a vehicle in contact is refused once
     // it is not bunker-eligible (the refusal ends the contact).
     w.obj_mut(u).unwrap().contact = Some(b);
