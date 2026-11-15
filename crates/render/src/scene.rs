@@ -486,10 +486,12 @@ impl Scene {
         // at the point can win, so the replay ends at the last such item, and there is none at
         // all when no such item exists (over open ground the pick costs one cheap pass that
         // skips the items without an object, as before #68).
+        // design: render (#120): the pixel test before the filter's group lookup (the same
+        // answer: the three tests have no side effects)
         let last = self.items.iter().rposition(|item| {
             candidate(item).is_some()
-                && filter.shows(item)
                 && item.copies(top).any(|c| self.opaque_at(&c, x, y))
+                && filter.shows(item)
         })?;
         let mut frame = Frame::new(1, 1, y, view.reference);
         let mut found = None;

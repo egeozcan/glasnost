@@ -1536,6 +1536,8 @@ impl Client {
                 match self.session.as_mut() {
                     Some(s) => {
                         s.tool_tips = self.settings.tool_tips;
+                        // design: render (#120) the pointer is picked once in the frame
+                        s.begin_frame();
                         s.update_marks();
                         s.update_cursor(&mut self.painter);
                         s.update_status_glyphs(&mut self.painter);
@@ -1562,7 +1564,9 @@ impl Client {
                         self.painter
                             .set_image_size(RADAR_IMAGE, glasnost_ui::hud::RADAR);
                         // The session scales its own interface layer.
-                        return (s.draw(overlay), FrameImages { changed });
+                        let list = s.draw(overlay);
+                        s.end_frame();
+                        return (list, FrameImages { changed });
                     }
                     None => {
                         // Loading the map.
