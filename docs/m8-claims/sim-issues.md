@@ -817,9 +817,9 @@ Lanes. Base is eb5d785. The after-lanes ran at 170b645 and 235c471; the commits 
 |---|---|---|
 | Arena | exit 0 | exit 0 |
 | M6c, M7a and M7b sweeps (seeds 1 to 16) | exit 0 | exit 0 |
-| AI suite with ignored tests | exit 0 | exit 101 (`--no-fail-fast`): only `brain::land_cell_tests::the_land_cell_of_the_square_is_the_land_cell_of_the_map` fails; skirmish 7 of 7 pass |
-| Sim-gate with ignored tests | exit 0 | exit 101 (`--no-fail-fast`): `golden.rs` (`debug_prefix_matches_golden`, `full_run_matches_golden`) and `m6c.rs` (`every_m6c_ability_is_exercised_and_the_replay_reproduces_the_game`) fail, all at duel-m6c; m7a, m7b, margins and play_fixes pass |
-| AI quick lane, seeds 7 to 10 | exit 0 | exit 0; output differs from base (not traced) |
+| AI suite with ignored tests | exit 0 | exit 101 (`--no-fail-fast`): 361 of 362 pass; only `brain::land_cell_tests::the_land_cell_of_the_square_is_the_land_cell_of_the_map` fails; skirmish 7 of 7 pass |
+| Sim-gate with ignored tests | exit 0 | exit 101 (`--no-fail-fast`): 14 of 17 pass; `golden.rs` (`debug_prefix_matches_golden`, `full_run_matches_golden`) and `m6c.rs` (`every_m6c_ability_is_exercised_and_the_replay_reproduces_the_game`) fail, all at duel-m6c; m7a, m7b, margins and play_fixes pass |
+| AI quick lane, seeds 7 to 10 | exit 0 | exit 0; all 4 seed outputs differ from base under `cmp` (not traced) |
 
 Final checks:
 
@@ -834,6 +834,7 @@ Seams left:
 - #291: a bouncing conversion animation is given no infantry-making state; the mech locomotor maps to no layer rule; no path detaches an attached animation while it plays.
 - #305: the 5 x 5 search of `considered` has no test of its own.
 - #305: duel-m6c no longer exercises the charger orders or the support beams. The goldens for duel-m6c, duel-m7a and duel-m7b are not regenerated, and the sim-gate fails. The gate scenario has to be looked at again; this batch does not. For the same reason, `brain::land_cell_tests::the_land_cell_of_the_square_is_the_land_cell_of_the_map` (glasnost-ai) fails its guard `found < compared`. Its equality checks hold.
+- #374's reworked test (cc123cc) has no timeout. If the fix regresses, it runs `i32::MAX` placements and hangs instead of failing.
 - `slaves::civilian_recipient` and `garrison::civilian_house` still range over removed houses.
 - S-0009 claim 29's References rule is not built (#368).
 - The app's radar still calls the plain `observe` (the flat-grid reading, #377).
