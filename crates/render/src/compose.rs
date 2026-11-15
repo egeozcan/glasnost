@@ -410,8 +410,14 @@ impl Frame {
 
     /// Sets the light-alpha values the covers and glows of this drawn frame
     /// produced (S-0110 claims 5 and 6), one per pixel, row by row. A
-    /// buffer of another size is ignored.
+    /// buffer of another size is the caller's error: a debug build stops
+    /// at it, a release build ignores it (design: render (#151)).
     pub fn set_light_alpha(&mut self, alpha: Vec<u8>) {
+        debug_assert_eq!(
+            alpha.len(),
+            self.alpha.len(),
+            "a light-alpha buffer of another size than the frame"
+        );
         if alpha.len() == self.alpha.len() {
             self.alpha = alpha;
         }
@@ -474,11 +480,13 @@ impl Frame {
                 }
                 let depth = match &d.depth {
                     DepthSource::Tile { tile_depth, .. } => match tile_depth {
-                        Some(td) => base + i32::from(td.get(ix, iy).unwrap_or(0)),
+                        // spec: S-0102 F3 (depth = (e + d(t + 30)) mod 65536, reduced before the test)
+                        Some(td) => {
+                            (base + i32::from(td.get(ix, iy).unwrap_or(0))).rem_euclid(DEPTH_MOD)
+                        }
                         // spec: S-0102 claim 9 (tiles without depth data do not touch the buffer)
                         None => {
-                            self.paint(x, y, index, d.paint, rows);
-                            painted += 1;
+                            painted += usize::from(self.paint(x, y, index, d.paint, rows));
                             continue;
                         }
                     },
@@ -505,14 +513,19 @@ impl Frame {
                     DepthTest::Writer | DepthTest::Reader => depth < stored,
                     // spec: S-0102 claim 25 (a smudge neither reads nor writes depth)
                     DepthTest::Ignore => {
-                        self.paint(x, y, index, d.paint, rows);
-                        painted += 1;
+                        painted += usize::from(self.paint(x, y, index, d.paint, rows));
                         continue;
                     }
                 };
                 if !pass {
                     continue;
                 }
+                // A pixel the paint does not draw (its shade row missing, a
+                // pixel particle in full shroud) stores no depth either.
+                if !self.paint(x, y, index, d.paint, rows) {
+                    continue;
+                }
+                painted += 1;
                 // spec: S-0102 claim 27 (a cell-pass shadow stores its depth, quirks.cell_pass_shadows_write_depth)
                 let stores = d.test != DepthTest::Reader
                     && (q.cell_pass_shadows_write_depth || !matches!(d.paint, Paint::Shadow));
@@ -520,8 +533,6 @@ impl Frame {
                     // spec: S-0102 F2 (a writer stores the pixel depth, reduced modulo 65536)
                     self.depth[i] = depth.rem_euclid(DEPTH_MOD) as u16;
                 }
-                self.paint(x, y, index, d.paint, rows);
-                painted += 1;
             }
         }
         painted
@@ -553,45 +564,36 @@ impl Frame {
         }
     }
 
-    fn paint(&mut self, x: i32, y: i32, index: u8, paint: Paint, rows: &[Row565]) {
+    /// Paints pixel (`x`, `y`); whether it drew it.
+    fn paint(&mut self, x: i32, y: i32, index: u8, paint: Paint, rows: &[Row565]) -> bool {
         let i = (y as u32 * self.width + x as u32) as usize;
-        let row = match paint {
-            Paint::Row(r) | Paint::Diamond(r) => rows.get(r),
+        let colour = match paint {
+            Paint::Row(r) | Paint::Diamond(r) => rows.get(r).map(|row| row[usize::from(index)]),
             // spec: S-0104 claim 15, S-0110 claim 5 (the pixel's light-alpha value picks the row)
-            Paint::Lit(s) | Paint::LitDiamond(s) => {
-                if let Some(row) = rows.get(s.row(self.alpha[i])) {
-                    // spec: S-0102 claim 34, F9 (an opaque, depth-passing pixel becomes S ∨ K after
-                    // palette conversion and shade selection)
-                    self.color[i] = row[usize::from(index)] | s.mask;
-                }
-                return;
-            }
-            Paint::Translucent(s, t) => {
-                // spec: S-0102 claim 32 (the selected, lit hi-colour source pixel blends with the
-                // already-painted destination by F8)
-                if let Some(row) = rows.get(s.row(self.alpha[i])) {
-                    self.color[i] = blend(
-                        row[usize::from(index)],
-                        self.color[i],
-                        t,
-                        PixelLayout::Rgb565,
-                    );
-                }
-                return;
-            }
-            Paint::Shadow => {
-                self.color[i] = darken565(self.color[i]);
-                return;
-            }
-            Paint::Pixel(c) => {
-                if let Some(c) = pixel_colour(c, self.alpha[i]) {
-                    self.color[i] = pack565(c);
-                }
-                return;
-            }
+            // spec: S-0102 claim 34, F9 (an opaque, depth-passing pixel becomes S ∨ K after
+            // palette conversion and shade selection)
+            Paint::Lit(s) | Paint::LitDiamond(s) => rows
+                .get(s.row(self.alpha[i]))
+                .map(|row| row[usize::from(index)] | s.mask),
+            // spec: S-0102 claim 32 (the selected, lit hi-colour source pixel blends with the
+            // already-painted destination by F8)
+            Paint::Translucent(s, t) => rows.get(s.row(self.alpha[i])).map(|row| {
+                blend(
+                    row[usize::from(index)],
+                    self.color[i],
+                    t,
+                    PixelLayout::Rgb565,
+                )
+            }),
+            Paint::Shadow => Some(darken565(self.color[i])),
+            Paint::Pixel(c) => pixel_colour(c, self.alpha[i]).map(pack565),
         };
-        if let Some(row) = row {
-            self.color[i] = row[usize::from(index)];
+        match colour {
+            Some(c) => {
+                self.color[i] = c;
+                true
+            }
+            None => false,
         }
     }
 

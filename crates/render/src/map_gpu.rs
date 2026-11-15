@@ -1206,6 +1206,13 @@ impl MapRenderer {
                 // design: render (#108): nor is an item whose depth image is larger than the atlas
                 continue;
             }
+            if !matches!(item.paint, Paint::Shadow | Paint::Pixel(_))
+                && row as usize >= scene.rows.len()
+            {
+                // As the CPU reference (compose::Frame::draw): a drawing
+                // whose first palette row is missing is not drawn.
+                continue;
+            }
             let ds = depth_slot.unwrap_or(Slot {
                 x: 0,
                 y: 0,
@@ -1486,6 +1493,12 @@ impl MapRenderer {
         size: (u32, u32),
         alpha: Option<&[u8]>,
     ) {
+        // design: render (#151): a buffer of another size than the view is
+        // the caller's error, as for compose::Frame::set_light_alpha.
+        debug_assert!(
+            alpha.is_none_or(|a| a.len() == size.0 as usize * size.1 as usize),
+            "a light-alpha buffer of another size than the view"
+        );
         let size = (size.0.max(1), size.1.max(1));
         let n = size.0 as usize * size.1 as usize;
         let alpha = alpha.filter(|a| a.len() == n);

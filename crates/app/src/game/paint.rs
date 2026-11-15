@@ -146,11 +146,15 @@ impl Painter {
                     if r.is_empty() {
                         continue;
                     }
+                    // design: render (#151): each edge pixel once; a frame
+                    // one pixel high or wide has no second row or column.
+                    let bottom = i32::from(r.h > 1);
+                    let right = i32::from(r.w > 1);
                     for e in [
                         Rect::new(r.x, r.y, r.w, 1),
-                        Rect::new(r.x, r.bottom() - 1, r.w, 1),
+                        Rect::new(r.x, r.bottom() - 1, r.w, bottom),
                         Rect::new(r.x, r.y + 1, 1, r.h - 2),
-                        Rect::new(r.right() - 1, r.y + 1, 1, r.h - 2),
+                        Rect::new(r.right() - 1, r.y + 1, right, r.h - 2),
                     ] {
                         if !e.is_empty() {
                             out.push(Quad::solid(r4(e), *rgba));

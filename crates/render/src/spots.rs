@@ -200,30 +200,58 @@ fn pixel(frame: &Frame, s: &Spot, origin: (i32, i32)) -> Option<(i32, i32)> {
 }
 
 /// The depth a spot at view row `r` is compared with: the row's depth plus
-/// the bias, modulo 65536 for a beam flash (S-0514 F8), otherwise held to
-/// the depth range as every drawing's depth is.
+/// the bias, modulo 65536 for a beam flash (S-0514 F8), otherwise a plain
+/// integer as a drawing's depth is (S-0102 F2). The stored depth lies in
+/// 0 … 65535, so the GPU path's clamp to that range gives the same strict
+/// test.
 pub fn spot_depth(frame: &Frame, r: i32, s: &Spot) -> i32 {
     let v = frame.row_depth(r) + s.bias;
     match s.kind {
         // spec: S-0514 F8 (a pixel on row r passes when (d(r) + b) mod 65536 is less than the stored depth)
         SpotKind::Flash { .. } => v.rem_euclid(65536),
-        _ => v.clamp(0, 65535),
+        // spec: S-0102 F2 (d is reduced modulo 65536 before the bias is added; the comparison is between plain integers)
+        _ => v,
     }
+}
+
+/// The view pixel a wave spot at view pixel (`x`, `y`) takes its source
+/// from: shifted by `shift`, held to the view (design: render (#151): a
+/// shift beyond the view-edge margin of S-0607 claim 25 reads the nearest
+/// view pixel).
+fn wave_source(frame: &Frame, x: i32, y: i32, shift: (i8, i8)) -> usize {
+    let (w, h) = (frame.width as i32, frame.height as i32);
+    let sx = (x + i32::from(shift.0)).clamp(0, w - 1);
+    let sy = (y + i32::from(shift.1)).clamp(0, h - 1);
+    (sy * w + sx) as usize
 }
 
 /// Applies `group` to `frame`, a view whose top-left world pixel is
 /// `origin` (the CPU reference).
 pub fn apply(frame: &mut Frame, group: &SpotGroup, origin: (i32, i32)) {
     // spec: S-0607 claim 25 (source pixels are read from the picture as it stood before the wave drew)
-    let before = group
+    // Each wave spot's source, read before any spot of the group draws, in
+    // the group's order.
+    let sources: Vec<u16> = group
         .spots
         .iter()
-        .any(|s| matches!(s.kind, SpotKind::Wave { .. }))
-        .then(|| frame.color.clone());
+        .filter_map(|s| match s.kind {
+            SpotKind::Wave { shift, .. } => {
+                let (x, y) = pixel(frame, s, origin)?;
+                Some(frame.color[wave_source(frame, x, y, shift)])
+            }
+            _ => None,
+        })
+        .collect();
+    let mut sources = sources.into_iter();
     let w = frame.width as i32;
     for s in &group.spots {
         let Some((x, y)) = pixel(frame, s, origin) else {
             continue;
+        };
+        // Taken here, before any test, as the sources were gathered.
+        let source = match s.kind {
+            SpotKind::Wave { .. } => sources.next(),
+            _ => None,
         };
         let i = (y * w + x) as usize;
         // spec: S-0518 claim 20 (a sample contributes only where its depth is strictly less than the stored depth; no depth write)
@@ -253,11 +281,7 @@ pub fn apply(frame: &mut Frame, group: &SpotGroup, origin: (i32, i32)) {
                 Some(c) => c,
                 None => continue,
             },
-            SpotKind::Wave { shift: (dx, dy), k } => {
-                let (sx, sy) = (x + i32::from(dx), y + i32::from(dy));
-                let src = before.as_ref().map_or(d, |b| b[(sy * w + sx) as usize]);
-                wave(src, k)
-            }
+            SpotKind::Wave { k, .. } => wave(source.unwrap_or(d), k),
         };
     }
 }
