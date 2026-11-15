@@ -1067,7 +1067,11 @@ impl GpuDraw {
             .light
             .as_ref()
             .is_some_and(|l| l.origin == v.origin && l.size == v.size && l.covers == covers);
-        if !kept {
+        if covers.is_empty() {
+            // spec: S-0110 claim 5 (the value is 127 before any cover acts: with no covers and no glows, 127 everywhere, which `None` draws)
+            // design: render (#118) (no view-sized buffer, compare or upload for a view without covers, as in a watch game)
+            m.light = None;
+        } else if !kept {
             let alpha = s.light_alpha_of(&covers);
             m.light = Some(LightKept {
                 covers,
