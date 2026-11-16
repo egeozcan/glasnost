@@ -1359,6 +1359,28 @@ mod tests {
         assert_eq!(sel[0].at, (11, -25));
     }
 
+    /// spec: S-0111 claim 6 and Import mapping (the bar and bracket moved by δ, PixelSelectionBracketDelta,
+    /// an integer of pixels) — design: render (#153): δ at the ends of the 32-bit range places the
+    /// bar without an overflow, beyond any view, with room to add a world anchor in 32 bits
+    #[test]
+    fn an_extreme_bracket_delta_places_the_bar_without_overflow() {
+        let r = ratios("0.5", "0.25");
+        for delta in [i32::MIN, i32::MIN + 20, i32::MAX] {
+            for infantry in [false, true] {
+                let bar = unit_bar(infantry, delta, 100, 100, true, &r);
+                assert!(!bar.is_empty());
+                for p in &bar {
+                    assert!(p.at.1.unsigned_abs() >= 1 << 19, "{delta}");
+                    assert!(p.at.1.unsigned_abs() < 1 << 24, "{delta}");
+                }
+            }
+        }
+        // An ordinary δ moves the bar as before.
+        let v = unit_bar(false, -4000, 100, 100, true, &r);
+        assert_eq!(v[0].at, (1, -4026));
+        assert_eq!(v[1].at, (-15, -4025));
+    }
+
     /// spec: S-0111 claim 7 and scenario OV5 (pip counts 7, 14, 29, 15, 29
     /// and 30; Q = (−60, −15e) for a 2 × 2 foundation; the last pip 7 right
     /// of and 2 below Q)
