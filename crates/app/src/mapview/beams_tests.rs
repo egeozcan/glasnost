@@ -687,6 +687,41 @@ fn wave_spots_match_the_box_scan() {
     }
 }
 
+/// Equivalence test (design: render (#141); passes before and after the
+/// change): the spots of bands long enough that the squared distance passes
+/// 2^14 (where the table root drops digits) and 2^24 (where the conversion
+/// to single precision may round), in both directions and steep, under both
+/// roundings, are exactly the whole-box scan's, in the same order.
+/// spec: S-0607 F5 (D = trunc(r(…)) with the table root, S-0204 F1)
+#[test]
+fn long_wave_spots_match_the_box_scan_in_both_roundings() {
+    let ends = [
+        // About 4 200 pixels across the screen, both ways.
+        (pos(30000, 30000, 0), pos(47920, 12080, 0)),
+        (pos(47920, 12080, 104), pos(30000, 30000, 0)),
+        // About 2 100 pixels, with a slant.
+        (pos(30000, 30000, 0), pos(39000, 20500, 300)),
+        // Steep on the screen: about 1 000 pixels down.
+        (pos(20000, 20000, 0), pos(28600, 28600, 0)),
+        // Short ones that cross 2^14 near their ends.
+        (pos(20000, 20000, 0), pos(21100, 18900, 0)),
+        (pos(20000, 20000, 52), pos(20400, 20900, 0)),
+    ];
+    for (n, (e1, e2)) in ends.into_iter().enumerate() {
+        for mode in [RZ, Rounding::Nearest] {
+            for (dir, c) in [((1, 0), 100), ((0, 1), 41)] {
+                let want = wave_spots_scanned(e1, e2, dir, c, mode);
+                assert!(!want.is_empty(), "case {n}: some spot");
+                assert_eq!(
+                    wave_spots(e1, e2, dir, c, mode),
+                    want,
+                    "case {n}: {e1:?} to {e2:?}, {mode:?}"
+                );
+            }
+        }
+    }
+}
+
 /// spec: S-0615 claims 15 and 16 (revision 4: arc beams D = 8 − k with S = 1, E = 0.5, the last drawn
 /// tick at 0.5 + 0.5/D, not 0.5; the final beam S = 1, E = 0, the last drawn tick at 1/D, no
 /// zero-intensity tick, no beam for D ≤ 0; ordinary drawing, fading on and blinking off, even with
