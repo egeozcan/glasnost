@@ -2,14 +2,14 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 81
+revision: 88
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-15
+approved-on: 2026-11-16
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132,
-Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000, Q-3042, Q-3086, Q-3112]
+Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000, Q-3042, Q-3086, Q-3112, Q-3158]
 supersedes: []
 ---
 
@@ -26,7 +26,8 @@ effects of each kind (vehicle explosions, sinking, passengers getting out, crews
 aircraft crashing, building explosions, spilled resources, survivors, smudges, rubble and
 crates), with their random draws in observable order, when a destroyed building leaves play, and
 the defaults and list items of the game-wide values these rules read, and how deep death weapons
-set off by other death weapons nest inside one killing hit (claim 33, Q-3000). Infantry death
+set off by other death weapons nest inside one killing hit (claim 33, Q-3000), and what a
+passenger killed inside its transport shows and when it frees its seat (claim 34, Q-3158). Infantry death
 sequences and corpses are S-0107's (claim 17); when a killed object leaves the turn order is
 S-0203's (claim 6); the damage itself is S-0302's and S-0303's.
 
@@ -258,7 +259,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
      the planted bomb's handling until AC29 part i runs; medium for its timer during the fall
 
 8. **Infantry.** A killed infantry unit takes the shared effects of claims 4 to 7 and then the death
-   sequence or removal of S-0107 claim 17, which also owns its corpse. When a crash begins instead
+   sequence or removal of S-0107 claim 17, which also owns its corpse. Claim 34 gives where this
+   happens for a passenger killed inside its transport, and our engine's removal of one inside a
+   closed transport. When a crash begins instead
    (S-0107 claim 17), its crash end in jumpjet movement is claim 16's *Infantry crash end*,
    rated there; in other movement modes it is an Open question.
    - Backing: `measurable` for the debris, the death weapon and the attached bomb of an infantry unit
@@ -268,6 +271,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    - Confidence: high for the debris, the death weapon and the bomb; low for the passengers
 
 ### Vehicles
+
+Claim 34 (e) gives which of claims 9 to 15 a vehicle passenger killed inside its transport takes.
 
 9. **Explosion and destruction animations.** A killed vehicle that neither sinks (claim 10) nor
    plays death image frames (Open questions) shows, at its position, one entry of its type's explosion
@@ -1301,6 +1306,130 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       death effects at one level of nesting, as claim 1 rates the order of the shared effects,
       and medium at greater depths; high for the departure, a design rule.
 
+### Passengers killed inside a transport
+
+34. **A passenger killed inside its transport.** This claim covers a passenger of a transport that
+    a killing hit reaches while it rides, as the defeat or surrender hit of its own house does
+    (S-0414 claim 5), for infantry and vehicle passengers in either kind of transport. It does not
+    cover passengers that die with their carrier (claims 5, 12 and 16; S-0507 claim 16), absorbed
+    passengers (S-0605 claim 15), garrison occupants (S-0508 claim 19), never-placed production
+    items (claim 1), or a passenger that an action fired by its own destruction raises removes or
+    destroys, a case claim 29 does not settle for any dying object. For that case our engine takes
+    the passenger off its transport's passenger list, freeing its seat, at the moment the action
+    removes or destroys it, and none of parts (b) to (f) applies to it: what follows is that
+    action's own outcome (design rule, decided at the delegated sign-off, 2026-11-16).
+    - **(a) It leaves the transport at the hit.** Within the killing hit, right after the
+      destruction raises of claim 29 and before claim 30's slave step and any of its death effects,
+      the passenger is taken off its transport's passenger list. The transport's passenger count
+      drops by one at once and the seat is free, whether or not the transport is open-topped and
+      whatever the passenger shows afterwards. This is the original's rule. From then on it is not
+      that transport's passenger: an open-topped transport no longer moves it with itself (S-0507
+      claim 15), and the transport's own later death or removal does not reach it. When an action
+      fired by those raises destroys or removes the transport first, claims 5, 12 and 16 and S-0507
+      claim 16 pass over this passenger, whose own killing hit is still in progress: it leaves the
+      list at once, inside that action, and part (b)'s effects start only after its own remaining
+      raises and the actions they fire have completed (claim 29), as they would had the transport
+      stayed (design rule, decided at the delegated sign-off, 2026-11-16). A slave master killed
+      inside ends its slave group as claim 30 gives for an on-map master, after this removal
+      (design rule, decided at the delegated sign-off, 2026-11-16).
+    - **(b) Its death effects, their position and height.** It then takes the death effects of
+      claims 4 to 7 (debris, the deaths of its own passengers and its death weapon when it is
+      exploding, and claim 7's handling of an attached bomb, below; for a vehicle passenger, as
+      part (e) limits them), in claim 1's order and with their draws, at its own position. Inside
+      an open-topped transport that is the transport's own position at the hit (S-0507 claim 15),
+      also when that transport is itself carried inside another transport. Inside any other
+      transport it is the position the passenger had when it went inside: such a transport does not
+      move its passengers with itself (S-0507 claim 15 gives that only for open-topped transports).
+      This is the original's rule. A passenger put inside without going in itself (for example a
+      transport's initial passengers) counts in our engine as having gone inside at the transport's
+      position at that moment (design rule, decided at the delegated sign-off, 2026-11-16). Its
+      debris, its death weapon's detonation and damage and its death animations come there
+      (`quirks.closed_passenger_death_effects`). A passenger is off the map inside either kind of
+      transport, open-topped included, so an attached bomb is not set off: claim 7's off-map case
+      removes it with no detonation, animation or damage (S-0519 claim 6). This is the original's
+      rule. Where these effects or S-0107 claim 17's choice read the passenger's height above the
+      surface (glossary), as S-0107 claim 17's water case does, our engine reads it at the same
+      point: inside an open-topped transport, the transport's height above the surface at the
+      hit; inside any other transport, the passenger's own height above the surface when it went
+      inside (for one put inside without going in, the transport's at that moment) (design rule,
+      decided at the delegated sign-off, 2026-11-16). When neither the transport at the hit nor the
+      passenger as it went inside was on a bridge deck, this is also the original's rule. How the
+      original reads it otherwise is not established (Open questions).
+    - **(c) Infantry inside an open-topped transport.** S-0107 claim 17's choice then applies
+      (claim 8) as for a unit killed on the map. When it gives a death sequence, the unit stays in
+      play (S-0203 claim 3) and plays the sequence in its own turns, as an open-topped passenger
+      takes turns (S-0507 claim 14). Taken off the list, it stays off the map (glossary *on the
+      map*) while the sequence plays, as it was while it rode: it is not placed in the world at its
+      position. This is the original's rule, kept for our engine. While the sequence plays, our
+      engine's unit does not move, fire or take orders, cannot be chosen as a target and takes no
+      damage from any hit or detonation (design rule, decided at the delegated sign-off,
+      2026-11-16), so at its completion the corpse, or none, and the removal are as S-0107 claim 17
+      gives, at part (b)'s position. Whether the original lets it move or fire meanwhile, or lets
+      it be targeted or reached by a detonation's damage, is not established (Open questions). When
+      claim 17's choice instead starts a crash, or turns the death request down with
+      `quirks.refused_death_keeps_unit` on, our engine removes the unit at once at the end of its
+      death effects, as part (d) does, with no corpse and no corpse-pick draw (design rule, decided
+      at the delegated sign-off, 2026-11-16). With that switch off, a turned-down request is
+      treated as claim 17 gives, at part (b)'s position. What the original does with these two
+      outcomes for such a passenger is not established (Open questions). It holds no seat meanwhile
+      (part a).
+    - **(d) Infantry inside a closed transport.** S-0107 claim 17's choice applies at part (b)'s
+      position and height. A passenger of a transport that is not open-topped is not in play and
+      takes no turns (S-0203 claim 3), so in the original an outcome of that choice that does not
+      remove the unit at once (a death sequence, or a death request turned down with
+      `quirks.refused_death_keeps_unit` on) never advances: the unit is never removed and leaves no
+      corpse. It holds no seat (part a) and is not on the map. Our engine removes it at once, at
+      the end of its death effects, with no death sequence, no corpse and no corpse-pick draw
+      (design rule, decided at the delegated sign-off, 2026-11-16). This takes precedence over
+      every outcome of S-0107 claim 17 that would not remove the unit at once or would leave a
+      corpse: a death sequence, a turned-down death request under either setting of
+      `quirks.refused_death_keeps_unit` (with that switch off, the corpse of the completion it is
+      treated as, and that corpse's pick), and a crash start. The animations of claim 17's rows
+      that show no sequence still appear. Where a row gives other effects together with its
+      sequence request (row 4's extra virus-death animation and particle delivery, S-0613 claim
+      3, among them), those effects still happen, with their draws, at part (b)'s position and
+      height; only the sequence and its corpse are replaced (design rule, decided at the
+      delegated sign-off, 2026-11-16). No switch is given. With
+      `quirks.removed_carrier_keeps_tag` off, this removal detaches an attached tag (claim 29,
+      *Infantry still showing death*), which the original, never removing the unit, does not
+      do; with that switch on, the tag stays attached in both.
+    - **(e) Vehicle passengers.** In our engine a vehicle passenger, in either kind of transport,
+      takes none of claims 9, 10 and 12 to 15: it shows no explosion or destruction animation, does
+      not sink or start a crash, and leaves no crew and no crate. It is removed at once at the end
+      of its death effects, with no wreck, and its own passengers that claim 5 has not killed die
+      as those of a removed transport do (S-0507 claim 16) (design rule, decided at the delegated
+      sign-off, 2026-11-16). This takes precedence over claims 9 to 15, which place their
+      animations, escapes, crew, crate and sinking at a vehicle's cell and height on the map. An
+      attached tag follows S-0011 claim 2 for a removed carrier
+      (`quirks.removed_carrier_keeps_tag`). What the original shows by claims 9, 10 and 12 to 15 at
+      such a death is not established (Open questions); this rule does not depend on it. A vehicle
+      passenger that carries the bomb mark takes this rule too: our engine does not apply claim
+      11's low-water skip, which covers a vehicle on the map, to a passenger off the map, and its
+      attached bomb is removed as part (b) gives (design rule, decided at the delegated sign-off,
+      2026-11-16). Whether the original applies that skip to such a passenger is not established
+      (Open questions).
+    - **(f) Off form.** With `quirks.closed_passenger_death_effects` off, a passenger killed inside
+      a transport that is not open-topped shows no death effects of its own and takes no draws for
+      them, as a passenger dying with an exploding carrier does (claim 5), and it is removed at
+      once. Its own passengers die as those of a removed transport do (S-0507 claim 16). An
+      attached tag follows S-0011 claim 2 for a removed carrier: with
+      `quirks.removed_carrier_keeps_tag` off the removal detaches it, with that switch on it stays
+      attached. For such a passenger this replaces parts (b), (d) and (e), except that an attached
+      bomb is removed as part (b) gives. Part (a) and the destruction raises are unchanged.
+    - Backing: `unmeasured` for every part: no scenario of this spec or of S-0414 records a
+      passenger's death effects, its corpse or its transport's passenger count around a killing hit
+      that reaches it inside (S-0414 scenario V11 part b records only the passenger's health, in
+      the network-game form), and none gives a passenger the bomb mark, plants a bomb on one or
+      kills a slave master inside. The design rules of parts (a) to (e) and the Off form are our
+      engine's choices, not observations of the original.
+    - Confidence: medium for parts (a) to (d) as the original's behaviour (among them the seat
+      release, the position, the bomb removal, the height when neither the transport at the hit nor
+      the passenger as it went inside was on a bridge deck, and part (c)'s off-the-map state),
+      except: low that the removal at the completion of part (c)'s sequence happens in the unit's
+      own turn (as S-0203 claim 6 (c) rates it); low for the outcomes parts (c) and (d) take from
+      S-0107 claim 17's water case, as that claim rates it. Medium for the design rules of the
+      scope sentence and of parts (a) to (e), and for the Off form.
+
 ### Backing boundaries
 
 These qualifications narrow the numbered claims' backing; a scenario for a neighbouring case
@@ -1452,9 +1581,10 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | 0 | infantry | cyborg crippling replaces death (claim 2) | none |
 | 0 | building | delayed death replaces death (claim 3) | none |
 | before 1 | tagged infantry, vehicle, aircraft, building | destruction raises and all actions they fire (claim 29); the initial lethal hit of a delayed-death building has these raises before its reprieve | only the actions' and their effects' draws |
+| before 1 | passenger killed inside its transport | taken off the transport's passenger list, freeing its seat (claim 34 (a)); after the destruction raises, before claim 30's slave step and every effect below; a passenger that an action fired by its own raises removes or destroys leaves the list at that action instead (claim 34, scope) | none |
 | before 1 | slave master | hidden slaves removed, on-map slaves freed or hit when no new owner exists (claim 30); after the master's killing-hit destruction raises | resulting slave notifications and damage effects; release-draw details remain open |
-| 1 | all | debris (claim 4, F1); skipped for a bomb-marked vehicle low over water (claim 11) | F1 |
-| 2 | all, exploding | passengers die (claim 5), then death weapon (claim 6); both skipped for a bomb-marked vehicle low over water (claim 11) | passenger-trigger actions and their effects, then the detonation's |
+| 1 | all | debris (claim 4, F1); skipped for a bomb-marked vehicle low over water on the map (claim 11; not for a passenger killed inside, claim 34 (e)) | F1 |
+| 2 | all, exploding | passengers die (claim 5), then death weapon (claim 6); both skipped for a bomb-marked vehicle low over water on the map (claim 11; not for a passenger killed inside, claim 34 (e)) | passenger-trigger actions and their effects, then the detonation's |
 | 3 | all | still-attached bomb detonates on the map, or is removed without effects off the map (claim 7); detachment before damage prevents a second detonation from the carrier's death | the bomb's, only when it detonates |
 | 4 | infantry | death sequence or removal (S-0107 claim 17) | S-0107 |
 | 4 | vehicle | sinking (claim 10), or wake and splash (claim 11), or explosion and destruction animations (claim 9) | up to two list picks (claim 9); none for sinking or for claim 11 |
@@ -1487,6 +1617,12 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | awaiting removal | its own turn, still in play, not erased, no pulse effect | leaves play and its cells before the second round; removal completes and rubble and crate are placed in the same turn (claim 21) |
 
 ## Edge cases and quirks
+
+- **`quirks.closed_passenger_death_effects`** (default: on, the original). A passenger killed
+  inside a transport that is not open-topped takes its death effects at the position where it
+  went inside (claim 34 (b)), so its debris, its death weapon's damage and its death animations
+  can come far from the transport. Off: it shows no death effects of its own, takes no draws for
+  them and is removed at once (claim 34 (f)).
 
 - **`quirks.vehicle_destruction_extra_raises`** (default: on, the original). Claim 29's extra
   vehicle group precedes the common destruction raises, so a repeating latched trigger can
@@ -2588,6 +2724,27 @@ described, and parts (a) and (b) are inconclusive. On our engine all three end a
 
 ## Open questions
 
+- Q-3158: what the original shows by claims 9, 10 and 12 to 15 for a vehicle passenger killed
+  inside its transport (its explosion and destruction animations, sinking, escapes, crew, crate
+  and crash) and whether it leaves play then is not established. Our engine's rule (claim 34 (e))
+  does not depend on it.
+- Q-3158: the original's position for a passenger put inside without going in itself (for
+  example a transport's initial passengers), what the original does with a passenger killed
+  inside when an action fired by its destruction raises destroys or removes the transport first,
+  and what it does with the slaves of a slave master killed inside, are not established. Our
+  engine's rules (claim 34 (a) and (b)) do not depend on them.
+- Q-3158: how the original reads the height above the surface of a passenger killed inside
+  when its transport at the hit, or the passenger as it went inside, was on a bridge deck is not
+  established. Our engine's rule (claim 34 (b)) does not depend on it.
+- Q-3158: whether the original applies claim 11's low-water skip to a bomb-marked vehicle
+  passenger killed inside its transport is not established. Our engine's rule (claim 34 (e))
+  does not depend on it.
+- Q-3158: whether the original lets an infantry passenger of an open-topped transport fire or
+  move while its death sequence plays, and whether it can be targeted or reached by a
+  detonation's damage meanwhile, and what it does with such a passenger when S-0107 claim 17's
+  choice starts a crash or turns the death request down with `quirks.refused_death_keeps_unit`
+  on, is not established. Our engine's rules (claim 34 (c)) do not depend on it.
+
 - Q-3000 question 2: whether a chain of death weapons nesting inside one killing hit (claim 33)
   makes the original fail once it is long enough, and at about what length, is not established.
   Our engine's rule does not depend on it (claim 33).
@@ -2709,6 +2866,46 @@ condition (with `quirks.crate_beneath_overlay_refusal` off it asks for that cond
 sentence on trigger and random crates whose selection is not placement (S-0312 claim 20 owns
 its refusals), and to the tick list: the tick of placement, which is the tick the building leaves
 play (S-0312 claim 21).
+
+S-0507 claim 15, *Position*: a passenger that a killing hit reaches inside an open-topped
+transport is no longer its passenger from that hit on (S-0312 claim 34 (a)), so the transport's
+later moves do not change its position. The bullet can say "its passengers' positions (S-0312
+claim 34 for a passenger killed inside)". Level and backing: medium, `unmeasured`, as claim 34
+rates it.
+
+S-0316 claim 4 and its Open question *Closed transport*: for its own use (claim 34 (b)), this
+spec finds that in the original a passenger inside a closed transport keeps the position it had
+when it went inside. Whether the bolt's start reads that position while its vehicle is inside is
+S-0316's and is not settled here; the Open question can cite claim 34 (b) for the position only.
+Level and backing: medium, `unmeasured`, as claim 34 rates it.
+
+S-0107 claim 17: for an infantry passenger killed inside a transport that is not open-topped,
+S-0312 claim 34 overrides what is shown and when the unit is removed. With
+`quirks.closed_passenger_death_effects` on (the default), claim 17's choice applies at the
+position and height of claim 34 (b), but every outcome of it that would not remove the unit at
+once or would leave a corpse (a death sequence, a turned-down death request under either setting
+of `quirks.refused_death_keeps_unit`, a crash start) gives way: our engine removes the unit at
+once with no corpse and no corpse-pick draw (claim 34 (d)); effects that a row gives together
+with its sequence request still happen, with their draws. With the switch off, claim 17's
+choice does not apply: the unit shows nothing and is removed at once (claim 34 (f)). Inside an
+open-topped transport claim 17 applies at the position and height of claim 34 (b), except that a
+crash start, or a death request turned down with `quirks.refused_death_keeps_unit` on, gives way
+to removal at once with no corpse and no corpse-pick draw, and the dying unit does not move or
+fire while its sequence plays (claim 34 (c)). Claim 17 can
+point to claim 34 for these cases. Level and backing: medium, `unmeasured`, as claim 34 rates
+it.
+
+S-0203 claim 6 (a), (c) and (e): a passenger killed inside its transport on its own, not with
+the transport, frees its seat at the hit and follows S-0312 claim 34. An infantry passenger of a
+closed transport is never in play there, and our engine removes it at the end of its death
+effects (claim 34 (d)), so no removal for claim 10 arises. A vehicle passenger is removed at the
+end of its death effects in either kind of transport (claim 34 (e)), so it is not one of (a)'s
+exceptions; inside an open-topped transport it is in play (claim 3) and its removal is a removal
+for claim 10, inside any other transport it is not. An infantry passenger of an open-topped
+transport whose claim 17 choice starts a crash, or turns the death request down with
+`quirks.refused_death_keeps_unit` on, is also removed at the end of its death effects (claim 34
+(c)), and that removal is a removal for claim 10. (a) and (c) can point to claim 34 (c) to (e).
+Level and backing: medium, `unmeasured`, as claim 34 rates it.
 
 ## Questions for the project lead
 
