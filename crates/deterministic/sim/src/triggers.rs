@@ -1274,14 +1274,14 @@ fn reveal(w: &mut World, wp: i32) {
     let k = h / 2; // spec: S-0011 F6 (k = h quo 2)
     let p = Pos::new(256 * (c.x - k) + 128, 256 * (c.y - k) + 128, LEVEL * h); // spec: S-0011 F6 (256 × (x − k) + 128, 256 × (y − k) + 128, 104 × h)
     // spec: S-0011 claim 26 (our engine applies the reveal to every player house that has not had the whole map revealed, a departure) and S-0409 claim 17 (the mark tested separately for each house)
-    // The reveal made for a house still counts for its allies by S-0409 claim 2, a marked ally included (Q-3149).
+    // spec: S-0409 claims 2 and 17 (revision 17, Q-3149: the reveal made for each unmarked house counts for its unmarked allies only; only a marked house is left out) (#367)
     let houses: Vec<HouseId> = (0..w.houses.len())
         .filter(|&i| w.houses[i].role == HouseRole::Player && !w.houses[i].removed)
         .map(|i| HouseId(i as u8))
         .filter(|&h| !crate::econ::shroud::whole_map_revealed(w, h))
         .collect();
     for h in houses {
-        crate::econ::shroud::area_reveal(w, h, p, r);
+        crate::econ::shroud::waypoint_reveal(w, h, p, r);
     }
 }
 

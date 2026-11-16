@@ -16,10 +16,11 @@ use glasnost_sim::world::{ObjectId, World};
 const RZ: Rounding = Rounding::TowardZero;
 
 /// A game with crates off, a collector ARMED of house 0 at (0, 0) and a crate
-/// of `contents` one cell away; returns the pickup's blocked answer.
+/// of `contents` one cell away, holding a place; returns the pickup's
+/// blocked answer.
 fn pick(w: &mut World, who: ObjectId, contents: u8) -> bool {
     let c = at(1, 0);
-    crate_at(w, c, WOOD, contents);
+    placed_crate_at(w, c, WOOD, contents);
     crates::pickup(w, who, c)
 }
 
@@ -525,7 +526,7 @@ fn a_pickup_with_crates_on_places_a_replacement() {
     let mut w = world_with(true, |_| {});
     let v = armed(&mut w);
     let c = at(1, 0);
-    crate_at(&mut w, c, WOOD, 0);
+    placed_crate_at(&mut w, c, WOOD, 0);
     crates::pickup(&mut w, v, c);
     let cells: Vec<CellXY> = w
         .cells

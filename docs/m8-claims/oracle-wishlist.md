@@ -91,6 +91,19 @@ behind an open arena discrepancy); entry 1 decides the most rows and would sit b
 | A6b-3 | A6b-1's recorder on M-0001 CAOS–E1, side A, seeds 0 to 5: which E1 enter a building, when, and what the rest do | S-0309 claim 25 (e); S-0215 claim 27; S-0508 claims 1, 4 | Decides CAOS–E1 side A, systematic before and after A6b's fix | medium |
 | A6b-4 | M-0015's hold recording for M-0001 TELE against V3, side A: each grip, set-down, restoration and new grip with its tick | S-0607 claims 8, 12, 16 to 18; S-0215 claim 37 | Decides TELE–V3 side A (our games end without a winner), open since intake 45 | medium |
 
+## Added by the arena triage (M8 step A6c)
+
+Scenarios behind arena rows that still fail after [a6c-arena-triage.md](a6c-arena-triage.md). The
+entry ranks with A6b-1, whose recorder it reuses; together they cover every side of the
+neutral-bunker rows that S-0309's open question (from Q-2987) leaves undecided.
+
+| Rank | Spec and scenario | Claims it settles | Why it ranks here | Cost |
+|---|---|---|---|---|
+| A6c-1 | S-0217 scenario **H1**'s recorder (A6b-1) on M-0002's set-up, side A, for INIT against E1 and INIT against E2, seed 0: for each INIT, its behaviour, target and destination every tick from tick 0 until the first check after tick 0 plus 100 ticks; each entry, refusal and eviction at the neutral bunkers with its tick; and each shot an INIT fires at a bunker before it enters | S-0309 claim 25 (e) and its open question *Claim 25, part e, after an eviction*; S-0215 claims 9, 27, 28; S-0508 claims 1, 4, 13; S-0217 claims 1, 2, 4 | Decides M-0002 INIT–E1 and INIT–E2, side A, which became systematic since A6b (ours row 20 and row 2 of 64 against the record's row): our INIT take a bunker as target from their first *hunt*, fire at it, go for it, are refused when it is full or put out at their house's checks, and take it again, while the E1 or E2 win | cheap (an existing game) |
+
+A6b-4 no longer decides an arena row: since sim issues S7 (#213) and S10, M-0001 TELE–V3 side A
+is within noise (ours col 61 of 64). It stays for S-0607's own claims.
+
 ## Measurable claims per spec
 
 A claim counts when its backing line contains `measurable` (a claim whose backing is split between
