@@ -123,8 +123,10 @@ pub fn magnitude(ae: i32, mu: F64) -> i32 {
     let i = (LAST_INDEX - ae).clamp(0, LAST_INDEX) as usize;
     // spec: S-0101 F9 (floating-point product rounded toward zero, then truncation toward zero, S-0205)
     let m = dbl(MAGNITUDE[i]).mul(mu, Rounding::TowardZero);
+    // design: render (#153) (F9 covers results that fit 32 bits; beyond, the magnitude is held to
+    // ±(2³¹ − 1), so its product with a direction component is a count too)
     m.trunc_i128().map_or(0, |v| {
-        v.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32
+        v.clamp(-i128::from(i32::MAX), i128::from(i32::MAX)) as i32
     })
 }
 
