@@ -1,9 +1,9 @@
 ---
 id: Q-3182
 title: Whether a vehicle that enters a vehicle bunker leaves play for the magnetic lift's grip, hits and drops
-status: open
+status: answered
 related: [S-0607, S-0606, S-0203]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need
