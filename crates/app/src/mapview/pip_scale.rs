@@ -483,6 +483,36 @@ mod tests {
         assert_eq!(pip_frame(Some(b"plaid"), OCCUPY_PIP_INITIAL), 1);
     }
 
+    /// spec: S-0111 Import mapping (the vocabulary of Pip and OccupyPip with the image frame each
+    /// word selects, compared ignoring case; a word that matches none gives 1) — every word, as a
+    /// guard for #153's vocabulary held once instead of per call
+    #[test]
+    fn every_pip_word_selects_its_frame() {
+        let table = [
+            ("green", 1),
+            ("yellow", 2),
+            ("white", 3),
+            ("red", 4),
+            ("blue", 5),
+            ("persongreen", 7),
+            ("personyellow", 8),
+            ("personwhite", 9),
+            ("personred", 10),
+            ("personblue", 11),
+            ("personpurple", 12),
+        ];
+        for (word, frame) in table {
+            let upper = word.to_ascii_uppercase();
+            for initial in [PIP_INITIAL, OCCUPY_PIP_INITIAL] {
+                assert_eq!(pip_frame(Some(word.as_bytes()), initial), frame, "{word}");
+                assert_eq!(pip_frame(Some(upper.as_bytes()), initial), frame, "{word}");
+            }
+        }
+        for unknown in [&b""[..], b"person", b"greenish", b"none"] {
+            assert_eq!(pip_frame(Some(unknown), OCCUPY_PIP_INITIAL), 1);
+        }
+    }
+
     /// spec: S-0111 claim 10 (pip places and sprites by kind; ammunition 3 pixels higher from the second pip sprite)
     #[test]
     fn claim_10_places() {
@@ -656,6 +686,29 @@ mod tests {
         // At the bound nothing is cut.
         assert_eq!(mind_row(PIP_ROW_LIMIT, 0, None).len(), n);
         assert_eq!(ammo_row(PIP_ROW_LIMIT, PIP_ROW_LIMIT, 0).len(), n);
+    }
+
+    /// spec: S-0111 claims 10 and 13 (the overload pip at index M, placed as the row's pips are) —
+    /// design: render (#153): a primary weapon's damage at the ends of the 32-bit range places
+    /// the overload pip without an overflow, millions of pixels from the origin, beyond any view
+    #[test]
+    fn an_extreme_overload_pip_is_placed_without_overflow() {
+        let o = (-60, 0);
+        for (m, count) in [(i32::MIN, 0), (-(1 << 29) - 1, 0), (i32::MAX, usize::MAX)] {
+            let row = mind_row(m, count, Some(false));
+            let (j, f) = *row.last().unwrap();
+            assert_eq!(f, 4);
+            for body in [Body::Vehicle, Body::Infantry, Body::Building] {
+                let p = place(body, o, j, f, false);
+                // Beyond any view, and room left to add a world anchor in 32 bits.
+                assert!(p.at.0.unsigned_abs() >= 1 << 21, "{m} {body:?}");
+                assert!(p.at.0.unsigned_abs() < 1 << 24, "{m} {body:?}");
+                assert!(p.at.1.unsigned_abs() < 1 << 24, "{m} {body:?}");
+            }
+        }
+        // Within the 32-bit place range the index is M, as before.
+        assert_eq!(mind_row(-3, 0, Some(true)), [(-3, 3)]);
+        assert_eq!(mind_row(-5000, 0, Some(false)), [(-5000, 4)]);
     }
 
     /// spec: S-0111 F3 (the largest λ in 0 … ⌊A / w⌋ − 1 with λ·w + j < a gives 15 + λ; none
