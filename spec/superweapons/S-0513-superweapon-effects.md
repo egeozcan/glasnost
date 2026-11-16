@@ -2,15 +2,15 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 124
+revision: 126
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-15
+approved-on: 2026-11-16
 measurements: []
 requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850,
 Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213, Q-2276, Q-2316,
-Q-2317, Q-2376, Q-2416, Q-2418, Q-2419, Q-2468, Q-2566, Q-3141]
+Q-2317, Q-2376, Q-2416, Q-2418, Q-2419, Q-2468, Q-2566, Q-3141, Q-3160]
 supersedes: []
 ---
 
@@ -105,7 +105,11 @@ presentation and swept-layer rules below also apply where those specs cite them.
   than the 14-tile water-tile test of S-0306 and S-0614. An unset shore or water role takes part
   as S-0010 claim 5 says for a role whose general test is not checked: its range is counted from
   the unset start (`quirks.unset_role_range`). This spec treats each waterfall role the same way,
-  as a role of range count 4 whose general test is not checked.
+  as a role of range count 4 whose general test is not checked. A cell that holds no tile
+  (S-0211 claim 5, row 2) is tested with the no-tile marker 65535 (S-0009) as its tile number,
+  compared with each of these ranges as it stands; there is no separate test for the marker.
+  Such a cell therefore has a wet tile only when one of the ranges contains 65535, that is,
+  when a role of range count *n* starts from 65536 − *n* up to 65535. An unset role's range, counted from −1, does not contain it.
 - **Phasing in.** The state of a warped object from the moment it leaves its old position until
   its arrival hold ends (claims 39 and 40). A phasing-in object is not warped again (claim 34).
 - **Camera sight.** The spy plane's sight with its radius replaced (claim 44).
@@ -1032,14 +1036,26 @@ presentation and swept-layer rules below also apply where those specs cite them.
       (S-0209), as one can whose movement zone crosses the open category (S-0211 claim 12) and
       whose locomotion class has a non-zero speed on road land; a naval member that cannot enter
       it meets the cannot-enter test, which gives the same outcome under both settings.
+      A landing cell that holds no tile has a wet tile only when one of the Terms entry's ranges
+      contains the no-tile marker. When none does, a member that meets this test on such a cell
+      is killed with no credit, and such a cell with the road land type (from an overlay,
+      S-0211 claim 5, row 2) is counted as a road cell under either setting, since its tile is
+      not a wet tile. When one does, a member that meets this test there sinks with no credit
+      when it is not infantry and is otherwise killed with no credit, and such a cell with the
+      road land type is a road cell whose tile is a wet tile: it is
+      counted as a road cell with the switch on and not counted with it off, as for any such
+      cell.
     - Backing: `measurable` (SW13 parts d and e; part f for the road cell read by its land type
       and the sink test read by its tile). The wet tile's waterfall and shore ranges, and an
       unset role's range, are `unmeasured`: no scenario here chooses a landing cell on a shore or
-      waterfall tile, and none uses a theater with an unset shore, water or waterfall role
+      waterfall tile, and none uses a theater with an unset shore, water or waterfall role.
+      A landing cell that holds no tile is `unmeasured`: no scenario here warps a member onto
+      such a cell
     - Confidence: high for the control-centre test and the deck-cell test with its no-credit
       sinking over water (SW13 part e); medium for the road-cell test and the sink test
       read by the tile (SW13 part f needs named data), for the shore, waterfall and unset-role
-      ranges of the wet tile, and for other arrival outcomes
+      ranges of the wet tile, for a landing cell that holds no tile, under both settings, and
+      for other arrival outcomes
 
 39. **Timing of a warp.** Let *t*_L be the tick of the warp launch (an order, applied after the turn
     pass, S-0203 claim 7). The following tick labels assume a surviving member with one warp
@@ -3665,9 +3681,6 @@ for these two kinds.
 - The deck-to-deck bridge lift of claim 36 remains low confidence; SW12 needs a deck-to-deck
   run recording both the initial landing point and actual placed height.
 - The absolute tick of each warp step (claim 39).
-- Whether a landing cell that holds no tile (S-0211 claim 5) passes the wet-tile test of claim
-  38's sink test, so whether a member that claim 38 sinks on a wet tile sinks or is killed
-  there.
 - Q-0742 question 4: claim 29 supplies the protection envelope and its draw; S-0102
   claim 34 and F9 settle ordinary opaque composition and the sprite-vehicle, aircraft,
   building-voxel and marked-building-animation cases; claim 29b settles bibs, under-door,

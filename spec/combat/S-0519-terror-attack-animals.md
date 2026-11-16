@@ -2,13 +2,13 @@
 id: S-0519
 title: Terror and attack animals
 topic: combat
-revision: 18
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-16
 measurements: []
-requests: [Q-0986, Q-1524, Q-1621]
+requests: [Q-0986, Q-1524, Q-1621, Q-3159]
 supersedes: []
 ---
 
@@ -139,6 +139,47 @@ ignores defences*, *quirk switch*. Also used:
      S-0312 keeps it in play (S-0312 claim 6, S-0203 claim 1).
    - Backing: `measurable` (scenarios T4 and T5)
    - Confidence: high
+
+   **A carrier that its own bomb kills and that stays in play (Q-3159).** When the detonation
+   kills its own carrier and S-0312 keeps that carrier in play because it starts to sink
+   (S-0312 claims 10 and 15) or to crash (S-0312 claims 15 and 16), the detonation does not end
+   the carrier's turn. Parts (a) to (d) give what this spec settles of the rest of that turn:
+   - **(a) A sinking vessel** takes its first descent of S-0504 claim 4 in that turn. A vessel
+     that starts sinking at height 0 therefore has height −5 leptons at the end of the
+     detonation tick and leaves play in the 80th tick after the detonation tick.
+   - **(b) An aircraft using ordinary flying movement** takes the first step of S-0501 claim 9's
+     crash fall in that turn, with its fall counter at 1.
+   - **(c) A vehicle using jumpjet movement** takes S-0502 claim 18's first crash update at
+     that turn's movement update, when it takes one. What decides is whether it is *moving* or
+     *moving now* (S-0502 Terms) as it stands at that update, so after the killing hit's own
+     destination clear (S-0502 claim 18), which is made inside the detonation:
+     - In the original, it takes that update when it is then either. Otherwise it takes none in
+       that turn, and its fall starts at its next update, as S-0502 claim 18 gives for the
+       original.
+     - In our engine, S-0502 claim 3's safety departure makes the pending crash start eligible
+       for that update even without a move order, so it takes its first crash update in that
+       turn in either case.
+     A unit held by magnetic lift is outside this part: S-0502 claim 18 keeps it out of the
+     ordinary crash entry, and S-0607 owns its motion.
+   - **(d) Other parts of the turn.** A carrier of (a), (b) or (c) also takes its ordinary
+     cloak update (S-0516 claim 42) in that turn. Our engine runs that update after the
+     detonation (design rule, decided at the delegated sign-off, 2026-11-16).
+     Infantry carriers, aircraft using jumpjet movement, other crashable movement modes and the
+     remaining parts of the turn are not settled here (Open questions).
+   - Backing: `measurable` for parts (a) and (b) and for part (c)'s case of a unit that is
+     *moving* or *moving now* at that update (scenario T4, variant b: carrier (iii) is
+     cruising). Part (c)'s case of a unit that is neither is `unmeasured`: for the original it
+     shares S-0502 claim 3's `unmeasured` limitation for a crash request on an idle unit, and
+     for our engine it is S-0502 claim 3's design rule, not an observation of the original.
+     Part (d) is `unmeasured`: the cloak update and the detonation fall within one turn, and
+     no established setup isolates what the cloak update does in the turn of a carrier that
+     has just been killed. Its order after the detonation is a design rule for our engine, not
+     an observation of the original.
+   - Confidence (this paragraph is rated here on its own; claim 4's Confidence line above does
+     not cover it): medium for parts (a) and (b) and for part (c)'s *moving* or *moving now*
+     case, until T4 variant b runs; medium for part (c)'s case of a unit that is neither, in the
+     original and in our engine; medium for part (d)'s cloak update in that turn and for its
+     order after the detonation, a design rule
 
 5. **Detonation and credit.** When a bomb goes off on a carrier that is on the map, including
    one falling after a destruction without a hit (claim 7):
@@ -1042,6 +1083,30 @@ result falsifies that part of its claim.
   second bomb shot or a disarm shot at a clean target.
 - **T4, timer tick (claim 4).** Plant on an idle vehicle. Expected: detonation in tick *t* + *D* + 1.
   Falsified by *t* + *D* or by any other difference.
+  - **Variant b, a carrier kept in play (claim 4 (a) to (c)).** Three runs, each planting on a
+    carrier of the local player by forced attack (as in T8):
+    - (i) S-0504 scenario N5's vessel, idle at height 0 on open water, planted from the shore,
+    - (ii) S-0501 scenario AC5's aircraft, planted while landed, then ordered to move so that it
+      flies at cruise height at tick *t* + *D*,
+    - (iii) S-0502 scenario J12's jumpjet vehicle, planted while grounded, then ordered to move so
+      that it is cruising at tick *t* + *D*, over flat ground with no other object within two
+      cells.
+
+    Named test data raises the timed delay enough for carriers (ii) and (iii) to reach cruise first,
+    raises the bomb damage so that the detonation kills each carrier, sets the no-wobble flag on
+    (iii)'s type, sets (iii)'s type's crash rate to at least 1 lepton per tick and, if the planter cannot reach (i) from the shore, raises its weapon's range.
+    A run in which the carrier survives, or in which (ii)'s or (iii)'s height differs between the
+    ends of ticks *t* + *D* − 1 and *t* + *D*, is void and is repeated.
+    Record each carrier's height at the end of ticks *t* + *D* and
+    *t* + *D* + 1, and the tick in which carrier (i) leaves play.
+    Expected:
+    - each height at the end of *t* + *D* + 1 is lower than at the end of *t* + *D*: by
+      5 leptons for carrier (i), by at least 1 lepton for carriers (ii) and (iii),
+    - (i) leaves play in tick *t* + *D* + 81.
+
+    Falsified by a height at the end of *t* + *D* + 1 equal to that at the end of *t* + *D* for
+    any carrier, or by (i) leaving play in tick *t* + *D* + 82, which is the result if the
+    detonation ended the carrier's turn.
 - **T5, turn position (claim 4).** Reuse S-0203 scenario O10 part A's setup and procedure. Expected: the
   result that O10 lists for detonation during V's own turn. Falsified by O10's pre-turn-pass
   result. An opportunity-firing carrier may fire before its bomb detonates in that turn,
@@ -1424,6 +1489,16 @@ result falsifies that part of its claim.
   pulse (claim 26), or only the value at its area's last repaint. No repaint tied to the pulse was
   found, only to the flash's on/off changes. Claim 26 chooses the current value in every frame for
   our engine only; T27(b) distinguishes that design test from the unresolved original hypotheses.
+- (Q-3159, claim 4.) What the rest of the detonation turn holds for a carrier that its own bomb
+  kills and that stays in play but is not covered by claim 4 (a) to (c): an infantry carrier
+  that starts to crash, an aircraft using jumpjet movement, and an object using another
+  crashable movement mode. Not traced.
+- (Q-3159, claim 4 (d).) Which other parts of the detonation turn such a carrier takes, besides
+  those claim 4 (a) to (d) give, among them a launch pass of its spawn controller (S-0506
+  claims 2 and 13), a vehicle's late start (S-0215 claim 11) and firing attempt, and an
+  aircraft's start after its movement (S-0501 claim 31) and firing. Not traced.
+- (Q-3159, claim 4.) Whether a carrier that the detonation removes from play still takes any part
+  of the rest of that turn. Not traced.
 
 ## Changes for other specs
 
@@ -1436,3 +1511,9 @@ result falsifies that part of its claim.
 - **S-0102 claim 34, shroud exception for building animations.** The change is listed under
   S-0513's Changes for other specs, which owns it (S-0513 claim 29b); this spec's claim 26
   relies on it.
+- **S-0504 claim 4, first descent.** Its sentence "For a killing hit, that is in the tick of the
+  hit when the vessel's turn (S-0203) comes after the hit, otherwise in the next tick" does not
+  name a killing hit made during the vessel's own turn. For its own bomb's detonation this spec
+  gives the answer (claim 4 (a)): the first descent comes later in that same turn. S-0504
+  claim 4 could name that case and cite scenario T4 variant b, keeping its own rating of the
+  first-descent tick.

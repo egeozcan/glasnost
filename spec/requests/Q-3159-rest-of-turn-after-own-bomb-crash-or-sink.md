@@ -3,7 +3,7 @@ id: Q-3159
 title: What the rest of its turn does for a carrier that its own bomb kills and that starts to crash or sink
 status: open
 related: [S-0519, S-0203, S-0312, S-0501, S-0502, S-0504]
-answered-by: []
+answered-by: [S-0519]
 ---
 
 ## Need
