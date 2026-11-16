@@ -82,6 +82,19 @@ pub struct MapKey {
     pub light: Option<u64>,
 }
 
+/// The light-alpha values of the last frame with what they were made from
+/// (design: render (#129), as the game window keeps them, #118): the values
+/// depend only on the covers, the view's origin and size, and the load's
+/// cover sprites (S-0110 claims 1 to 10).
+struct PaneLight {
+    generation: u64,
+    covers: Vec<glasnost_render::shroud::Cover>,
+    origin: (i32, i32),
+    size: (u32, u32),
+    alpha: Rc<Vec<u8>>,
+    tag: u64,
+}
+
 /// A loaded map as the pane keeps it.
 struct Shown {
     loaded: Loaded,
@@ -150,9 +163,13 @@ pub struct MapPane {
     pending_jump: Option<(i32, i32)>,
     /// The cheer rate limit, kept for the whole session (S-0213 claim 19).
     cheer: targeting::CheerMemory,
+    /// The last frame's light alpha (design: render (#129)).
+    light: Option<PaneLight>,
     /// The tags given to the light alpha so far: each new alpha takes the
     /// next (design: render (#129)).
     light_tags: u64,
+    /// What the CPU texture shows (design: render (#129)).
+    cpu_drawn: Option<MapKey>,
     /// Frames that composed the CPU picture.
     #[cfg(test)]
     cpu_composes: usize,
@@ -182,7 +199,9 @@ impl Default for MapPane {
             explain: String::new(),
             pending_jump: None,
             cheer: targeting::CheerMemory::default(),
+            light: None,
             light_tags: 0,
+            cpu_drawn: None,
             #[cfg(test)]
             cpu_composes: 0,
             status: "Mount an install, then find its maps.".into(),
@@ -368,6 +387,11 @@ impl MapPane {
     /// shroud covers (S-0110 claims 1 to 10) with their tag, or `None`
     /// when no cover is drawn: no live game, the sandbox (every owner's
     /// objects, no single player), or the covers turned off.
+    ///
+    /// design: render (#129): the last frame's values are kept while the
+    /// load, the covers and the view's origin and size are unchanged, with
+    /// their tag; a view of the same size moved elsewhere moves the kept
+    /// values ([`cover::alpha_moved`]). Values made again take a new tag.
     fn light_alpha(&mut self) -> Light {
         let view = self.view();
         let q = ShroudQuirks::default();
@@ -376,11 +400,41 @@ impl MapPane {
             (s.shroud && !live.setup.sandbox)
                 .then(|| (s.generation, cover::covers(&live.world, s.house, &view, &q)))
         });
-        let (_, covers) = lit?;
-        let s = self.shown.as_ref()?;
-        let alpha = cover::alpha_of(&covers, &view, &s.loaded.covers, &q);
+        let Some((generation, covers)) = lit else {
+            self.light = None;
+            return None;
+        };
+        if let Some(l) = &self.light
+            && l.generation == generation
+            && l.origin == view.origin
+            && l.size == view.size
+            && l.covers == covers
+        {
+            return Some((l.alpha.clone(), l.tag));
+        }
+        let sprites = &self.shown.as_ref()?.loaded.covers;
+        let alpha = match self.light.take() {
+            Some(l) if l.generation == generation && l.size == view.size => cover::alpha_moved(
+                Rc::unwrap_or_clone(l.alpha),
+                l.origin,
+                &l.covers,
+                &covers,
+                &view,
+                sprites,
+                &q,
+            ),
+            _ => cover::alpha_of(&covers, &view, sprites, &q),
+        };
         self.light_tags += 1;
-        Some((Rc::new(alpha), self.light_tags))
+        let l = self.light.insert(PaneLight {
+            generation,
+            covers,
+            origin: view.origin,
+            size: view.size,
+            alpha: Rc::new(alpha),
+            tag: self.light_tags,
+        });
+        Some((l.alpha.clone(), l.tag))
     }
 
     /// Local snapshots: issues the deploy order of the controlled house's
@@ -467,6 +521,7 @@ impl MapPane {
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn forget_textures(&mut self) {
         self.cpu_texture = None;
+        self.cpu_drawn = None;
         if let Some(s) = self.shown.as_mut() {
             s.minimap = None;
             s.radar_texture = None;
@@ -876,29 +931,34 @@ impl MapPane {
             let Some((alpha, key)) = self.frame_light() else {
                 return;
             };
-            #[cfg(test)]
-            {
-                self.cpu_composes += 1;
-            }
-            let frame = scene.compose_lit(
-                &key.view,
-                &key.filter,
-                &ComposeQuirks::default(),
-                alpha.map(|(a, _)| Rc::unwrap_or_clone(a)),
-            );
-            let img = egui::ColorImage::from_rgba_unmultiplied(
-                [size.0 as usize, size.1 as usize],
-                &frame.to_rgba(),
-            );
-            match &mut self.cpu_texture {
-                Some(t) => t.set(img, TextureOptions::NEAREST),
-                None => {
-                    self.cpu_texture = Some(ui.ctx().load_texture(
-                        "map view",
-                        img,
-                        TextureOptions::NEAREST,
-                    ))
+            // design: render (#129): the texture keeps its picture while
+            // the key it was drawn with holds
+            if self.cpu_texture.is_none() || self.cpu_drawn.as_ref() != Some(&key) {
+                #[cfg(test)]
+                {
+                    self.cpu_composes += 1;
                 }
+                let frame = scene.compose_lit(
+                    &key.view,
+                    &key.filter,
+                    &ComposeQuirks::default(),
+                    alpha.map(|(a, _)| Rc::unwrap_or_clone(a)),
+                );
+                let img = egui::ColorImage::from_rgba_unmultiplied(
+                    [size.0 as usize, size.1 as usize],
+                    &frame.to_rgba(),
+                );
+                match &mut self.cpu_texture {
+                    Some(t) => t.set(img, TextureOptions::NEAREST),
+                    None => {
+                        self.cpu_texture = Some(ui.ctx().load_texture(
+                            "map view",
+                            img,
+                            TextureOptions::NEAREST,
+                        ))
+                    }
+                }
+                self.cpu_drawn = Some(key);
             }
             self.cpu_texture.as_ref().map(TextureHandle::id)
         };

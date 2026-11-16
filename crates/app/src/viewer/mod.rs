@@ -370,6 +370,9 @@ struct MapGpu {
     size: (u32, u32),
     targets: Option<(wgpu::Texture, wgpu::Texture, map_display::MapDisplay)>,
     texture: Option<egui::TextureId>,
+    /// What the targets show (design: render (#129)); `None` before the
+    /// first pass into them.
+    drawn: Option<map_pane::MapKey>,
 }
 
 impl Gfx {
@@ -438,6 +441,14 @@ impl Gfx {
     /// it.
     fn render_map(&mut self, r: &map_pane::GpuRequest) -> Result<egui::TextureId, String> {
         use glasnost_render::map_gpu::{COLOR_FORMAT, MapRenderer, targets};
+        // design: render (#129): the key names all the pass draws from, so
+        // targets drawn with it already hold this frame's picture
+        if let Some(m) = &self.map
+            && m.drawn.as_ref() == Some(&r.key)
+            && let Some(id) = m.texture
+        {
+            return Ok(id);
+        }
         // A scene of the same generation gains images and palette rows for
         // the live objects: upload what it gained (the atlas grows when
         // full), or the whole scene again when the atlas is at the device's
@@ -473,6 +484,7 @@ impl Gfx {
                 size: (0, 0),
                 targets: None,
                 texture: None,
+                drawn: None,
             });
         }
         let device = &self.device;
@@ -498,6 +510,7 @@ impl Gfx {
             }
             m.targets = Some((color, depth, display));
             m.size = size;
+            m.drawn = None;
         }
         let (color, depth, _display) = m.targets.as_ref().ok_or("no targets")?;
         let mut encoder =
@@ -515,6 +528,7 @@ impl Gfx {
             r.alpha.as_ref().map(|(a, tag)| (a.as_slice(), Some(*tag))),
         );
         self.queue.submit([encoder.finish()]);
+        m.drawn = Some(r.key.clone());
         if self.frames_presented.is_multiple_of(120) {
             log::info!(
                 "map view drawn on the GPU at {:?}, {}×{}",
