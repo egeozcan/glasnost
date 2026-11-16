@@ -2440,10 +2440,19 @@ struct Raster {
     y1: i64,
     /// Colour of the stored region, row-major; 0 is transparent.
     colour: Vec<u8>,
-    /// Comparison depths written in depth mode, by `(y, x)`; a missing entry
-    /// is empty (claim 24).
+    /// Comparison depths of the stored region, row-major like `colour`,
+    /// made on the first depth-mode write when the region is no larger
+    /// than [`DEPTH_GRID_LIMIT`] (design: render (#144)).
+    grid: Option<Vec<i64>>,
+    /// Comparison depths written in depth mode outside the grid, by
+    /// `(y, x)`: left of the stored region, or anywhere when there is no
+    /// grid; a missing entry is empty (claim 24).
     depth: BTreeMap<(i64, i64), i64>,
 }
+
+/// The largest stored region whose depths are kept in a flat grid; a larger
+/// one keeps them in the map, with the same result (design: render (#144)).
+const DEPTH_GRID_LIMIT: usize = 1 << 20;
 
 impl Raster {
     /// A fresh image for the overall bounding box `bounds` (claim 34: fully
@@ -2458,16 +2467,23 @@ impl Raster {
         let sx0 = x0.saturating_add((w - u).div_euclid(2));
         let sy0 = y0.saturating_add((h - v).div_euclid(2));
         let (sx1, sy1) = (sx0.saturating_add(u), sy0.saturating_add(v));
-        let len = ((sx1 - sx0) * (sy1 - sy0)) as usize;
+        Self::with_region(copy, [sx0, sy0, sx1, sy1])
+    }
+
+    /// A fresh image storing columns `x0 .. x1` and rows `y0 .. y1` of
+    /// `copy`.
+    fn with_region(copy: CopyRect, [x0, y0, x1, y1]: [i64; 4]) -> Self {
+        let len = ((x1 - x0) * (y1 - y0)) as usize;
         Self {
             copy,
-            x0: sx0,
-            y0: sy0,
-            x1: sx1,
-            y1: sy1,
+            x0,
+            y0,
+            x1,
+            y1,
             // spec: S-0105 claim 34 (every fresh draw starts completely transparent)
             colour: vec![0; len],
             // spec: S-0105 claims 24, 34 (every coordinate starts empty)
+            grid: None,
             depth: BTreeMap::new(),
         }
     }
@@ -2493,14 +2509,30 @@ impl Raster {
 
     /// The comparison depth at `(x, y)`, [`EMPTY_DEPTH`] if none was written.
     fn depth_at(&self, x: i64, y: i64) -> i64 {
+        if let (Some(grid), Some(i)) = (&self.grid, self.index(x, y)) {
+            return grid[i];
+        }
         self.depth.get(&(y, x)).copied().unwrap_or(EMPTY_DEPTH)
     }
 
     /// A depth-mode write of `value` and `depth` at `(x, y)`.
     fn put_depth(&mut self, x: i64, y: i64, value: u8, depth: i64) {
-        self.put(x, y, value);
-        if self.depth_kept(x, y) {
-            self.depth.insert((y, x), depth);
+        let Some(i) = self.index(x, y) else {
+            if self.depth_kept(x, y) {
+                self.depth.insert((y, x), depth);
+            }
+            return;
+        };
+        self.colour[i] = value;
+        if self.grid.is_none() && self.colour.len() <= DEPTH_GRID_LIMIT {
+            // spec: S-0105 claims 24, 34 (every coordinate starts empty)
+            self.grid = Some(vec![EMPTY_DEPTH; self.colour.len()]);
+        }
+        match &mut self.grid {
+            Some(grid) => grid[i] = depth,
+            None => {
+                self.depth.insert((y, x), depth);
+            }
         }
     }
 
@@ -5858,6 +5890,39 @@ mod tests {
             90,
             0,
         )])
+    }
+
+    /// spec: S-0105 claims 24, 34 (every coordinate starts empty; a depth
+    /// left of the stored region is kept, one right of or outside its rows
+    /// is not); design: render (#144) (the flat grid and the map for a
+    /// region too large for it keep the same depths)
+    #[test]
+    fn depths_kept_alike_in_the_grid_and_the_map() {
+        // A small region, held in the grid, and one just over the grid limit.
+        for (w, h) in [(4, 2), (1025, 1024)] {
+            let (x0, y0) = (10, -3);
+            let (x1, y1) = (x0 + w, y0 + h);
+            let mut r = Raster::with_region([0, -3, x1 + 6, h], [x0, y0, x1, y1]);
+            assert_eq!(r.depth_at(x0, y0), EMPTY_DEPTH);
+            r.put_depth(x0 - 1, y0, 7, 5);
+            r.put_depth(x0, y0, 9, 3);
+            r.put_depth(x1, y0, 1, 4);
+            r.put_depth(x0, y1, 1, 4);
+            r.put_depth(x0 + 1, y1 - 1, 6, -2);
+            assert_eq!(r.grid.is_some(), w * h <= DEPTH_GRID_LIMIT as i64);
+            assert_eq!(r.depth_at(x0 - 1, y0), 5, "left of the region, {w} × {h}");
+            assert_eq!(r.depth_at(x0, y0), 3, "{w} × {h}");
+            assert_eq!(r.depth_at(x0 + 1, y1 - 1), -2, "{w} × {h}");
+            assert_eq!(r.depth_at(x1, y0), EMPTY_DEPTH, "right of the region");
+            assert_eq!(r.depth_at(x0, y1), EMPTY_DEPTH, "below the region");
+            assert_eq!(r.depth_at(x0 + 1, y0), EMPTY_DEPTH, "never written");
+            r.put_depth(x0, y0, 2, 8);
+            assert_eq!(r.depth_at(x0, y0), 8);
+            let wide = w as usize;
+            assert_eq!(r.colour[0], 2);
+            assert_eq!(r.colour[(h as usize - 1) * wide + 1], 6);
+            assert_eq!(r.colour.iter().filter(|&&c| c != 0).count(), 2);
+        }
     }
 
     /// spec: S-0105 claims 24, 34, S2 (every fresh depth-mode draw starts

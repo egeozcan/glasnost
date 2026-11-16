@@ -60,6 +60,18 @@ fn map_shader_translates_to_glsl_es_300() {
     assert!(fs.contains("texelFetch"));
 }
 
+/// design: render (#117): the spots' vertex and fragment stages, drawn from the compact spot
+/// buffer, translate too, without a base instance.
+#[test]
+fn map_spot_stages_translate_to_glsl_es_300() {
+    let src = glasnost_render::map_gpu::SHADER_SOURCE;
+    let vs = translate_for_webgl2(src, naga::ShaderStage::Vertex, "vs_spot");
+    let fs = translate_for_webgl2(src, naga::ShaderStage::Fragment, "fs_spot");
+    assert!(vs.starts_with("#version 300 es"));
+    assert!(!vs.contains("gl_BaseInstance"));
+    assert!(fs.contains("gl_FragDepth"), "depth is written per fragment");
+}
+
 #[test]
 fn batch2d_translates_to_glsl_es_300() {
     let src = glasnost_render::batch2d::SHADER_SOURCE;

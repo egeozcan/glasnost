@@ -26,7 +26,9 @@ pub struct Painter {
     pub atlas: Atlas,
     /// Palette rows (256 RGBA entries each).
     pub palettes: Vec<[u8; 1024]>,
-    /// Whether the atlas or palettes changed since the GPU copy.
+    /// Whether the palettes changed since the GPU copy. The atlas keeps
+    /// its own changed rows ([`Atlas::dirty`]), so a new sprite frame does
+    /// not send the palettes again (design: render (#123)).
     pub dirty: bool,
     glyphs: BTreeMap<char, [i32; 4]>,
     sprites: BTreeMap<(u32, u32), SpriteFrame>,
@@ -110,7 +112,6 @@ impl Painter {
         };
         self.sprites
             .insert((id, frame), SpriteFrame { region, row });
-        self.dirty = true;
         true
     }
 
@@ -256,6 +257,21 @@ impl Painter {
 mod tests {
     use super::*;
     use glasnost_ui::draw::colour;
+
+    /// design: render (#123): a sprite frame changes the atlas and leaves
+    /// the palettes as they were sent; a palette row marks the palettes.
+    #[test]
+    fn a_sprite_leaves_the_palettes_clean() {
+        let mut p = Painter::new();
+        p.dirty = false;
+        p.atlas.uploaded();
+        let frame = IndexedImage::new(3, 2, vec![1, 2, 3, 4, 5, 6]).unwrap();
+        assert!(p.add_sprite(1, 0, &frame, 0));
+        assert!(p.atlas.dirty(), "the atlas changed");
+        assert!(!p.dirty, "the palettes did not");
+        p.add_palette([7; 1024]);
+        assert!(p.dirty, "a palette row marks the palettes");
+    }
 
     #[test]
     fn text_frames_and_images_become_quads() {

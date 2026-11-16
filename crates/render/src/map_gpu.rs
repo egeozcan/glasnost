@@ -22,7 +22,7 @@ use wgpu::util::DeviceExt;
 
 use crate::compose::{ComposeQuirks, DepthTest, Paint, Profile, expand565};
 use crate::scene::{Filter, ItemDepth, Scene, View};
-use crate::spots::{SpotGroup, SpotKind};
+use crate::spots::{Spot, SpotGroup, SpotKind};
 
 /// WGSL source.
 pub const SHADER_SOURCE: &str = include_str!("map_gpu.wgsl");
@@ -44,7 +44,23 @@ struct ViewUniform {
     rows_per_column: i32,
     /// The number of palette rows the scene has (#151).
     rows: i32,
-    pad: i32,
+    /// The magnetic wave's view-edge margin ([`crate::spots::WAVE_MARGIN`]):
+    /// the shader leaves a wave pixel within it undrawn (design: render
+    /// (#117)).
+    wave_margin: i32,
+}
+
+/// A spot's instance in the spot buffer (design: render (#117)): 24 bytes
+/// instead of an [`Instance`]'s 80, in world pixels, so that it holds for
+/// every view.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Pod, Zeroable)]
+struct SpotInstance {
+    /// World x, world y, depth bias, and the kind in bits 0 to 7 with the
+    /// offset's x and y as signed bytes in bits 8 to 15 and 16 to 23.
+    place: [i32; 4],
+    /// The colour, and the blended weights or the wave's *k*.
+    paint: [u32; 2],
 }
 
 #[repr(C)]
@@ -426,6 +442,9 @@ pub struct MapRenderer {
     view_buffer: wgpu::Buffer,
     instances: wgpu::Buffer,
     instance_capacity: usize,
+    /// The spot instances of [`Self::spot_layout`] (design: render (#117)).
+    spot_buffer: wgpu::Buffer,
+    spot_capacity: usize,
     slots: Vec<Slot>,
     /// The size of each image of [`Scene::images`] as it was placed: a
     /// rewrite at another size moves it (design: render (#105)).
@@ -477,9 +496,9 @@ pub struct MapRenderer {
     resized: Vec<u32>,
     /// A frame's cell-pass items near the view, kept for its room.
     near: Vec<u32>,
-    /// The view's pixels marked for laying out spot groups (design: render
-    /// (#115, #116)).
-    spot_stamps: SpotStamps,
+    /// The scene's spot groups laid out in world pixels, as the spot buffer
+    /// holds them, kept while their spots stay (design: render (#117)).
+    spot_layout: Option<SpotLayout>,
 }
 
 /// The side of a [`CellCull`] bucket in world pixels (design: render
@@ -803,7 +822,19 @@ impl MapRenderer {
         let attributes = wgpu::vertex_attr_array![
             0 => Uint32x4, 1 => Sint32x4, 2 => Uint32x4, 3 => Uint32x4, 4 => Sint32x4
         ];
+        // design: render (#117): a spot's pipeline reads the compact spot buffer
+        let spot_attributes = wgpu::vertex_attr_array![0 => Sint32x4, 1 => Uint32x2];
         let make = |role: Role| {
+            let (entry, stride, attributes): (_, _, &[wgpu::VertexAttribute]) =
+                if role == Role::Spot {
+                    (
+                        "vs_spot",
+                        std::mem::size_of::<SpotInstance>(),
+                        &spot_attributes,
+                    )
+                } else {
+                    ("vs_main", std::mem::size_of::<Instance>(), &attributes)
+                };
             let (compare, write) = match role {
                 Role::Tile => (wgpu::CompareFunction::LessEqual, true),
                 Role::Writer => (wgpu::CompareFunction::Less, true),
@@ -835,12 +866,12 @@ impl MapRenderer {
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: Some("vs_main"),
+                    entry_point: Some(entry),
                     compilation_options: Default::default(),
                     buffers: &[Some(wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Instance>() as u64,
+                        array_stride: stride as u64,
                         step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &attributes,
+                        attributes,
                     })],
                 },
                 primitive: wgpu::PrimitiveState::default(),
@@ -878,6 +909,8 @@ impl MapRenderer {
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let spot_capacity = 1024;
+        let spot_buffer = Self::spot_buffer(device, spot_capacity);
         Ok(Self {
             pipelines,
             bind_group,
@@ -885,6 +918,8 @@ impl MapRenderer {
             view_buffer,
             instances,
             instance_capacity,
+            spot_buffer,
+            spot_capacity,
             slots,
             sizes,
             signed_slots,
@@ -911,7 +946,17 @@ impl MapRenderer {
             cull: None,
             resized: Vec::new(),
             near: Vec::new(),
-            spot_stamps: SpotStamps::default(),
+            spot_layout: None,
+        })
+    }
+
+    /// A spot buffer of `capacity` instances.
+    fn spot_buffer(device: &wgpu::Device, capacity: usize) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("map spots"),
+            size: (capacity * std::mem::size_of::<SpotInstance>()) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         })
     }
 
@@ -1297,7 +1342,8 @@ impl MapRenderer {
             rows_per_column: self.rows_per_column as i32,
             // design: render (#151): a pixel whose shade row is past the scene's rows is not drawn, as on the CPU (compose::Frame::paint)
             rows: i32::try_from(scene.rows.len()).unwrap_or(i32::MAX),
-            pad: 0,
+            // spec: S-0607 claim 25 (no wave pixel within the margin of the view's edges)
+            wave_margin: crate::spots::WAVE_MARGIN,
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&uniform));
         let (ox, oy) = view.origin;
@@ -1310,16 +1356,20 @@ impl MapRenderer {
         // backdrop copies (`passes`).
         let mut rects: Vec<[u32; 4]> = std::mem::take(&mut self.rects);
         rects.clear();
-        // A spot instance draws its own pixel.
-        let spot_rects = |list: &[Instance], rects: &mut Vec<[u32; 4]>| {
-            for i in &list[rects.len()..] {
-                rects.push([(i.place[0] - ox) as u32, (i.place[1] - oy) as u32, 1, 1]);
+        // design: render (#117): the spot groups' instances, built and uploaded only when their
+        // spots change; a frame picks the batches that meet its view
+        let spots = self.sync_spots(device, queue, scene, view, filter);
+        let mut spots_drawn = 0;
+        let mut push_spots = |gi: usize, g: &SpotGroup, batches: &mut Vec<Batch>| {
+            if filter.shows_spots(g) {
+                spots_drawn += spots.push_group(gi, view, batches);
             }
         };
         // Runs of instances that share a pipeline; a translucent item is a
-        // run of its own, with the view rectangle it covers.
+        // run of its own, with the view rectangle it covers. A spot run's
+        // range is in the spot buffer.
         let mut batches: Vec<Batch> = Vec::new();
-        let mut spot_groups = scene.spots.iter().peekable();
+        let mut spot_groups = scene.spots.iter().enumerate().peekable();
         // design: render (#113): the cell pass's items that may meet the view, from the cull
         // kept while the cell pass stays, then every item of the object pass; an item left out
         // would draw no pixel, so the instances and their order are those of every item
@@ -1351,11 +1401,8 @@ impl MapRenderer {
         });
         for (n, base, j) in copies {
             self.stats.items += 1;
-            while let Some(g) = spot_groups.next_if(|g| g.at <= n) {
-                if filter.shows_spots(g) {
-                    spot_instances(g, view, &mut self.spot_stamps, &mut list, &mut batches);
-                    spot_rects(&list, &mut rects);
-                }
+            while let Some((gi, g)) = spot_groups.next_if(|(_, g)| g.at <= n) {
+                push_spots(gi, g, &mut batches);
             }
             // Copy 0 is the item itself; a higher copy moves only its row and bias.
             let moved;
@@ -1522,9 +1569,8 @@ impl MapRenderer {
                 _ => batches.push((role, n - 1..n, None)),
             }
         }
-        for g in spot_groups.filter(|g| filter.shows_spots(g)) {
-            spot_instances(g, view, &mut self.spot_stamps, &mut list, &mut batches);
-            spot_rects(&list, &mut rects);
+        for (gi, g) in spot_groups {
+            push_spots(gi, g, &mut batches);
         }
         self.near = near;
         if list.len() > self.instance_capacity {
@@ -1554,7 +1600,7 @@ impl MapRenderer {
             self.stats.upload_bytes += std::mem::size_of_val(&list[same..]) as u64;
         }
         self.list_held = true;
-        self.stats.instances += list.len();
+        self.stats.instances += list.len() + spots_drawn;
         let begin = |encoder: &mut wgpu::CommandEncoder, first: bool| {
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1596,7 +1642,16 @@ impl MapRenderer {
         };
         self.stats.draws += batches.len();
         let mut first = true;
-        for (copies, run) in passes(batches, &rects) {
+        let drawn_meets = |b: &Batch, c: &[u32; 4]| {
+            if b.0 == Role::Spot {
+                spots.meets(b.1.start, c, view)
+            } else {
+                rects[b.1.start as usize..b.1.end as usize]
+                    .iter()
+                    .any(|d| meets(d, c))
+            }
+        };
+        for (copies, run) in passes_by(batches, drawn_meets) {
             for [x, y, cw, ch] in copies {
                 // spec: S-0102 claim 32 (a translucent pixel blends with the already-painted
                 // destination: the pixels drawn so far are copied before the item is drawn)
@@ -1625,25 +1680,87 @@ impl MapRenderer {
             let mut pass = begin(encoder, first);
             first = false;
             self.stats.passes += 1;
+            // `begin` binds the instance buffer.
+            let mut on_spots = false;
             for (role, range, _) in run {
+                let spot = role == Role::Spot;
+                if spot != on_spots {
+                    let buffer = if spot {
+                        &self.spot_buffer
+                    } else {
+                        &self.instances
+                    };
+                    pass.set_vertex_buffer(0, buffer.slice(..));
+                    on_spots = spot;
+                }
                 pass.set_pipeline(&self.pipelines[role.index()]);
                 pass.draw(0..6, range);
             }
         }
-        let drawn = list.len();
+        let drawn = list.len() + spots_drawn;
+        self.spot_layout = Some(spots);
         self.spare = std::mem::replace(&mut self.list, list);
         self.rects = rects;
         drawn
     }
+
+    /// The scene's spot groups laid out for `view` (design: render
+    /// (#117)): the groups it meets laid out if they are not, and the
+    /// instances the spot buffer does not hold yet uploaded.
+    fn sync_spots(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        scene: &Scene,
+        view: &View,
+        filter: &Filter,
+    ) -> SpotLayout {
+        let mut layout = self.spot_layout.take().unwrap_or_default();
+        layout.sync(scene);
+        layout.lay_out_view(scene, view, filter);
+        let n = layout.instances.len();
+        if n > self.spot_capacity {
+            self.spot_capacity = n.next_power_of_two();
+            self.spot_buffer = Self::spot_buffer(device, self.spot_capacity);
+            layout.uploaded = 0;
+        }
+        if n > layout.uploaded {
+            let new = &layout.instances[layout.uploaded..];
+            queue.write_buffer(
+                &self.spot_buffer,
+                (layout.uploaded * std::mem::size_of::<SpotInstance>()) as u64,
+                bytemuck::cast_slice(new),
+            );
+            self.stats.uploads += 1;
+            self.stats.upload_bytes += std::mem::size_of_val(new) as u64;
+            layout.uploaded = n;
+        }
+        layout
+    }
 }
 
 /// A run of instances sharing a pipeline, with the view rectangle a
-/// blending run covers.
+/// blending run covers. A [`Role::Spot`] run's range is in the spot buffer.
 type Batch = (Role, std::ops::Range<u32>, Option<[u32; 4]>);
 
-/// The render passes of a frame's `batches` (`rects`: the view rectangle
-/// each instance draws into), each with the backdrop copies taken before
-/// it begins.
+/// Whether two view rectangles (x, y, width, height) meet.
+fn meets(a: &[u32; 4], b: &[u32; 4]) -> bool {
+    a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
+}
+
+/// [`passes_by`] for runs whose instances draw into `rects`, one each.
+#[cfg(test)]
+fn passes(batches: Vec<Batch>, rects: &[[u32; 4]]) -> Vec<(Vec<[u32; 4]>, Vec<Batch>)> {
+    passes_by(batches, |b, c| {
+        rects[b.1.start as usize..b.1.end as usize]
+            .iter()
+            .any(|d| meets(d, c))
+    })
+}
+
+/// The render passes of a frame's `batches` (`drawn_meets`: whether a
+/// run draws a pixel of a view rectangle), each with the backdrop copies
+/// taken before it begins.
 ///
 /// A blending run reads the copy of the pixels under it, which must hold
 /// what was drawn before it. The copy is taken where the last pass began
@@ -1652,301 +1769,536 @@ type Batch = (Role, std::ops::Range<u32>, Option<[u32; 4]>);
 /// run. So runs that do not meet what was drawn since share one pass break
 /// instead of one each (M8 step C4); the first pass, which clears the
 /// target, takes no copy. There is always at least one pass.
-fn passes(batches: Vec<Batch>, rects: &[[u32; 4]]) -> Vec<(Vec<[u32; 4]>, Vec<Batch>)> {
-    let meets = |a: &[u32; 4], b: &[u32; 4]| {
-        a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
-    };
+fn passes_by(
+    batches: Vec<Batch>,
+    drawn_meets: impl Fn(&Batch, &[u32; 4]) -> bool,
+) -> Vec<(Vec<[u32; 4]>, Vec<Batch>)> {
     let mut out: Vec<(Vec<[u32; 4]>, Vec<Batch>)> = vec![(Vec::new(), Vec::new())];
-    // The rectangles drawn since the last pass began.
-    let mut drawn: Vec<[u32; 4]> = Vec::new();
     for b in batches {
         if let Some(c) = b.2 {
-            if out.len() > 1 && !drawn.iter().any(|d| meets(d, &c)) {
-                if let Some(last) = out.last_mut() {
-                    last.0.push(c);
-                }
+            // The runs drawn since the last pass began are the last pass's.
+            let last = out.len() - 1;
+            if last > 0 && !out[last].1.iter().any(|d| drawn_meets(d, &c)) {
+                out[last].0.push(c);
             } else {
                 out.push((vec![c], Vec::new()));
-                drawn.clear();
             }
         }
-        drawn.extend_from_slice(&rects[b.1.start as usize..b.1.end as usize]);
-        if let Some(last) = out.last_mut() {
-            last.1.push(b);
-        }
+        let last = out.len() - 1;
+        out[last].1.push(b);
     }
     out
 }
 
-/// Appends the instances of spot group `g` (one 1 × 1 instance per spot in
-/// the view) and their batches. A batch reads the copy of the target taken
-/// before it, so a batch ends before a spot that hits a pixel the batch
-/// already holds: overlapping spots then apply in order, as on the CPU
-/// ([`crate::spots::apply`]). A magnetic wave's spots never repeat a pixel
-/// and read the copy around them (S-0607 claim 25).
-///
-/// A group with no magnetic wave is laid out by [`layered_spot_instances`]
-/// instead (design: render (#115, #116)).
-fn spot_instances(
-    g: &SpotGroup,
-    view: &View,
-    stamps: &mut SpotStamps,
-    list: &mut Vec<Instance>,
-    batches: &mut Vec<Batch>,
-) {
-    if g.spots.len() < SpotStamps::LAYERS as usize
-        && !g
-            .spots
-            .iter()
-            .any(|s| matches!(s.kind, SpotKind::Wave { .. }))
-    {
-        layered_spot_instances(g, view, stamps, list, batches);
-        return;
+/// The spot kinds' codes in the shader (`fs_spot`; design: render (#117)).
+const SPOT_OPAQUE: i32 = 0; // design: render (#117)
+const SPOT_ADDITIVE: i32 = 1; // design: render (#117)
+const SPOT_BLENDED: i32 = 2; // design: render (#117)
+const SPOT_FLASH: i32 = 3; // design: render (#117)
+const SPOT_WAVE: i32 = 4; // design: render (#117)
+
+/// A spot's instance: its world pixel, bias, kind code, offset (a blended
+/// spot's light-alpha pixel, a wave's source pixel) and paint.
+fn spot_instance(s: &Spot) -> SpotInstance {
+    let (kind, colour, weights, (dx, dy)) = match s.kind {
+        SpotKind::Opaque { colour } => (SPOT_OPAQUE, u32::from(colour), 0u32, (0, 0)),
+        SpotKind::Additive { rgb } => (SPOT_ADDITIVE, rgb_word(rgb), 0, (0, 0)),
+        SpotKind::Blended {
+            rgb,
+            line,
+            screen,
+            alpha_from,
+        } => (
+            SPOT_BLENDED,
+            rgb_word(rgb),
+            u32::from(line) | (u32::from(screen) << 16),
+            alpha_from,
+        ),
+        SpotKind::Flash { rgb } => (SPOT_FLASH, rgb_word(rgb), 0, (0, 0)),
+        SpotKind::Wave { shift, k } => (SPOT_WAVE, 0, u32::from(k), shift),
+    };
+    SpotInstance {
+        place: [
+            s.x,
+            s.y,
+            s.bias,
+            kind | (i32::from(dx as u8) << 8) | (i32::from(dy as u8) << 16),
+        ],
+        paint: [colour, weights],
     }
-    let (ox, oy) = view.origin;
-    let (w, h) = (view.size.0 as i32, view.size.1 as i32);
-    let mut held: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
-    let mut rect: Option<[i32; 4]> = None;
-    let mut start = list.len() as u32;
-    let close =
-        |list: &Vec<Instance>, start: u32, rect: Option<[i32; 4]>, batches: &mut Vec<Batch>| {
-            let n = list.len() as u32;
-            if let Some([x0, y0, x1, y1]) = rect
-                && n > start
-            {
-                let (x0, y0) = (x0.max(0), y0.max(0));
-                let (x1, y1) = (x1.min(w), y1.min(h));
-                batches.push((
-                    Role::Spot,
-                    start..n,
-                    Some([x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32]),
-                ));
-            }
-        };
-    for s in &g.spots {
-        let (x, y) = (s.x - ox, s.y - oy);
-        if x < 0 || y < 0 || x >= w || y >= h {
-            continue;
-        }
-        let (kind, colour, weights, shift) = match s.kind {
-            SpotKind::Opaque { colour } => (0u32, u32::from(colour), 0u32, (0, 0)),
-            SpotKind::Additive { rgb } => (1, rgb_word(rgb), 0, (0, 0)),
-            SpotKind::Blended {
-                rgb,
-                line,
-                screen,
-                alpha_from,
-            } => (
-                2,
-                rgb_word(rgb),
-                u32::from(line) | (u32::from(screen) << 16),
-                alpha_from,
-            ),
-            SpotKind::Flash { rgb } => (3, rgb_word(rgb), 0, (0, 0)),
-            SpotKind::Wave { shift, k } => {
-                let m = crate::spots::WAVE_MARGIN;
-                if x < m || y < m || x >= w - m || y >= h - m {
-                    continue;
-                }
-                (4, 0, u32::from(k), shift)
-            }
-        };
-        if !held.insert((x, y)) {
-            close(list, start, rect, batches);
-            start = list.len() as u32;
-            held.clear();
-            held.insert((x, y));
-            rect = None;
-        }
-        // The rectangle of target pixels the batch reads: its own pixels and,
-        // for a wave, the source pixels.
-        let (sx, sy) = (x + i32::from(shift.0), y + i32::from(shift.1));
-        let r = rect.get_or_insert([x, y, x + 1, y + 1]);
-        r[0] = r[0].min(x).min(sx);
-        r[1] = r[1].min(y).min(sy);
-        r[2] = r[2].max(x + 1).max(sx + 1);
-        r[3] = r[3].max(y + 1).max(sy + 1);
-        list.push(Instance {
-            image: [0, 0, NO_IMAGE, 1 | (1 << 16)],
-            place: [s.x, s.y, s.bias, 0],
-            depth: [0, 0, NO_IMAGE, 0],
-            paint: [kind, colour, weights, 0],
-            companion: [i32::from(shift.0), i32::from(shift.1), 0, 0],
-        });
-    }
-    close(list, start, rect, batches);
 }
 
-/// The view's pixels marked for laying out one spot group, kept for their
-/// room (design: render (#115, #116)): a word a pixel, the group's
-/// generation in the top 8 bits and the layer of the last spot at the pixel
-/// in the low 24, so that a new group needs no clearing.
+impl SpotInstance {
+    fn kind(&self) -> i32 {
+        self.place[3] & 0xFF
+    }
+
+    /// The offset to the pixel a blended spot takes its light-alpha value
+    /// from, or a wave its source pixel.
+    fn offset(&self) -> (i32, i32) {
+        let w = self.place[3];
+        ((w << 16) >> 24, (w << 8) >> 24)
+    }
+
+    /// Whether the spot reads the target (S-0518 F7 and F8); a blended
+    /// spot's offset reads the light-alpha values, not the target.
+    fn reads(&self) -> bool {
+        matches!(self.kind(), SPOT_ADDITIVE | SPOT_BLENDED)
+    }
+
+    /// Whether the spot draws its pixel in the world rectangle `v` of a
+    /// view: inside it, and a wave's pixel not within the view-edge margin
+    /// (S-0607 claim 25).
+    fn drawn_in(&self, v: &[i32; 4]) -> bool {
+        let (x, y) = (self.place[0], self.place[1]);
+        let m = if self.kind() == SPOT_WAVE {
+            crate::spots::WAVE_MARGIN // spec: S-0607 claim 25
+        } else {
+            0
+        };
+        x >= v[0] + m && y >= v[1] + m && x < v[2] - m && y < v[3] - m
+    }
+}
+
+/// A world rectangle: x0, y0, x1, y1.
+type WorldRect = [i32; 4];
+
+/// A world rectangle (x0, y0, x1, y1) widened to hold pixel (x, y).
+fn widen(r: &mut Option<[i32; 4]>, x: i32, y: i32) {
+    let r = r.get_or_insert([x, y, x + 1, y + 1]);
+    r[0] = r[0].min(x);
+    r[1] = r[1].min(y);
+    r[2] = r[2].max(x + 1);
+    r[3] = r[3].max(y + 1);
+}
+
+/// Whether two world rectangles (x0, y0, x1, y1) meet.
+fn world_meets(a: &[i32; 4], b: &[i32; 4]) -> bool {
+    a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
+}
+
+/// One run of a spot group's instances in the spot buffer, drawn with one
+/// copy of the target before it (design: render (#117)).
+#[derive(Clone, Debug)]
+struct SpotBatch {
+    range: std::ops::Range<u32>,
+    /// The world rectangle of its pixels.
+    cover: [i32; 4],
+    /// The world rectangle of the target pixels it reads.
+    reads: Option<[i32; 4]>,
+    /// Whether it is a run of a group with a magnetic wave, whose every
+    /// spot reads the target at its pixel and its offset.
+    split: bool,
+    /// Whether it holds a magnetic wave's spot.
+    wave: bool,
+}
+
+/// The last spot at each world pixel of a group being laid out (design:
+/// render (#117)): a grid over the group's rectangle, marked by generation
+/// so that a new group needs no clearing, or an ordered map for a group
+/// spread too thinly for one.
 #[derive(Default)]
-struct SpotStamps {
-    cells: Vec<u32>,
-    /// The generation of the group being laid out, 1 to 255 (0 marks
-    /// nothing).
+struct PixelMarks {
+    cells: Vec<(u32, u32)>,
+    /// The generation of the group being laid out (0 marks nothing).
     generation: u32,
-    /// Each in-view spot's layer, in group order.
+    /// The grid's world corner and width, if the group uses the grid.
+    grid: Option<(i32, i32, usize)>,
+    map: std::collections::BTreeMap<(i32, i32), u32>,
+}
+
+impl PixelMarks {
+    /// The most grid cells a group of `n` spots uses (design: render
+    /// (#117)): a thick beam's rectangle; a group spread wider uses the map.
+    fn grid_limit(n: usize) -> usize {
+        (8 * n).max(1 << 18) // design: render (#117)
+    }
+
+    /// Starts a group of `n` spots inside world rectangle `r`.
+    fn begin(&mut self, r: [i32; 4], n: usize) {
+        let (w, h) = (
+            i64::from(r[2]) - i64::from(r[0]),
+            i64::from(r[3]) - i64::from(r[1]),
+        );
+        let area = w * h;
+        if area > Self::grid_limit(n) as i64 {
+            self.grid = None;
+            self.map.clear();
+            return;
+        }
+        let area = area as usize;
+        if self.cells.len() < area {
+            self.cells.resize(area, (0, 0));
+        }
+        self.generation = self.generation.wrapping_add(1);
+        if self.generation == 0 {
+            self.cells.fill((0, 0));
+            self.generation = 1;
+        }
+        self.grid = Some((r[0], r[1], w as usize));
+    }
+
+    /// What was last marked at pixel (x, y) in this group, if anything.
+    fn get(&self, x: i32, y: i32) -> Option<u32> {
+        match self.grid {
+            Some((x0, y0, w)) => {
+                let c = self.cells[(y - y0) as usize * w + (x - x0) as usize];
+                (c.0 == self.generation).then_some(c.1)
+            }
+            None => self.map.get(&(y, x)).copied(),
+        }
+    }
+
+    fn set(&mut self, x: i32, y: i32, v: u32) {
+        match self.grid {
+            Some((x0, y0, w)) => {
+                self.cells[(y - y0) as usize * w + (x - x0) as usize] = (self.generation, v);
+            }
+            None => {
+                self.map.insert((y, x), v);
+            }
+        }
+    }
+}
+
+/// A spot group as the layout last saw it (design: render (#117)).
+#[derive(Default)]
+struct GroupEntry {
+    /// Its spots.
+    held: Vec<Spot>,
+    /// The world rectangle of its pixels.
+    cover: Option<WorldRect>,
+    /// Its runs in [`SpotLayout::batches`], once laid out.
+    laid: Option<std::ops::Range<usize>>,
+}
+
+/// The scene's spot groups laid out in world pixels (design: render
+/// (#117)): the instances the spot buffer holds and their runs. A group is
+/// laid out once, when a view first meets it, for every view, and kept
+/// while the groups' spots stay; a frame draws the runs that meet its
+/// view. When a laid-out group's spots change, every group is laid out
+/// anew as views meet it.
+#[derive(Default)]
+struct SpotLayout {
+    entries: Vec<GroupEntry>,
+    instances: Vec<SpotInstance>,
+    batches: Vec<SpotBatch>,
+    /// How many of `instances` the spot buffer holds.
+    uploaded: usize,
+    marks: PixelMarks,
+    /// Each spot's layer in the group being laid out.
     layers: Vec<u32>,
     /// Each layer's spot count, then where its spots go.
     counts: Vec<u32>,
-    /// Each layer's rectangle of reading spots (x0, y0, x1, y1).
-    reads: Vec<Option<[i32; 4]>>,
+    /// Each layer's rectangles of pixels and of reading spots.
+    covers: Vec<(Option<WorldRect>, Option<WorldRect>)>,
     /// The group's instances in layer order.
-    sorted: Vec<Instance>,
+    sorted: Vec<SpotInstance>,
 }
 
-impl SpotStamps {
-    /// The layers a word holds; a group with as many spots or more is laid
-    /// out spot by spot.
-    const LAYERS: u32 = 1 << 24;
-
-    /// Starts a group over a view of `n` pixels.
-    fn begin(&mut self, n: usize) {
-        if self.cells.len() != n {
-            self.cells.clear();
-            self.cells.resize(n, 0);
-            self.generation = 0;
-        }
-        self.generation += 1;
-        if self.generation > 255 {
-            self.cells.fill(0);
-            self.generation = 1;
-        }
-    }
-
-    /// The layer of the group's last spot at pixel `i`, if one is there.
-    fn get(&self, i: usize) -> Option<u32> {
-        let c = self.cells[i];
-        (c >> 24 == self.generation).then_some(c & (Self::LAYERS - 1))
-    }
-
-    fn set(&mut self, i: usize, layer: u32) {
-        self.cells[i] = (self.generation << 24) | layer;
-    }
-}
-
-/// Appends the instances of spot group `g`, which holds no magnetic wave,
-/// and their batches, one batch a layer (design: render (#115, #116)).
-///
-/// A spot that reads the target (additive and blended, S-0518 F7 and F8)
-/// reads the copy taken before its batch, which must hold every earlier
-/// spot at its pixel; one that does not (opaque, S-0518 claim 23; a beam
-/// flash, S-0514 claim 25) only replaces the pixel. So the first spot at a
-/// pixel is in layer 0, and a later one in the layer of the spot before it
-/// there, one higher if it reads. The layers are drawn in turn, each spot
-/// after every earlier spot at its pixel, and within a layer in group
-/// order, which the draw keeps; spots read and write no depth (S-0518 claim
-/// 20), so none changes whether another is drawn. A layer's batch covers
-/// the pixels its reading spots read, and a layer without one takes no
-/// copy: the pixels are those [`crate::spots::apply`] gives, with a copy
-/// and a pass for each depth of repetition instead of each repeat.
-fn layered_spot_instances(
-    g: &SpotGroup,
-    view: &View,
-    stamps: &mut SpotStamps,
-    list: &mut Vec<Instance>,
-    batches: &mut Vec<Batch>,
-) {
-    let (ox, oy) = view.origin;
-    let (w, h) = (view.size.0 as i32, view.size.1 as i32);
-    stamps.begin(view.size.0 as usize * view.size.1 as usize);
-    stamps.layers.clear();
-    stamps.reads.clear();
-    let start = list.len();
-    let mut top = 0;
-    for s in &g.spots {
-        let (x, y) = (s.x - ox, s.y - oy);
-        if x < 0 || y < 0 || x >= w || y >= h {
-            continue;
-        }
-        let (kind, colour, weights, alpha_from, reads) = match s.kind {
-            SpotKind::Opaque { colour } => (0u32, u32::from(colour), 0u32, (0, 0), false),
-            SpotKind::Additive { rgb } => (1, rgb_word(rgb), 0, (0, 0), true),
-            SpotKind::Blended {
-                rgb,
-                line,
-                screen,
-                alpha_from,
-            } => (
-                2,
-                rgb_word(rgb),
-                u32::from(line) | (u32::from(screen) << 16),
-                alpha_from,
-                true,
-            ),
-            SpotKind::Flash { rgb } => (3, rgb_word(rgb), 0, (0, 0), false),
-            SpotKind::Wave { .. } => continue,
-        };
-        let i = y as usize * view.size.0 as usize + x as usize;
-        let layer = stamps.get(i).map_or(0, |l| l + u32::from(reads));
-        stamps.set(i, layer);
-        stamps.layers.push(layer);
-        top = top.max(layer);
-        if reads {
-            // A blended spot's `alpha_from` reads the light-alpha values, not the target.
-            let l = layer as usize;
-            if stamps.reads.len() <= l {
-                stamps.reads.resize(l + 1, None);
+impl SpotLayout {
+    /// Takes in the scene's groups: a group whose spots are not those last
+    /// seen is held anew, not laid out; if it was laid out, every group is
+    /// laid out anew.
+    fn sync(&mut self, scene: &Scene) {
+        let mut stale = self.entries.len() > scene.spots.len()
+            && self.entries[scene.spots.len()..]
+                .iter()
+                .any(|e| e.laid.is_some());
+        self.entries.truncate(scene.spots.len());
+        self.entries
+            .resize_with(scene.spots.len(), GroupEntry::default);
+        for (e, g) in self.entries.iter_mut().zip(&scene.spots) {
+            if e.held == g.spots {
+                continue;
             }
-            let r = stamps.reads[l].get_or_insert([x, y, x + 1, y + 1]);
-            r[0] = r[0].min(x);
-            r[1] = r[1].min(y);
-            r[2] = r[2].max(x + 1);
-            r[3] = r[3].max(y + 1);
+            stale |= e.laid.is_some();
+            e.held.clone_from(&g.spots);
+            e.cover = g.spots.iter().fold(None, |mut r, s| {
+                widen(&mut r, s.x, s.y);
+                r
+            });
+            e.laid = None;
         }
-        list.push(Instance {
-            image: [0, 0, NO_IMAGE, 1 | (1 << 16)],
-            place: [s.x, s.y, s.bias, 0],
-            depth: [0, 0, NO_IMAGE, 0],
-            paint: [kind, colour, weights, 0],
-            companion: [i32::from(alpha_from.0), i32::from(alpha_from.1), 0, 0],
-        });
-    }
-    if list.len() == start {
-        return;
-    }
-    let layers = top as usize + 1;
-    stamps.counts.clear();
-    stamps.counts.resize(layers, 0);
-    for &l in &stamps.layers {
-        stamps.counts[l as usize] += 1;
-    }
-    if layers > 1 {
-        // A stable counting sort by layer.
-        let mut at = 0;
-        for c in &mut stamps.counts {
-            let n = *c;
-            *c = at;
-            at += n;
+        if stale {
+            self.instances.clear();
+            self.batches.clear();
+            self.uploaded = 0;
+            for e in &mut self.entries {
+                e.laid = None;
+            }
         }
-        stamps.sorted.clear();
-        stamps.sorted.resize(list.len() - start, Instance::zeroed());
-        for (k, inst) in list[start..].iter().enumerate() {
-            let slot = &mut stamps.counts[stamps.layers[k] as usize];
-            stamps.sorted[*slot as usize] = *inst;
-            *slot += 1;
-        }
-        list[start..].copy_from_slice(&stamps.sorted);
     }
-    // `counts` now holds each layer's end (or, for one layer, its count).
-    let mut from = start as u32;
-    for l in 0..layers {
-        let end = if layers > 1 {
-            start as u32 + stamps.counts[l]
-        } else {
-            list.len() as u32
+
+    /// Lays out the groups `filter` shows whose pixels meet `view` and that
+    /// are not laid out yet.
+    fn lay_out_view(&mut self, scene: &Scene, view: &View, filter: &Filter) {
+        let v = world_view(view);
+        for (gi, g) in scene.spots.iter().enumerate() {
+            let e = &self.entries[gi];
+            let Some(cover) = e.cover else {
+                continue;
+            };
+            if e.laid.is_some() || !world_meets(&cover, &v) || !filter.shows_spots(g) {
+                continue;
+            }
+            let first = self.batches.len();
+            self.marks.begin(cover, g.spots.len());
+            if g.spots
+                .iter()
+                .any(|s| matches!(s.kind, SpotKind::Wave { .. }))
+            {
+                self.split(&g.spots);
+            } else {
+                self.layered(&g.spots);
+            }
+            self.entries[gi].laid = Some(first..self.batches.len());
+        }
+    }
+
+    /// Lays out a group with a magnetic wave: runs in group order, a run
+    /// ending before a spot at a pixel the run already holds, so that
+    /// overlapping spots apply in order as on the CPU
+    /// ([`crate::spots::apply`]); a run reads the target at its pixels and
+    /// their offsets (S-0607 claim 25).
+    fn split(&mut self, spots: &[Spot]) {
+        let mut start = self.instances.len();
+        let mut first = 0;
+        let mut cover: Option<[i32; 4]> = None;
+        let mut reads: Option<[i32; 4]> = None;
+        let mut wave = false;
+        for (k, s) in spots.iter().enumerate() {
+            if self
+                .marks
+                .get(s.x, s.y)
+                .is_some_and(|j| j as usize >= first)
+            {
+                self.close_split(start, cover.take(), reads.take(), wave);
+                start = self.instances.len();
+                first = k;
+                wave = false;
+            }
+            self.marks.set(s.x, s.y, k as u32);
+            let inst = spot_instance(s);
+            let (dx, dy) = inst.offset();
+            widen(&mut cover, s.x, s.y);
+            widen(&mut reads, s.x, s.y);
+            widen(&mut reads, s.x + dx, s.y + dy);
+            wave |= inst.kind() == SPOT_WAVE;
+            self.instances.push(inst);
+        }
+        self.close_split(start, cover, reads, wave);
+    }
+
+    fn close_split(
+        &mut self,
+        start: usize,
+        cover: Option<[i32; 4]>,
+        reads: Option<[i32; 4]>,
+        wave: bool,
+    ) {
+        if let Some(cover) = cover {
+            self.batches.push(SpotBatch {
+                range: start as u32..self.instances.len() as u32,
+                cover,
+                reads,
+                split: true,
+                wave,
+            });
+        }
+    }
+
+    /// Lays out a group with no magnetic wave, one run a layer (design:
+    /// render (#115, #116)).
+    ///
+    /// A spot that reads the target (additive and blended, S-0518 F7 and
+    /// F8) reads the copy taken before its run, which must hold every
+    /// earlier spot at its pixel; one that does not (opaque, S-0518 claim
+    /// 23; a beam flash, S-0514 claim 25) only replaces the pixel. So the
+    /// first spot at a pixel is in layer 0, and a later one in the layer of
+    /// the spot before it there, one higher if it reads. The layers are
+    /// drawn in turn, each spot after every earlier spot at its pixel, and
+    /// within a layer in group order, which the draw keeps; spots read and
+    /// write no depth (S-0518 claim 20), so none changes whether another is
+    /// drawn. A layer's run reads the pixels of its reading spots, and a
+    /// layer without one takes no copy: the pixels are those
+    /// [`crate::spots::apply`] gives, with a copy and a pass for each depth
+    /// of repetition instead of each repeat.
+    fn layered(&mut self, spots: &[Spot]) {
+        let start = self.instances.len();
+        self.layers.clear();
+        self.covers.clear();
+        for s in spots {
+            let inst = spot_instance(s);
+            let layer = self
+                .marks
+                .get(s.x, s.y)
+                .map_or(0, |l| l + u32::from(inst.reads()));
+            self.marks.set(s.x, s.y, layer);
+            self.layers.push(layer);
+            let l = layer as usize;
+            if self.covers.len() <= l {
+                self.covers.resize(l + 1, (None, None));
+            }
+            let (cover, reads) = &mut self.covers[l];
+            widen(cover, s.x, s.y);
+            if inst.reads() {
+                widen(reads, s.x, s.y);
+            }
+            self.instances.push(inst);
+        }
+        let layers = self.covers.len();
+        if layers > 1 {
+            // A stable counting sort by layer.
+            self.counts.clear();
+            self.counts.resize(layers, 0);
+            for &l in &self.layers {
+                self.counts[l as usize] += 1;
+            }
+            let mut at = 0;
+            for c in &mut self.counts {
+                let n = *c;
+                *c = at;
+                at += n;
+            }
+            self.sorted.clear();
+            self.sorted
+                .resize(self.instances.len() - start, SpotInstance::zeroed());
+            for (k, inst) in self.instances[start..].iter().enumerate() {
+                let slot = &mut self.counts[self.layers[k] as usize];
+                self.sorted[*slot as usize] = *inst;
+                *slot += 1;
+            }
+            self.instances[start..].copy_from_slice(&self.sorted);
+        }
+        // `counts` now holds each layer's end.
+        let mut from = start as u32;
+        for l in 0..layers {
+            let end = if layers > 1 {
+                start as u32 + self.counts[l]
+            } else {
+                self.instances.len() as u32
+            };
+            // A layer above 0 holds a spot, as every layer up to the top.
+            if let (Some(cover), reads) = self.covers[l] {
+                self.batches.push(SpotBatch {
+                    range: from..end,
+                    cover,
+                    reads,
+                    split: false,
+                    wave: false,
+                });
+            }
+            from = end;
+        }
+    }
+
+    /// Appends the runs of group `gi` that draw a pixel of `view`, with the
+    /// view rectangle each reads, as the frame's batches, and gives the
+    /// instances they draw. A group whose pixels miss the view is passed
+    /// over whole.
+    fn push_group(&self, gi: usize, view: &View, batches: &mut Vec<Batch>) -> usize {
+        let Some(GroupEntry {
+            cover: Some(cover),
+            laid: Some(range),
+            ..
+        }) = self.entries.get(gi)
+        else {
+            return 0;
         };
-        let rect = stamps
-            .reads
-            .get(l)
-            .copied()
-            .flatten()
-            .map(|[x0, y0, x1, y1]| [x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32]);
-        batches.push((Role::Spot, from..end, rect));
-        from = end;
+        let v = world_view(view);
+        if !world_meets(cover, &v) {
+            return 0;
+        }
+        let mut drawn = 0;
+        for b in &self.batches[range.clone()] {
+            if let Some(copy) = self.frame_reads(b, &v) {
+                batches.push((Role::Spot, b.range.clone(), copy));
+                drawn += b.range.len();
+            }
+        }
+        drawn
     }
+
+    /// For run `b` in the view of world rectangle `v`: `None` if it draws
+    /// no pixel there, else the view rectangle of the target pixels it
+    /// reads there, if any; those of its spots the view holds, as when the
+    /// instances were those of the view's spots alone.
+    fn frame_reads(&self, b: &SpotBatch, v: &[i32; 4]) -> Option<Option<[u32; 4]>> {
+        if !world_meets(&b.cover, v) {
+            return None;
+        }
+        let m = if b.wave {
+            crate::spots::WAVE_MARGIN // spec: S-0607 claim 25
+        } else {
+            0
+        };
+        let inner = [v[0] + m, v[1] + m, v[2] - m, v[3] - m];
+        let to_view = |r: [i32; 4]| {
+            let (x0, y0) = (r[0].max(v[0]), r[1].max(v[1]));
+            let (x1, y1) = (r[2].min(v[2]), r[3].min(v[3]));
+            [
+                (x0 - v[0]) as u32,
+                (y0 - v[1]) as u32,
+                (x1 - x0) as u32,
+                (y1 - y0) as u32,
+            ]
+        };
+        let c = &b.cover;
+        if c[0] >= inner[0] && c[1] >= inner[1] && c[2] <= inner[2] && c[3] <= inner[3] {
+            // Every spot of the run is drawn.
+            return Some(b.reads.map(to_view));
+        }
+        let mut any = false;
+        let mut reads = None;
+        for s in &self.instances[b.range.start as usize..b.range.end as usize] {
+            if !s.drawn_in(v) {
+                continue;
+            }
+            any = true;
+            let (x, y) = (s.place[0], s.place[1]);
+            if b.split {
+                let (dx, dy) = s.offset();
+                widen(&mut reads, x, y);
+                widen(&mut reads, x + dx, y + dy);
+            } else if s.reads() {
+                widen(&mut reads, x, y);
+            }
+        }
+        any.then(|| reads.map(to_view))
+    }
+
+    /// Whether the run whose instances start at `start` draws a pixel of
+    /// view rectangle `c` in `view`.
+    fn meets(&self, start: u32, c: &[u32; 4], view: &View) -> bool {
+        let Ok(i) = self.batches.binary_search_by_key(&start, |b| b.range.start) else {
+            return false;
+        };
+        let b = &self.batches[i];
+        let (ox, oy) = view.origin;
+        let cw = [
+            ox + c[0] as i32,
+            oy + c[1] as i32,
+            ox + (c[0] + c[2]) as i32,
+            oy + (c[1] + c[3]) as i32,
+        ];
+        if !world_meets(&b.cover, &cw) {
+            return false;
+        }
+        let v = world_view(view);
+        self.instances[b.range.start as usize..b.range.end as usize]
+            .iter()
+            .any(|s| {
+                let (x, y) = (s.place[0], s.place[1]);
+                x >= cw[0] && y >= cw[1] && x < cw[2] && y < cw[3] && s.drawn_in(&v)
+            })
+    }
+}
+
+/// The world rectangle (x0, y0, x1, y1) of `view`.
+fn world_view(view: &View) -> [i32; 4] {
+    let (ox, oy) = view.origin;
+    [ox, oy, ox + view.size.0 as i32, oy + view.size.1 as i32]
 }
 
 /// Three 8-bit channels in one word, red lowest.
@@ -2527,5 +2879,42 @@ mod tests {
     #[test]
     fn instance_is_80_bytes() {
         assert_eq!(std::mem::size_of::<Instance>(), 80);
+    }
+
+    /// design: render (#117): a spot's instance is 24 bytes and keeps its
+    /// kind and signed offset.
+    #[test]
+    fn spot_instance_is_24_bytes_and_keeps_its_offset() {
+        assert_eq!(std::mem::size_of::<SpotInstance>(), 24);
+        let wave = spot_instance(&Spot {
+            x: -5,
+            y: 7,
+            bias: -100,
+            kind: SpotKind::Wave {
+                shift: (-9, 20),
+                k: 130,
+            },
+        });
+        assert_eq!(
+            (wave.kind(), wave.offset(), wave.paint),
+            (SPOT_WAVE, (-9, 20), [0, 130])
+        );
+        assert!(!wave.reads());
+        let blended = spot_instance(&Spot {
+            x: 0,
+            y: 0,
+            bias: 0,
+            kind: SpotKind::Blended {
+                rgb: [1, 2, 3],
+                line: 5,
+                screen: 6,
+                alpha_from: (127, -128),
+            },
+        });
+        assert_eq!(
+            (blended.kind(), blended.offset(), blended.paint),
+            (SPOT_BLENDED, (127, -128), [0x030201, 5 | (6 << 16)])
+        );
+        assert!(blended.reads());
     }
 }

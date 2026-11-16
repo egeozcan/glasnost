@@ -13,7 +13,8 @@ struct View {
     rows_per_column: i32,
     // Number of palette rows the scene has (#151).
     rows: i32,
-    pad1: i32,
+    // The magnetic wave's view-edge margin (S-0607 claim 25).
+    wave_margin: i32,
 };
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -75,6 +76,38 @@ fn vs_main(@builtin(vertex_index) v: u32, inst: Instance) -> Varyings {
     out.depth = inst.depth;
     out.paint = inst.paint;
     out.companion = inst.companion;
+    return out;
+}
+
+// A spot's instance in the spot buffer (#117): world x, world y, depth
+// bias, and the kind in bits 0 to 7 with the offset's x and y as signed
+// bytes in bits 8 to 15 and 16 to 23; the colour, and the blended weights
+// or the wave's k.
+struct SpotIn {
+    @location(0) place: vec4<i32>,
+    @location(1) paint: vec2<u32>,
+};
+
+// A spot's 1 x 1 quad, with the varyings `fs_spot` reads.
+@vertex
+fn vs_spot(@builtin(vertex_index) v: u32, s: SpotIn) -> Varyings {
+    var corners = array<vec2<i32>, 6>(
+        vec2<i32>(0, 0), vec2<i32>(1, 0), vec2<i32>(0, 1),
+        vec2<i32>(0, 1), vec2<i32>(1, 0), vec2<i32>(1, 1),
+    );
+    let p = s.place.xy - view.origin + corners[v];
+    let ndc = vec2<f32>(
+        f32(p.x) / f32(view.size.x) * 2.0 - 1.0,
+        1.0 - f32(p.y) / f32(view.size.y) * 2.0,
+    );
+    let w = s.place.w;
+    var out: Varyings;
+    out.position = vec4<f32>(ndc, 0.5, 1.0);
+    out.image = vec4<u32>(0u, 0u, 0xFFFFFFFFu, 1u | (1u << 16u));
+    out.place = vec4<i32>(s.place.xyz, 0);
+    out.depth = vec4<u32>(0u, 0u, 0xFFFFFFFFu, 0u);
+    out.paint = vec4<u32>(u32(w & 255), s.paint.x, s.paint.y, 0u);
+    out.companion = vec4<i32>((w << 16u) >> 24u, (w << 8u) >> 24u, 0, 0);
     return out;
 }
 
@@ -322,6 +355,11 @@ fn unpack_rgb(w: u32) -> vec3<u32> {
 fn fs_spot(in: Varyings) -> Fragment {
     let px = vec2<i32>(floor(in.position.xy));
     let kind = in.paint.x;
+    // S-0607 claim 25: no wave pixel within the margin of the view's edges.
+    let m = view.wave_margin;
+    if kind == 4u && (px.x < m || px.y < m || px.x >= view.size.x - m || px.y >= view.size.y - m) {
+        discard;
+    }
     var depth = row_depth(px.y) + in.place.z;
     if kind == 3u {
         // S-0514 F8: (d(r) + b) mod 65536.

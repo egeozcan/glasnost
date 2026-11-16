@@ -202,7 +202,9 @@ pub struct Atlas {
     x: u32,
     y: u32,
     shelf: u32,
-    dirty: bool,
+    /// The rows changed since the last upload, `[from, to)`; only they
+    /// go up again (design: render (#123)).
+    dirty: Option<(u32, u32)>,
 }
 
 impl Default for Atlas {
@@ -220,7 +222,7 @@ impl Atlas {
             x: 0,
             y: 0,
             shelf: 0,
-            dirty: true,
+            dirty: Some((0, size)),
         }
     }
 
@@ -231,18 +233,26 @@ impl Atlas {
 
     /// Whether the atlas changed since its last upload.
     pub fn dirty(&self) -> bool {
-        self.dirty
+        self.dirty.is_some()
     }
 
     /// The atlas was uploaded as it is now.
     pub fn uploaded(&mut self) {
-        self.dirty = false;
+        self.dirty = None;
     }
 
     /// Has the next [`Batch2d::upload_atlas`] upload the whole atlas
     /// again: a new device holds none of it (design: render (#100)).
     pub fn touch(&mut self) {
-        self.dirty = true;
+        self.dirty = Some((0, self.size));
+    }
+
+    /// Marks rows `[from, to)` for the next upload (design: render (#123)).
+    fn changed(&mut self, from: u32, to: u32) {
+        self.dirty = Some(match self.dirty {
+            Some((a, b)) => (a.min(from), b.max(to)),
+            None => (from, to),
+        });
     }
 
     /// The index at a texel.
@@ -280,7 +290,7 @@ impl Atlas {
         let r = [self.x as i32, self.y as i32, w as i32, h as i32];
         self.x += w + 1;
         self.shelf = self.shelf.max(h);
-        self.dirty = true;
+        self.changed(self.y, self.y + h);
         Some(r)
     }
 }
@@ -437,11 +447,20 @@ fn texture(
 }
 
 fn write(queue: &wgpu::Queue, t: &wgpu::Texture, w: u32, h: u32, bpp: u32, data: &[u8]) {
+    write_at(queue, t, 0, w, h, bpp, data);
+}
+
+/// Writes `h` rows of a one-byte texture of width `w` from row `y`.
+fn write_rows(queue: &wgpu::Queue, t: &wgpu::Texture, w: u32, y: u32, h: u32, data: &[u8]) {
+    write_at(queue, t, y, w, h, 1, data);
+}
+
+fn write_at(queue: &wgpu::Queue, t: &wgpu::Texture, y: u32, w: u32, h: u32, bpp: u32, data: &[u8]) {
     queue.write_texture(
         wgpu::TexelCopyTextureInfo {
             texture: t,
             mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
+            origin: wgpu::Origin3d { x: 0, y, z: 0 },
             aspect: wgpu::TextureAspect::All,
         },
         data,
@@ -651,11 +670,13 @@ impl Batch2d {
 
     /// Uploads the atlas when it changed since the last upload.
     pub fn upload_atlas(&mut self, queue: &wgpu::Queue, atlas: &mut Atlas) {
-        if atlas.dirty {
+        if let Some((from, to)) = atlas.dirty {
             if atlas.size <= self.atlas_side() {
+                // design: render (#123): the changed rows alone
+                let rows = &atlas.pixels[(from * atlas.size) as usize..(to * atlas.size) as usize];
                 self.stats.uploads += 1;
-                self.stats.upload_bytes += atlas.pixels.len() as u64;
-                write(queue, &self.atlas, atlas.size, atlas.size, 1, &atlas.pixels);
+                self.stats.upload_bytes += rows.len() as u64;
+                write_rows(queue, &self.atlas, atlas.size, from, to - from, rows);
             } else {
                 // design: render (#103): said, not skipped silently
                 log::warn!(
