@@ -925,7 +925,10 @@ fn hovering(w: &World, id: ObjectId) -> bool {
 /// waterfall roles' ranges, all unchecked, whatever the cell's land type.
 /// An unset role's range counts from the unset start under
 /// `quirks.unset_role_range` and passes no tile without it (S-0010 claim
-/// 5).
+/// 5). A cell that holds no tile is tested with the no-tile marker as its
+/// tile number, compared with each range as it stands (S-0513 r126 Terms,
+/// Q-3160): only a range that reaches the marker makes it wet, and an
+/// unset role's range never does.
 pub(crate) fn wet_tile(w: &World, c: CellXY) -> bool {
     let Some(cat) = w.catalogue.as_deref() else {
         // A world without a tile catalogue (synthetic maps) has no tile roles.
@@ -952,7 +955,7 @@ pub(crate) fn wet_tile(w: &World, c: CellXY) -> bool {
             return false;
         }
         let start = start.max(-1); // spec: S-0010 claim 4 (the unset start −1) and S-0513 Terms (an unset role's range counted from the unset start, the waterfall roles too)
-        // spec: S-0010 claim 5 (an unchecked role's range: the n tiles from its start)
+        // spec: S-0010 claim 5 (an unchecked role's range: the n tiles from its start); S-0513 r126 Terms (a cell with no tile: the no-tile marker 65535 compared with the range as it stands, Q-3160)
         (start..start + n).contains(&tile)
     })
 }
