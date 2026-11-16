@@ -1795,6 +1795,10 @@ mod sidebar_tip_tests;
 mod touch_tests;
 
 #[cfg(test)]
+#[path = "client_pointer_left_tests.rs"]
+mod pointer_left_tests;
+
+#[cfg(test)]
 #[path = "client_display_tests.rs"]
 mod display_tests;
 

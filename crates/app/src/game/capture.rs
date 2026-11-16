@@ -370,6 +370,12 @@ impl Ring {
         }
     }
 
+    /// The battlefield clicks noted (tests).
+    #[cfg(test)]
+    pub fn clicks(&self) -> impl Iterator<Item = &Click> {
+        self.clicks.iter()
+    }
+
     /// The snapshots held.
     pub fn snapshots(&self) -> impl Iterator<Item = &Snapshot> {
         self.snapshots.iter()
