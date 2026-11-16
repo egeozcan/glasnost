@@ -255,9 +255,15 @@ impl Pip {
     }
 }
 
+/// The farthest a unit's bar is moved by its bracket delta δ, pixels: a δ
+/// beyond it is held to it. 2²⁰ pixels are beyond any view we draw, and the
+/// bar's places and the anchor added to them stay well within 32 bits; no
+/// stock type's delta comes near.
+pub const BRACKET_DELTA_LIMIT: i32 = 1 << 20; // design: render (#153)
+
 /// The health bar of a vehicle, aircraft or infantry unit (S-0111 claim 6),
 /// in drawing order: the bracket image when selected, then the filled
-/// segments.
+/// segments; δ is held to [`BRACKET_DELTA_LIMIT`].
 pub fn unit_bar(
     infantry: bool,
     delta: i32,
@@ -266,6 +272,8 @@ pub fn unit_bar(
     selected: bool,
     r: &Ratios,
 ) -> Vec<Pip> {
+    // design: render (#153) (δ held to ±BRACKET_DELTA_LIMIT)
+    let delta = delta.clamp(-BRACKET_DELTA_LIMIT, BRACKET_DELTA_LIMIT);
     // spec: S-0111 claim 6 (table: segments, segment place and bracket image by kind)
     let (n, x0, y, bracket_frame, bracket_at) = if infantry {
         (INFANTRY_SEGMENTS, -5, delta - 24, 1, (11, delta - 25))
@@ -1357,6 +1365,28 @@ mod tests {
         let sel = unit_bar(true, 0, 60, 100, true, &r);
         assert_eq!(sel[0].frame, 1);
         assert_eq!(sel[0].at, (11, -25));
+    }
+
+    /// spec: S-0111 claim 6 and Import mapping (the bar and bracket moved by δ, PixelSelectionBracketDelta,
+    /// an integer of pixels) — design: render (#153): δ at the ends of the 32-bit range places the
+    /// bar without an overflow, beyond any view, with room to add a world anchor in 32 bits
+    #[test]
+    fn an_extreme_bracket_delta_places_the_bar_without_overflow() {
+        let r = ratios("0.5", "0.25");
+        for delta in [i32::MIN, i32::MIN + 20, i32::MAX] {
+            for infantry in [false, true] {
+                let bar = unit_bar(infantry, delta, 100, 100, true, &r);
+                assert!(!bar.is_empty());
+                for p in &bar {
+                    assert!(p.at.1.unsigned_abs() >= 1 << 19, "{delta}");
+                    assert!(p.at.1.unsigned_abs() < 1 << 24, "{delta}");
+                }
+            }
+        }
+        // An ordinary δ moves the bar as before.
+        let v = unit_bar(false, -4000, 100, 100, true, &r);
+        assert_eq!(v[0].at, (1, -4026));
+        assert_eq!(v[1].at, (-15, -4025));
     }
 
     /// spec: S-0111 claim 7 and scenario OV5 (pip counts 7, 14, 29, 15, 29

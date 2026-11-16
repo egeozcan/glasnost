@@ -123,8 +123,10 @@ pub fn magnitude(ae: i32, mu: F64) -> i32 {
     let i = (LAST_INDEX - ae).clamp(0, LAST_INDEX) as usize;
     // spec: S-0101 F9 (floating-point product rounded toward zero, then truncation toward zero, S-0205)
     let m = dbl(MAGNITUDE[i]).mul(mu, Rounding::TowardZero);
+    // design: render (#153) (F9 covers results that fit 32 bits; beyond, the magnitude is held to
+    // ±(2³¹ − 1), so its product with a direction component is a count too)
     m.trunc_i128().map_or(0, |v| {
-        v.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32
+        v.clamp(-i128::from(i32::MAX), i128::from(i32::MAX)) as i32
     })
 }
 
@@ -428,6 +430,31 @@ mod tests {
             e.cycle(Some((0, 0)), client, 3, one(), 0, |_| false),
             (-16, -16)
         );
+    }
+
+    /// spec: S-0101 F9 (m = trunc₀(rz(T(i) × μ)), the request m × direction; the formula covers
+    /// finite non-negative μ whose result fits 32 bits) — design: render (#153): an extreme
+    /// negative multiplier gives a request in the 32-bit range on every edge, never an overflow
+    #[test]
+    fn an_extreme_multiplier_requests_within_the_32_bit_range() {
+        let client = (800, 600);
+        let rz = Rounding::TowardZero;
+        for mu in [F64::from_i64(-(1 << 40), rz), F64::from_i64(1 << 40, rz)] {
+            for (p, axis) in [
+                ((0, 300), 0),
+                ((799, 300), 0),
+                ((400, 0), 1),
+                ((400, 599), 1),
+            ] {
+                let mut e = EdgeScroll::default();
+                let d = e.cycle(Some(p), client, 3, mu, 0, |_| false);
+                let c = if axis == 0 { d.0 } else { d.1 };
+                // The far end of the range, signed by the edge's direction and μ.
+                assert_eq!(c.unsigned_abs(), i32::MAX as u32, "at {p:?}");
+            }
+        }
+        // An ordinary multiplier is unchanged.
+        assert_eq!(magnitude(0, one()), MAGNITUDE[8] as i32);
     }
 
     /// spec: S-0101 claims 12 and 13, F9 (leaving the edge keeps the direction while momentum decays; a blocked one-pixel move gives no request or acceleration)

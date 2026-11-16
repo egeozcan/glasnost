@@ -90,10 +90,20 @@ pub fn pip_frame(stored: Option<&[u8]>, initial: usize) -> usize {
     let Some(v) = stored else {
         return initial;
     };
-    // On the stack: this runs per passenger and occupant at each status redraw (#153).
-    let words: [&str; PIP_WORDS.len()] = std::array::from_fn(|i| PIP_WORDS[i].0);
-    value::named(v, NAMED_LIMIT, &words).map_or(PIP_UNKNOWN, |i| PIP_WORDS[i].1)
+    // Held once: this runs per passenger and occupant at each status redraw (#153).
+    value::named(v, NAMED_LIMIT, &PIP_WORD_TEXT).map_or(PIP_UNKNOWN, |i| PIP_WORDS[i].1)
 }
+
+/// The words of [`PIP_WORDS`], in its order, made once at compile time.
+const PIP_WORD_TEXT: [&str; PIP_WORDS.len()] = {
+    let mut out = [""; PIP_WORDS.len()];
+    let mut i = 0;
+    while i < PIP_WORDS.len() {
+        out[i] = PIP_WORDS[i].0;
+        i += 1;
+    }
+    out
+};
 
 /// Which pip row an object's kind draws (S-0111 claim 10).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -299,9 +309,15 @@ const OVERLOAD_HIGHLIGHT: usize = 3; // spec: S-0111 claim 13 (the overload pip 
 /// The overload pip otherwise (S-0111 claim 13).
 const OVERLOAD: usize = 4; // spec: S-0111 claim 13 (otherwise image frame 4)
 
+/// The farthest index the overload pip stands at: an index beyond it is
+/// held to it. 2²⁰ pip places are over 2 million pixels from the origin,
+/// beyond any view we draw, and [`place`] and the anchor added to it stay
+/// well within 32 bits; no stock weapon's damage comes near.
+const PIP_INDEX_LIMIT: i32 = 1 << 20; // design: render (#153)
+
 /// The mind-control row (S-0111 claim 13) as (pip index, image frame):
 /// `m` pips, `count` controlled, and with `overload` (its highlight on or
-/// off) one more pip at index `m`.
+/// off) one more pip at index `m`, held to ±[`PIP_INDEX_LIMIT`].
 pub fn mind_row(m: i32, count: usize, overload: Option<bool>) -> Vec<(i32, usize)> {
     // design: render (#153) (at most PIP_ROW_LIMIT pips; the overload pip stays at index M)
     let mut out: Vec<(i32, usize)> = (0..m.clamp(0, PIP_ROW_LIMIT))
@@ -312,7 +328,9 @@ pub fn mind_row(m: i32, count: usize, overload: Option<bool>) -> Vec<(i32, usize
         .collect();
     if let Some(lit) = overload {
         // spec: S-0111 claim 13 (one more pip at index M, image frame 3 while highlighted, else 4)
-        out.push((m, if lit { OVERLOAD_HIGHLIGHT } else { OVERLOAD }));
+        // design: render (#153) (the index held to ±PIP_INDEX_LIMIT)
+        let at = m.clamp(-PIP_INDEX_LIMIT, PIP_INDEX_LIMIT);
+        out.push((at, if lit { OVERLOAD_HIGHLIGHT } else { OVERLOAD }));
     }
     out
 }
@@ -481,6 +499,36 @@ mod tests {
         assert_eq!(pip_frame(Some(b"Yellow"), PIP_INITIAL), 2);
         assert_eq!(pip_frame(Some(b"personPurple"), OCCUPY_PIP_INITIAL), 12);
         assert_eq!(pip_frame(Some(b"plaid"), OCCUPY_PIP_INITIAL), 1);
+    }
+
+    /// spec: S-0111 Import mapping (the vocabulary of Pip and OccupyPip with the image frame each
+    /// word selects, compared ignoring case; a word that matches none gives 1) — every word, as a
+    /// guard for #153's vocabulary held once instead of per call
+    #[test]
+    fn every_pip_word_selects_its_frame() {
+        let table = [
+            ("green", 1),
+            ("yellow", 2),
+            ("white", 3),
+            ("red", 4),
+            ("blue", 5),
+            ("persongreen", 7),
+            ("personyellow", 8),
+            ("personwhite", 9),
+            ("personred", 10),
+            ("personblue", 11),
+            ("personpurple", 12),
+        ];
+        for (word, frame) in table {
+            let upper = word.to_ascii_uppercase();
+            for initial in [PIP_INITIAL, OCCUPY_PIP_INITIAL] {
+                assert_eq!(pip_frame(Some(word.as_bytes()), initial), frame, "{word}");
+                assert_eq!(pip_frame(Some(upper.as_bytes()), initial), frame, "{word}");
+            }
+        }
+        for unknown in [&b""[..], b"person", b"greenish", b"none"] {
+            assert_eq!(pip_frame(Some(unknown), OCCUPY_PIP_INITIAL), 1);
+        }
     }
 
     /// spec: S-0111 claim 10 (pip places and sprites by kind; ammunition 3 pixels higher from the second pip sprite)
@@ -656,6 +704,29 @@ mod tests {
         // At the bound nothing is cut.
         assert_eq!(mind_row(PIP_ROW_LIMIT, 0, None).len(), n);
         assert_eq!(ammo_row(PIP_ROW_LIMIT, PIP_ROW_LIMIT, 0).len(), n);
+    }
+
+    /// spec: S-0111 claims 10 and 13 (the overload pip at index M, placed as the row's pips are) —
+    /// design: render (#153): a primary weapon's damage at the ends of the 32-bit range places
+    /// the overload pip without an overflow, millions of pixels from the origin, beyond any view
+    #[test]
+    fn an_extreme_overload_pip_is_placed_without_overflow() {
+        let o = (-60, 0);
+        for (m, count) in [(i32::MIN, 0), (-(1 << 29) - 1, 0), (i32::MAX, usize::MAX)] {
+            let row = mind_row(m, count, Some(false));
+            let (j, f) = *row.last().unwrap();
+            assert_eq!(f, 4);
+            for body in [Body::Vehicle, Body::Infantry, Body::Building] {
+                let p = place(body, o, j, f, false);
+                // Beyond any view, and room left to add a world anchor in 32 bits.
+                assert!(p.at.0.unsigned_abs() >= 1 << 21, "{m} {body:?}");
+                assert!(p.at.0.unsigned_abs() < 1 << 24, "{m} {body:?}");
+                assert!(p.at.1.unsigned_abs() < 1 << 24, "{m} {body:?}");
+            }
+        }
+        // Within the 32-bit place range the index is M, as before.
+        assert_eq!(mind_row(-3, 0, Some(true)), [(-3, 3)]);
+        assert_eq!(mind_row(-5000, 0, Some(false)), [(-5000, 4)]);
     }
 
     /// spec: S-0111 F3 (the largest λ in 0 … ⌊A / w⌋ − 1 with λ·w + j < a gives 15 + λ; none
