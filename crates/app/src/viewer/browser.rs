@@ -1667,6 +1667,30 @@ mod tests {
         assert!(b.texture.is_some());
     }
 
+    /// Equivalence test (design: render (#129); passes before and after
+    /// the change): the preview's picture does not read the zoom, which
+    /// only scales its display, so a new zoom needs no new texture.
+    #[test]
+    fn the_preview_picture_does_not_follow_the_zoom() {
+        let queue = Queue::default();
+        let ctx = egui::Context::default();
+        let mut b = Browser::new(None);
+        b.mount(&queue, install());
+        settle(&mut b, &queue);
+        for name in ["discs.shp", "grid.tmp", "model.vxl"] {
+            select(&mut b, &queue, name);
+            frame(&mut b, &queue, &ctx);
+            let pictures: Vec<_> = (1..=8)
+                .map(|zoom| {
+                    b.zoom = zoom;
+                    let p = b.picture(4096).expect("a picture").expect("it decodes");
+                    (p.width, p.height, p.pixels)
+                })
+                .collect();
+            assert!(pictures.windows(2).all(|w| w[0] == w[1]), "{name}");
+        }
+    }
+
     /// Renders one egui frame offscreen and returns RGBA rows.
     fn render_offscreen(
         ctx: &egui::Context,
