@@ -869,13 +869,24 @@ fn compose_by(
     let gaps = friendly_gap_cells(w, h);
     // spec: S-0410 claim 8 (only a pixel some object is listed at can have a winner, among the objects listed there)
     let listed = arrivals.by_pixel();
+    // Each image pixel's list, by its row-major index: the lists of pixels
+    // outside the image are never asked (render perf batch RP7, #137: an
+    // index in place of a map lookup at every pixel; the same lists).
+    let (iw, ih) = (img.width.max(0), img.height.max(0));
+    let mut at_pixel: Vec<Option<&Vec<(ObjectId, (i32, usize))>>> =
+        vec![None; (iw * ih) as usize];
+    for (&(p, q), at) in &listed {
+        if (0..iw).contains(&p) && (0..ih).contains(&q) {
+            at_pixel[(q * iw + p) as usize] = Some(at);
+        }
+    }
     let mut out = Vec::with_capacity(terrain.len());
     for q in 0..img.height {
         for p in 0..img.width {
             let i = (q * img.width + p) as usize;
             let t = terrain.get(i).copied().unwrap_or([0, 0, 0]);
             // spec: S-0410 claim 6 (the colour of the first object shown at the pixel)
-            if let Some(at) = listed.get(&(p, q))
+            if let Some(at) = at_pixel[i]
                 && let Some(id) =
                     winner_among_on(w, h, (p, q), g, img, view.on_flat_grid, at.iter().copied())
             {
