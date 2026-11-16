@@ -1171,7 +1171,7 @@ The P3 census rule: neither fix makes or moves a back-reference of `World::censu
 
 ## Batch S25: the seams left open
 
-Base main a0cf7c7, not rebased. The batch takes the seams that S24 left for #383 and S20 left for #375, #368, #374, #381, #305 and #371. It hands back early, before S20's #291, S18's rests (#344, #339, #346, #263, #252) and A6c's (#284, #367), which stay untouched. Each test is committed before its fix (e8a1326, fc21d02, 847baaf, 716d7eb, d8d7200). Each fails on the commit before its fix, except the guard and control tests named below; logs are in `local-lane/sim-issues/s25/tests-on-base.txt` and `tests-on-base-burst.txt`. No fix commit changes a test. acb8792 is rustfmt on three of the test files, and 6eb638a regenerates the goldens. No request is filed. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S25: the seams left open)* (95c7f2b, corrected in dfd32a3).
+Base main a0cf7c7, not rebased. The batch takes the seams that S24 left for #383 and S20 left for #375, #368, #374, #381, #305 and #371. It hands back early, before S20's #291, S18's rests (#344, #339, #346, #263, #252) and A6c's (#284, #367), which stay untouched. Each test is committed before its fix (e8a1326, fc21d02, 847baaf, 716d7eb, d8d7200). The new tests were run on the base code before any fix was written, and each fails there except the guard and control tests named below. Logs are in `local-lane/sim-issues/s25/tests-on-base.txt` and `tests-on-base-burst.txt`. No fix commit changes a test. acb8792 is rustfmt on three of the test files, and 6eb638a regenerates the goldens. No request is filed. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S25: the seams left open)* (95c7f2b, corrected in dfd32a3).
 
 | Issue | Finding | Status | Fix | Tests |
 |---|---|---|---|---|
@@ -1193,7 +1193,7 @@ Guard and control tests that pass on base:
 - #371: `a_change_to_another_target_keeps_the_burst_counter`.
 - #383 (d), #374, #381 and #305: test-only, so these pass at once.
 
-Every other new test fails on the commit before its fix: 2 of 4 for #383 (a), 1 of 2 for (b), 1 of 2 for (c), 2 of 2 for #375 and 5 of 6 for #371.
+Every other new test fails on the base code: 2 of 4 for #383 (a), 1 of 2 for (b), 1 of 2 for (c), 2 of 2 for #375 and 5 of 6 for #371.
 
 Formats: no fix adds saved or hashed state, so save 151, AI game 128 and wire 12 are unchanged. The sim-gate goldens were regenerated once, after the last fix, with the ignored tests (6eb638a). Four of the nine move (duel, duel-m7a, duel-naval and duel-diagonal), all because of #383 (b). Each moves only in windows while passengers ride a closed transport, and matches its old hashes again after each window, the last samples included.
 
