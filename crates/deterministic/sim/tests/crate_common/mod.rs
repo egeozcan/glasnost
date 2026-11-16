@@ -229,12 +229,34 @@ pub fn spawn(w: &mut World, kind: Kind, name: &str, house: u8, c: CellXY) -> Obj
     testkit::spawn(w, kind, name, house, c, 0)
 }
 
-/// Puts a crate with `contents` and overlay `overlay` on a cell, with a place.
+/// Puts a crate with `contents` and overlay `overlay` on a cell, written
+/// straight into the cell: it holds no place.
 pub fn crate_at(w: &mut World, c: CellXY, overlay: u8, contents: u8) {
     if let Some(cell) = w.cells.grid.get_mut(c) {
         cell.overlay = overlay;
         cell.overlay_data = contents;
     }
+}
+
+/// As [`crate_at`], and the lowest free crate place becomes occupied with the
+/// cell `c` and a lifetime no test reaches, as a crate placement leaves it
+/// (S-0520 claims 1 and 3); the crate belongs to that place (claim 29).
+pub fn placed_crate_at(w: &mut World, c: CellXY, overlay: u8, contents: u8) {
+    crate_at(w, c, overlay, contents);
+    let k = (0..256u16)
+        .find(|k| !w.crates.places.contains_key(k))
+        .expect("a free place");
+    w.crates.owners.insert(c, k);
+    let start = w.tick;
+    w.crates.places.insert(
+        k,
+        glasnost_sim::crates::Place {
+            cell: c,
+            start,
+            life: 1_000_000,
+            trigger: false,
+        },
+    );
 }
 
 pub fn credits(w: &World, h: u8) -> i32 {
