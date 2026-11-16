@@ -1150,7 +1150,7 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit, inside: Option<bool>) 
     // spec: S-0107 claim 17 row 7 and S-0611 claims 1 and 6 (w = 9 reached: the conversion takes place unless claim 6's test refuses it)
     if !not_human
         && kind == crate::mutation::MUTATING_DEATH_KIND
-        && crate::mutation::convert(w, id, hit)
+        && crate::mutation::convert(w, id, hit, inside.is_some())
     {
         return;
     }
