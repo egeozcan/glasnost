@@ -2240,8 +2240,10 @@ Render batches R10 and R12 held the view against rules and art values far outsid
 
   The view plays its animations through the same `anim_clock::Player`, so the two clocks agree. The view's `slots::read_anim` therefore takes no bound of its own.
 - *The game-speed normalisation (`infantry::normalised`).* S-0107 F3's 8*b* wraps. The spec states no 64-bit intermediate, and the truncating division follows S-0205 claim 2. On the animation rate path the products are already exact: a rate gives *d* = ⌊900 / ρ⌋ ≤ 900 (S-0109 F1), and the random-rate pair converts the same way. The random loop delay is never normalised. Two callers can pass a base delay above 2²⁸, so their products used to overflow: a building's body delay (S-0108 claim 6) and the low-funds speech delay (S-0701 claim 38).
+- *A building's pixel-shifted fire point (`combat::position::fire_point`).* The lepton form of a primary fire pixel shift (S-0313 claim 7, with or without the dual-shift flag) and of a voxel turret's anchor shift (claim 8) is added to the point with a wrapping add. `pixel_to_leptons` already wraps its own conversion (S-0205 claim 7).
 
 Seams:
+- In `combat::position`, the garrisoned building's muzzle shift (S-0313 claim 6), claim 1's translation-column adds and the lateral part σ*L* are still plain additions and products. They wrap in release builds but would panic in a debug one; no test reaches them with extreme data yet.
 - The clock's stage advance, its step back and its image frame *a* + *k* saturate where S-0205 claim 1 wraps. They never panic, and they were left as they are.
 - The view's `slots::first_frame` holds a reversed animation's first frame *a* + λₑ − 1 to 32 bits (design: render (#153)). The clock instead wraps *k*₀ = λₑ − 1. So for λₑ = −2³¹ with `quirks.anim_reverse_raw_loop_end` on, the view's first frame and the clock's first frame differ.
 
