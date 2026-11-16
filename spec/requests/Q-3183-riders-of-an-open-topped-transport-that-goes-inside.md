@@ -3,7 +3,7 @@ id: Q-3183
 title: Whether the riders of an open-topped transport leave play when the transport itself goes inside
 status: open
 related: [S-0607, S-0507, S-0203]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

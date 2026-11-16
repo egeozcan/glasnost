@@ -2,15 +2,16 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 50
+revision: 52
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-15
+approved-on: 2026-11-16
 measurements: []
 requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330,
 Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342,
-Q-1343, Q-1344, Q-1522, Q-2035, Q-2113, Q-2151, Q-2160, Q-3119]
+Q-1343, Q-1344, Q-1522, Q-2035, Q-2113, Q-2151, Q-2160, Q-3119, Q-3182,
+Q-3183]
 supersedes: []
 ---
 
@@ -141,6 +142,11 @@ New terms:
    - A firer that was already a passenger of an open-topped transport when it fired is in play
      while it rides (S-0507 claim 14), so riding does not void its hit: the hit is tested as any
      other.
+   - Two events of the flight are not leaving play for this test (claim 12, *Lifters and vehicle
+     bunkers* and *A riding lifter whose transport goes inside*): the firer, or an open-topped
+     transport it rides, goes into a vehicle bunker, or the firer rides an open-topped transport
+     that itself goes inside a transport or a building. Neither voids the hit: it is tested as any
+     other. This is the original's rule.
    - Otherwise, before the target is tested, the firer's current grip ends as claim 13 says. A
      dropped unit falls. The firer keeps its target. This happens even when the target then
      turns out to be immune.
@@ -150,12 +156,15 @@ New terms:
      destroyed firer is a vehicle, which leaves play at once (S-0203 claim 6a), and no scenario
      here kills a firer that stays in play while its projectile flies. A firer that has started
      to cloak or dug in is `unmeasured`: no scenario here tells "since the shot" from "at the
-     hit", since no run has the firer uncloak or resurface before the hit.
+     hit", since no run has the firer uncloak or resurface before the hit. A firer that goes into
+     a vehicle bunker, or whose transport goes inside, while its projectile flies is `unmeasured`:
+     no scenario here sets up either event during a seizing projectile's flight.
    - Confidence: high (a firer destroyed while the projectile flies, a firer gripping this
      target or seized; a walking passenger's hit); medium (another passenger's hit; a firer
      killed but kept in play for a time, as S-0302 claim 1 rates it; a firer that has left play
      since the shot, by boarding or by other means, whether or not it entered play again; one
-     that has cloaked or dug in)
+     that has cloaked or dug in; one that goes into a vehicle bunker or whose transport goes
+     inside while the projectile flies)
 
 3. **Which targets can be seized.** The target is seized only when all of these hold:
    - it is a vehicle or an aircraft. Infantry and buildings are never seized,
@@ -715,6 +724,49 @@ New terms:
         holds by the second row, before it boards. If a lifter whose
         grip began after it took that destination boards while it grips, the grip ends at the
         boarding by the leaving-play row, since boarding is leaving play (S-0203 claim 3).
+    - **A riding lifter whose transport goes inside.** When an open-topped transport goes inside a
+      transport or a building, its riders do not leave play: they stay in the update order and
+      take turns while it is inside. They lose their targets (S-0507 claim 15). S-0203 claim 3
+      and S-0507 claim 14 give the riders' turns for a transport on the map; the rule for a
+      transport that is inside is this claim's (Changes for other specs).
+      - A riding lifter's grip therefore lasts: the loss of its target is a change of target,
+        which is not an event of the table. Its gripped unit keeps flying to the movement point
+        fixed at the seize (claim 7).
+      - Claim 21 says how the loss of target ends its wave. Claim 14 says that it stays the
+        dropper of a unit it dropped.
+      - A transport that is removed from play kills its riders (S-0507 claim 16). A gripping
+        rider then leaves play as a destroyed lifter does (the bullets above).
+      - This is the original's rule.
+    - **Lifters and vehicle bunkers.** Going into a vehicle bunker is not leaving play: a bunkered
+      vehicle stays on the map and in play (S-0606 claim 7). Neither the entry nor being bunkered
+      is itself an event of the table.
+      - The enter order that sends a vehicle into a bunker gives it no target and the bunker as
+        its destination (S-0214 table M). S-0215 Terms and S-0606 claim 3 call the bunker the
+        entering vehicle's target; it is held as its destination, not as the target that claim
+        21's end test reads (Changes for other specs). A lifter that accepts that destination ends a grip it holds then by the table's
+        second row.
+      - A lifter that grips while it goes into a bunker (its grip began after it took the bunker
+        as its destination) keeps its grip at the entry. The entry does not change its target:
+        it keeps the object it attacks, if any (the enter order gave it none). The grip lasts
+        while it is bunkered, until an event of the table.
+      - While the bunker link holds, the lifter refuses every non-empty destination (S-0606
+        claim 18), so the table's second row does not happen then. A destination it already
+        holds, such as the bunker kept at arrival (S-0215 claim 29), is not an acceptance and
+        plays no part in that row.
+      - A fall-back to rest while it is bunkered ends the grip by the table's third row, unless an
+        override is in effect or its behaviour is *wait*. S-0606 claim 7 gives the *guard* it
+        then returns to. The *guard* that the bunker queues when the vehicle reaches *occupied*
+        is not a fall-back to rest.
+      - Being let out by *unload* gives the lifter a destination (S-0606 claim 12). A lifter that
+        accepts it ends its grip by the table's second row. Being let out because the bunker is
+        destroyed, sold or erased gives it none (S-0606 claim 13), so that release is not an
+        event of the table.
+      - Being let out is not entering play again. The lifter keeps its place in the update order
+        (S-0203 claim 3).
+      - An open-topped transport that goes into a bunker does not leave play either, and does not
+        leave the map, so the entry takes away neither its riders' targets (S-0507 claim 15) nor
+        their grips.
+      - This is the original's rule.
     - Backing: `measurable` (L2 arrival, L3 accepted destinations and rest, L7 leaving play,
       L8 building rows, L9 new hits, L13 part c for the drop-pod row in the original; L9 part h
       for riding, the transport's movement, getting out and the order to board). A riding
@@ -729,13 +781,21 @@ New terms:
       game without being destroyed is `unmeasured`: no scenario here removes one. The
       leaving-play row for a lifter that is neither destroyed nor removed is `unmeasured`:
       whether ordinary play reaches it while the lifter grips is not established (Open
-      questions).
+      questions). A riding lifter whose transport goes inside, and a lifter or a transport with
+      riders that goes into a vehicle bunker, are `unmeasured`: no scenario here sets up either
+      while a lifter grips, and whether ordinary play reaches a gripping lifter's bunker entry is
+      not established (Open questions). The let-out rows inherit S-0606 claims 12 and 13
+      (no input is known that gives a bunkered vehicle *unload*, S-0606 claim 12), and the
+      refusal of destinations S-0606 claim 18. The enter order's target and destination are
+      S-0214 table M's, with S-0214 claim 10's backing.
     - Confidence: high (arrival, orders, a new seizing hit, a destroyed lifter leaving play),
       medium (falling back to rest, building rows, riding, the transport's movement, a riding
       lifter's change of target, getting out,
       a passenger killed with its transport or getting out of it, the order to board, a lifter
       removed without being destroyed, a lifter that leaves play without being destroyed or
-      removed)
+      removed, a riding lifter whose transport goes inside, a lifter or a transport with riders
+      that goes into a vehicle bunker, its stay there and its release; the enter order's target and
+      destination, as S-0214 claim 10 rates table M)
 
 13. **Drop or set down.** When a grip ends:
     - **Height above the surface 1 lepton or more:** the unit is dropped.
@@ -868,15 +928,21 @@ New terms:
       only if, before the unit lands, it leaves play again or is destroyed or removed while out
       of play, as when it is killed with the closed transport it boarded (S-0507 claim 16,
       S-0312 claim 5). This is the original's rule too.
+    - **Bunkers and riders.** Two events are not leaving play for this claim: going into a vehicle
+      bunker, by the dropper or by an open-topped transport it rides (claim 12, *Lifters and vehicle
+      bunkers*), and the going inside of an open-topped transport that the dropper rides (claim 12,
+      *A riding lifter whose transport goes inside*). A dropper that goes through either keeps its
+      place as dropper. This is the original's rule.
     - Backing: `measurable` (scenario L7) for the first sentence and a destroyed lifter. A
       lifter removed without being destroyed is `unmeasured`: no scenario here removes one. The
       exception is `unmeasured`: no scenario here makes a gripping lifter leave play without
       being destroyed or removed, and whether ordinary play reaches that case is not
       established (claim 12); the same holds for such a dropper's later leaving, destruction or
-      removal.
+      removal. *Bunkers and riders* is `unmeasured`: no scenario here sends a dropper into a
+      vehicle bunker, or its transport inside, before its dropped unit lands.
     - Confidence: medium (the first sentence, a destroyed lifter, a removed lifter, the
-      exception, and the exception's dropper leaving play again or destroyed or removed out of
-      play)
+      exception, the exception's dropper leaving play again or destroyed or removed out of
+      play, and *Bunkers and riders*)
 
 ### The fall and the impact
 
@@ -1151,10 +1217,30 @@ New terms:
       itself is fired, so a seize can happen with no wave.
     - **Ending.** The wave has no fixed duration. It ends when its firer or its target leaves
       play, or when its firer's target is no longer the wave's target. The wave's distance limit
-      applies to sonic waves only. Leaving play includes going inside a transport, a bunker or a
+      applies to sonic waves only. Leaving play includes going inside a transport or a
       building: a target or firer that does so ends the wave at the wave's next update, even
       though it is not destroyed. For an open-topped transport this holds although the
       passenger enters play again at once (S-0203 claim 3).
+    - **Vehicle bunkers and riders.** Two events are not leaving play for the wave. This is the
+      original's rule.
+      - Going into a vehicle bunker (S-0606 claim 7; claim 12, *Lifters and vehicle bunkers*).
+        The entry does not change the firer's target.
+        - The enter order that sends a firer into a bunker gives it no target (S-0214 table M).
+          A wave it has at the order therefore ends by the target condition at its first turn
+          that sees the order (*When it updates*, below). A wave it creates after it takes a
+          target again (claim 12, Open questions) is left by the entry to the other ending
+          conditions above.
+        - A target that goes into a bunker, and a firer that rides an open-topped transport that
+          does so, leave the wave to the other ending conditions above. The transport's enter
+          order passes no target to its riders (S-0213 table T3, part (f)). A later setting of
+          the firer's target to the bunkered unit can give the bunker instead (S-0309 claim 24),
+          and then ends the wave by the target condition.
+      - The going inside of an open-topped transport that the firer rides (claim 12, *A riding
+        lifter whose transport goes inside*). The firer loses its target then (S-0507 claim 15),
+        so the wave ends at its next update by the target condition.
+      - Being let out of a bunker is not entering play again. Such a firer keeps its place in
+        the update order (S-0203 claim 3), and the timing below is unchanged by its stay in the
+        bunker and its release.
     - **A riding firer.** A firer that is already a passenger of an open-topped transport when it
       fires creates a wave as any other firer does, and the conditions above end it.
     - **When it updates.** The wave joins the update order when it is created, appended after
@@ -1185,7 +1271,14 @@ New terms:
       grip lasts (claim 11), and a grip can begin with no wave.
     - Backing: `measurable` (scenario L10) for creation, the ending conditions, no fixed expiry
       and damage; L10 for a target that boards an open-topped transport; L9 part h for a riding
-      firer's wave. A firer that boards an open-topped transport is `unmeasured`: the order that
+      firer's wave. *Vehicle bunkers and riders* is `unmeasured`: for a target that goes into a
+      bunker, a later setting of the firer's target to the bunkered unit gives the bunker for a
+      firer that S-0309 claim 24's first row covers, and then ends the wave by itself, and no
+      scenario here separates the two; no scenario here orders a firer with a live wave into a
+      bunker, or sends a riding firer's transport into a bunker or inside while its wave lives.
+      A target or firer that goes inside a
+      building is `unmeasured`: no scenario here sends either into a building while the wave
+      lives. A firer that boards a transport, open-topped or not, is `unmeasured`: the order that
       sends a firer in can also take its target, which ends the wave by itself (for a gripping
       firer it does, claim 12), and no scenario here separates the two. The same reason covers
       the wave of a firer that has left play since the wave was created, whose turn then comes
@@ -1205,10 +1298,11 @@ New terms:
       accumulator precision
       and table-root choice in F3 and F4 are `unmeasured`:
       no setup here distinguishes alternative arithmetic with the same visible thresholds.
-    - Confidence: high (no damage, end conditions, no fixed expiry, F3's threshold); medium
-      (every part of the update timing listed in the Backing, the fade-out's length included; a target or
-      firer that boards an open-topped transport; the wave of a firer that has left play since it
-      was created; a riding firer's wave)
+    - Confidence: high (no damage, end conditions, no fixed expiry, F3's threshold); medium (every
+      part of the update timing listed in the Backing, the fade-out's length included; a target or
+      firer that boards an open-topped transport; a firer that boards a transport that is not
+      open-topped; a target or firer that goes inside a building; the wave of a firer that has left
+      play since it was created; a riding firer's wave; *Vehicle bunkers and riders*)
 
 ### Other locomotors
 
@@ -2063,7 +2157,7 @@ establish a qualifying condition; a run lacking the required observations is inc
     Separately remove target and firer to test both ending conditions. With stationary
     participants and unchanged targeting, observe well past 100 ticks: no fixed expiry.
   - Target boarding: let the wave's target enter a transport (closed and, separately,
-    an open-topped one that named data lets it board) or a bunker; expect the
+    an open-topped one that named data lets it board); expect the
     wave to begin fading in the next update, while the target is unharmed. A named L10 map may
     place the firer and target so that the squared horizontal distance wraps negative; expect
     creation exactly as F3's mirrored root predicts, if such a separation is reachable.
@@ -2569,6 +2663,13 @@ establish a qualifying condition; a run lacking the required observations is inc
   grips ends the grip as a lifter leaving play does, and whether a dropper that does so loses
   its place as dropper as claim 14 says of one leaving play. Claims 12 and 14 do not list these
   events, and no run has been made.
+- (Q-3182.) Whether ordinary play reaches a lifter that grips while it goes into a vehicle
+  bunker, its grip having begun after it took the bunker as its destination (claim 12): the
+  enter order gives it no target, so it would have to take one during the approach and fire. The
+  outcome is stated.
+- (Q-3183.) Whether a rider of an open-topped transport can take a new target and fire while the
+  transport is inside a transport or a building. That the rider takes turns, loses its target
+  and keeps its grip is stated (claim 12, *A riding lifter whose transport goes inside*).
 
 ## Changes for other specs
 
@@ -2634,3 +2735,17 @@ establish a qualifying condition; a run lacking the required observations is inc
   entry is about the seize only; this spec does not settle the detonation's attacker. S-0302
   claim 1 and the S-0306 Terms sentence may want to re-check a firer that leaves play after the
   shot.
+- **S-0606, claim 7 (*Map presence*) (Q-3182).** Since a bunkered vehicle stays in play, a bunker
+  entry does not end a grip, a dropper's place or a magnetic wave as leaving play would, and does
+  not void a seizing hit in flight (claims 2, 12, 14 and 21 here). The bullet could point to these
+  claims. Medium, `unmeasured` (claim 12 gives the reason).
+- **S-0606, claim 3, and S-0215 Terms (*Target, destination*) (Q-3182).** An enter order to a
+  bunker gives the vehicle no target and the bunker as its destination (S-0214 table M), so the
+  bunker that claim 3 calls the entering vehicle's target, and that S-0215 Terms count as an
+  object it enters, is held as its destination. Claim 3 could say "with a bunker as its
+  destination". No change of behaviour. Medium, as S-0214 claim 10 rates table M.
+- **S-0203, claim 3, and S-0507, claim 14 (Q-3183).** When an open-topped transport itself goes
+  inside a transport or a building, the transport leaves play and its riders do not: they stay
+  in the update order and take turns while it is inside (claim 12 here, *A riding lifter whose
+  transport goes inside*). Their loss of targets is S-0507 claim 15's. Both claims could say so.
+  Medium, `unmeasured` (claim 12 gives the reason).
