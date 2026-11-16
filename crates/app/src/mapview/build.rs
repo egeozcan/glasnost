@@ -6974,8 +6974,10 @@ impl Painter {
     /// of the cell pass are not followed. The building light sources are
     /// the game's lit buildings ([`Painter::set_building_lights`], S-0405
     /// claim 9), except that a pulse never puts one out or on (no pulse
-    /// exists in the game yet) and a building's light is never scaled for
-    /// its damage (S-0302 claim 12's factor is open, Q-3146) (#152). The named palettes' tables take
+    /// exists in the game yet). A hit the building survives changes neither
+    /// its light nor the cells' light (S-0302 claim 12, *The building's
+    /// light*: the damage factor is none), so a lit building's health is not
+    /// read here (#152). The named palettes' tables take
     /// the effect tint with the house-colour tables (S-0103 claim 17). The
     /// house tables are all built when the game starts (S-0104 Open questions),
     /// so claim 2's third column, the tint of a table built while an effect
@@ -7102,6 +7104,12 @@ impl Painter {
     /// The light of cell `c` as last computed, `None` outside the map.
     pub fn cell_light(&self, c: CellXY) -> Option<light::CellLight> {
         self.lights.get(c).copied()
+    }
+
+    /// How many times [`Painter::relight`] ran (tests).
+    #[cfg(test)]
+    pub fn relights(&self) -> u64 {
+        self.relights
     }
 
     /// The voxel buffer, for the next game of the program (S-0105 claim

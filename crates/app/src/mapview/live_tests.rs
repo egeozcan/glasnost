@@ -9559,3 +9559,66 @@ fn claim_9_a_building_light_follows_the_game() {
         "out when the building leaves the map"
     );
 }
+
+/// A hit the lit building survives leaves its light and its cells' light as
+/// they were: the light takes no damage factor, and no relight follows
+/// (#152).
+/// spec: S-0302 claim 12 (The building's light: a hit the building survives does not change its
+/// light source or the cells' light, so the factor is none), S-0104 claim 12 (only a light added,
+/// removed or changed relights)
+#[test]
+fn claim_12_a_surviving_hit_leaves_the_building_light() {
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    // Invented light values for the test's tower.
+    let rules = format!(
+        "{}[TOWER]\nLightIntensity=0.5\nLightVisibility=2048\n",
+        RULES.replace(
+            "[BuildingTypes]\n1=HUTX\n",
+            "[BuildingTypes]\n1=HUTX\n2=TOWER\n"
+        )
+    );
+    let (import, catalogue, _) = context_with(&rules);
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let ruleset = testkit::combat_ruleset();
+    let mut world = testkit::game_with(&ruleset, 24, 3);
+    let at = testkit::mid(24, 0, 0);
+    let tower = testkit::spawn(&mut world, SimKind::Building, "TOWER", 0, at, 0);
+    let rules = world.rules_arc();
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(3), Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.redraw(&inputs, &mut scene);
+    let lit = live.cell_light(at);
+    assert!(
+        lit.is_some_and(|l| l.source_sum > 0),
+        "the tower lights its cell: {lit:?}"
+    );
+    let relights = live.relights();
+    let full = live.world.obj(tower).unwrap().health;
+    assert!(full > 4, "a tower with health to lose: {full}");
+    // Down to half, a quarter and the last point: each a hit it survives.
+    for health in [full / 2, full / 4, 1] {
+        live.world.obj_mut(tower).unwrap().health = health;
+        live.redraw(&inputs, &mut scene);
+        assert_eq!(live.cell_light(at), lit, "at health {health} of {full}");
+        assert_eq!(live.relights(), relights, "no relight at health {health}");
+    }
+}

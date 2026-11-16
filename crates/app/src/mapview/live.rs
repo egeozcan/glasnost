@@ -2333,6 +2333,7 @@ impl Live {
             })
             .collect();
         let lit = self.building_lights.update(&on_map);
+        // spec: S-0302 claim 12 (The building's light: a hit the building survives does not change its light source, so its health takes no part here)
         let mut sources = Vec::new();
         for id in lit {
             let Some(o) = self.world.obj(id) else {
@@ -2365,6 +2366,12 @@ impl Live {
     #[cfg(test)]
     pub(super) fn cell_light(&self, c: CellXY) -> Option<glasnost_render::light::CellLight> {
         self.painter.cell_light(c)
+    }
+
+    /// How many times the view relit its cells (tests).
+    #[cfg(test)]
+    pub(super) fn relights(&self) -> u64 {
+        self.painter.relights()
     }
 
     /// The shadowed cells the last redraw lit its mobiles by (tests).
