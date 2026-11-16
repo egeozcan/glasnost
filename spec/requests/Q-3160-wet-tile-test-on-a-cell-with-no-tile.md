@@ -1,9 +1,9 @@
 ---
 id: Q-3160
 title: Whether a warp landing cell that holds no tile passes the wet-tile test
-status: open
+status: answered
 related: [S-0513, S-0010, S-0211, S-0009]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
