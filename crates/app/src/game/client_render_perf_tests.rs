@@ -216,3 +216,107 @@ fn render_perf_119_a_kept_light_alpha_follows_the_shroud_and_the_view() {
     let closed = check(&mut c, "the shroud closed");
     assert!(closed != scrolled, "the closed shroud shows");
 }
+
+/// design: render (#118) (the kept light alpha moved with a scrolled view,
+/// only the uncovered strips made again): a draw that keeps its light alpha
+/// shows what a new draw shows after scrolls in both axes and both
+/// directions, a jump past the whole view, and a scroll in the same frame as
+/// the shroud opening inside the part of the view both frames show, or
+/// closing everywhere.
+/// spec: S-0110 claims 5 to 7 and 10 (the light-alpha values of the view after its covers)
+#[test]
+fn render_perf_118_b_scrolled_light_alpha_follows_the_shroud_and_the_view() {
+    use glasnost_render::offscreen::OFFSCREEN_FORMAT;
+    let Ok(g) = glasnost_render::gpu::shared_device() else {
+        eprintln!("skipping: no GPU adapter");
+        return;
+    };
+    let (device, queue) = (g.device, g.queue);
+    let size = (800, 600);
+    let mut c = client(size, 100);
+    start_by_keyboard_with(&mut c, fixture::rules());
+    let mcv = own(&c, Kind::Vehicle)[0];
+    let s = session_mut(&mut c);
+    s.loaded.covers = shroud_sprite();
+    let me = s.play.me();
+    let at = s.play.world().obj(mcv).unwrap().pos;
+    // An explored patch whose edges cross the view, so that every scroll
+    // moves light-alpha changes.
+    glasnost_sim::econ::shroud::area_reveal(&mut s.play.game.world, me, at, 3);
+    draw_lit_ground(s);
+    let mut kept = crate::game::GpuDraw::new(&device, OFFSCREEN_FORMAT);
+    let m = session(&c).map_rect();
+    let field = move |rgba: &[u8]| -> Vec<u8> {
+        let w = size.0;
+        (m.y..m.y + m.h)
+            .flat_map(|y| {
+                let at = ((y * w + m.x) * 4) as usize;
+                rgba[at..at + (m.w * 4) as usize].to_vec()
+            })
+            .collect()
+    };
+    let mut check = |c: &mut Client, what: &str| {
+        let k = field(&gpu_frame(&device, &queue, &mut kept, c));
+        let mut fresh = crate::game::GpuDraw::new(&device, OFFSCREEN_FORMAT);
+        let f = field(&gpu_frame(&device, &queue, &mut fresh, c));
+        let first = k.chunks(4).zip(f.chunks(4)).position(|(a, b)| a != b);
+        assert!(first.is_none(), "{what}: pixel {first:?} differs");
+        k
+    };
+    // A scroll draws the scene again, without the item: it is put back.
+    let scroll = |c: &mut Client, d: (i32, i32)| -> bool {
+        let before = session(c).view().origin;
+        session_mut(c).scroll(d);
+        let _ = c.frame();
+        draw_lit_ground(session_mut(c));
+        session(c).view().origin != before
+    };
+    let mut last = check(&mut c, "the first frame");
+    let mut moved = 0;
+    for d in [
+        (30, 0),
+        (-47, 0),
+        (0, 15),
+        (0, -31),
+        (61, -17),
+        (-13, 29),
+        (7, 7),
+        (-120, -90),
+    ] {
+        moved += usize::from(scroll(&mut c, d));
+        last = check(&mut c, &format!("a scroll by {d:?}"));
+    }
+    assert!(moved >= 6, "only {moved} scrolls moved the view");
+    // A scroll and the shroud opening inside both frames' part of the view.
+    let o = session(&c).view().origin;
+    assert!(scroll(&mut c, (23, 11)), "the view scrolls");
+    let s = session_mut(&mut c);
+    let open = glasnost_sim::world::Pos {
+        x: at.x + 5 * 256,
+        y: at.y - 2 * 256,
+        z: at.z,
+    };
+    glasnost_sim::econ::shroud::area_reveal(&mut s.play.game.world, me, open, 3);
+    let opened = check(&mut c, "a scroll as the shroud opens");
+    assert!(opened != last, "the opened shroud shows");
+    assert_ne!(session(&c).view().origin, o);
+    // A jump from one corner of the map to the other, past the whole view:
+    // no part is shown by both frames.
+    scroll(&mut c, (-5000, -5000));
+    let _ = check(&mut c, "a corner");
+    let o = session(&c).view().origin;
+    scroll(&mut c, (5000, 5000));
+    let jumped = session(&c).view().origin;
+    let _ = check(&mut c, "a jump");
+    let (w, h) = session(&c).view().size;
+    assert!(
+        (jumped.0 - o.0).unsigned_abs() >= w || (jumped.1 - o.1).unsigned_abs() >= h,
+        "the jump from {o:?} to {jumped:?} leaves part of the view shown"
+    );
+    // Back, as the shroud closes everywhere.
+    scroll(&mut c, (-5000, -5000));
+    let s = session_mut(&mut c);
+    glasnost_sim::econ::shroud::crate_darkness(&mut s.play.game.world, me);
+    let closed = check(&mut c, "a scroll as the shroud closes");
+    assert!(closed != opened, "the closed shroud shows");
+}

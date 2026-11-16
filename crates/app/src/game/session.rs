@@ -1148,6 +1148,27 @@ impl Session {
         )
     }
 
+    /// [`Session::light_alpha_of`], given `kept`, the values of a view of
+    /// this view's size at world pixel `kept_origin` after `kept_covers`
+    /// (design: render (#118), [`cover::alpha_moved`]).
+    pub fn light_alpha_moved(
+        &self,
+        kept: Vec<u8>,
+        kept_origin: (i32, i32),
+        kept_covers: &[glasnost_render::shroud::Cover],
+        covers: &[glasnost_render::shroud::Cover],
+    ) -> Vec<u8> {
+        cover::alpha_moved(
+            kept,
+            kept_origin,
+            kept_covers,
+            covers,
+            &self.view(),
+            &self.loaded.covers,
+            &ShroudQuirks::default(),
+        )
+    }
+
     /// The battlefield composed on the CPU, RGBA.
     pub fn map_rgba(&self) -> Vec<u8> {
         let covers = self.shroud_covers();

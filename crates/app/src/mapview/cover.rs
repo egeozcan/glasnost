@@ -167,19 +167,102 @@ pub fn alpha_of(
     sprites: &CoverSprites,
     q: &ShroudQuirks,
 ) -> Vec<u8> {
-    shroud::light_alpha(
-        view.origin,
-        view.size,
-        covers,
-        Sprites {
-            shroud: sprites.shroud.as_ref(),
-            fog: sprites.fog.as_ref(),
-            // spec: S-0110 Import mapping (fog of war always off in skirmish)
-            fog_of_war: false,
-        },
-        &[],
-        q,
-    )
+    shroud::light_alpha(view.origin, view.size, covers, sprites_of(sprites), &[], q)
+}
+
+/// The cover sprites as the light-alpha pass takes them.
+fn sprites_of(sprites: &CoverSprites) -> Sprites<'_> {
+    Sprites {
+        shroud: sprites.shroud.as_ref(),
+        fog: sprites.fog.as_ref(),
+        // spec: S-0110 Import mapping (fog of war always off in skirmish)
+        fog_of_war: false,
+    }
+}
+
+/// [`alpha_of`] for `view`, given `kept`, the values of a view of the same
+/// size at world pixel `kept_origin` after `kept_covers` (both cover lists
+/// [`covers`] of their views, with the same sprites): the same values.
+///
+/// design: render (#118) (a scrolled view moves the kept values and makes
+/// only the strips it uncovers): a pixel's value depends only on the covers
+/// whose canvas holds it, in their order (S-0110 claims 5, 7 and 10), and
+/// every cover whose canvas meets the part both views show is in both lists,
+/// in the same order (State and ordering). So when those covers are the same
+/// in both lists, that part keeps its values; the strips the view uncovers
+/// are made from all of `covers`, each pixel clipped to its strip as the
+/// view clips it. Otherwise, or with no part shown by both, the view is
+/// made afresh.
+pub fn alpha_moved(
+    kept: Vec<u8>,
+    kept_origin: (i32, i32),
+    kept_covers: &[Cover],
+    covers: &[Cover],
+    view: &View,
+    sprites: &CoverSprites,
+    q: &ShroudQuirks,
+) -> Vec<u8> {
+    let (w, h) = (view.size.0 as i32, view.size.1 as i32);
+    let (ox, oy) = view.origin;
+    let (kx, ky) = kept_origin;
+    // The world pixels both views show: [x0, x1) × [y0, y1).
+    let (x0, x1) = (ox.max(kx), (ox + w).min(kx + w));
+    let (y0, y1) = (oy.max(ky), (oy + h).min(ky + h));
+    if kept.len() != (w.max(0) * h.max(0)) as usize || x0 >= x1 || y0 >= y1 {
+        return alpha_of(covers, view, sprites, q);
+    }
+    // spec: S-0110 claim 7 (a cover acts only inside its 60 × 30 canvas)
+    let meets = |c: &&Cover| {
+        let (cl, ct) = shroud::canvas_origin(c.cell, c.level, q);
+        cl < x1 && cl + CANVAS_WIDTH > x0 && ct < y1 && ct + CANVAS_HEIGHT > y0
+    };
+    if !kept_covers
+        .iter()
+        .filter(meets)
+        .eq(covers.iter().filter(meets))
+    {
+        return alpha_of(covers, view, sprites, q);
+    }
+    let mut a = kept;
+    // Each shown row moves from its kept place to its new one; rows are
+    // taken before they are written over (moving up, from the top).
+    let n = (x1 - x0) as usize;
+    let mut move_row = |y: i32| {
+        let from = ((y - ky) * w + (x0 - kx)) as usize;
+        let to = ((y - oy) * w + (x0 - ox)) as usize;
+        a.copy_within(from..from + n, to);
+    };
+    if oy > ky {
+        (y0..y1).for_each(&mut move_row);
+    } else {
+        (y0..y1).rev().for_each(&mut move_row);
+    }
+    // The uncovered strips: the rows above and below the shown part, then
+    // its rows' columns to the left and right of it.
+    let strips = [
+        (ox, oy, w, y0 - oy),
+        (ox, y1, w, oy + h - y1),
+        (ox, y0, x0 - ox, y1 - y0),
+        (x1, y0, ox + w - x1, y1 - y0),
+    ];
+    for (sx, sy, sw, sh) in strips {
+        if sw <= 0 || sh <= 0 {
+            continue;
+        }
+        let part = shroud::light_alpha(
+            (sx, sy),
+            (sw as u32, sh as u32),
+            covers,
+            sprites_of(sprites),
+            &[],
+            q,
+        );
+        for (r, values) in part.chunks_exact(sw as usize).enumerate() {
+            let to = ((sy - oy + r as i32) * w + (sx - ox)) as usize;
+            a[to..to + sw as usize].copy_from_slice(values);
+        }
+    }
+    a
 }
 
 #[cfg(test)]
@@ -317,6 +400,72 @@ mod tests {
                     .all(|&v| i32::from(v) == glasnost_render::light::DEFAULT_LIGHT_ALPHA)
             );
         }
+    }
+
+    /// design: render (#118) (moved values are the values made afresh):
+    /// views moved by every kind of step from one whose values are kept, the
+    /// shroud unchanged, opened inside the part both views show, or opened
+    /// outside it.
+    /// spec: S-0110 claims 5, 7 and 10 (a pixel's value after the covers whose canvas holds it)
+    #[test]
+    fn moved_alpha_is_the_alpha_made_afresh() {
+        let w = game();
+        let h = HouseId(0);
+        let q = ShroudQuirks::default();
+        let s = sprite();
+        let size = (601, 401);
+        let mid = testkit::mid(40, 0, 0);
+        let (cx, cy) = canvas_origin((mid.x, mid.y), 0, &q);
+        let start = (cx - 300, cy - 200);
+        let view = |origin: (i32, i32)| View {
+            origin,
+            size,
+            reference: 0,
+        };
+        let mut opened_inside = w.clone();
+        glasnost_sim::econ::shroud::area_reveal(
+            &mut opened_inside,
+            h,
+            Pos::centre(CellXY::new(mid.x + 6, mid.y + 2), 0),
+            1,
+        );
+        assert!(
+            !explored(&w, h, CellXY::new(mid.x + 6, mid.y + 2)),
+            "the inside opening is new"
+        );
+        let mut opened_outside = w.clone();
+        glasnost_sim::econ::shroud::area_reveal(
+            &mut opened_outside,
+            h,
+            Pos::centre(CellXY::new(mid.x + 30, mid.y + 30), 0),
+            2,
+        );
+        let mut checked = 0;
+        for after in [&w, &opened_inside, &opened_outside] {
+            for d in [
+                (0, 1),
+                (1, 0),
+                (-1, 0),
+                (0, -1),
+                (37, -12),
+                (-200, 90),
+                (600, 0),
+                (601, 0),
+                (0, 400),
+                (-5, -401),
+                (700, 700),
+            ] {
+                let (from, to) = (view(start), view((start.0 + d.0, start.1 + d.1)));
+                let kept_covers = covers(&w, h, &from, &q);
+                let kept = alpha_of(&kept_covers, &from, &s, &q);
+                let now = covers(after, h, &to, &q);
+                let fresh = alpha_of(&now, &to, &s, &q);
+                let moved = alpha_moved(kept, from.origin, &kept_covers, &now, &to, &s, &q);
+                assert!(moved == fresh, "a move by {d:?}");
+                checked += usize::from(fresh.contains(&0) && fresh.contains(&127));
+            }
+        }
+        assert!(checked > 20, "{checked} moves show both cover and light");
     }
 
     /// [`covers`] as before M8 C4 part 4: every cell of the grid asked.
