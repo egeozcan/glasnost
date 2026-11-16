@@ -208,7 +208,9 @@ fn issue_363_a_move_order_in_the_leaving_stage_is_dropped_before_any_choice() {
     step(&mut w);
     run(&mut w, 5);
     assert!(
-        glasnost_sim::superweapons::warp_leaving(&w, b),
+        w.obj(b)
+            .and_then(|o| o.sw.warp.as_ref())
+            .is_some_and(|m| m.leaving()),
         "set-up: in the leaving stage"
     );
     let before = w.rng.clone();
