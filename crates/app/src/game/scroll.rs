@@ -440,7 +440,12 @@ mod tests {
         let client = (800, 600);
         let rz = Rounding::TowardZero;
         for mu in [F64::from_i64(-(1 << 40), rz), F64::from_i64(1 << 40, rz)] {
-            for (p, axis) in [((0, 300), 0), ((799, 300), 0), ((400, 0), 1), ((400, 599), 1)] {
+            for (p, axis) in [
+                ((0, 300), 0),
+                ((799, 300), 0),
+                ((400, 0), 1),
+                ((400, 599), 1),
+            ] {
                 let mut e = EdgeScroll::default();
                 let d = e.cycle(Some(p), client, 3, mu, 0, |_| false);
                 let c = if axis == 0 { d.0 } else { d.1 };
