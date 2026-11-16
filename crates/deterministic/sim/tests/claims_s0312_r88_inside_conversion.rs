@@ -105,7 +105,12 @@ fn at(dx: i32, dy: i32) -> CellXY {
 /// `raise` leptons, boarded into `carrier` at (0, 0), which then moves to
 /// (−5, 2). Returns the world, the passenger, the carrier and the
 /// passenger's position when it went inside.
-fn inside(r: &Ruleset, passenger: &str, carrier: &str, raise: i32) -> (World, ObjectId, ObjectId, Pos) {
+fn inside(
+    r: &Ruleset,
+    passenger: &str,
+    carrier: &str,
+    raise: i32,
+) -> (World, ObjectId, ObjectId, Pos) {
     let mut w = testkit::game_with(r, SIZE, 7);
     testkit::run(&mut w, 2);
     let p = testkit::spawn(&mut w, Kind::Infantry, passenger, 0, at(3, 0), 0);

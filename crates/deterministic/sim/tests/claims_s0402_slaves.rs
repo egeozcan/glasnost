@@ -1198,7 +1198,10 @@ fn two_civilian_game(cleanup: bool) -> World {
 fn s0312_claim_31_removed_civilian_house_is_no_recipient() {
     for cleanup in [false, true] {
         let mut w = two_civilian_game(cleanup);
-        assert_eq!(w.houses[2].removed, cleanup, "set-up: the cleanup removes Civ");
+        assert_eq!(
+            w.houses[2].removed, cleanup,
+            "set-up: the cleanup removes Civ"
+        );
         assert!(!w.houses[3].removed, "set-up: Kept stays");
         let b = working_building(&mut w);
         let out = on_map(&w, b);

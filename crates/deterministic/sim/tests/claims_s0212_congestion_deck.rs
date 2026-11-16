@@ -166,7 +166,10 @@ fn run_block(heading: bool) -> (Option<Mode>, Vec<CellXY>) {
     };
     let a = at(&w, cell(3, 0));
     let b = at(&w, cell(5, 1));
-    assert!(w.cells.list(cell(4, 0), Layer::Ground).is_empty(), "set-up: nothing listed ahead");
+    assert!(
+        w.cells.list(cell(4, 0), Layer::Ground).is_empty(),
+        "set-up: nothing listed ahead"
+    );
     {
         let o = w.obj_mut(b).unwrap();
         o.dest = Some(Target::Cell(cell(4, 10)));
