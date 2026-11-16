@@ -1129,6 +1129,21 @@ pub fn psychic_reveal(w: &mut World, made_for: HouseId, p: Pos, r: i32) {
     reveal_for(w, made_for, &cells);
 }
 
+/// The waypoint reveal's area reveal (claim 17, S-0011 claim 26): as
+/// [`area_reveal`], but it does not count for an ally whose
+/// whole-map-revealed mark is set.
+pub fn waypoint_reveal(w: &mut World, made_for: HouseId, p: Pos, r: i32) {
+    let cells = sight_cells(w, p, r.min(MAX_RADIUS));
+    let ally = w.rules().econ.shroud.ally_reveal;
+    for h in player_houses(w) {
+        // spec: S-0409 claims 2 and 17 (revision 17, Q-3149: a waypoint reveal made for a house whose mark is clear does not count for an allied house whose mark is set, even with ally reveal on)
+        let shared = ally && w.allied(Some(made_for), Some(h)) && !whole_map_revealed(w, h);
+        if h == made_for || shared {
+            area_cells(w, h, &cells);
+        }
+    }
+}
+
 /// Applies an area reveal's cells for the house it is made for and the
 /// houses that claim 2 lets share it.
 fn reveal_for(w: &mut World, made_for: HouseId, cells: &[u32]) {
