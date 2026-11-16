@@ -75,10 +75,6 @@ fn a_named_crate_overlay_no_placement_placed_and_a_place_on_its_cell() {
         crates::pickup(&mut w, v, c);
         assert!(credits(&w, 0) > before, "by cell {by_cell}: the effect");
         assert_eq!(overlay(&w, c), Some(want), "by cell {by_cell}: the crate");
-        assert_eq!(
-            places_on(&w, c).len(),
-            left,
-            "by cell {by_cell}: the place"
-        );
+        assert_eq!(places_on(&w, c).len(), left, "by cell {by_cell}: the place");
     }
 }
