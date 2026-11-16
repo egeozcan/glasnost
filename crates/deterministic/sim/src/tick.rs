@@ -389,9 +389,11 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     // spec: S-0519 claim 4 (a planted bomb is checked in its carrier's own turn, after the behaviour processing; not in a pass of its own)
     crate::bomb::turn(w, id);
+    // spec: S-0519 r21 claim 4 (a) (a vessel its own bomb sets sinking takes its first descent in that turn; it was not sinking when the turn's own descent came)
+    let bomb_sunk = !sinking && crate::naval::sinking(w, id);
     // spec: S-0519 claim 19 (a designator's change of target cancels its strike: looked at in its own turn)
     crate::strike::turn(w, id);
-    // spec: S-0519 claim 4 and S-0203 claim 6 (c) (a carrier its bomb kills that stays in play only plays out its death: an infantry unit in its death sequence takes no more of its living turn, so no step, no boarding); Q-3159 (interim: one that is then crashing or sinking goes on with the turn as before)
+    // spec: S-0519 claim 4 and S-0203 claim 6 (c) (a carrier its bomb kills that stays in play only plays out its death: an infantry unit in its death sequence takes no more of its living turn, so no step, no boarding); S-0519 r21 claim 4 (a carrier that then sinks or crashes does not end its turn at the detonation; parts a to c below, and part d's cloak update; the rest of its turn is not settled, S-0519 Open questions, and goes on as before)
     if w.obj(id).is_none_or(|o| {
         crate::combat::damage::dead(o)
             && !(crate::jump::crashing(w, id)
@@ -458,6 +460,13 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         _ if falling => fell,
         // spec: S-0507 claim 15 and S-0203 claim 3 (a passenger in play inside an open-topped transport has no movement of its own; its position is the transport's)
         _ if crate::transport::riding(w, id).is_some() => false,
+        // spec: S-0519 r21 claim 4 (a) (a vessel its own bomb set sinking in this turn takes its first descent of S-0504 claim 4 here, in place of its locomotor progress, S-0504 claim 5; it may leave play at once)
+        _ if bomb_sunk => {
+            if crate::naval::sinking_turn(w, id) {
+                return;
+            }
+            false
+        }
         // spec: S-0504 claim 5 (a sinking vessel makes no progress by its locomotor, turning and speed-fraction updates included)
         _ if sinking => false,
         // spec: S-0607 claims 5 and 7 (a seized unit moves with its temporary jumpjet locomotor, whatever its own)

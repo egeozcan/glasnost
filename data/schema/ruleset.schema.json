@@ -9059,6 +9059,11 @@
           "type": "boolean",
           "default": true
         },
+        "closed_passenger_death_effects": {
+          "description": "A passenger killed inside a transport that is not open-topped takes its death effects at the position where it went inside, so its debris, its death weapon's damage and its death animations can come far from the transport; off: it shows no death effects of its own, takes no draws for them and is removed at once.",
+          "type": "boolean",
+          "default": true
+        },
         "coarse_limit_records_cost": {
           "description": "A coarse route found at the pending limit still sets the sector's cost.",
           "type": "boolean",

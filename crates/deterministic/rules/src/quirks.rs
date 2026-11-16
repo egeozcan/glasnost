@@ -1064,6 +1064,10 @@ pub struct Quirks {
     // spec: S-0312 claim 11, Edge cases
     #[serde(default = "on")]
     pub bomb_mark_water_death_on_deck: bool,
+    /// A passenger killed inside a transport that is not open-topped takes its death effects at the position where it went inside, so its debris, its death weapon's damage and its death animations can come far from the transport; off: it shows no death effects of its own, takes no draws for them and is removed at once.
+    // spec: S-0312 claim 34 (b) and (f), Edge cases
+    #[serde(default = "on")]
+    pub closed_passenger_death_effects: bool,
     /// Rubble is the overlay type at a fixed registration index.
     // spec: S-0312 claim 20
     #[serde(default = "on")]
@@ -2618,6 +2622,7 @@ impl Default for Quirks {
             building_smudge_discarded_draws: true,
             death_weapon_unplaced_projectile: true,
             bomb_mark_water_death_on_deck: true,
+            closed_passenger_death_effects: true,
             rubble_overlay_by_index: true,
             crate_beneath_overlay_refusal: true,
             barrel_probe_top_left_only: true,
@@ -3552,6 +3557,10 @@ impl Quirks {
             (
                 "bomb_mark_water_death_on_deck",
                 self.bomb_mark_water_death_on_deck,
+            ),
+            (
+                "closed_passenger_death_effects",
+                self.closed_passenger_death_effects,
             ),
             ("rubble_overlay_by_index", self.rubble_overlay_by_index),
             (

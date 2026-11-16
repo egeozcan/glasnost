@@ -223,6 +223,9 @@ pub(crate) struct KillRest {
     o: crate::world::Object,
     /// It takes S-0312 claim 11's effects.
     marked_water: bool,
+    /// A passenger killed inside its transport (S-0312 claim 34): whether
+    /// that transport is open-topped.
+    inside: Option<bool>,
 }
 
 /// One kept rest of a step stopped at a death weapon of a chain.
@@ -615,12 +618,21 @@ pub(crate) fn kill_in(
     let Some(o) = w.obj(id).cloned() else {
         return Flow::Done(());
     };
+    let riding = crate::transport::riding(w, id);
+    if o.structure.inside.is_none()
+        && crate::structures::absorb::absorbed_in(w, id).is_none()
+        && let Some(t) = riding
+        && matches!(o.kind, Kind::Infantry | Kind::Vehicle)
+    {
+        // spec: S-0312 claim 34 (an infantry or vehicle passenger that a killing hit reaches while it rides, in either kind of transport); S-0414 claim 21 (the killing hit has registered the destruction, so no second credit here)
+        return passenger_killed_inside(w, id, t, hit, chain, raises);
+    }
     if o.structure.inside.is_some()
-        || crate::transport::riding(w, id).is_some()
+        || riding.is_some()
         || crate::structures::absorb::absorbed_in(w, id).is_some()
     {
         // spec: S-0508 claim 19 (an occupant killed inside a building by its own house's defeat: individual killing hits, no eviction; our engine then removes the place and repairs the index under claim 23, `garrison::removing`; like a passenger it shows no death effects)
-        // spec: S-0414 claims 5 and 15 and S-0605 claim 15 (a passenger hit at its own place inside a transport or an absorbing building leaves the game there: the carrier's count drops at once and the carrier's own death gives it no second one); Q-3158 (interim: what it shows is not specified; it gets the occupant's treatment, no death effects of its own and no draws for them)
+        // spec: S-0414 claims 5 and 15 and S-0605 claim 15 (a passenger hit at its own place inside a transport or an absorbing building leaves the game there: the carrier's count drops at once and the carrier's own death gives it no second one); S-0312 claim 34 (scope: absorbed passengers and garrison occupants are not covered; an aircraft passenger, outside its infantry and vehicle scope, keeps this treatment, no death effects of its own and no draws for them)
         // spec: S-0414 claim 21 (one loss per destruction: the killing hit has registered it, so no second credit here)
         passenger_removed(w, id, hit, raises);
         return Flow::Done(());
@@ -673,6 +685,7 @@ pub(crate) fn kill_in(
             hit: *hit,
             o,
             marked_water,
+            inside: None,
         };
         if chain {
             // spec: S-0312 claim 33 (inside a death weapon's detonation this death weapon nests: it goes off before the rest of this object's effects and before the outer detonation's later hits, at any depth)
@@ -698,8 +711,100 @@ pub(crate) fn kill_in(
             hit: *hit,
             o,
             marked_water,
+            inside: None,
         },
     );
+    Flow::Done(())
+}
+
+/// A killing hit that reaches infantry or vehicle passenger `id` while it
+/// rides in transport `t` (S-0312 claim 34): it leaves the passenger list
+/// at the hit, after its destruction raises, then takes its death effects
+/// at the transport's position when `t` is open-topped and where it went
+/// inside otherwise (with `quirks.closed_passenger_death_effects` off, a
+/// closed transport's passenger shows none and is removed at once).
+fn passenger_killed_inside(
+    w: &mut World,
+    id: ObjectId,
+    t: ObjectId,
+    hit: &Hit,
+    chain: bool,
+    raises: bool,
+) -> Flow<()> {
+    let open = crate::transport::open_topped(w, t);
+    // spec: S-0312 claim 34 (b) (inside an open-topped transport, the transport's own position at the hit; inside any other transport, the position the passenger had when it went inside)
+    let place = if open {
+        w.obj(t).map(|o| o.pos)
+    } else {
+        crate::transport::went_in(w, id)
+    }
+    .or_else(|| w.obj(id).map(|o| o.pos));
+    if let Some(ob) = w.obj_mut(id) {
+        ob.health = 0;
+    }
+    mark_killed(w, id);
+    // spec: S-0312 claim 29 and table, before step 1 (the destruction raises and the actions they fire); S-0302 claim 16 (not again at a delayed kill's later lethal hit with quirks.delay_kill_credited_again off)
+    if raises {
+        destruction_raises(w, id, hit);
+    }
+    // spec: S-0312 claim 34 (scope: a passenger that an action fired by its own raises removes has left the list at that action; what follows is that action's own outcome)
+    if w.obj(id).is_none() {
+        return Flow::Done(());
+    }
+    // spec: S-0312 claim 34 (a) and table, before step 1 (right after the destruction raises and before claim 30's slave step, the passenger is taken off its transport's list: the seat is free at once)
+    crate::transport::leave_list(w, id);
+    if let (Some(p), Some(ob)) = (place, w.obj_mut(id)) {
+        // spec: S-0312 claim 34 (b) and (c) (its death effects come at that position; it stays off the map, not placed in the world)
+        ob.pos = p;
+    }
+    // spec: S-0312 claim 34 (a) (a slave master killed inside ends its slave group as claim 30 gives for an on-map master, after this removal) and claim 30
+    crate::econ::slaves::master_killed(w, id, hit);
+    // spec: S-0402 claim 14 (a killed slave is lost to its master: the regeneration delay starts)
+    crate::econ::slaves::lost(w, id);
+    // spec: S-0506 claims 9 and 13 (a killed slot object is announced as lost; a killed spawner clears its slots)
+    crate::spawn::killed(w, id);
+    // spec: S-0601 claim 10 (the controller's killing hit releases its victims in the same tick, as part of that hit)
+    crate::mind::killed(w, id);
+    if !open && !w.rules().quirks.closed_passenger_death_effects {
+        // spec: S-0312 claim 34 (f) (quirks.closed_passenger_death_effects off: no death effects of its own and no draws for them; an attached bomb is removed as part b gives; removed at once, its own passengers dying as those of a removed transport do, S-0507 claim 16, `transport::removing`)
+        crate::bomb::carrier_killed(w, id);
+        crate::objects::remove(w, id);
+        return Flow::Done(());
+    }
+    // spec: S-0312 claim 34 (b) and table, step 1 (debris, with its draws, at part b's position; claim 34 (e): claim 11's low-water skip does not apply to a passenger)
+    debris(w, id);
+    let exploding = exploding(w, id);
+    // spec: S-0312 claim 34 (b) and table, step 2 and claim 5 (an exploding passenger: its own passengers die, in the order held, before its death weapon)
+    if exploding {
+        crate::transport::kill_passengers(w, id, hit);
+    }
+    let Some(o) = w.obj(id).cloned() else {
+        return Flow::Done(());
+    };
+    let rest = KillRest {
+        id,
+        hit: *hit,
+        o,
+        marked_water: false,
+        inside: Some(open),
+    };
+    if exploding && let Some((wp, dmg)) = death_weapon(w, id) {
+        if chain {
+            // spec: S-0312 claim 33 (inside a death weapon's detonation this death weapon nests: it goes off before the rest of this object's effects and before the outer detonation's later hits, at any depth)
+            w.death_chain.pending = Some(Pending {
+                weapon: wp,
+                damage: dmg,
+                pos: rest.o.pos,
+                source: id,
+                house: rest.o.owner,
+            });
+            keep(w, Frame::Kill(Box::new(rest)));
+            return Flow::Suspended;
+        }
+        // spec: S-0312 claim 34 (b) and claim 6 (the death weapon's detonation and damage come at part b's position, inside its killing hit) and claim 33
+        set_off_death_weapon(w, wp, dmg, rest.o.pos, id, rest.o.owner);
+    }
+    kill_rest(w, rest);
     Flow::Done(())
 }
 
@@ -740,13 +845,24 @@ fn kill_rest(w: &mut World, rest: KillRest) {
         hit,
         o,
         marked_water,
+        inside,
     } = rest;
     let hit = &hit;
     let rules = w.rules_arc();
-    // spec: S-0312 table step 3 and S-0519 claim 5 (an attached bomb goes off once at the carrier's position, or is removed silently off the map; the carrier's death does not set it off a second time)
+    // spec: S-0312 table step 3 and S-0519 claim 5 (an attached bomb goes off once at the carrier's position, or is removed silently off the map; the carrier's death does not set it off a second time); S-0312 claim 34 (b) (a passenger is off the map: claim 7's off-map case removes its bomb, S-0519 claim 6)
     crate::bomb::carrier_killed(w, id);
+    if let Some(open) = inside {
+        if o.kind == Kind::Infantry {
+            // spec: S-0312 claim 34 (c) and (d) (S-0107 claim 17's choice, with part c's or part d's limits)
+            infantry_death(w, id, hit, Some(open));
+        } else {
+            // spec: S-0312 claim 34 (e) (a vehicle passenger takes none of claims 9, 10 and 12 to 15: no animation, sinking, crash, crew or crate; removed at once with no wreck, its own passengers dying as those of a removed transport do, S-0507 claim 16, `transport::removing`)
+            crate::objects::remove(w, id);
+        }
+        return;
+    }
     match o.kind {
-        Kind::Infantry => infantry_death(w, id, hit),
+        Kind::Infantry => infantry_death(w, id, hit, None),
         Kind::Vehicle => {
             // spec: S-0312 claim 32 (a killing hit on a vessel already sinking, whether its descent began with a killing hit or a cull)
             let already_sinking = crate::naval::sinking(w, id);
@@ -962,8 +1078,13 @@ fn passengers_of_destroyed_vehicle(w: &mut World, id: ObjectId, hit: &Hit, crash
     }
 }
 
-/// An infantry unit's death (S-0107 claim 17).
-fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
+/// An infantry unit's death (S-0107 claim 17). `inside` is set for a
+/// passenger killed inside its transport, true when that transport is
+/// open-topped (S-0312 claim 34 (c) and (d)): no crash starts, and inside
+/// a closed transport no death sequence starts either.
+fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit, inside: Option<bool>) {
+    // spec: S-0312 claim 34 (c) and (d) (a passenger killed inside starts no crash: our engine removes it at once at the end of its death effects instead)
+    let may_crash = inside.is_none();
     let Some(o) = w.obj(id).cloned() else { return };
     let rules = w.rules_arc();
     let Some(u) = rules.unit(o.kind, o.type_index) else {
@@ -987,7 +1108,7 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
     // spec: S-0107 claim 17 row 2 (a prone cyborg or a jumpjet type: a general animation, no sequence)
     if (u.cyborg && prone) || u.jumpjet {
         // spec: S-0107 claim 17 (the rows that show no sequence remove the unit at once, unless its type has the crash flag and a crash begins instead: the jumpjet locomotor's, S-0502 claim 18)
-        if u.vehicle.crashable && crate::jump::start_crash(w, id, Some(hit)) {
+        if may_crash && u.vehicle.crashable && crate::jump::start_crash(w, id, Some(hit)) {
             return;
         }
         leave_play(w, id);
@@ -1020,7 +1141,7 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
             death_anim(w, &name, o.pos);
         }
         // spec: S-0107 claim 17 (the rows that show no sequence remove the unit at once, unless its type has the crash flag and a crash begins instead)
-        if u.vehicle.crashable && crate::jump::start_crash(w, id, Some(hit)) {
+        if may_crash && u.vehicle.crashable && crate::jump::start_crash(w, id, Some(hit)) {
             return;
         }
         leave_play(w, id);
@@ -1052,13 +1173,21 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
             death_kind_effect(w, kind, o.pos);
         }
         // spec: S-0615 claims 2 and 3 and S-0107 claim 17 (the unit is removed in the same processing, or begins its crash if its type has the crash flag)
-        if u.vehicle.crashable && crate::jump::start_crash(w, id, Some(hit)) {
+        if may_crash && u.vehicle.crashable && crate::jump::start_crash(w, id, Some(hit)) {
             return;
         }
         // spec: S-0107 claim 17 row 8 (other kinds: no sequence, removed at once)
         leave_play(w, id);
         return;
     };
+    if inside == Some(false) {
+        // spec: S-0312 claim 34 (d) (inside a closed transport: no death sequence, no corpse and no corpse-pick draw; removed at once at the end of its death effects; a row's other effects together with its sequence request, row 4's extra virus-death effect among them, still happen at part b's position)
+        if extra_after {
+            crate::gas::virus_death(w, o.pos, owner, true);
+        }
+        leave_play(w, id);
+        return;
+    }
     let started = crate::infantry::request(w, id, q, true);
     if extra_after {
         // spec: S-0615 claim 1 (a "not human" type killed on the ground with death kind 8 makes its forced die-1 request first, and the extra virus effect comes after it)
@@ -1066,6 +1195,11 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
     }
     // spec: S-0107 claim 17 (a cyborg killed by damage that ignores defences is removed at once on a death request)
     if u.cyborg && hit.ignore_defences {
+        leave_play(w, id);
+        return;
+    }
+    if !started && inside.is_some() && rules.quirks.refused_death_keeps_unit {
+        // spec: S-0312 claim 34 (c) (inside an open-topped transport, a death request turned down with quirks.refused_death_keeps_unit on: removed at once at the end of its death effects, with no corpse and no corpse-pick draw)
         leave_play(w, id);
         return;
     }

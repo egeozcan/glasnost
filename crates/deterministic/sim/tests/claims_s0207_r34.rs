@@ -233,11 +233,14 @@ fn claim_20_b_warp_pending_immobilization_keeps_the_landing_point() {
     let o = w.obj(u).unwrap();
     assert_eq!(o.dest, None, "no L was fixed: the destination is removed");
     assert_eq!(o.teleport.as_ref().and_then(|t| t.landing), None);
-    // An L fixed before the warp stays when a new destination arrives.
+    // An L fixed before the warp stays when a new destination arrives while
+    // the warp is pending; from the leaving stage on, part (a)'s being-erased
+    // drop comes first (S-0207 r85, glossary leaving stage;
+    // claims_s0207_r85_leaving_stage).
     let mut w = game();
     let u = spawn(&mut w, Kind::Vehicle, "TELEQ", at(0, 0));
     offer(&mut w, u, at(3, 0));
-    w.obj_mut(u).unwrap().sw.warp = Some(member(&w, u, Stage::Leaving(2)));
+    w.obj_mut(u).unwrap().sw.warp = Some(member(&w, u, Stage::Pending));
     offer(&mut w, u, at(5, 0));
     let o = w.obj(u).unwrap();
     assert_eq!(o.dest, Some(Target::Cell(at(5, 0))));

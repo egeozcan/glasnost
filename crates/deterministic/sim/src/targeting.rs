@@ -1187,9 +1187,10 @@ fn engineer_friendly(w: &World, actor: ObjectId, t: ObjectId) -> bool {
         .and_then(|h| w.houses.get(usize::from(h.0)))
         .and_then(|h| w.rules().countries.get(h.country as usize))
         .is_some_and(|c| c.passive);
-    // spec: S-0214 table I (repairable, not vehicle-like, allied; or of a passive neutral house, garrisonable and not being erased, #358). Which branch each condition reaches is Q-3164; the conditions stand as the sentence's nearest reading.
-    (repairable && allied(w, actor, t))
-        || (passive_neutral && b.raw.can_be_occupied.unwrap_or(false) && !being_erased(w, t))
+    // spec: S-0214 table I (revision 84, Q-3164, #358: a repairable building, not vehicle-like, that is allied with the actor, garrisonable or not and erased or not, or belongs to a passive neutral house, can be garrisoned and is not being erased; the repairable and not-vehicle-like tests apply in both cases)
+    repairable
+        && (allied(w, actor, t)
+            || (passive_neutral && b.raw.can_be_occupied.unwrap_or(false) && !being_erased(w, t)))
 }
 
 // ---------------------------------------------------------------------------
