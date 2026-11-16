@@ -514,7 +514,8 @@ impl Player {
         }
         // spec: S-0109 claim 5 (an advance when at least d ticks have passed since the last
         // advance, and d > 0)
-        if self.delay <= 0 || tick - self.last < self.delay {
+        // spec: S-0205 claim 1 (the tick difference wraps)
+        if self.delay <= 0 || tick.wrapping_sub(self.last) < self.delay {
             return true;
         }
         self.advance(tick, env, q);
@@ -535,15 +536,17 @@ impl Player {
         let p = &self.play;
         let a = p.start;
         let more = self.r.more();
+        // spec: S-0109 F3, S-0205 claim 1 (λₑ − a and λₛ − a wrap)
+        let upper = p.loop_end.wrapping_sub(a);
         if p.ping_pong {
             let turn = if more {
                 // spec: S-0109 claim 9 (while r ≥ 2: k ≥ λₑ − a, or k = a (quirks.anim_pingpong_lower_turn;
                 // off: k ≤ λₛ − a))
-                self.k >= p.loop_end - a
+                self.k >= upper
                     || if q.anim_pingpong_lower_turn {
                         self.k == a
                     } else {
-                        self.k <= p.loop_start - a
+                        self.k <= p.loop_start.wrapping_sub(a)
                     }
             } else {
                 // spec: S-0109 claim 9 (on the last pass: k ≥ E or k = 0)
@@ -556,7 +559,7 @@ impl Player {
             }
         }
         // spec: S-0109 claim 6, F3 (limit λₑ − a while r ≥ 2, E on the last pass)
-        let limit = if more { p.loop_end - a } else { p.end };
+        let limit = if more { upper } else { p.end };
         // spec: S-0109 claim 8 (a reversed pass ends at k ≤ 0; quirks.anim_reverse_raw_loop_end off:
         // k < 0)
         let low = if q.anim_reverse_raw_loop_end {
@@ -568,7 +571,7 @@ impl Player {
         // reversed, at k ≥ λₑ − a, claim 10)
         let ends = self.k >= limit
             || (p.reverse && low)
-            || (p.shadow && !p.reverse && self.k >= p.loop_end - a);
+            || (p.shadow && !p.reverse && self.k >= upper);
         if !ends {
             return;
         }
@@ -592,14 +595,14 @@ impl Player {
             Remaining::Endless => Remaining::Endless,
         };
         self.k = if !p.reverse {
-            // spec: S-0109 claim 6, F3 (k′ = λₛ − a)
-            p.loop_start - p.start
+            // spec: S-0109 claim 6, F3 (k′ = λₛ − a); S-0205 claim 1 (wraps)
+            p.loop_start.wrapping_sub(p.start)
         } else if q.anim_reverse_raw_loop_end {
             // spec: S-0109 claim 8, F3 (reversed: k′ = λₑ)
             p.loop_end
         } else {
-            // spec: S-0109 Edge cases (quirks.anim_reverse_raw_loop_end off: λₑ − a − 1)
-            p.loop_end - p.start - 1
+            // spec: S-0109 Edge cases (quirks.anim_reverse_raw_loop_end off: λₑ − a − 1); S-0205 claim 1 (wraps)
+            p.loop_end.wrapping_sub(p.start).wrapping_sub(1)
         };
         let (d1, d2) = p.random_loop_delay;
         if (d1, d2) != (0, 0) {
@@ -652,11 +655,11 @@ fn initial_stage(p: &Playback, q: &AnimQuirks) -> (i32, i32) {
         // spec: S-0109 claim 1, F3 (k₀ = 0, σ = +1)
         (0, 1)
     } else if q.anim_reverse_raw_loop_end {
-        // spec: S-0109 claim 8, F3 (k₀ = λₑ − 1, σ = −1)
-        (p.loop_end - 1, -1)
+        // spec: S-0109 claim 8, F3 (k₀ = λₑ − 1, σ = −1); S-0205 claim 1 (wraps)
+        (p.loop_end.wrapping_sub(1), -1)
     } else {
-        // spec: S-0109 Edge cases (quirks.anim_reverse_raw_loop_end off: λₑ − a − 1)
-        (p.loop_end - p.start - 1, -1)
+        // spec: S-0109 Edge cases (quirks.anim_reverse_raw_loop_end off: λₑ − a − 1); S-0205 claim 1 (wraps)
+        (p.loop_end.wrapping_sub(p.start).wrapping_sub(1), -1)
     }
 }
 
