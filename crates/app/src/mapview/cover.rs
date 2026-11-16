@@ -462,7 +462,7 @@ mod tests {
                 let fresh = alpha_of(&now, &to, &s, &q);
                 let moved = alpha_moved(kept, from.origin, &kept_covers, &now, &to, &s, &q);
                 assert!(moved == fresh, "a move by {d:?}");
-                checked += usize::from(fresh.iter().any(|&v| v == 0) && fresh.contains(&127));
+                checked += usize::from(fresh.contains(&0) && fresh.contains(&127));
             }
         }
         assert!(checked > 20, "{checked} moves show both cover and light");
