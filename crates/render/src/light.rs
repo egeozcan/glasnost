@@ -721,6 +721,29 @@ pub fn full_recompute_with_terms(
     }
     let raw_tint = raw.map(saturate);
     let normalised = normalise(raw_tint, q);
+    let (unscaled_ground, scaled_ground, scaled_raised) =
+        full_levels(&normalised, ambient, sum, terms, height_level);
+    CellLight {
+        unscaled_ground,
+        scaled_ground,
+        scaled_raised,
+        raw_tint,
+        normalised,
+        table: choose_tile_table(&normalised, detail),
+        source_sum: saturate(sum),
+    }
+}
+
+/// A full recompute's unscaled ground, scaled ground and scaled raised
+/// levels from the normalised tint, the ambient (hundredths), the source
+/// sum *S*, the terms and the height level (S-0104 Formulas, "Cell light").
+fn full_levels(
+    normalised: &Normalised,
+    ambient: i32,
+    sum: i64,
+    terms: HeightTerms,
+    height_level: i32,
+) -> (i32, i32, i32) {
     let (ground, raised) = unscaled_levels(ambient, sum, terms, height_level);
     let k = normalised.k;
     // spec: S-0104 Formulas, "Cell light" (scaled ground = min(2000, max(0, ⌊min(ground, 2000)·K / 65536⌋)))
@@ -730,17 +753,45 @@ pub fn full_recompute_with_terms(
     } else {
         clamp_level(ground.min(i64::from(LEVEL_MAX)) * k / ONE_16_16)
     };
-    CellLight {
+    (
         // spec: S-0104 Formulas, "Cell light" (unscaled ground = min(2000, max(0, ground)))
-        unscaled_ground: clamp_level(ground),
+        clamp_level(ground),
         scaled_ground,
         // spec: S-0104 Formulas, "Cell light" (scaled raised = min(2000, max(0, ⌊raised·K / 65536⌋)), no clamp before scaling)
-        scaled_raised: clamp_level(raised * k / ONE_16_16),
-        raw_tint,
-        normalised,
-        table: choose_tile_table(&normalised, detail),
-        source_sum: saturate(sum),
+        clamp_level(raised * k / ONE_16_16),
+    )
+}
+
+/// The cell light a full recompute ([`full_recompute_with_terms`]) gives
+/// at ambient `ambient` (hundredths), terms `terms` and height level
+/// `height_level`, for a cell whose last full recompute was `previous` and
+/// whose light sources, map tint, detail level and quirks are unchanged
+/// since: the stored source sum, raw tint, normalised tint and table are
+/// those a recompute would find again, so only the levels are evaluated.
+/// `None` when the stored sum was saturated, so that the sum a recompute
+/// takes is not known (design: render (#132)).
+pub fn full_relevel(
+    previous: &CellLight,
+    ambient: i32,
+    terms: HeightTerms,
+    height_level: i32,
+) -> Option<CellLight> {
+    if previous.source_sum == i32::MAX || previous.source_sum == i32::MIN {
+        return None;
     }
+    let (unscaled_ground, scaled_ground, scaled_raised) = full_levels(
+        &previous.normalised,
+        ambient,
+        i64::from(previous.source_sum),
+        terms,
+        height_level,
+    );
+    Some(CellLight {
+        unscaled_ground,
+        scaled_ground,
+        scaled_raised,
+        ..*previous
+    })
 }
 
 /// Incremental update of a cell (S-0104 claim 9, Formulas "Incremental
@@ -1768,6 +1819,57 @@ mod tests {
         assert_eq!(
             incremental_update(&full, 240, HeightTerms::uniform(0, 0), 0, &off),
             again
+        );
+    }
+
+    /// design: render (#132): the levels of a full recompute evaluated again from the stored
+    /// source sum equal a full recompute at the new ambient and terms, near-black and clamped
+    /// cells included; a saturated sum gives none
+    /// spec: S-0104 claims 8, 9 and 11, Formulas "Cell light"
+    #[test]
+    fn full_relevel_is_a_full_recompute() {
+        // Invented light values.
+        let lights = [LightSource {
+            x: 128,
+            y: 128,
+            radius: 1024,
+            intensity: 700,
+            tint: [300, -100, 900],
+            required_detail: DetailLevel::Low,
+        }];
+        for tint in [[80; 3], [0; 3], [150, 20, 90]] {
+            for (cell, z) in [((0, 0), 0), ((2, 1), 3), ((9, 9), 1)] {
+                let at = |a: i32, level: i32, ground: i32| {
+                    let terms = HeightTerms::uniform(level, ground);
+                    full_recompute_with_terms(
+                        a,
+                        terms,
+                        tint,
+                        cell,
+                        z,
+                        &lights,
+                        DetailLevel::High,
+                        &Q,
+                    )
+                };
+                let before = at(100, 10, 50);
+                for (a, level, ground) in [(250, 10, 50), (0, 40, 0), (160, -20, 300)] {
+                    let terms = HeightTerms::uniform(level, ground);
+                    assert_eq!(
+                        full_relevel(&before, a, terms, z),
+                        Some(at(a, level, ground)),
+                        "{tint:?} {cell:?} {a} {level} {ground}"
+                    );
+                }
+            }
+        }
+        let saturated = CellLight {
+            source_sum: i32::MAX,
+            ..full_recompute(100, 0, 0, [80; 3], (0, 0), 0, &[], DetailLevel::High, &Q)
+        };
+        assert_eq!(
+            full_relevel(&saturated, 90, HeightTerms::uniform(0, 0), 0),
+            None
         );
     }
 

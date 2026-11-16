@@ -1181,11 +1181,60 @@ struct Lights {
 
 impl Lights {
     fn get(&self, c: CellXY) -> Option<&light::CellLight> {
+        self.index(c).and_then(|i| self.cells[i].as_ref())
+    }
+
+    /// Cell `c`'s place in [`Lights::cells`], `None` outside.
+    fn index(&self, c: CellXY) -> Option<usize> {
         if c.x < 0 || c.y < 0 || c.x >= self.side || c.y >= self.side {
             return None;
         }
-        self.cells[(c.y * self.side + c.x) as usize].as_ref()
+        Some((c.y * self.side + c.x) as usize)
     }
+}
+
+/// What the cells were last lit with: the ambient (hundredths), the chosen
+/// set's level factor, ground bias and tint, the detail level and every
+/// light source (design: render (#132)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct LitWith {
+    ambient: i32,
+    level: i32,
+    ground: i32,
+    tint: [i32; 3],
+    detail: DetailLevel,
+    sources: Vec<LightSource>,
+}
+
+/// The light sources of `a` and `b` that the other does not hold, each as
+/// often as it is missing there (design: render (#132)).
+fn changed_sources(a: &[LightSource], b: &[LightSource]) -> Vec<LightSource> {
+    let mut rest: Vec<Option<LightSource>> = b.iter().copied().map(Some).collect();
+    let mut changed = Vec::new();
+    for s in a {
+        match rest.iter_mut().find(|r| r.as_ref() == Some(s)) {
+            Some(r) => *r = None,
+            None => changed.push(*s),
+        }
+    }
+    changed.extend(rest.into_iter().flatten());
+    changed
+}
+
+/// The square of cells, (lowest x, lowest y, highest x, highest y), that
+/// holds every cell whose centre light source `s` reaches (S-0104 claim 11:
+/// the centre within the radius), `None` for a source that reaches none.
+/// A cell more is taken on each side (design: render (#132)).
+fn reach_square(s: &LightSource) -> Option<(i64, i64, i64, i64)> {
+    // spec: S-0104 claim 11 (radius 0 reaches no cell)
+    if s.radius <= 0 {
+        return None;
+    }
+    let r = i64::from(s.radius);
+    // spec: S-0104 Formulas, "Cell light" (cell centre = cell coordinate × 256 + 128)
+    let lo = |p: i32| (i64::from(p) - r - 128).div_euclid(256) - 1;
+    let hi = |p: i32| (i64::from(p) + r - 128).div_euclid(256) + 1;
+    Some((lo(s.x), lo(s.y), hi(s.x), hi(s.y)))
 }
 
 /// What a house-coloured drawing's 53-shade table is built from: its
@@ -1404,6 +1453,9 @@ pub struct Painter {
     /// The radiation fields' light sources the cells were last lit with
     /// (S-0525 claim 13), after the building lights.
     field_sources: Vec<LightSource>,
+    /// What [`Painter::lights`] was last computed with, for a relight that
+    /// recomputes only what changed (design: render (#132)).
+    lit_with: Option<LitWith>,
     /// The cell-pass items of terrain tiles (diamonds and extra images)
     /// with their cells, for a relight.
     tile_items: Vec<(usize, CellXY)>,
@@ -6718,6 +6770,7 @@ impl Painter {
             oversized: BTreeSet::new(),
             sources: Vec::new(),
             field_sources: Vec::new(),
+            lit_with: None,
             tile_items: Vec::new(),
             protected_cells: BTreeMap::new(),
             pieces: Default::default(),
@@ -6814,6 +6867,107 @@ impl Painter {
             ));
         }
         self.lights = Lights { side, cells };
+        self.lit_with = Some(LitWith {
+            ambient,
+            level: set.level,
+            ground: set.ground,
+            tint: set.tint,
+            detail,
+            sources,
+        });
+    }
+
+    /// Lights the cells as [`Painter::compute_lights`] does, recomputing
+    /// only what changed since the last time (design: render (#132)): a
+    /// cell that a light source added, removed or changed may reach is
+    /// recomputed in full; with the sources unchanged there, a new ambient,
+    /// level factor or ground bias is applied to the stored source sum
+    /// ([`light::full_relevel`]); a new tint, detail level or map size
+    /// recomputes every cell. Every cell so ends as a full recompute leaves
+    /// it. Returns the cells whose light changed (by place in
+    /// [`Painter::lights`]), `None` when every cell was recomputed.
+    fn update_lights(
+        &mut self,
+        map: &Map,
+        rules: Option<&SimRules>,
+        ambient: i32,
+        set: LightingSet,
+        detail: DetailLevel,
+    ) -> Option<Vec<bool>> {
+        let side = i32::from(map.cells.footprint().coordinate_side());
+        let sources: Vec<LightSource> = self
+            .sources
+            .iter()
+            .chain(&self.field_sources)
+            .copied()
+            .collect();
+        let Some(last) = self
+            .lit_with
+            .as_ref()
+            .filter(|l| l.tint == set.tint && l.detail == detail && self.lights.side == side)
+        else {
+            self.compute_lights(map, rules, ambient, set, detail);
+            return None;
+        };
+        let relevel =
+            last.ambient != ambient || last.level != set.level || last.ground != set.ground;
+        let n = (side * side) as usize;
+        let mut reached = vec![false; n];
+        for s in changed_sources(&last.sources, &sources) {
+            let Some((x0, y0, x1, y1)) = reach_square(&s) else {
+                continue;
+            };
+            let clip = |v: i64| v.clamp(0, i64::from(side) - 1) as i32;
+            if x1 < 0 || y1 < 0 || x0 >= i64::from(side) || y0 >= i64::from(side) {
+                continue;
+            }
+            for y in clip(y0)..=clip(y1) {
+                for x in clip(x0)..=clip(x1) {
+                    reached[(y * side + x) as usize] = true;
+                }
+            }
+        }
+        let q = light_quirks(rules);
+        let terms = light::HeightTerms::uniform(set.level, set.ground);
+        let mut changed = vec![false; n];
+        for (c, cell) in map.cells.iter() {
+            let i = (c.y * side + c.x) as usize;
+            let old = self.lights.cells[i];
+            let full = || {
+                light::full_recompute(
+                    ambient,
+                    set.level,
+                    set.ground,
+                    set.tint,
+                    (c.x, c.y),
+                    i32::from(cell.level),
+                    &sources,
+                    detail,
+                    &q,
+                )
+            };
+            let new = match old {
+                Some(_) if !reached[i] && !relevel => continue,
+                Some(l) if !reached[i] => {
+                    light::full_relevel(&l, ambient, terms, i32::from(cell.level))
+                        .unwrap_or_else(full)
+                }
+                _ => full(),
+            };
+            if old != Some(new) {
+                self.lights.cells[i] = Some(new);
+                changed[i] = true;
+            }
+        }
+        self.lit_with = Some(LitWith {
+            ambient,
+            level: set.level,
+            ground: set.ground,
+            tint: set.tint,
+            detail,
+            sources,
+        });
+        Some(changed)
     }
 
     /// The shade row of tile table `table` at brightness `b`, adding the
@@ -6964,8 +7118,10 @@ impl Painter {
     /// `items` shaded again. Objects pick the new cell light up when they
     /// are next drawn.
     ///
-    /// Our presentation: a full recompute of every cell with the chosen
-    /// set's terms and its tint as the map tint, which stands in for claim
+    /// Our presentation: every cell ends as a full recompute with the chosen
+    /// set's terms and its tint as the map tint leaves it, though only the
+    /// cells and tiles a change reaches are worked on again
+    /// ([`Painter::update_lights`], design: render (#132)); it stands in for claim
     /// 5's retint of the tile shade tables and claim 9's incremental update
     /// (the house-colour tables take the effect tint by
     /// [`Painter::set_effect_tint`], and the drawings kept from frame to
@@ -6990,7 +7146,8 @@ impl Painter {
         ambient: i32,
         set: LightingSet,
     ) {
-        self.compute_lights(
+        // design: render (#132): only what the change reaches is recomputed, to the same light
+        let changed = self.update_lights(
             inputs.map,
             inputs.rules,
             ambient,
@@ -7001,6 +7158,13 @@ impl Painter {
         self.relights += 1;
         let tiles = std::mem::take(&mut self.tile_items);
         for &(i, c) in &tiles {
+            // design: render (#132): a tile whose cell kept its light keeps the row it has, the
+            // row its table and brightness give (a table a cell chooses keeps its rows)
+            if let Some(changed) = &changed
+                && !self.lights.index(c).is_some_and(|k| changed[k])
+            {
+                continue;
+            }
             let Some(item) = items.get_mut(i) else {
                 continue;
             };
