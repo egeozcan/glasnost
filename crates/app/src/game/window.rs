@@ -301,7 +301,25 @@ impl GameApp {
     /// place mouse and touch positions are converted
     /// (`super::display::Display::point`).
     fn view_point(&self, p: winit::dpi::PhysicalPosition<f64>) -> Point {
-        let (x, y) = match (&self.gfx, &self.window) {
+        let (x, y) = self.surface_position(p);
+        self.client.display().point(x, y)
+    }
+
+    /// The view pixel of the mouse pointer at a host position in physical
+    /// pixels, outside the view when the position is outside the window
+    /// (`super::display::Display::pointer`). Every host here keeps
+    /// reporting the pointer and the release while a button is held and
+    /// the pointer is outside the window (pointer capture in the browser,
+    /// the window system's grab on the desktop), as S-0214 claim 34 (f)
+    /// asks of a host that applies claim 34 (a) to (e).
+    fn pointer_point(&self, p: winit::dpi::PhysicalPosition<f64>) -> Point {
+        let (x, y) = self.surface_position(p);
+        self.client.display().pointer(x, y)
+    }
+
+    /// A host position in physical window pixels, in surface pixels.
+    fn surface_position(&self, p: winit::dpi::PhysicalPosition<f64>) -> (f64, f64) {
+        match (&self.gfx, &self.window) {
             (Some(g), Some(w)) => {
                 let inner = w.inner_size();
                 surface_point(
@@ -311,8 +329,7 @@ impl GameApp {
                 )
             }
             _ => (p.x, p.y),
-        };
-        self.client.display().point(x, y)
+        }
     }
 
     /// Gives the client the surface's new size after the surface was
@@ -487,7 +504,8 @@ impl ApplicationHandler<GameEvent> for GameApp {
             WindowEvent::CursorMoved { .. } | WindowEvent::MouseInput { .. }
                 if self.client.mouse_quiet(now_ms()) => {}
             WindowEvent::CursorMoved { position, .. } => {
-                self.pointer = self.view_point(position);
+                // spec: S-0214 claim 34 (a) and (c) (a pointer outside the window reaches the game as it is, for the release click's pixel)
+                self.pointer = self.pointer_point(position);
                 self.client.pointer_moved(self.pointer);
             }
             WindowEvent::CursorLeft { .. } => self.client.pointer_left(),

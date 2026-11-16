@@ -796,9 +796,12 @@ impl Client {
         self.shell.screen == Screen::Game && self.session.as_ref().is_some_and(|s| s.draws_cursor())
     }
 
-    /// The pointer moved.
+    /// The pointer moved to screen pixel `p`, which lies outside the window
+    /// when the host reports the pointer there while a button is held
+    /// (S-0214 claim 34): the game reads it as it is, and the screens
+    /// outside the game read it limited to the window.
     pub fn pointer_moved(&mut self, p: Point) {
-        self.pointer = Some(p);
+        self.pointer = Some(super::band::limited(p, self.size));
         if let Some(s) = self.session.as_mut() {
             s.pointer_moved(p);
         }
@@ -815,6 +818,7 @@ impl Client {
     /// The middle button went down or up (S-0111 claim 20: it only hides
     /// the name tip).
     pub fn middle_button(&mut self, p: Point) {
+        let p = super::band::limited(p, self.size);
         self.pointer = Some(p);
         if self.shell.screen == Screen::Game
             && let Some(s) = self.session.as_mut()
@@ -956,9 +960,12 @@ impl Client {
         Some((s.centre(), s.play.selection.len()))
     }
 
-    /// A button went down.
+    /// A button went down at screen pixel `p`, limited to the window (a
+    /// press of another button while one is held may come with the pointer
+    /// outside it).
     pub fn pointer_down(&mut self, b: Button, p: Point) {
         self.gesture();
+        let p = super::band::limited(p, self.size);
         self.pointer = Some(p);
         self.press = Some(p);
         // The pointer takes over from the keyboard: the focus marks go.
@@ -974,13 +981,15 @@ impl Client {
         }
     }
 
-    /// A button went up.
+    /// A button went up at screen pixel `p`, which may lie outside the
+    /// window as in [`Client::pointer_moved`].
     pub fn pointer_up(&mut self, b: Button, p: Point, mods: Modifiers) {
-        self.pointer = Some(p);
+        let at = super::band::limited(p, self.size);
+        self.pointer = Some(at);
         let pressed = self.press.take();
         // The screens outside the game are laid out in the interface's
         // logical pixels.
-        let q = self.ui_scale().to_ui(p);
+        let q = self.ui_scale().to_ui(at);
         match &self.shell.screen {
             Screen::Game => {
                 let Some(s) = self.session.as_mut() else {
@@ -1371,6 +1380,7 @@ impl Client {
             if let Some(s) = self.session.as_mut() {
                 s.type_select_cancel();
                 s.route_key(false);
+                s.abandon_press();
             }
         }
     }
