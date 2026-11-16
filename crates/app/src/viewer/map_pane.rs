@@ -1582,4 +1582,303 @@ mod tests {
         assert!(delay(&mut pane, 520.0).is_zero(), "a new size");
         settle(&mut pane, 520.0);
     }
+
+    /// A shroud sprite whose piece 15 is black (index 0) and every other
+    /// piece transparent (index 254) over the whole canvas, so the covers
+    /// darken the cells not explored (S-0110 claims 1 to 3).
+    fn cover_sprites() -> cover::CoverSprites {
+        use glasnost_fmt::image::IndexedImage;
+        use glasnost_render::shroud::{CoverFrame, CoverSprite, FULL_COVER, PIECES};
+        let frames = (0..PIECES)
+            .map(|i| {
+                let v = if i == usize::from(FULL_COVER) { 0 } else { 254 };
+                Some(CoverFrame {
+                    image: IndexedImage::new(60, 30, vec![v; 60 * 30]).unwrap(),
+                    x: 0,
+                    y: 0,
+                })
+            })
+            .collect();
+        cover::CoverSprites {
+            shroud: Some(CoverSprite { frames }),
+            fog: None,
+        }
+    }
+
+    /// A synthetic skirmish (no game data), loaded and paused, its shroud
+    /// drawn with [`cover_sprites`].
+    fn skirmish_loaded() -> Loaded {
+        use glasnost_ai::fixture;
+        let mut loaded = Loaded::bare(
+            fixture::map(),
+            fixture::rules(),
+            fixture::catalogue(),
+            &fixture::setup(7),
+        )
+        .expect("the synthetic skirmish loads");
+        loaded.covers = cover_sprites();
+        loaded
+    }
+
+    /// A pane showing [`skirmish_loaded`], paused.
+    fn skirmish() -> MapPane {
+        let mut pane = MapPane::default();
+        pane.set_loaded(skirmish_loaded());
+        pane.shown.as_mut().unwrap().paused = true;
+        pane
+    }
+
+    /// One frame of the pane's view on a screen `width` × 400 points.
+    fn frame(ctx: &egui::Context, pane: &mut MapPane, width: f32) {
+        frame_at(ctx, pane, egui::vec2(width, 400.0));
+    }
+
+    /// One frame of the pane's view on a screen of `size` points.
+    fn frame_at(ctx: &egui::Context, pane: &mut MapPane, size: egui::Vec2) {
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)),
+            ..Default::default()
+        };
+        ctx.run_ui(raw, |ui| pane.view_ui(ui))
+            .drop_without_applying_deltas();
+    }
+
+    /// Timing probe (design: render (#129); ignored, run by hand in
+    /// release): frames with nothing new of a paused synthetic skirmish
+    /// with a view of 1920 × 1080: the CPU view's frame, the GPU
+    /// request, and the covers of the view alone. Synthetic sprites, so the
+    /// figures only compare the code before and after.
+    #[test]
+    #[ignore = "timing probe: run by hand with --release --ignored --nocapture"]
+    fn idle_frame_probe() {
+        use std::time::Instant;
+        let ctx = egui::Context::default();
+        let mut pane = skirmish();
+        let screen = egui::vec2(1920.0, 1080.0);
+        pane.set_use_gpu(false);
+        for _ in 0..3 {
+            frame_at(&ctx, &mut pane, screen);
+        }
+        let composed = pane.cpu_composes;
+        let n = 100;
+        let t = Instant::now();
+        for _ in 0..n {
+            frame_at(&ctx, &mut pane, screen);
+        }
+        let cpu = t.elapsed() / n;
+        let recomposed = pane.cpu_composes - composed;
+        pane.set_use_gpu(true);
+        let n = 400;
+        let t = Instant::now();
+        for _ in 0..n {
+            std::hint::black_box(pane.gpu_request());
+        }
+        let gpu = t.elapsed() / n;
+        let view = pane.view();
+        let s = pane.shown.as_ref().unwrap();
+        let world = &s.loaded.live.as_ref().unwrap().world;
+        let q = ShroudQuirks::default();
+        let t = Instant::now();
+        for _ in 0..n {
+            std::hint::black_box(cover::covers(world, s.house, &view, &q));
+        }
+        let covers = t.elapsed() / n;
+        println!(
+            "view {:?}: CPU frame {cpu:?} ({recomposed} of 100 composed), GPU request {gpu:?}, covers {covers:?}",
+            view.size
+        );
+    }
+
+    /// The light-alpha values of the pane's view made afresh, as the pane
+    /// made them before it kept them.
+    fn fresh_alpha(pane: &MapPane) -> Vec<u8> {
+        let s = pane.shown.as_ref().unwrap();
+        cover::light_alpha(
+            &s.loaded.live.as_ref().unwrap().world,
+            s.house,
+            &pane.view(),
+            &s.loaded.covers,
+            &ShroudQuirks::default(),
+        )
+    }
+
+    /// The GPU request of the frame, its light alpha made afresh beside it.
+    fn request(pane: &mut MapPane) -> (MapKey, Option<Vec<u8>>, Vec<u8>) {
+        let r = pane.gpu_request().expect("a map is shown");
+        let fresh = fresh_alpha(pane);
+        (r.key, r.alpha.map(|(a, _)| a.to_vec()), fresh)
+    }
+
+    /// Equivalence test (design: render (#129); fails before the change:
+    /// every frame drew the picture again): a frame with nothing new asks
+    /// for the picture drawn last, with the light alpha of the frame before
+    /// and its tag, and the CPU view does not compose it again.
+    /// spec: S-0110 claims 1 to 10 (the light alpha after the covers)
+    #[test]
+    fn a_frame_with_nothing_new_keeps_the_picture() {
+        let mut pane = skirmish();
+        let (a, alpha_a, fresh) = request(&mut pane);
+        assert!(a.light.is_some(), "the skirmish draws its shroud");
+        assert_eq!(alpha_a.as_deref(), Some(&fresh[..]));
+        // The sprite gives covered and open pixels in the view, so the
+        // values compared below are not all one.
+        assert!(fresh.contains(&0) && fresh.contains(&127));
+        let (b, alpha_b, _) = request(&mut pane);
+        assert_eq!(a, b, "the same picture");
+        assert_eq!(alpha_a, alpha_b);
+        let ctx = egui::Context::default();
+        pane.set_use_gpu(false);
+        for _ in 0..3 {
+            frame(&ctx, &mut pane, 640.0);
+        }
+        let composed = pane.cpu_composes;
+        for _ in 0..3 {
+            frame(&ctx, &mut pane, 640.0);
+        }
+        assert_eq!(pane.cpu_composes, composed, "nothing composed again");
+    }
+
+    /// Invalidation test (design: render (#129)): each input of the
+    /// battlefield picture moves the frame's key, and the CPU view composes
+    /// the picture again: a tick (advance and the pacer's step), new health
+    /// bars (the selection), a scroll, a new size, the filter, the shroud
+    /// turned off and on, another house, cells explored inside the view, a
+    /// new load and a new egui context. The light alpha is the one made
+    /// afresh after each.
+    /// spec: S-0110 claims 1 to 10 (the light alpha after the covers); S-0111 claim 3 (the
+    /// selected objects show their health bars)
+    #[test]
+    fn each_input_of_the_picture_draws_it_again() {
+        let ctx = egui::Context::default();
+        let mut pane = skirmish();
+        let checked = |pane: &mut MapPane, last: &mut MapKey, what: &str| {
+            let (key, alpha, fresh) = request(pane);
+            assert_ne!(&key, last, "{what}: the key moves");
+            if key.light.is_some() {
+                assert_eq!(
+                    alpha.as_deref(),
+                    Some(&fresh[..]),
+                    "{what}: the light alpha"
+                );
+            } else {
+                assert!(alpha.is_none(), "{what}: no light alpha");
+            }
+            *last = key;
+        };
+        // The CPU view composes once on the frame after `change`, then not
+        // again.
+        let composes = |pane: &mut MapPane, width: f32, what: &str| {
+            let before = pane.cpu_composes;
+            pane.set_use_gpu(false);
+            frame(&ctx, pane, width);
+            assert_eq!(pane.cpu_composes, before + 1, "{what}: composed again");
+            frame(&ctx, pane, width);
+            assert_eq!(pane.cpu_composes, before + 1, "{what}: then kept");
+            pane.set_use_gpu(true);
+        };
+        pane.set_use_gpu(false);
+        for _ in 0..3 {
+            frame(&ctx, &mut pane, 640.0);
+        }
+        pane.set_use_gpu(true);
+        let mut last = request(&mut pane).0;
+
+        pane.advance(1);
+        checked(&mut pane, &mut last, "advance");
+        composes(&mut pane, 640.0, "advance");
+
+        pane.shown.as_mut().unwrap().step_once = true;
+        composes(&mut pane, 640.0, "a step of the pacer");
+        checked(&mut pane, &mut last, "a step of the pacer");
+
+        let s = pane.shown.as_mut().unwrap();
+        let live = s.loaded.live.as_ref().unwrap();
+        let unit = live
+            .world
+            .objects
+            .values()
+            .find(|o| o.owner == Some(s.house) && o.kind.is_mobile() && o.on_map)
+            .map(|o| o.id)
+            .expect("the house has a unit");
+        s.selection.push(unit);
+        pane.set_use_gpu(false);
+        let before = pane.cpu_composes;
+        frame(&ctx, &mut pane, 640.0);
+        // The frame that changed the bars drew the picture before them.
+        assert_eq!(pane.cpu_composes, before, "the frame before the bars");
+        pane.set_use_gpu(true);
+        checked(&mut pane, &mut last, "the selection's bars");
+        composes(&mut pane, 640.0, "the selection's bars");
+
+        pane.pending_jump = Some((pane.centre.0 + 90, pane.centre.1 + 45));
+        composes(&mut pane, 640.0, "a scroll");
+        checked(&mut pane, &mut last, "a scroll");
+
+        composes(&mut pane, 700.0, "a new size");
+        checked(&mut pane, &mut last, "a new size");
+
+        pane.groups.pop();
+        checked(&mut pane, &mut last, "a group hidden");
+        composes(&mut pane, 700.0, "a group hidden");
+        pane.provisional = !pane.provisional;
+        checked(&mut pane, &mut last, "the provisional filter");
+        composes(&mut pane, 700.0, "the provisional filter");
+
+        pane.shown.as_mut().unwrap().shroud = false;
+        checked(&mut pane, &mut last, "the shroud off");
+        assert!(last.light.is_none());
+        composes(&mut pane, 700.0, "the shroud off");
+        pane.shown.as_mut().unwrap().shroud = true;
+        checked(&mut pane, &mut last, "the shroud on");
+        composes(&mut pane, 700.0, "the shroud on");
+
+        let s = pane.shown.as_mut().unwrap();
+        let world = &s.loaded.live.as_ref().unwrap().world;
+        s.house = (0..world.houses.len())
+            .map(|h| HouseId(h as _))
+            .find(|&h| h != s.house)
+            .expect("another house");
+        checked(&mut pane, &mut last, "another house");
+        composes(&mut pane, 700.0, "another house");
+
+        // A cell the view shows whole that the house has not explored.
+        let q = ShroudQuirks::default();
+        let view = pane.view();
+        let s = pane.shown.as_mut().unwrap();
+        let house = s.house;
+        let world = &mut s.loaded.live.as_mut().unwrap().world;
+        let (ox, oy) = view.origin;
+        let (w, h) = (view.size.0 as i32, view.size.1 as i32);
+        let dark = world
+            .cells
+            .grid
+            .iter()
+            .map(|(c, cell)| (c, i32::from(cell.level)))
+            .find(|&(c, level)| {
+                let (x, y) = glasnost_render::shroud::canvas_origin((c.x, c.y), level, &q);
+                !glasnost_sim::econ::shroud::explored(world, house, c)
+                    && x >= ox + 60
+                    && y >= oy + 30
+                    && x + 120 <= ox + w
+                    && y + 60 <= oy + h
+            })
+            .map(|(c, _)| c)
+            .expect("the view shows a cell not explored");
+        glasnost_sim::econ::shroud::area_reveal(
+            world,
+            house,
+            glasnost_sim::world::Pos::centre(dark, 0),
+            2,
+        );
+        checked(&mut pane, &mut last, "cells explored");
+        composes(&mut pane, 700.0, "cells explored");
+
+        pane.set_loaded(skirmish_loaded());
+        pane.shown.as_mut().unwrap().paused = true;
+        checked(&mut pane, &mut last, "a new load");
+        composes(&mut pane, 700.0, "a new load");
+
+        pane.forget_textures();
+        composes(&mut pane, 700.0, "a new egui context");
+    }
 }
