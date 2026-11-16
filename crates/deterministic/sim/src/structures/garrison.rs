@@ -142,9 +142,12 @@ pub fn civilian_building(w: &World, b: ObjectId) -> bool {
 }
 
 /// The civilian house: the first house, in house order, whose country
-/// belongs to the civilian side (S-0508 Terms, S-0414 claim 12).
+/// belongs to the civilian side (S-0508 Terms, S-0414 claim 12), among the
+/// houses the unused-house cleanup left (S-0009 claim 28).
 pub fn civilian_house(w: &World) -> Option<HouseId> {
     (0..w.houses.len())
+        // spec: S-0009 claim 28 (a removed house owns nothing from then on, so it is handed no building) and S-0414 Terms (a house removed by unused-house cleanup is no house of the game)
+        .filter(|&i| !w.houses[i].removed)
         .map(|i| HouseId(i as u8))
         .find(|&h| crate::econ::setup::civilian(w, h))
 }
