@@ -873,8 +873,7 @@ fn compose_by(
     // outside the image are never asked (render perf batch RP7, #137: an
     // index in place of a map lookup at every pixel; the same lists).
     let (iw, ih) = (img.width.max(0), img.height.max(0));
-    let mut at_pixel: Vec<Option<&Vec<(ObjectId, (i32, usize))>>> =
-        vec![None; (iw * ih) as usize];
+    let mut at_pixel = vec![None; (iw * ih) as usize];
     for (&(p, q), at) in &listed {
         if (0..iw).contains(&p) && (0..ih).contains(&q) {
             at_pixel[(q * iw + p) as usize] = Some(at);
