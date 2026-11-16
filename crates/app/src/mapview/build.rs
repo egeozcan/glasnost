@@ -2488,11 +2488,13 @@ impl<'a> Builder<'a> {
             let (shift, shadow_offset) = draw_shift(o, flags, deck, d);
             let (qx, qy) = cell_top(c.x, c.y);
             let p = (qx, qy + 15 - TERRAIN_LIFT * level + shift);
-            let name = self.import.outcome.registries[&k][idx].name.clone();
+            // design: render (#149) (the type's name read only for the object list of a whole build, never in play)
+            let import = self.import;
             let object = (!live).then(|| {
                 self.add_object(ObjectInfo {
                     kind: "overlay",
-                    type_name: String::from_utf8_lossy(&name).into_owned(),
+                    type_name: String::from_utf8_lossy(&import.outcome.registries[&k][idx].name)
+                        .into_owned(),
                     owner: String::new(),
                     cell: c,
                     entry: format!("type index {o}, data {d}"),

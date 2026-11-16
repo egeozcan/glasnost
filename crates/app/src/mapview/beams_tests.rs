@@ -687,6 +687,41 @@ fn wave_spots_match_the_box_scan() {
     }
 }
 
+/// Equivalence test (design: render (#141); passes before and after the
+/// change): the spots of bands long enough that the squared distance passes
+/// 2^14 (where the table root drops digits) and 2^24 (where the conversion
+/// to single precision may round), in both directions and steep, under both
+/// roundings, are exactly the whole-box scan's, in the same order.
+/// spec: S-0607 F5 (D = trunc(r(…)) with the table root, S-0204 F1)
+#[test]
+fn long_wave_spots_match_the_box_scan_in_both_roundings() {
+    let ends = [
+        // About 4 200 pixels across the screen, both ways.
+        (pos(30000, 30000, 0), pos(47920, 12080, 0)),
+        (pos(47920, 12080, 104), pos(30000, 30000, 0)),
+        // About 2 100 pixels, with a slant.
+        (pos(30000, 30000, 0), pos(39000, 20500, 300)),
+        // Steep on the screen: about 1 000 pixels down.
+        (pos(20000, 20000, 0), pos(28600, 28600, 0)),
+        // Short ones that cross 2^14 near their ends.
+        (pos(20000, 20000, 0), pos(21100, 18900, 0)),
+        (pos(20000, 20000, 52), pos(20400, 20900, 0)),
+    ];
+    for (n, (e1, e2)) in ends.into_iter().enumerate() {
+        for mode in [RZ, Rounding::Nearest] {
+            for (dir, c) in [((1, 0), 100), ((0, 1), 41)] {
+                let want = wave_spots_scanned(e1, e2, dir, c, mode);
+                assert!(!want.is_empty(), "case {n}: some spot");
+                assert_eq!(
+                    wave_spots(e1, e2, dir, c, mode),
+                    want,
+                    "case {n}: {e1:?} to {e2:?}, {mode:?}"
+                );
+            }
+        }
+    }
+}
+
 /// spec: S-0615 claims 15 and 16 (revision 4: arc beams D = 8 − k with S = 1, E = 0.5, the last drawn
 /// tick at 0.5 + 0.5/D, not 0.5; the final beam S = 1, E = 0, the last drawn tick at 1/D, no
 /// zero-intensity tick, no beam for D ≤ 0; ordinary drawing, fading on and blinking off, even with
@@ -886,4 +921,40 @@ fn a_wave_keeps_its_ends_when_its_target_leaves_play_before_it_ends() {
     lines.after_tick(&w, 2, 1);
     let after = lines.waves[&id];
     assert_eq!((after.e1, after.e2), (held.e1, held.e2));
+}
+
+/// The stepped root is the table root of S-0204 F1 for every `n` below 2²⁰,
+/// and on a stride across 2²⁴ up to 2²⁶, in both roundings of S-0205
+/// claim 4, from no guess and from the neighbour's root on either side
+/// (design: render (#141)).
+#[test]
+fn stepped_table_root_matches_root_floor() {
+    use glasnost_num::geom::root_floor;
+    for mode in [Rounding::TowardZero, Rounding::Nearest] {
+        let mut up = None;
+        for n in 0..1u64 << 20 {
+            let want = root_floor(n, true, mode);
+            assert_eq!(table_root_floor_near(n, None, mode), want, "n {n}");
+            let got = table_root_floor_near(n, up, mode);
+            assert_eq!(got, want, "n {n} from below");
+            up = Some(got);
+        }
+        let mut down = None;
+        for n in (0..1u64 << 20).rev() {
+            let got = table_root_floor_near(n, down, mode);
+            assert_eq!(got, root_floor(n, true, mode), "n {n} from above");
+            down = Some(got);
+        }
+        let mut near = None;
+        for n in ((1u64 << 20)..1 << 26).step_by(41) {
+            let got = table_root_floor_near(n, near, mode);
+            assert_eq!(got, root_floor(n, true, mode), "n {n} strided");
+            near = Some(got);
+        }
+        for n in (1u64 << 24) - 64..(1 << 24) + 64 {
+            let got = table_root_floor_near(n, near, mode);
+            assert_eq!(got, root_floor(n, true, mode), "n {n} at 2^24");
+            near = Some(got);
+        }
+    }
 }

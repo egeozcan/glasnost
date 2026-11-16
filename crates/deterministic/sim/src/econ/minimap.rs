@@ -614,17 +614,24 @@ pub fn shown_on(
     img: &Image,
     on_flat_grid: bool,
 ) -> bool {
-    let Some(o) = w.obj(id) else { return false };
     let shift = w.rules().quirks.radar_pixel_cell_shift;
-    // spec: S-0410 claim 7 (not owned by H: the cell shown at its pixel is not shrouded, claim 6's test with quirks.shroud_on_flat_grid's precedence)
-    if o.owner != Some(h)
-        && cell_shrouded_on(
+    shown_given(w, h, id, || {
+        cell_shrouded_on(
             w,
             h,
             cell_at_pixel(g, img, pixel.0, pixel.1, shift),
             on_flat_grid,
         )
-    {
+    })
+}
+
+/// [`shown_on`] with the shroud test of the cell shown at the pixel given
+/// by `shrouded`, asked only for an object H does not own (render perf
+/// batch RP9, #137: the composition asks it once per pixel).
+fn shown_given(w: &World, h: HouseId, id: ObjectId, mut shrouded: impl FnMut() -> bool) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0410 claim 7 (not owned by H: the cell shown at its pixel is not shrouded, claim 6's test with quirks.shroud_on_flat_grid's precedence)
+    if o.owner != Some(h) && shrouded() {
         return false;
     }
     // spec: S-0410 claim 7 (radar-invisible, unless H allies its owner, H's side)
@@ -764,6 +771,19 @@ fn winner_among_on(
     on_flat_grid: bool,
     at: impl Iterator<Item = (ObjectId, (i32, usize))>,
 ) -> Option<ObjectId> {
+    winner_by(w, h, at, |id| {
+        shown_on(w, h, id, pixel, g, img, on_flat_grid)
+    })
+}
+
+/// [`winner_among_on`] with the draw-time tests of claim 7 given by
+/// `shown`.
+fn winner_by(
+    w: &World,
+    h: HouseId,
+    at: impl Iterator<Item = (ObjectId, (i32, usize))>,
+    mut shown: impl FnMut(ObjectId) -> bool,
+) -> Option<ObjectId> {
     let mut own = Vec::new();
     let mut other = Vec::new();
     for (id, arr) in at {
@@ -779,7 +799,7 @@ fn winner_among_on(
     own.into_iter()
         .chain(other)
         .map(|(_, id)| id)
-        .find(|&id| shown_on(w, h, id, pixel, g, img, on_flat_grid))
+        .find(|&id| shown(id))
 }
 
 /// Inputs of the radar map that are not game state: house colours, the
@@ -814,7 +834,7 @@ pub fn compose(
     terrain: &[Rgb],
 ) -> Vec<RadarColour> {
     let shift = w.rules().quirks.radar_pixel_cell_shift;
-    compose_by(w, view, arrivals, g, img, terrain, |p, q, _| {
+    compose_by(w, view, arrivals, img, terrain, |p, q, _| {
         cell_at_pixel(g, img, p, q, shift)
     })
 }
@@ -851,7 +871,7 @@ pub fn compose_kept(
         return compose(w, view, arrivals, g, img, terrain);
     }
     // spec: S-0410 claim 6 (the same colours as compose: each pixel's cell is F3's, kept)
-    compose_by(w, view, arrivals, g, img, terrain, |_, _, i| cells[i])
+    compose_by(w, view, arrivals, img, terrain, |_, _, i| cells[i])
 }
 
 /// The pixels of [`compose`], the cell of pixel (*p*, *q*) at row-major
@@ -860,7 +880,6 @@ fn compose_by(
     w: &World,
     view: &View,
     arrivals: &Arrivals,
-    g: &Grid,
     img: &Image,
     terrain: &[Rgb],
     cell: impl Fn(i32, i32, usize) -> CellXY,
@@ -884,10 +903,19 @@ fn compose_by(
         for p in 0..img.width {
             let i = (q * img.width + p) as usize;
             let t = terrain.get(i).copied().unwrap_or([0, 0, 0]);
+            // spec: S-0410 claim 6 and F3 (the cell shown at the pixel: the one the draw-time test of
+            // claim 7 reads too, under the same quirks.radar_pixel_cell_shift)
+            let c = cell(p, q, i);
+            // The pixel's shroud test, made at most once for the draw-time
+            // tests and the pixel's own colour (render perf batch RP9, #137).
+            let mut known = None;
             // spec: S-0410 claim 6 (the colour of the first object shown at the pixel)
             if let Some(at) = at_pixel[i]
-                && let Some(id) =
-                    winner_among_on(w, h, (p, q), g, img, view.on_flat_grid, at.iter().copied())
+                && let Some(id) = winner_by(w, h, at.iter().copied(), |id| {
+                    shown_given(w, h, id, || {
+                        *known.get_or_insert_with(|| cell_shrouded_on(w, h, c, view.on_flat_grid))
+                    })
+                })
             {
                 let o = w.obj(id);
                 // spec: S-0410 claim 8 and S-0516 claim 38 (a disguised unit: its owner's colour when the owner allies H, otherwise its disguise house's, the neutral fallback when the disguise has no house)
@@ -905,11 +933,10 @@ fn compose_by(
                 out.push(rc);
                 continue;
             }
-            let c = cell(p, q, i);
             if in_friendly_gap(w, c, &gaps, view.on_flat_grid) {
                 // spec: S-0410 claim 6 (in a friendly gap field: the pixel's own terrain colour, halved)
                 out.push(halved(radar_colour(t, view.bits)));
-            } else if cell_shrouded_on(w, h, c, view.on_flat_grid) {
+            } else if known.unwrap_or_else(|| cell_shrouded_on(w, h, c, view.on_flat_grid)) {
                 // spec: S-0410 claim 6 (shrouded: black)
                 out.push([0, 0, 0]);
             } else {
@@ -1047,6 +1074,8 @@ mod tests {
     // The radar's faster forms give the plain forms' answers (S-0410 claims 6
     // and 8; M8 C4 part 4) on synthetic data: the synthetic ruleset with an
     // invented sight tower and gap generator.
+
+    use std::sync::Arc;
 
     use glasnost_rules::schema::Ruleset;
     use glasnost_rules::sim::BuildingType;
@@ -1278,6 +1307,87 @@ mod tests {
                     .count();
             }
         }
+        assert!(shown > 0, "some pixel shows an object or a gap field");
+    }
+
+    // spec: S-0410 claims 6, 7 and 8 (every pixel's colour from the composition equals the plain per-pixel tests' over varied heights and slopes, odd and negative levels and cells near the coordinate edges, with the arrivals observed before the terrain changed so that listed objects of the other house stand on shrouded and unshrouded pixels; under every setting of quirks.shroud_negative_odd_pair, quirks.shroud_point_cell_wrap, quirks.offmap_cells_shared, quirks.negative_level_floor_raised, quirks.radar_pixel_cell_shift and quirks.shroud_on_flat_grid; by compose and compose_kept)
+    #[test]
+    fn composition_matches_the_plain_tests_over_heights_and_switches() {
+        let mut base = world();
+        spawn(&mut base, Kind::Building, "GAP", 1, 2, 2);
+        spawn(&mut base, Kind::Vehicle, "CART", 1, -4, 3);
+        spawn(&mut base, Kind::Vehicle, "CART", 1, 5, -2);
+        testkit::run(&mut base, 3);
+        let g = grid(&base).expect("usable cells");
+        let img = image(&g);
+        let arrivals: Vec<Arrivals> = [HouseId(0), HouseId(1)]
+            .iter()
+            .map(|&h| {
+                let mut a = Arrivals::default();
+                a.observe(&base, h, &g, &img);
+                a
+            })
+            .collect();
+        // Levels from −3 to 9 (odd and negative among them) and every slope
+        // number, spread over the map so that the candidates of the point
+        // test reach beyond the coordinate edges.
+        let s = base.cells.footprint().coordinate_side() as i32;
+        for y in 0..s {
+            for x in 0..s {
+                if let Some(cell) = base.cells.grid.get_mut(CellXY::new(x, y)) {
+                    cell.level = ((x * 7 + y * 3) % 13 - 3) as i8;
+                    cell.slope = ((x * 5 + y) % 23) as u8;
+                }
+            }
+        }
+        let terrain: Vec<Rgb> = (0..img.width * img.height)
+            .map(|i| [(i % 251) as u8, (i % 113) as u8, (i % 37) as u8])
+            .collect();
+        let colour = |h: HouseId| [40 + 50 * h.0, 200, 10];
+        let flash = |id: ObjectId| (id.0 % 3) as i32;
+        let (mut black, mut shown) = (0, 0);
+        for bits in 0..32u32 {
+            let mut w = base.clone();
+            {
+                let r = Arc::make_mut(w.rules.as_mut().expect("rules"));
+                let q = &mut r.quirks;
+                q.shroud_negative_odd_pair = bits & 1 != 0;
+                q.shroud_point_cell_wrap = bits & 2 != 0;
+                q.offmap_cells_shared = bits & 4 != 0;
+                q.negative_level_floor_raised = bits & 8 != 0;
+                q.radar_pixel_cell_shift = bits & 16 != 0;
+            }
+            let shift = w.rules().quirks.radar_pixel_cell_shift;
+            let cells = pixel_cells(&g, &img, shift);
+            for (h, arr) in [HouseId(0), HouseId(1)].into_iter().zip(&arrivals) {
+                for flat in [true, false] {
+                    let view = View {
+                        house: h,
+                        house_colour: &colour,
+                        neutral: [7, 7, 7],
+                        flash: &flash,
+                        flash_frame_time: 1,
+                        bits: Bits([5, 6, 5]),
+                        on_flat_grid: flat,
+                    };
+                    let want = compose_by_lookup(&w, &view, arr, &g, &img, &terrain);
+                    let label = format!("switches {bits:05b}, house {}, flat {flat}", h.0);
+                    assert_eq!(compose(&w, &view, arr, &g, &img, &terrain), want, "{label}");
+                    assert_eq!(
+                        compose_kept(&w, &view, arr, &g, &img, &terrain, &cells),
+                        want,
+                        "{label}"
+                    );
+                    black += want.iter().filter(|c| **c == [0, 0, 0]).count();
+                    shown += want
+                        .iter()
+                        .zip(&terrain)
+                        .filter(|&(c, t)| *c != radar_colour(*t, view.bits) && *c != [0, 0, 0])
+                        .count();
+                }
+            }
+        }
+        assert!(black > 0, "some pixel is shrouded");
         assert!(shown > 0, "some pixel shows an object or a gap field");
     }
 

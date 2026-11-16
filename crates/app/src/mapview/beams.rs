@@ -1020,6 +1020,40 @@ fn ripple_of(d: i64, c: i32, mode: Rounding) -> (i32, u16) {
     (s, (110 + 8 * j) as u16)
 }
 
+/// *D* = ⌊r(`n`)⌋ of S-0204 F1, as `root_floor` with the table root gives
+/// it, found by stepping from `near`, the *D* of a nearby `n` (design:
+/// render (#141): a wave row's next pixel), with no 128-bit root.
+///
+/// Below 2²⁴ the conversion to single precision keeps `n` whatever the
+/// rounding, and ⌊R × 2^(z − 23)⌋ with R = ⌊√(m × 2^(46 − 2z))⌋, m the
+/// 14-digit truncation of `n`, is ⌊√m⌋ (⌊⌊√M⌋ / 2^k⌋ = ⌊√(M / 4^k)⌋). From
+/// 2²⁴ on, the general root.
+fn table_root_floor_near(n: u64, near: Option<u64>, mode: Rounding) -> u64 {
+    // spec: S-0205 claim 4 (single precision keeps 24 significant bits: below 2^24 every integer is exact)
+    if n >= 1 << 24 {
+        return glasnost_num::geom::root_floor(n, true, mode);
+    }
+    let len = 64 - n.leading_zeros();
+    // spec: S-0204 F1 (n / 4^z truncated toward zero to 14 significant binary digits)
+    let m = if len > 14 {
+        n & !((1u64 << (len - 14)) - 1)
+    } else {
+        n
+    };
+    // nocite: √(2^24) bounds the root here, and keeps the squares in range
+    let mut d = near.map_or_else(
+        || glasnost_num::geom::isqrt(u128::from(m)) as u64,
+        |d| d.min(1 << 12),
+    );
+    while d * d > m {
+        d -= 1;
+    }
+    while (d + 1) * (d + 1) <= m {
+        d += 1;
+    }
+    d
+}
+
 /// Whether the doubled point `p` lies inside or on the convex polygon `v`
 /// (doubled coordinates).
 fn inside(v: &[(i64, i64); 4], p: (i64, i64)) -> bool {
@@ -1105,6 +1139,8 @@ pub fn wave_spots(e1: Pos, e2: Pos, dir: (i8, i8), c: i32, mode: Rounding) -> Ve
             // Both lie within left..=right here.
             (a as i32, b as i32)
         };
+        // design: render (#141) (each pixel's D stepped from the row's previous one)
+        let mut near = None;
         for x in from..=to {
             // Our interim fill rule: the pixel's centre inside or on the band.
             if !inside(&doubled, (2 * i64::from(x) + 1, 2 * i64::from(y) + 1)) {
@@ -1112,7 +1148,8 @@ pub fn wave_spots(e1: Pos, e2: Pos, dir: (i8, i8), c: i32, mode: Rounding) -> Ve
             }
             let (dx, dy) = (i64::from(x - x0), i64::from(y - y0));
             // spec: S-0607 F5 (D = trunc(r(…)) with the table root)
-            let d = glasnost_num::geom::root_floor((dx * dx + dy * dy) as u64, true, mode);
+            let d = table_root_floor_near((dx * dx + dy * dy) as u64, near, mode);
+            near = Some(d);
             let (s, k) = match usize::try_from(d) {
                 Ok(i) if i < 1 << 16 => {
                     if by_d.len() <= i {
