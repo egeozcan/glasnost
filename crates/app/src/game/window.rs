@@ -1124,7 +1124,13 @@ impl GpuDraw {
             // design: render (#118) (no view-sized buffer, compare or upload for a view without covers, as in a watch game)
             m.light = None;
         } else if !kept {
-            let alpha = s.light_alpha_of(&covers);
+            // design: render (#118) (a view of the kept size moved: the kept values move with it and only the strips it uncovers are made)
+            let alpha = match m.light.take() {
+                Some(l) if l.size == v.size && l.origin != v.origin => {
+                    s.light_alpha_moved(l.alpha, l.origin, &l.covers, &covers)
+                }
+                _ => s.light_alpha_of(&covers),
+            };
             m.light_tags += 1;
             m.light = Some(LightKept {
                 covers,
