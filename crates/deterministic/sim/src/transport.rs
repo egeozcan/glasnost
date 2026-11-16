@@ -663,12 +663,17 @@ pub fn hand_down_target(w: &mut World, t: ObjectId) {
     }
 }
 
-/// Keeps a transport's passengers at its position (claim 15): whenever the
-/// transport moves to a new position, its passengers' positions become
-/// its position at once.
+/// Keeps an open-topped transport's passengers at its position (claim 15):
+/// whenever the transport moves to a new position, its passengers'
+/// positions become its position at once. Any other transport's
+/// passengers keep their positions (S-0312 claim 34 (b)).
 pub fn sync(w: &mut World, t: ObjectId) {
     let Some(o) = w.obj(t) else { return };
     if o.transport.passengers.is_empty() {
+        return;
+    }
+    // spec: S-0507 claim 15 and S-0312 claim 34 (b) (only an open-topped transport moves its passengers with itself)
+    if !open_topped(w, t) {
         return;
     }
     let pos = o.pos;
