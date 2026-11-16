@@ -430,6 +430,26 @@ mod tests {
         );
     }
 
+    /// spec: S-0101 F9 (m = trunc₀(rz(T(i) × μ)), the request m × direction; the formula covers
+    /// finite non-negative μ whose result fits 32 bits) — design: render (#153): an extreme
+    /// negative multiplier gives a request in the 32-bit range on every edge, never an overflow
+    #[test]
+    fn an_extreme_multiplier_requests_within_the_32_bit_range() {
+        let client = (800, 600);
+        let rz = Rounding::TowardZero;
+        for mu in [F64::from_i64(-(1 << 40), rz), F64::from_i64(1 << 40, rz)] {
+            for (p, axis) in [((0, 300), 0), ((799, 300), 0), ((400, 0), 1), ((400, 599), 1)] {
+                let mut e = EdgeScroll::default();
+                let d = e.cycle(Some(p), client, 3, mu, 0, |_| false);
+                let c = if axis == 0 { d.0 } else { d.1 };
+                // The far end of the range, signed by the edge's direction and μ.
+                assert_eq!(c.unsigned_abs(), i32::MAX as u32, "at {p:?}");
+            }
+        }
+        // An ordinary multiplier is unchanged.
+        assert_eq!(magnitude(0, one()), MAGNITUDE[8] as i32);
+    }
+
     /// spec: S-0101 claims 12 and 13, F9 (leaving the edge keeps the direction while momentum decays; a blocked one-pixel move gives no request or acceleration)
     #[test]
     fn claim_13_run_on_and_blocking() {
