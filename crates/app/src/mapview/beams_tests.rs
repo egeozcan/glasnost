@@ -922,3 +922,39 @@ fn a_wave_keeps_its_ends_when_its_target_leaves_play_before_it_ends() {
     let after = lines.waves[&id];
     assert_eq!((after.e1, after.e2), (held.e1, held.e2));
 }
+
+/// The stepped root is the table root of S-0204 F1 for every `n` below 2²⁰,
+/// and on a stride across 2²⁴ up to 2²⁶, in both roundings of S-0205
+/// claim 4, from no guess and from the neighbour's root on either side
+/// (design: render (#141)).
+#[test]
+fn stepped_table_root_matches_root_floor() {
+    use glasnost_num::geom::root_floor;
+    for mode in [Rounding::TowardZero, Rounding::Nearest] {
+        let mut up = None;
+        for n in 0..1u64 << 20 {
+            let want = root_floor(n, true, mode);
+            assert_eq!(table_root_floor_near(n, None, mode), want, "n {n}");
+            let got = table_root_floor_near(n, up, mode);
+            assert_eq!(got, want, "n {n} from below");
+            up = Some(got);
+        }
+        let mut down = None;
+        for n in (0..1u64 << 20).rev() {
+            let got = table_root_floor_near(n, down, mode);
+            assert_eq!(got, root_floor(n, true, mode), "n {n} from above");
+            down = Some(got);
+        }
+        let mut near = None;
+        for n in ((1u64 << 20)..1 << 26).step_by(41) {
+            let got = table_root_floor_near(n, near, mode);
+            assert_eq!(got, root_floor(n, true, mode), "n {n} strided");
+            near = Some(got);
+        }
+        for n in (1u64 << 24) - 64..(1 << 24) + 64 {
+            let got = table_root_floor_near(n, near, mode);
+            assert_eq!(got, root_floor(n, true, mode), "n {n} at 2^24");
+            near = Some(got);
+        }
+    }
+}
