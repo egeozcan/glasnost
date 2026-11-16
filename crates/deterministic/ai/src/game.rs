@@ -34,6 +34,11 @@ use crate::brain::Brain;
 // nocite: version number of our own save format
 pub const GAME_FORMAT_VERSION: u32 = 127;
 
+/// Bytes reserved beyond the world's save for the rest of a game save: a
+/// first guess at the brains and the replay, not a limit.
+// nocite: buffer size of our own save writer
+const SAVE_ROOM: usize = 64 * 1024;
+
 /// A running game.
 pub struct Game {
     /// The simulation state.
@@ -58,9 +63,21 @@ struct SavedGame {
 #[derive(Serialize)]
 struct SavedGameRef<'a> {
     version: u32,
-    world: Vec<u8>,
+    world: Bytes<'a>,
     brains: &'a [Brain],
     replay: &'a Replay,
+}
+
+/// A byte string written with the serializer's byte form. In postcard that
+/// is the length and the bytes, the same encoding as a sequence of `u8`, so
+/// [`SavedGame`] reads it back as its `Vec<u8>`; it is written in one copy
+/// instead of one call per byte (#131).
+struct Bytes<'a>(&'a [u8]);
+
+impl Serialize for Bytes<'_> {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_bytes(self.0)
+    }
 }
 
 /// The AI houses of a setup.
@@ -248,12 +265,19 @@ impl Game {
 
     /// Saves the game.
     pub fn save(&self) -> Vec<u8> {
-        postcard::to_allocvec(&SavedGameRef {
-            version: GAME_FORMAT_VERSION,
-            world: save::save(&self.world),
-            brains: &self.brains,
-            replay: &self.replay,
-        })
+        let world = save::save(&self.world);
+        // The world's bytes and room for the rest, so the output grows
+        // rarely (#131).
+        let room = world.len() + SAVE_ROOM;
+        postcard::to_extend(
+            &SavedGameRef {
+                version: GAME_FORMAT_VERSION,
+                world: Bytes(&world),
+                brains: &self.brains,
+                replay: &self.replay,
+            },
+            Vec::with_capacity(room),
+        )
         .expect("the game serializes")
     }
 
@@ -315,5 +339,47 @@ impl Game {
             }
             self.issue(*h, o.clone());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixture;
+
+    /// The save written before #131: the world's bytes as a `Vec<u8>`.
+    #[derive(Serialize)]
+    struct OldRef<'a> {
+        version: u32,
+        world: Vec<u8>,
+        brains: &'a [Brain],
+        replay: &'a Replay,
+    }
+
+    /// The cheaper save writes the same bytes as the old one, and they load.
+    #[test]
+    fn save_bytes_unchanged_by_the_byte_form() {
+        let mut g = Game::new(
+            fixture::rules(),
+            &fixture::map(),
+            "synthetic-skirmish",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the synthetic skirmish loads");
+        for _ in 0..200 {
+            g.step();
+        }
+        let old = postcard::to_allocvec(&OldRef {
+            version: GAME_FORMAT_VERSION,
+            world: save::save(&g.world),
+            brains: &g.brains,
+            replay: &g.replay,
+        })
+        .expect("the game serializes");
+        let new = g.save();
+        assert!(old == new, "the save's bytes changed");
+        let back = Game::load(&new, fixture::rules(), fixture::catalogue()).expect("it loads");
+        assert_eq!(back.state_hash(), g.state_hash());
     }
 }

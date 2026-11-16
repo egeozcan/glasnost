@@ -9130,7 +9130,7 @@
           "default": true
         },
         "crate_phantom_place": {
-          "description": "A selected crate cell whose overlay a terrain object prevents still occupies its crate place, with its lifetime draw, until expiry; off: the failed overlay placement takes no place or lifetime draw. Unreachable in our engine: no terrain object blocks an overlay on a cell the placement search accepted, so both settings act alike.",
+          "description": "A selected crate cell whose overlay S-0009 claim 12's slope condition (or a terrain object) refuses still occupies its crate place, with its lifetime draw, until expiry, and the placement makes no further attempt; off: the overlay's appearance is a placement test, so the attempt fails with no place or lifetime draw. The terrain-object case is unreachable in our engine: the placement search rejects a cell with a terrain object.",
           "type": "boolean",
           "default": true
         },
@@ -11316,6 +11316,11 @@
         },
         "warp_naval_road_cell": {
           "description": "A naval warp member landing on a road cell sinks; off: a road cell that is water is not counted.",
+          "type": "boolean",
+          "default": true
+        },
+        "warp_pending_infantry_landing": {
+          "description": "A teleporting infantry unit with warp-pending immobilization chooses and reserves a standing position it does not jump to, and the reservation lasts until its warp appearance; off: such a destination is treated as S-0207 claim 20 b treats one for other objects, with no choice, reservation or draw, an earlier landing point keeping its reservation.",
           "type": "boolean",
           "default": true
         },

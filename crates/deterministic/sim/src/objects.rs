@@ -673,6 +673,10 @@ fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
     let Some(o) = w.obj(id).map(Removed::of) else {
         return;
     };
+    if !o.on_map && o.kind == Kind::Infantry && crate::superweapons::warp::departed(w, id) {
+        // spec: S-0208 Open questions (a warp member of claim 19 removed before it appears: our engine releases the standing position it reserved while its warp was pending, a provisional rule) and claim 19 (Appearance of a teleporting infantry warp member: the entries it holds off the map are the ones its appearance would free, #363)
+        crate::teleport::warp_appear_free(w, id);
+    }
     // spec: S-0309 claim 27 and S-0501 claim 32 (every holder drops as its target an object that is removed, a crush included, at that moment); S-0415 r22 claim 13 (before the foundation cells are recalculated)
     crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::Removed);
     // spec: S-0306 claim 17 (a projectile whose target is removed from the map: the cell it stood in when not airborne, else nothing; a killed target was dealt with at the kill)

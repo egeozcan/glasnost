@@ -1187,9 +1187,9 @@ fn engineer_friendly(w: &World, actor: ObjectId, t: ObjectId) -> bool {
         .and_then(|h| w.houses.get(usize::from(h.0)))
         .and_then(|h| w.rules().countries.get(h.country as usize))
         .is_some_and(|c| c.passive);
-    // spec: S-0214 table I (repairable, not vehicle-like, allied; or of a passive neutral house and garrisonable)
+    // spec: S-0214 table I (repairable, not vehicle-like, allied; or of a passive neutral house, garrisonable and not being erased, #358). Which branch each condition reaches is Q-3164; the conditions stand as the sentence's nearest reading.
     (repairable && allied(w, actor, t))
-        || (passive_neutral && b.raw.can_be_occupied.unwrap_or(false))
+        || (passive_neutral && b.raw.can_be_occupied.unwrap_or(false) && !being_erased(w, t))
 }
 
 // ---------------------------------------------------------------------------
@@ -1679,11 +1679,12 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
     } else {
         k
     };
-    // spec: S-0214 table V value n (an accepting allied building: allied with the actor, docking answer accepts; for a repair depot S-0314 claim 16's permission, for a recycling building S-0603 claim 2's answer)
+    // spec: S-0214 table V value n (an accepting allied building: allied with the actor, not being erased, docking answer accepts; for a repair depot S-0314 claim 16's permission, for a recycling building S-0603 claim 2's answer, #358). Value b is select only for a target not being erased (row G10), so this condition already held; it is written out as the value's definition gives it.
     let recycler = crate::structures::grinder::is_recycler(w, t);
     let accepting = b == Action::Select
         && building(w, t).is_some()
         && ally
+        && !being_erased(w, t)
         && (crate::depot::accepts(w, t, actor, true)
             // spec: S-0606 claim 2 (a tank bunker's permission: row P10 accepts) and claim 20 (a type that is also a repair depot takes claim 2's rows)
             || crate::structures::bunker::permits(w, t, actor)
@@ -2270,8 +2271,9 @@ pub fn berserk_cursor_arrow(kind: Option<Kind>, berserk: bool, show_action: bool
 }
 
 /// Attack-move eligibility (S-0214 claim 5): the first slot, not the slot
-/// in use (Terms, *armed*: a rule that names the first slot means it).
-fn eligible(w: &World, id: ObjectId) -> bool {
+/// in use (Terms, *armed*: a rule that names the first slot means it). The
+/// input side and the order's application side both read it.
+pub(crate) fn eligible(w: &World, id: ObjectId) -> bool {
     // spec: S-0214 claim 5 (infantry or a vehicle with a weapon in its first slot and no prevent-attack-move flag, #357)
     matches!(kind(w, id), Some(Kind::Infantry | Kind::Vehicle))
         && first_weapon(w, id).is_some()

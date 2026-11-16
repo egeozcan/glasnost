@@ -361,8 +361,6 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY, fell_back: bool) {
     }
     // spec: S-0513 claim 51 (the launch ends a jumpjet's driving step and movement commitment too, #362)
     crate::jump::warp_join(w, id);
-    // spec: S-0513 claim 51 and S-0208 claim 19 (a teleporting infantry unit's landing point not jumped to releases its standing-position reservation, #363)
-    crate::teleport::warp_release(w, id);
     let landing = landing_in(w, o.kind, o.pos, to);
     if let Some(ob) = w.obj_mut(id) {
         ob.contact = None;
@@ -379,7 +377,10 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY, fell_back: bool) {
         if let Some(t) = ob.teleport.as_mut() {
             t.landing = None;
             t.for_dest = None;
-            t.mark = None;
+            if o.kind != Kind::Infantry {
+                t.mark = None;
+            }
+            // spec: S-0208 claim 19 (Appearance of a teleporting infantry warp member, r66, Q-3142: an infantry unit's landing point not jumped to keeps its standing-position reservation until the appearance frees it, #363)
         }
         // spec: S-0513 claim 34 and T2 (warp pending; landing point fixed)
         ob.sw.warp = Some(Member {
@@ -570,15 +571,16 @@ fn lift_off(w: &mut World, id: ObjectId) {
     }
     // spec: S-0502 claim 29 (going off the map for any reason ends the flying registration) and claims 4, 7, 13, 14 and 18 (a jumpjet leaving the map releases its marks, listing, landing reservation and hover slot); S-0513 claim 39 (the departure takes the member off the map, #360)
     crate::jump::leaving(w, id);
-    // spec: S-0208 claim 19 and S-0513 claims 39 and 51 (a landing point fixed while warp-pending is never jumped to: its reservation goes at departure; Q-3142 asks what the choice should be, #363)
-    crate::teleport::warp_release(w, id);
     let cell = o.pos.cell();
     w.cells.leave_both(cell, id);
     let q = crate::objects::occ_quirks(w);
     if let Some(wt) = o.walk.as_ref().and_then(|s| s.target) {
         w.cells.clear_infantry(wt.cell(), o.layer, id, q);
     }
-    w.cells.clear_infantry(cell, o.layer, id, q);
+    // spec: S-0208 claim 19 (Appearance of a teleporting infantry warp member, r66, Q-3142: a remembered landing point, jumped to or not, stays taken through the departure; a unit with no remembered landing point frees the entry at the place it left, #363)
+    if !crate::teleport::warp_keeps_entry(w, id) {
+        w.cells.clear_infantry(cell, o.layer, id, q);
+    }
     if let Some(ob) = w.obj_mut(id) {
         ob.on_map = false;
         if let Some(s) = ob.walk.as_mut() {
@@ -618,6 +620,8 @@ fn check_or_redirect(w: &mut World, id: ObjectId) {
         Check::Pass => {
             // spec: S-0513 claim 50 (a passed check is not a reservation; the entry test of the checked cell is remembered to detect a terrain or deck change before the placement)
             let entry_ok = enterable_now(w, id, m.landing.cell());
+            // spec: S-0208 claim 19 (Appearance of a teleporting infantry warp member, r66, Q-3142: the entry at the place it left is taken again when the landing check passes, #363)
+            crate::teleport::warp_check_passed(w, id);
             // spec: S-0513 T2 (check passed: placed on the next update)
             set_member(
                 w,
@@ -864,6 +868,8 @@ fn place(w: &mut World, id: ObjectId, m: Member) {
         return;
     }
     let layer = crate::teleport::landing_layer(w, c);
+    // spec: S-0208 claim 19 (Appearance of a teleporting infantry warp member, r66, Q-3142: the appearance frees its entry before it takes the one at the warp's landing point, so when the two are the same entry it ends taken, #363)
+    crate::teleport::warp_appear_free(w, id);
     if let Some(ob) = w.obj_mut(id) {
         ob.layer = layer;
         if let Some(t) = ob.teleport.as_mut() {
@@ -874,6 +880,7 @@ fn place(w: &mut World, id: ObjectId, m: Member) {
     // spec: S-0513 claim 39 (appears at its landing point in its next update)
     // spec: S-0513 r115 claim 38 (the placement at its landing point is an appearance at the height of claim 36, not S-0501 claim 1's rule: `air::placed` reads the member state, which still holds here)
     crate::objects::place(w, id, m.landing, facing);
+    crate::teleport::warp_appeared(w, id, c, layer);
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0105 r50 claim 6 (When the turn starts: a chronosphere warp's appearance at the landing point keeps the elevation, so the tick of the last placement is kept)
         ob.placed_tick = o.placed_tick;
