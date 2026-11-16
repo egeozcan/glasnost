@@ -771,7 +771,9 @@ fn winner_among_on(
     on_flat_grid: bool,
     at: impl Iterator<Item = (ObjectId, (i32, usize))>,
 ) -> Option<ObjectId> {
-    winner_by(w, h, at, |id| shown_on(w, h, id, pixel, g, img, on_flat_grid))
+    winner_by(w, h, at, |id| {
+        shown_on(w, h, id, pixel, g, img, on_flat_grid)
+    })
 }
 
 /// [`winner_among_on`] with the draw-time tests of claim 7 given by
@@ -1370,11 +1372,7 @@ mod tests {
                     };
                     let want = compose_by_lookup(&w, &view, arr, &g, &img, &terrain);
                     let label = format!("switches {bits:05b}, house {}, flat {flat}", h.0);
-                    assert_eq!(
-                        compose(&w, &view, arr, &g, &img, &terrain),
-                        want,
-                        "{label}"
-                    );
+                    assert_eq!(compose(&w, &view, arr, &g, &img, &terrain), want, "{label}");
                     assert_eq!(
                         compose_kept(&w, &view, arr, &g, &img, &terrain, &cells),
                         want,
