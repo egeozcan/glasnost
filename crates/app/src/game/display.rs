@@ -133,6 +133,22 @@ impl Display {
         Point::new(to(x, w), to(y, h))
     }
 
+    /// The view pixel of the mouse pointer at a host position in physical
+    /// pixels: [`Display::point`] inside the window, and outside it, where
+    /// a host reports the pointer and the release while a button is held,
+    /// the view pixel the position would have, outside the view (S-0214
+    /// claim 34: the game limits it where a rule reads the limited pointer
+    /// and resolves a release click at it).
+    pub fn pointer(&self, x: f64, y: f64) -> Point {
+        let (w, h) = (f64::from(self.physical.0), f64::from(self.physical.1));
+        let inside = (0.0..w).contains(&x) && (0.0..h).contains(&y);
+        if inside || !x.is_finite() || !y.is_finite() {
+            return self.point(x, y);
+        }
+        let f = f64::from(self.factor);
+        Point::new((x / f).floor() as i32, (y / f).floor() as i32)
+    }
+
     /// A host movement in physical pixels (a touchpad's pixel wheel delta)
     /// in view pixels, so a swipe moves the content as far as the fingers
     /// on the screen.

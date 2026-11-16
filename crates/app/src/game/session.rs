@@ -1380,12 +1380,16 @@ impl Session {
             .unwrap_or_default()
     }
 
-    /// The pointer moved.
-    pub fn pointer_moved(&mut self, p: Point) {
+    /// The pointer moved to screen pixel `raw`, which lies outside the
+    /// window when the host reports the pointer there.
+    pub fn pointer_moved(&mut self, raw: Point) {
+        // spec: S-0214 claim 34 (a) (while a press is held the gesture samples the limited pointer; inside the window it is the pointer itself)
+        let p = band::limited(raw, self.screen);
         self.pointer_at(p);
         let mode = self.play.game.world.rules().mode;
+        let m = self.map_rect();
         if let Some(d) = self.drag.as_mut() {
-            d.motion(p, mode);
+            d.motion_in(p, mode, m);
         }
         if let Some(r) = self.right.as_mut() {
             r.motion(p);
@@ -1429,14 +1433,53 @@ impl Session {
         }
     }
 
-    /// The pointer left the window.
+    /// The pointer left the window. Our hosts keep reporting the pointer and
+    /// the release outside the window (the window layer's
+    /// `super::window`), so a held battlefield press of S-0214 claims 18,
+    /// 26 and 27 stays held, sampling the pointer where it was last
+    /// limited. Every other press ends here, as before.
     pub fn pointer_left(&mut self) {
+        // spec: S-0214 claim 34 (a) and (f) (with a host that keeps reporting the pointer and the release, the press stays held: leaving the window is not an event of its own)
+        if self.battlefield_press().is_some()
+            && !self
+                .route
+                .pressed
+                .as_ref()
+                .is_some_and(|p| *p != glasnost_sim::routes::Press::Ordinary)
+        {
+            return;
+        }
         self.pointer = None;
         self.press = None;
         self.drag = None;
         self.right = None;
         self.view_button_held = false;
         // spec: S-0111 claim 20 (r40: the pointer leaving the window is not an event of its own; the last movement restarts the wait as usual, and a wait that ends with the pointer outside the window shows nothing and uses up the rest's choice)
+    }
+
+    /// The held press of S-0214 claims 18, 26 and 27: a left or right
+    /// press on the battlefield view, outside the pause menu, with its
+    /// press pixel and button.
+    fn battlefield_press(&self) -> Option<(Point, Button)> {
+        self.press.filter(|&(start, b)| {
+            !self.paused
+                && matches!(b, Button::Left | Button::Right)
+                && self.hud_at(start) == Some(HudHit::Map)
+        })
+    }
+
+    /// The game's window lost the input focus: a held battlefield press is
+    /// abandoned, so nothing is applied, an active band box disappears, a
+    /// scroll drag stops and the later release does nothing.
+    pub fn abandon_press(&mut self) {
+        // spec: S-0214 claim 34 (f) (with either host, the window losing the input focus while a press is held abandons it, as in (e); the next press starts afresh)
+        if self.battlefield_press().is_some() {
+            self.press = None;
+            self.drag = None;
+            self.right = None;
+            self.view_button_held = false;
+            self.route.pressed = None;
+        }
     }
 
     /// The middle button went down or up: it does nothing in the game but
@@ -1560,9 +1603,18 @@ impl Session {
         )
     }
 
-    /// A button went up: a click or the end of a drag.
-    pub fn pointer_up(&mut self, b: Button, p: Point, mods: Modifiers) -> SessionEvent {
+    /// A button went up at screen pixel `raw`: a click or the end of a
+    /// drag. `raw` lies outside the window when the host reports the
+    /// release there (S-0214 claim 34).
+    pub fn pointer_up(&mut self, b: Button, raw: Point, mods: Modifiers) -> SessionEvent {
+        let outside = band::outside(raw, self.screen);
+        // spec: S-0214 claim 34 (a) (the release outside the window ends the press as a release inside would; every rule but the release click's pixel reads the limited pointer)
+        let p = band::limited(raw, self.screen);
         self.pointer_at(p);
+        if outside {
+            // The pointer is no longer over the window.
+            self.pointer = None;
+        }
         // spec: S-0111 claim 20 (releasing the left or right mouse button hides the tip and stops the wait)
         self.name_tip.button();
         self.view_button_held = false;
@@ -1610,7 +1662,11 @@ impl Session {
             // spec: S-0411 claim 10 (a classified right drag and release keep placement mode and the ready item: no cancellation, no refund)
             Some(HudHit::Map) if scrolled => {}
             Some(HudHit::Map) if dragged && self.play.tool == Tool::Select => {
-                let end = band::limit(p, self.map_rect());
+                let end = match drag {
+                    // spec: S-0214 claim 34 (b) (released outside the window, the box is applied with the rectangle from the press pixel to the endpoint as last updated before the release)
+                    Some(d) if outside => d.end,
+                    _ => band::limit(p, self.map_rect()),
+                };
                 let inside = self.box_candidates(start, end);
                 let click = if self.type_select.held {
                     // spec: S-0214 claims 29 and 32 (a held drag expands the types of every in-box candidate, of any house and kind, in first in-box encounter order, each type in the pool's order, matching objects outside the box included; it reads the reach the last tap left and does not change it) and S-0701 claim 17 (silent)
@@ -1621,13 +1677,28 @@ impl Session {
                 };
                 // spec: S-0214 claim 19 (an unmodified box without a live candidate continues as the ordinary release click at the final pixel)
                 if click {
-                    let (cell, object) = self.under(end);
-                    self.play.click_map(b, object, cell, mods);
-                    self.show_markers();
+                    // spec: S-0214 claim 34 (b) (outside the window, that click resolves as claim 34 (c) gives)
+                    let at = if outside {
+                        self.release_outside(b, raw)
+                    } else {
+                        Some(self.under(end))
+                    };
+                    if let Some((cell, object)) = at {
+                        self.play.click_map(b, object, cell, mods);
+                        self.show_markers();
+                    }
                 }
             }
             Some(HudHit::Map) if !dragged => {
-                let (cell, object) = self.under(p);
+                let at = if outside {
+                    self.release_outside(b, raw)
+                } else {
+                    Some(self.under(p))
+                };
+                let Some((cell, object)) = at else {
+                    self.route_selection_changed();
+                    return SessionEvent::None;
+                };
                 match self.type_select_click(b, object, cell, mods) {
                     Some((t, held)) => {
                         // spec: S-0214 claims 12 and 32 (with the role held, select and toggle select act on the clicked object's type as a whole within the reach the last tap left; silent, and the reach is not changed)
@@ -1675,6 +1746,29 @@ impl Session {
         }
         self.route_selection_changed();
         SessionEvent::None
+    }
+
+    /// The cell and object a battlefield click of button `b` released at
+    /// screen pixel `raw` outside the window acts on, `None` for no click
+    /// (S-0214 claim 34 (c) and (d)).
+    fn release_outside(&mut self, b: Button, raw: Point) -> Option<(CellXY, Option<ObjectId>)> {
+        if b == Button::Right {
+            // spec: S-0214 claim 34 (d) (a right release outside the window without a scroll drag is the right click of claims 26 and 28, whatever the release pixel)
+            return Some((self.under(raw).0, None));
+        }
+        let origin_cell = self
+            .play
+            .game
+            .world
+            .rules()
+            .quirks
+            .offview_release_origin_cell;
+        // spec: S-0214 claim 34 (c) (released outside the window, the click resolves at the release pixel, not at the limited pointer, with no object under it)
+        match band::release_outside(raw, self.map_rect(), origin_cell) {
+            band::OffView::Projected => Some((self.under(raw).0, None)),
+            band::OffView::OriginCell => Some((CellXY::new(0, 0), None)),
+            band::OffView::Nothing => None,
+        }
     }
 
     /// Any selection of an object clears the point selection (S-0213
@@ -3410,13 +3504,11 @@ impl Session {
             };
             ring_marker(&mut d, x, y, ink, m);
         }
-        if let (Some(drag), Some(p)) = (self.drag, self.pointer)
+        if let Some(drag) = self.drag
             && drag.active
         {
-            d.frame(
-                Rect::spanning(drag.press, band::limit(p, m)),
-                colour::ACCENT,
-            );
+            // spec: S-0214 claim 18 and claim 34 (b) (the box from the press pixel to its moving endpoint as last updated)
+            d.frame(Rect::spanning(drag.press, drag.end), colour::ACCENT);
         }
         if let Some(font) = &self.play.status_font {
             // The status lines keep the battlefield's pixels: S-0213 claim

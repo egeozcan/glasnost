@@ -1394,22 +1394,28 @@ impl MapRenderer {
             .map(|&n| n as usize)
             .chain(cell_len..scene.items.len());
         // spec: S-0109 claim 27 (a stack's copies, lowest first, as many as the view's top row allows)
+        // design: render (#127): of those, the copies that may meet the view, found directly;
+        // the others draw no pixel (S-0101 F4b)
         let copies = order.flat_map(|n| {
             let i = &scene.items[n];
-            let count = i.stack.map_or(1, |s| s.copies(oy));
-            (0..count).map(move |j| (n, i, j))
+            let range = scene.copies_in(i, view.origin, view.size);
+            // A spot group placed before item n comes first even when no copy of it is drawn.
+            std::iter::once((n, i, None)).chain(range.map(move |j| (n, i, Some(j))))
         });
         for (n, base, j) in copies {
+            let Some(j) = j else {
+                while let Some((gi, g)) = spot_groups.next_if(|(_, g)| g.at <= n) {
+                    push_spots(gi, g, &mut batches);
+                }
+                continue;
+            };
             self.stats.items += 1;
-            while let Some((gi, g)) = spot_groups.next_if(|(_, g)| g.at <= n) {
-                push_spots(gi, g, &mut batches);
-            }
             // Copy 0 is the item itself; a higher copy moves only its row and bias.
             let moved;
             let item = if j == 0 {
                 base
             } else {
-                moved = base.copies(oy).nth(j as usize).unwrap_or(*base);
+                moved = base.copy(j);
                 &moved
             };
             if !filter.shows(item) {

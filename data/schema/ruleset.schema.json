@@ -10119,6 +10119,11 @@
           "type": "boolean",
           "default": true
         },
+        "offview_release_origin_cell": {
+          "description": "A left click released outside the game's window, to the left of or above the battlefield view on either axis, acts on the cell at map cell coordinates (0, 0) with no object under it; off: it gives no order and does not change the selection.",
+          "type": "boolean",
+          "default": true
+        },
         "omnicrusher_needs_crusher": {
           "description": "The omni-crusher flag alone makes no vehicle a crusher.",
           "type": "boolean",

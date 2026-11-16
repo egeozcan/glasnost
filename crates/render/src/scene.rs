@@ -10,6 +10,8 @@
 //! world rows through the depth reference *C* (S-0102 F1), so items are
 //! stored with world rows and converted to view rows per frame.
 
+use std::ops::Range;
+
 use glasnost_fmt::image::IndexedImage;
 
 use crate::compose::{
@@ -171,17 +173,22 @@ impl Item {
     /// `top`, lowest first (S-0109 claim 27): the item alone unless it is a
     /// stack.
     pub fn copies(&self, top: i32) -> impl Iterator<Item = Item> + '_ {
-        let (n, h) = self.stack.map_or((1, 0), |s| (s.copies(top), s.spacing));
-        (0..n).map(move |j| {
-            let mut c = *self;
-            // spec: S-0109 claim 27 (copy j is centred j·h rows above the lowest)
-            c.y -= j * h;
-            if let ItemDepth::Profile { bias, .. } = &mut c.depth {
-                // spec: S-0102 claim 13 (tiled copy j: the bias reduced by exactly j·h)
-                *bias -= j * h;
-            }
-            c
-        })
+        let n = self.stack.map_or(1, |s| s.copies(top));
+        (0..n).map(move |j| self.copy(j))
+    }
+
+    /// Copy `j` of this item (S-0109 claim 27): the item itself for copy 0
+    /// or an item that is not a stack.
+    pub fn copy(&self, j: i32) -> Item {
+        let h = self.stack.map_or(0, |s| s.spacing);
+        let mut c = *self;
+        // spec: S-0109 claim 27 (copy j is centred j·h rows above the lowest)
+        c.y -= j * h;
+        if let ItemDepth::Profile { bias, .. } = &mut c.depth {
+            // spec: S-0102 claim 13 (tiled copy j: the bias reduced by exactly j·h)
+            *bias -= j * h;
+        }
+        c
     }
 }
 
@@ -344,6 +351,39 @@ impl Scene {
         )
     }
 
+    /// The copies `j` of `item` (S-0109 claim 27) whose bounds may meet a
+    /// view at `origin` of `size`, lowest first: every copy whose bounds
+    /// meet it is in the range, so leaving out the others leaves out only
+    /// copies that draw no pixel (S-0101 F4b). An item that is not a stack
+    /// is its copy 0, whatever its bounds. design: render (#127): the range
+    /// is found directly, not by walking every copy the view's top row gives
+    /// the stack.
+    pub fn copies_in(&self, item: &Item, origin: (i32, i32), size: (u32, u32)) -> Range<i32> {
+        let Some(s) = item.stack else {
+            return 0..1;
+        };
+        let count = s.copies(origin.1);
+        if s.spacing <= 0 || count <= 1 {
+            return 0..count;
+        }
+        let (l, _, r, _) = self.bounds(item);
+        let (ox, oy) = (i64::from(origin.0), i64::from(origin.1));
+        let (w, rows) = (i64::from(size.0), i64::from(size.1));
+        // Every copy has the item's columns.
+        if i64::from(r) <= ox || i64::from(l) >= ox + w {
+            return 0..0;
+        }
+        let tall = i64::from(self.images[item.image as usize].height());
+        let (y, spacing) = (i64::from(item.y), i64::from(s.spacing));
+        // Copy j spans rows y − j·h .. y − j·h + tall: it meets the view's rows
+        // when y − j·h < oy + rows, j > (y − oy − rows) / h, and when
+        // y − j·h + tall > oy, j < (y + tall − oy) / h.
+        let first = (y - oy - rows).div_euclid(spacing) + 1;
+        let end = (y + tall - oy + spacing - 1).div_euclid(spacing);
+        let clamp = |v: i64| v.clamp(0, i64::from(count)) as i32;
+        clamp(first)..clamp(end).max(clamp(first))
+    }
+
     /// Whether `item`'s rectangle contains world pixel `(x, y)`; the cheap
     /// tests on the item's corner come before the image's size is read.
     fn covers(&self, item: &Item, x: i32, y: i32) -> bool {
@@ -394,8 +434,9 @@ impl Scene {
             if !filter.shows(item) {
                 continue;
             }
-            for item in item.copies(oy) {
-                let _ = self.draw_item(&mut frame, &item, (ox, oy), quirks);
+            // design: render (#127): only the copies that may meet the view
+            for j in self.copies_in(item, (ox, oy), (w, h)) {
+                let _ = self.draw_item(&mut frame, &item.copy(j), (ox, oy), quirks);
             }
         }
         for g in spots.filter(|g| filter.shows_spots(g)) {
@@ -763,6 +804,69 @@ mod tests {
             base_row: i32::MIN,
         };
         assert_eq!(low.copies(i32::MAX), 1);
+    }
+
+    /// design: render (#127): the copies a view may show are found directly, and they are the
+    /// copies whose bounds meet the view, of all the copies the view's top row gives the stack
+    /// (spec: S-0109 claim 27; S-0101 F4b: the others draw no pixel), in their order
+    #[test]
+    fn the_copies_in_a_view_are_those_whose_bounds_meet_it() {
+        let mut s = Scene::default();
+        let heights = [1, 7, 16, 40];
+        let images: Vec<u32> = heights
+            .iter()
+            .map(|&h| s.add_image(IndexedImage::new(9, h, vec![1; 9 * h as usize]).unwrap()))
+            .collect();
+        let size = (30, 20);
+        let mut stacks = 0;
+        for &image in &images {
+            for spacing in [1, 5, 8, 11, 16, 40] {
+                for (x, y, base_row) in [(0, 100, 100), (25, 90, 96), (-8, 3, 0), (40, -20, -20)] {
+                    let item = Item {
+                        image,
+                        x,
+                        y,
+                        test: DepthTest::Writer,
+                        depth: ItemDepth::Profile {
+                            profile: Profile::Flat,
+                            bias: 0,
+                            companion: None,
+                        },
+                        paint: Paint::Row(0),
+                        group: Group::Effects,
+                        provisional: false,
+                        object: None,
+                        stack: Some(Stack { spacing, base_row }),
+                    };
+                    for oy in (-60..130).step_by(3) {
+                        for ox in [-40, -12, -9, -8, 0, 10, 26, 40, 41] {
+                            let range = s.copies_in(&item, (ox, oy), size);
+                            let count = item.stack.unwrap().copies(oy);
+                            let meeting: Vec<i32> = item
+                                .copies(oy)
+                                .enumerate()
+                                .filter(|(_, c)| {
+                                    let (l, t, r, b) = s.bounds(c);
+                                    r > ox && b > oy && l < ox + 30 && t < oy + 20
+                                })
+                                .map(|(j, _)| j as i32)
+                                .collect();
+                            if count <= 1 {
+                                assert_eq!(range, 0..count);
+                                continue;
+                            }
+                            stacks += 1;
+                            let found: Vec<i32> = range.clone().collect();
+                            assert_eq!(found, meeting, "{item:?} at ({ox}, {oy})");
+                            for j in range {
+                                assert_eq!(item.copy(j), item.copies(oy).nth(j as usize).unwrap());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(stacks > 1000, "{stacks} stacked views checked");
     }
 
     /// spec: S-0109 claim 27 (C = 1 when pᵧ − ⌊h/2⌋ < 0, else ⌊(pᵧ − ⌊h/2⌋) / h⌋ + 2, with pᵧ

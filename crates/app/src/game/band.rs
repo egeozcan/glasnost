@@ -27,6 +27,9 @@ pub struct Drag {
     pub press: Point,
     /// The box is active: a motion has crossed the threshold.
     pub active: bool,
+    /// The moving endpoint as last updated by a motion of the active box,
+    /// limited to the battlefield view (the press pixel before that).
+    pub end: Point,
 }
 
 impl Drag {
@@ -35,6 +38,18 @@ impl Drag {
         Self {
             press,
             active: false,
+            end: press,
+        }
+    }
+
+    /// A pointer motion to `p` (the limited pointer) with the battlefield
+    /// view `view`: [`Drag::motion`], then an active box's endpoint follows
+    /// `p` limited to the view.
+    pub fn motion_in(&mut self, p: Point, mode: Rounding, view: Rect) {
+        self.motion(p, mode);
+        if self.active {
+            // spec: S-0214 claim 18 and claim 34 (b) (while the box is active its moving endpoint follows the limited pointer, further limited to the battlefield view)
+            self.end = limit(p, view);
         }
     }
 
@@ -93,6 +108,53 @@ impl RightDrag {
 pub fn limit(p: Point, view: Rect) -> Point {
     // spec: S-0214 claim 18 (once dragging, the moving endpoint is limited to the battlefield view's last pixel on each axis)
     Point::new(p.x.min(view.right() - 1), p.y.min(view.bottom() - 1))
+}
+
+/// The limited pointer of S-0214 claim 34 (a): screen pixel `p` with each
+/// coordinate limited to the client area of `screen` pixels.
+pub fn limited(p: Point, screen: (i32, i32)) -> Point {
+    // spec: S-0214 claim 34 (a) (x limited to 0 … B − 1 and y to 0 … C − 1 of the client area)
+    Point::new(
+        p.x.clamp(0, (screen.0 - 1).max(0)),
+        p.y.clamp(0, (screen.1 - 1).max(0)),
+    )
+}
+
+/// Whether screen pixel `p` lies outside the client area of `screen`
+/// pixels (S-0214 claim 34).
+pub fn outside(p: Point, screen: (i32, i32)) -> bool {
+    p.x < 0 || p.y < 0 || p.x >= screen.0 || p.y >= screen.1
+}
+
+/// What a left click released outside the window acts on (S-0214 claim 34
+/// (c)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OffView {
+    /// The cell under the release pixel, projected beyond the view's edge.
+    Projected,
+    /// The cell at map cell coordinates (0, 0).
+    OriginCell,
+    /// Nothing: no order, and the selection stays.
+    Nothing,
+}
+
+/// Where a left click released at screen pixel `p` outside the window acts,
+/// for the battlefield view `view`, with `quirks.offview_release_origin_cell`
+/// as `origin_cell`.
+pub fn release_outside(p: Point, view: Rect, origin_cell: bool) -> OffView {
+    // spec: S-0214 claim 34 (c) (a release pixel to the left of or above the view on either axis, beyond its upper-right and lower-left corners included)
+    if p.x < view.x || p.y < view.y {
+        if origin_cell {
+            // spec: S-0214 claim 34 (c) and Edge cases (quirks.offview_release_origin_cell on, the original: the cell at map cell coordinates (0, 0))
+            OffView::OriginCell
+        } else {
+            // spec: S-0214 Edge cases (quirks.offview_release_origin_cell off: no order, and the selection does not change)
+            OffView::Nothing
+        }
+    } else {
+        // spec: S-0214 claim 34 (c) (otherwise the cell under the release pixel, projected beyond the view's edge as a pixel inside it)
+        OffView::Projected
+    }
 }
 
 /// Whether box point `q` is inside the box from `press` to `end`: all four
@@ -183,6 +245,51 @@ mod tests {
         let view = Rect::new(0, 0, 640, 480);
         assert_eq!(limit(Point::new(700, 500), view), Point::new(639, 479));
         assert_eq!(limit(Point::new(30, 40), view), Point::new(30, 40));
+    }
+
+    // spec: S-0214 claim 34 (a) (the limited pointer: each coordinate limited to the client area)
+    #[test]
+    fn claim_34_a_limited_pointer() {
+        let screen = (800, 600);
+        assert_eq!(limited(Point::new(-30, 700), screen), Point::new(0, 599));
+        assert_eq!(limited(Point::new(900, -5), screen), Point::new(799, 0));
+        assert_eq!(limited(Point::new(12, 34), screen), Point::new(12, 34));
+        assert!(outside(Point::new(-1, 0), screen));
+        assert!(outside(Point::new(0, 600), screen));
+        assert!(!outside(Point::new(799, 599), screen));
+    }
+
+    // spec: S-0214 claim 34 (b) (the endpoint as last updated by a motion of the active box, limited to the view, not the release pixel)
+    #[test]
+    fn claim_34_b_the_endpoint_as_last_updated() {
+        let mode = Rounding::default();
+        let view = Rect::new(0, 0, 640, 480);
+        let mut d = Drag::armed(Point::new(100, 100));
+        d.motion_in(Point::new(102, 100), mode, view);
+        assert_eq!(d.end, Point::new(100, 100), "a click so far");
+        d.motion_in(Point::new(20, 30), mode, view);
+        assert_eq!(d.end, Point::new(20, 30));
+        d.motion_in(limited(Point::new(-50, 700), (800, 600)), mode, view);
+        assert_eq!(d.end, Point::new(0, 479), "on the view's boundary");
+    }
+
+    // spec: S-0214 claim 34 (c) and Edge cases (left of or above the view on either axis: the origin cell with the quirk on, nothing with it off; otherwise the projected cell)
+    #[test]
+    fn claim_34_c_release_outside() {
+        let view = Rect::new(0, 0, 640, 600);
+        for p in [
+            Point::new(-1, 300),
+            Point::new(300, -1),
+            Point::new(900, -20),
+            Point::new(-20, 700),
+        ] {
+            assert_eq!(release_outside(p, view, true), OffView::OriginCell, "{p:?}");
+            assert_eq!(release_outside(p, view, false), OffView::Nothing, "{p:?}");
+        }
+        for p in [Point::new(900, 300), Point::new(300, 700)] {
+            assert_eq!(release_outside(p, view, true), OffView::Projected, "{p:?}");
+            assert_eq!(release_outside(p, view, false), OffView::Projected, "{p:?}");
+        }
     }
 
     // spec: S-0214 F6 (the box includes its four edges, whichever corner the drag ends at)

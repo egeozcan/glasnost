@@ -120,3 +120,17 @@ fn the_settings_row_changes_the_factor_at_once() {
     assert_eq!(c.display().factor, 2);
     assert!(d.0.texts().contains(&"3x (2x fits)"));
 }
+
+/// spec: S-0214 claim 34 (a) and (c) (the mouse pointer outside the window reaches the game as the
+/// view pixel it would have, so a release click there resolves at its own pixel; inside the window,
+/// the black remainder included, it is the pixel the touches and clicks get)
+#[test]
+fn the_pointer_outside_the_window_keeps_its_view_pixel() {
+    let c = two_times();
+    let d = c.display();
+    assert_eq!(d.pointer(-7.0, 30.0), Point::new(-4, 15));
+    assert_eq!(d.pointer(2600.0, 1700.0), Point::new(1300, 850));
+    assert_eq!(d.pointer(100.5, 41.0), d.point(100.5, 41.0));
+    assert_eq!(d.pointer(2559.5, 1599.5), Point::new(1279, 799));
+    assert_eq!(d.pointer(f64::NAN, 3.0), d.point(f64::NAN, 3.0));
+}
