@@ -90,10 +90,20 @@ pub fn pip_frame(stored: Option<&[u8]>, initial: usize) -> usize {
     let Some(v) = stored else {
         return initial;
     };
-    // On the stack: this runs per passenger and occupant at each status redraw (#153).
-    let words: [&str; PIP_WORDS.len()] = std::array::from_fn(|i| PIP_WORDS[i].0);
-    value::named(v, NAMED_LIMIT, &words).map_or(PIP_UNKNOWN, |i| PIP_WORDS[i].1)
+    // Held once: this runs per passenger and occupant at each status redraw (#153).
+    value::named(v, NAMED_LIMIT, &PIP_WORD_TEXT).map_or(PIP_UNKNOWN, |i| PIP_WORDS[i].1)
 }
+
+/// The words of [`PIP_WORDS`], in its order, made once at compile time.
+const PIP_WORD_TEXT: [&str; PIP_WORDS.len()] = {
+    let mut out = [""; PIP_WORDS.len()];
+    let mut i = 0;
+    while i < PIP_WORDS.len() {
+        out[i] = PIP_WORDS[i].0;
+        i += 1;
+    }
+    out
+};
 
 /// Which pip row an object's kind draws (S-0111 claim 10).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -299,9 +309,15 @@ const OVERLOAD_HIGHLIGHT: usize = 3; // spec: S-0111 claim 13 (the overload pip 
 /// The overload pip otherwise (S-0111 claim 13).
 const OVERLOAD: usize = 4; // spec: S-0111 claim 13 (otherwise image frame 4)
 
+/// The farthest index the overload pip stands at: an index beyond it is
+/// held to it. 2²⁰ pip places are over 2 million pixels from the origin,
+/// beyond any view we draw, and [`place`] and the anchor added to it stay
+/// well within 32 bits; no stock weapon's damage comes near.
+const PIP_INDEX_LIMIT: i32 = 1 << 20; // design: render (#153)
+
 /// The mind-control row (S-0111 claim 13) as (pip index, image frame):
 /// `m` pips, `count` controlled, and with `overload` (its highlight on or
-/// off) one more pip at index `m`.
+/// off) one more pip at index `m`, held to ±[`PIP_INDEX_LIMIT`].
 pub fn mind_row(m: i32, count: usize, overload: Option<bool>) -> Vec<(i32, usize)> {
     // design: render (#153) (at most PIP_ROW_LIMIT pips; the overload pip stays at index M)
     let mut out: Vec<(i32, usize)> = (0..m.clamp(0, PIP_ROW_LIMIT))
@@ -312,7 +328,9 @@ pub fn mind_row(m: i32, count: usize, overload: Option<bool>) -> Vec<(i32, usize
         .collect();
     if let Some(lit) = overload {
         // spec: S-0111 claim 13 (one more pip at index M, image frame 3 while highlighted, else 4)
-        out.push((m, if lit { OVERLOAD_HIGHLIGHT } else { OVERLOAD }));
+        // design: render (#153) (the index held to ±PIP_INDEX_LIMIT)
+        let at = m.clamp(-PIP_INDEX_LIMIT, PIP_INDEX_LIMIT);
+        out.push((at, if lit { OVERLOAD_HIGHLIGHT } else { OVERLOAD }));
     }
     out
 }
