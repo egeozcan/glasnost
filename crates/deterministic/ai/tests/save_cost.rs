@@ -5,6 +5,13 @@
 //! median time of a game save beside the median time of the world's own
 //! save inside it. Synthetic data only.
 
+// A local timing probe: reads the host clock and prints, outside the simulation.
+#![allow(
+    clippy::disallowed_types,
+    clippy::disallowed_methods,
+    clippy::disallowed_macros
+)]
+
 use std::time::{Duration, Instant};
 
 use glasnost_ai::fixture;
