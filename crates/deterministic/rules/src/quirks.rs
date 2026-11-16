@@ -591,6 +591,10 @@ pub struct Quirks {
     // spec: S-0214 claim 19 and Edge cases
     #[serde(default = "on")]
     pub empty_box_release_click: bool,
+    /// A left click released outside the game's window, to the left of or above the battlefield view on either axis, acts on the cell at map cell coordinates (0, 0) with no object under it; off: it gives no order and does not change the selection.
+    // spec: S-0214 claim 34 (c) and Edge cases (quirks.offview_release_origin_cell, default: original)
+    #[serde(default = "on")]
+    pub offview_release_origin_cell: bool,
     /// *Centre group* keeps the rest of the selection, objects outside the
     /// group included, when the first selected object is in the group, and
     /// centres on all of them (the original). Off: it replaces the
@@ -2492,6 +2496,8 @@ impl Default for Quirks {
             hijack_truce_harvester_check: true,
             permadisguise_attack_cursor: true,
             empty_box_release_click: true,
+            // spec: S-0214 claim 34 (c) and Edge cases (default on = original)
+            offview_release_origin_cell: true,
             group_center_keeps_extra_selection: true,
             group_kept_on_owner_change: true,
             damaging_entry_cursor_retained: true,
@@ -3231,6 +3237,10 @@ impl Quirks {
                 self.permadisguise_attack_cursor,
             ),
             ("empty_box_release_click", self.empty_box_release_click),
+            (
+                "offview_release_origin_cell",
+                self.offview_release_origin_cell,
+            ),
             (
                 "group_center_keeps_extra_selection",
                 self.group_center_keeps_extra_selection,
