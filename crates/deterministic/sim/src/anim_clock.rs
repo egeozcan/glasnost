@@ -569,9 +569,8 @@ impl Player {
         };
         // spec: S-0109 F3 (k ≥ limit, or reversed and at the low end, or a shadow type, not
         // reversed, at k ≥ λₑ − a, claim 10)
-        let ends = self.k >= limit
-            || (p.reverse && low)
-            || (p.shadow && !p.reverse && self.k >= upper);
+        let ends =
+            self.k >= limit || (p.reverse && low) || (p.shadow && !p.reverse && self.k >= upper);
         if !ends {
             return;
         }

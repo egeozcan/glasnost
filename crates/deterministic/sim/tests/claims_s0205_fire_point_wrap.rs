@@ -62,8 +62,22 @@ fn rules() -> Ruleset {
 /// at a BUGGY three cells east.
 fn scene(r: &Ruleset) -> (World, ObjectId) {
     let mut w = testkit::game_with(r, N, 7);
-    let t = testkit::spawn(&mut w, Kind::Building, "PAD", 0, testkit::mid(N, 0, 0), 16384);
-    let b = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, testkit::mid(N, 3, 0), 49152);
+    let t = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "PAD",
+        0,
+        testkit::mid(N, 0, 0),
+        16384,
+    );
+    let b = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        1,
+        testkit::mid(N, 3, 0),
+        49152,
+    );
     let o = w.obj_mut(t).unwrap();
     o.target = Some(Target::Object(b));
     o.body = Turning::at(0);
@@ -95,7 +109,11 @@ fn a_primary_fire_pixel_shift_past_the_range_wraps() {
     let (w, t) = scene(&r);
     let bp = base_point(&w, t);
     let (q, d) = huge_shift(&w, bp.x.min(bp.y));
-    r.sim.buildings.get_mut("PAD").unwrap().primary_fire_pixel_offset = Some([0, q]);
+    r.sim
+        .buildings
+        .get_mut("PAD")
+        .unwrap()
+        .primary_fire_pixel_offset = Some([0, q]);
     let (w, t) = scene(&r);
     assert_eq!(
         fire_point(&w, t, 0, 0),
