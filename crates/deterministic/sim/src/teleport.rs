@@ -235,23 +235,20 @@ fn take_destination_with(w: &mut World, id: ObjectId, forced: bool) {
         set_state(w, id, st);
         return;
     }
-    // spec: S-0207 claim 20 (a) (dropped while phasing in, held, S-0614 Terms, or being erased by a temporal beam, S-0514 claim 16; the electromagnetic pulse has no state in our engine; a superweapon warp's leaving stage is the warp-pending immobilization of part b below)
+    // spec: S-0207 claim 20 (a) (dropped while phasing in, held, S-0614 Terms, or being erased, S-0214 Terms: by a temporal beam, S-0514 claim 16, or in a superweapon warp's leaving stage, which the glossary's *leaving stage* counts as being erased throughout, the expiry update included, so part a's drop comes before part b's warp-pending immobilization; the electromagnetic pulse has no state in our engine)
+    // spec: S-0208 claim 19 (Landing choice while a warp is pending, r66, Q-3142: for infantry too, from the leaving stage until the departure, being erased drops the destination before any choice, S-0207 claim 20 a)
     // spec: S-0207 claim 27 (Q-1130 table, third row: with no suppression pending the order-level destination becomes empty and nothing is consumed)
     // spec: S-0214 Terms and S-0513 Terms and claim 40 (phasing in is also a superweapon warp member's, from departure until its arrival hold ends, #361)
-    if phasing_in(w, id) || crate::parasite::held(w, id) || crate::temporal::erased(w, id) {
+    if phasing_in(w, id)
+        || crate::parasite::held(w, id)
+        || crate::superweapons::being_erased(w, id)
+    {
         st.for_dest = None;
         set_state(w, id, st);
         drop_destination(w, id);
         return;
     }
     if o.kind == Kind::Infantry {
-        if crate::superweapons::warp_leaving(w, id) {
-            // spec: S-0208 claim 19 (Landing choice while a warp is pending, r66, Q-3142: from the leaving stage until the departure, being erased drops the destination before any choice, S-0207 claim 20 a)
-            st.for_dest = None;
-            set_state(w, id, st);
-            drop_destination(w, id);
-            return;
-        }
         if crate::superweapons::warp_pending_or_leaving(w, id)
             && !w.rules().quirks.warp_pending_infantry_landing
         {
