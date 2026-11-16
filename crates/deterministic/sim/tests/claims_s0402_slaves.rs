@@ -1152,6 +1152,79 @@ fn s0312_claim_31_no_recipient() {
     }
 }
 
+/// A game on [`rules`] with the field at (5, −1) and two more houses of
+/// the civilian side: Civ (house 2, of Civland, not passive) and Kept
+/// (house 3, of the invented passive country Keptland); with `cleanup` the
+/// unused-house cleanup of S-0009 claim 28 then runs and removes Civ.
+fn two_civilian_game(cleanup: bool) -> World {
+    let mut r = rules();
+    r.registries
+        .get_mut("countries")
+        .unwrap()
+        .push("Keptland".into());
+    let mut kept = Country {
+        multiplay_passive: Some(true),
+        ..Default::default()
+    };
+    kept.econ.side = Some("Civilian".into());
+    r.sim.countries.insert("Keptland".into(), kept);
+    let mut map = testkit::empty_map(SIZE);
+    for (c, o, d) in field(5, -1, 5) {
+        let cell = map.cells.get_mut(c).unwrap();
+        cell.overlay = o;
+        cell.overlay_data = d;
+    }
+    let mut s = testkit::setup(7);
+    for (name, country) in [("Civ", "Civland"), ("Kept", "Keptland")] {
+        s.houses.push(HouseSetup {
+            name: name.into(),
+            country: country.into(),
+            human: false,
+            start: None,
+            role: HouseRole::Neutral,
+            ai: false,
+        });
+    }
+    let rules = Arc::new(SimRules::new(&r, "synthetic-test"));
+    let mut w = glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &s).unwrap();
+    if cleanup {
+        glasnost_sim::load::cleanup(&mut w, &s);
+    }
+    w
+}
+
+// spec: S-0312 claim 31 (slaves on the map go to the first existing house of the civilian side) with S-0009 claim 28 (a house the unused-house cleanup removes owns nothing from then on; glossary *absent*): a removed civilian-side house is passed over (S20's seam)
+#[test]
+fn s0312_claim_31_removed_civilian_house_is_no_recipient() {
+    for cleanup in [false, true] {
+        let mut w = two_civilian_game(cleanup);
+        assert_eq!(w.houses[2].removed, cleanup, "set-up: the cleanup removes Civ");
+        assert!(!w.houses[3].removed, "set-up: Kept stays");
+        let b = working_building(&mut w);
+        let out = on_map(&w, b);
+        assert!(!out.is_empty(), "set-up: slaves out");
+        glasnost_sim::objects::remove(&mut w, b);
+        let expect = HouseId(if cleanup { 3 } else { 2 });
+        for &s in &out {
+            assert_eq!(w.obj(s).unwrap().owner, Some(expect), "cleanup {cleanup}");
+        }
+    }
+}
+
+// spec: S-0508 Terms (the civilian house: the first house of the game, in house order, whose country belongs to the civilian side) with S-0009 claim 28 (a removed house is absent: no house of the game); the fixture is [`two_civilian_game`] (S20's seam)
+#[test]
+fn s0508_removed_civilian_house_is_not_the_civilian_house() {
+    for cleanup in [false, true] {
+        let w = two_civilian_game(cleanup);
+        let expect = HouseId(if cleanup { 3 } else { 2 });
+        assert_eq!(
+            glasnost_sim::structures::garrison::civilian_house(&w),
+            Some(expect),
+            "cleanup {cleanup}"
+        );
+    }
+}
+
 /// A working SMB whose return cell holds another house's vehicle, sold:
 /// the pack-up fails (S-0415 claims 11 and 12). The old slaves on the map
 /// and the world.
