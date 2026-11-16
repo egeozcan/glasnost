@@ -1118,9 +1118,9 @@ impl Browser {
         ui.heading("View");
         ui.horizontal(|ui| {
             ui.label("zoom");
-            if ui.add(egui::Slider::new(&mut self.zoom, 1..=8)).changed() {
-                self.texture_dirty = true;
-            }
+            // design: render (#129): the zoom scales the display only, so
+            // the texture stays
+            ui.add(egui::Slider::new(&mut self.zoom, 1..=8));
         });
         if let Preview::Shp(bytes) = &self.preview {
             let frames = Shp::parse(bytes).map_or(0, |s| s.frames.len());
@@ -1665,6 +1665,64 @@ mod tests {
         assert!(matches!(b.preview, Preview::Pcx(_)));
         frame(&mut b, &queue, &ctx);
         assert!(b.texture.is_some());
+    }
+
+    /// Equivalence test (design: render (#129); passes before and after
+    /// the change): the preview's picture does not read the zoom, which
+    /// only scales its display, so a new zoom needs no new texture.
+    #[test]
+    fn the_preview_picture_does_not_follow_the_zoom() {
+        let queue = Queue::default();
+        let ctx = egui::Context::default();
+        let mut b = Browser::new(None);
+        b.mount(&queue, install());
+        settle(&mut b, &queue);
+        for name in ["discs.shp", "grid.tmp", "model.vxl"] {
+            select(&mut b, &queue, name);
+            frame(&mut b, &queue, &ctx);
+            let pictures: Vec<_> = (1..=8)
+                .map(|zoom| {
+                    b.zoom = zoom;
+                    let p = b.picture(4096).expect("a picture").expect("it decodes");
+                    (p.width, p.height, p.pixels)
+                })
+                .collect();
+            assert!(pictures.windows(2).all(|w| w[0] == w[1]), "{name}");
+        }
+    }
+
+    /// Timing probe (design: render (#129); ignored, run by hand in
+    /// release): the header parse the preview's frame slider runs on every
+    /// egui frame, for synthetic SHP files of 100 and 1 000 frames.
+    #[test]
+    #[ignore = "timing probe: run by hand with --release --ignored --nocapture"]
+    fn shp_frame_count_probe() {
+        use glasnost_fmt::image::IndexedImage;
+        use glasnost_fmt::shp::{ShpWriter, WriteFrame};
+        for n in [100, 1000] {
+            let bytes = ShpWriter {
+                width: 8,
+                height: 8,
+                frames: (0..n)
+                    .map(|i| WriteFrame {
+                        x: 0,
+                        y: 0,
+                        image: IndexedImage::new(8, 8, vec![(i % 200) as u8 + 1; 64]).unwrap(),
+                        compression: 1,
+                    })
+                    .collect(),
+            }
+            .write();
+            let runs = 10_000;
+            let t = std::time::Instant::now();
+            for _ in 0..runs {
+                std::hint::black_box(
+                    Shp::parse(std::hint::black_box(&bytes)).map(|s| s.frames.len()),
+                )
+                .ok();
+            }
+            println!("{n} frames: {:?} a parse", t.elapsed() / runs);
+        }
     }
 
     /// Renders one egui frame offscreen and returns RGBA rows.

@@ -574,6 +574,16 @@ pub struct Live {
     /// level, beams, bolts and beam flashes (#93). A redraw with no tick
     /// between is not a new drawn frame and shows these again.
     drawn_lines: Option<DrawnLines>,
+    /// A tick's drawn frame was put off ([`Live::put_off_frame`]) and no
+    /// redraw has drawn it since (design: render (#138)).
+    owed: bool,
+    /// A frame put off set new light sources, so the redraw it falls back
+    /// on relights (design: render (#138)).
+    relight_owed: bool,
+    /// The cells whose overlay left its start value in a tick whose frame
+    /// was put off: they join the changed overlays at the next redraw, as
+    /// that tick's redraw would have joined them (design: render (#138)).
+    joined_overlays: BTreeSet<CellXY>,
     /// The battlefield view's origin and size at the latest redraw, for the
     /// electric bolts' view test (S-0316 claim 5); `None` (no view known):
     /// every bolt counts as in view.
@@ -1448,6 +1458,9 @@ impl Live {
             target_lines: BTreeMap::new(),
             cosmetic,
             drawn_lines: None,
+            owed: false,
+            relight_owed: false,
+            joined_overlays: BTreeSet::new(),
             battlefield: None,
             status_view: None,
             debug_markers: true,
@@ -3684,10 +3697,78 @@ impl Live {
         })
     }
 
+    /// The drawn frame of a tick that no one sees (a rejoining peer's
+    /// catch-up ticks before the update's frame, the network pump's ticks
+    /// while the window draws no frames), in place of [`Live::redraw`]
+    /// after [`Live::after_tick`]. The next redraw draws the scene as a
+    /// redraw after every such tick would have left it (design: render
+    /// (#138)).
+    ///
+    /// What a redraw carries from one drawn frame to the next is brought up
+    /// to this tick here, as the redraw would: the types met and their slot
+    /// definitions (the next tick's slots read them), the building lights
+    /// followed frame by frame (S-0405 claim 9), the upper layers' order,
+    /// the map's buildings that left their start pose, the overlays that
+    /// left their start value, and the frame's line draws from the
+    /// cosmetic stream (S-0316 claims 5 and 9, S-0518 claim 21). A tick
+    /// that changes the light or the house tint is redrawn at once: its
+    /// relight is read by the next tick's effects (the ground light).
+    pub fn put_off_frame(&mut self, inputs: &Inputs, scene: &mut Scene) {
+        self.learn_types(inputs);
+        let buildings = self.building_light_sources(inputs);
+        let buildings_changed = self.painter.set_building_lights(buildings);
+        let fields_changed = self.painter.set_field_lights(self.field_light_sources());
+        let l = &self.world.lighting;
+        if buildings_changed
+            || fields_changed
+            || (l.current, l.choice) != self.lit
+            || glasnost_sim::lighting::tint(&self.world) != self.house_tint
+        {
+            self.relight_owed |= buildings_changed || fields_changed;
+            self.redraw(inputs, scene);
+            return;
+        }
+        self.owed = true;
+        // The redraw's sync without taking the tick's mark, so that the
+        // redraw that draws this frame syncs as this tick's would.
+        if self.synced == Some(self.world.tick) {
+            self.sync_entrants();
+        } else {
+            self.sync_layers(false);
+        }
+        self.sort_upper_layers();
+        self.note_posed();
+        let grid = &self.world.cells.grid;
+        for &(c, i) in &self.legal_cells {
+            let Some(cell) = grid.get(c) else { continue };
+            if self.start_overlays.get(i) != Some(&(cell.overlay, cell.overlay_data))
+                && !self.changed_overlays.contains_key(&c)
+            {
+                self.joined_overlays.insert(c);
+            }
+        }
+        self.load_slot_defs(inputs);
+        self.take_line_draws(inputs);
+    }
+
+    /// Whether a frame put off ([`Live::put_off_frame`]) waits for a
+    /// redraw (design: render (#138)).
+    pub fn owes_frame(&self) -> bool {
+        self.owed
+    }
+
+    /// The drawing's cosmetic stream as it stands (tests).
+    #[cfg(test)]
+    pub(super) fn cosmetic(&self) -> &glasnost_sim::rng::Rng {
+        &self.cosmetic
+    }
+
     /// Rebuilds the object pass of `scene`: the cell pass stays, the static
     /// ground entries are reused and the mobile objects are drawn from the
     /// game, all in ground-layer order.
     pub fn redraw(&mut self, inputs: &Inputs, scene: &mut Scene) {
+        // design: render (#138) (this redraw draws every frame put off before it)
+        self.owed = false;
         // design: render (#145) (the benchmark's parts of the scene update)
         let mut lap = self.lap_start();
         // design: render (#139) (the redraw finds the status order afresh)
@@ -3699,12 +3780,7 @@ impl Live {
         } else {
             self.sync_layers(false);
         }
-        if !self.view_quirks.unsorted_upper_layers {
-            // spec: S-0102 Edge cases (quirks.unsorted_upper_layers off: the other layers are sorted like the ground layer, by the keys of claim 5)
-            let keys = self.upper_keys();
-            self.layers
-                .sort_by_key(|e| keys.get(&e).copied().unwrap_or(i64::MIN));
-        }
+        self.sort_upper_layers();
         self.laps.layers += self.lap_end(&mut lap);
         let ids: Vec<ObjectId> = self.mobile_order();
         let mobiles: Vec<Mobile> = ids
@@ -3738,22 +3814,14 @@ impl Live {
         // relights the same tick), S-0405 claim 9 (which buildings are lit)
         let buildings = self.building_light_sources(inputs);
         let buildings_changed = self.painter.set_building_lights(buildings);
+        let fields_changed = self.painter.set_field_lights(self.field_light_sources());
         let l = &self.world.lighting;
         let key = (l.current, l.choice);
-        // spec: S-0525 claim 13 (each field is a light source; every change of it relights the cells it reaches)
-        let fields = glasnost_sim::radiation::lights(&self.world)
-            .iter()
-            .map(|l| {
-                glasnost_render::light::LightSource::field(
-                    (l.centre.x, l.centre.y),
-                    l.radius,
-                    l.intensity,
-                    l.tint,
-                )
-            })
-            .collect();
-        let fields_changed = self.painter.set_field_lights(fields);
-        let relit = key != self.lit || fields_changed || buildings_changed;
+        // design: render (#138) (or a frame put off set new sources)
+        let relit = key != self.lit
+            || fields_changed
+            || buildings_changed
+            || std::mem::take(&mut self.relight_owed);
         if relit {
             let set =
                 glasnost_sim::lighting::set_of(l, key.1).unwrap_or(inputs.map.lighting.normal);
@@ -3848,24 +3916,7 @@ impl Live {
         // facing (S-0105 claim 16) or animation-frame counter (S-0609 claim
         // 14) left its start value, or that unloads (S-0108 claims 22 and
         // 23), is drawn live from then on (#97).
-        let tick = self.world.tick;
-        for (code, id) in &self.building_ids {
-            if self.map_posed.contains(code) {
-                continue;
-            }
-            let Some(o) = self.world.obj(*id).filter(|o| o.on_map) else {
-                continue;
-            };
-            let pose = (o.turret.value(tick), o.combat.anim_frame);
-            // spec: S-0108 claims 1 and 2 (a map building in the construction state, its build-down
-            // in a sale, draws its build-up sprite: it is drawn live from then on)
-            if self.map_start_pose.get(code) != Some(&pose)
-                || o.beh.current == Some(Behaviour::Unload)
-                || self.buildup_of(o).is_some()
-            {
-                self.map_posed.insert(*code);
-            }
-        }
+        self.note_posed();
         let changed_map: BTreeSet<u32> = self
             .building_ids
             .iter()
@@ -3900,6 +3951,14 @@ impl Live {
             let now = (cell.overlay, cell.overlay_data);
             if self.start_overlays.get(i) != Some(&now) {
                 changed.insert(c, now);
+            }
+        }
+        // design: render (#138) (the cells that left their start value in a tick whose frame was put off join with today's values)
+        for c in std::mem::take(&mut self.joined_overlays) {
+            if let Some(cell) = grid.get(c) {
+                changed
+                    .entry(c)
+                    .or_insert((cell.overlay, cell.overlay_data));
             }
         }
         // A relight draws the changed overlays again too, so that they take
@@ -3984,20 +4043,7 @@ impl Live {
         // the map's buildings drawn live (protected, changed or animated)
         // follow, in object ID order (our placeholder order; the map's
         // other buildings keep their place in the cell pass).
-        // Each drawn type's slot definitions, read once (S-0108 Import mapping).
-        let drawn_types: Vec<usize> = self
-            .world
-            .objects
-            .values()
-            .filter(|o| o.kind == SimKind::Building && o.on_map)
-            .filter_map(|o| *self.types.get(&(o.kind, o.type_index))?)
-            .collect();
-        for idx in drawn_types {
-            if !self.slot_defs.contains_key(&idx) {
-                let defs = self.painter.slot_defs(inputs, idx);
-                self.slot_defs.insert(idx, defs);
-            }
-        }
+        self.load_slot_defs(inputs);
         // The map's buildings that keep their cell-pass drawing.
         let kept_map: BTreeSet<ObjectId> = self
             .building_ids
@@ -4199,8 +4245,31 @@ impl Live {
     /// 23, S-0514 claims 24 to 26), after all layers and the status extras
     /// (S-0102 claim 2): lasers first, then beam flashes (S-0514 claim 26).
     fn draw_lines(&mut self, inputs: &Inputs, scene: &mut Scene) {
-        use glasnost_render::light::DetailLevel;
         use glasnost_render::spots::SpotGroup;
+        self.take_line_draws(inputs);
+        let Some(drawn) = self.drawn_lines.as_ref() else {
+            return;
+        };
+        self.counts.bolt_pixels = drawn.spots[1].len();
+        // spec: S-0316 claim 12 (in the effects group after lasers, before trails and beam flashes)
+        for spots in drawn.spots.iter().cloned() {
+            if !spots.is_empty() {
+                // spec: S-0102 claim 2 (beam effects after all five layers and after the status extras)
+                scene.spots.push(SpotGroup {
+                    at: usize::MAX,
+                    group: glasnost_render::scene::Group::Effects,
+                    provisional: false,
+                    spots,
+                });
+            }
+        }
+    }
+
+    /// The beams, bolts and beam flashes of the shown tick's drawn frame,
+    /// with their draws from the cosmetic stream, taken once per drawn
+    /// frame (for [`Live::draw_lines`], and for a frame put off).
+    fn take_line_draws(&mut self, inputs: &Inputs) {
+        use glasnost_render::light::DetailLevel;
         // spec: S-0518 Import mapping (the detail level of S-0104: 0, 1 or 2)
         let detail = match inputs.options.detail {
             DetailLevel::Low => 0,
@@ -4233,20 +4302,72 @@ impl Live {
                 spots: [beams, bolts, flashes],
             });
         }
-        let Some(drawn) = self.drawn_lines.as_ref() else {
-            return;
-        };
-        self.counts.bolt_pixels = drawn.spots[1].len();
-        // spec: S-0316 claim 12 (in the effects group after lasers, before trails and beam flashes)
-        for spots in drawn.spots.iter().cloned() {
-            if !spots.is_empty() {
-                // spec: S-0102 claim 2 (beam effects after all five layers and after the status extras)
-                scene.spots.push(SpotGroup {
-                    at: usize::MAX,
-                    group: glasnost_render::scene::Group::Effects,
-                    provisional: false,
-                    spots,
-                });
+    }
+
+    /// The radiation fields' light sources (S-0525 claim 13: each field is
+    /// a light source; every change of it relights the cells it reaches).
+    fn field_light_sources(&self) -> Vec<glasnost_render::light::LightSource> {
+        // spec: S-0525 claim 13 (each field is a light source; every change of it relights the cells it reaches)
+        glasnost_sim::radiation::lights(&self.world)
+            .iter()
+            .map(|l| {
+                glasnost_render::light::LightSource::field(
+                    (l.centre.x, l.centre.y),
+                    l.radius,
+                    l.intensity,
+                    l.tint,
+                )
+            })
+            .collect()
+    }
+
+    /// Sorts the layers other than ground by the keys of S-0102 claim 5.
+    fn sort_upper_layers(&mut self) {
+        if !self.view_quirks.unsorted_upper_layers {
+            // spec: S-0102 Edge cases (quirks.unsorted_upper_layers off: the other layers are sorted like the ground layer, by the keys of claim 5)
+            let keys = self.upper_keys();
+            self.layers
+                .sort_by_key(|e| keys.get(&e).copied().unwrap_or(i64::MIN));
+        }
+    }
+
+    /// Notes the map's buildings that left the pose the cell pass drew
+    /// them in: drawn live from then on (#97).
+    fn note_posed(&mut self) {
+        let tick = self.world.tick;
+        for (code, id) in &self.building_ids {
+            if self.map_posed.contains(code) {
+                continue;
+            }
+            let Some(o) = self.world.obj(*id).filter(|o| o.on_map) else {
+                continue;
+            };
+            let pose = (o.turret.value(tick), o.combat.anim_frame);
+            // spec: S-0108 claims 1 and 2 (a map building in the construction state, its build-down
+            // in a sale, draws its build-up sprite: it is drawn live from then on)
+            if self.map_start_pose.get(code) != Some(&pose)
+                || o.beh.current == Some(Behaviour::Unload)
+                || self.buildup_of(o).is_some()
+            {
+                self.map_posed.insert(*code);
+            }
+        }
+    }
+
+    /// Reads each drawn type's slot definitions once (S-0108 Import
+    /// mapping).
+    fn load_slot_defs(&mut self, inputs: &Inputs) {
+        let drawn_types: Vec<usize> = self
+            .world
+            .objects
+            .values()
+            .filter(|o| o.kind == SimKind::Building && o.on_map)
+            .filter_map(|o| *self.types.get(&(o.kind, o.type_index))?)
+            .collect();
+        for idx in drawn_types {
+            if !self.slot_defs.contains_key(&idx) {
+                let defs = self.painter.slot_defs(inputs, idx);
+                self.slot_defs.insert(idx, defs);
             }
         }
     }

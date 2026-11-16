@@ -119,6 +119,13 @@ pub struct Session {
     /// The window has the input focus (S-0201 claims 9 and 16); the client
     /// sets it every update.
     pub focused: bool,
+    /// The ticks run now are seen by no frame of their own (a rejoining
+    /// peer's catch-up, the network pump's update): their drawn frames are
+    /// put off to the next frame or pick (design: render (#138)).
+    pub put_off_frames: bool,
+    /// A tick's drawn frame was put off and not drawn since (design:
+    /// render (#138)).
+    frame_owed: bool,
     /// A network game: the lockstep session paces the ticks and the
     /// person's orders, a speed change among them, go through it
     /// (`Play::outbox`; S-0201 claims 15 to 17).
@@ -540,6 +547,8 @@ impl Session {
             leave_after_surrender: false,
             paused: false,
             focused: true,
+            put_off_frames: false,
+            frame_owed: false,
             network: false,
             scroll_index: scroll::DEFAULT_SCROLL_INDEX,
             screen: (1024, 768),
@@ -741,6 +750,12 @@ impl Session {
     /// whether it did (a network game's lockstep session), and when it did,
     /// the interface follows and the live objects are redrawn.
     pub fn step_by(&mut self, tick: impl FnOnce(&mut Game) -> bool) -> bool {
+        // spec: S-0201 claim 15 (in a network game the opener's machine draws no new frame of the battlefield while the options menu is open; the ticks go on) and claim 16 (nor while its window lacks the focus)
+        let draw = !(self.network && (self.paused || !self.focused));
+        if !draw {
+            // design: render (#138): a frame put off is drawn before a tick that draws none, as it would have been after its own tick
+            self.draw_owed_frame();
+        }
         self.play.capture.speed = self.speed;
         let clock = self.lap_clock;
         let lap = || clock.map_or(0.0, |c| c());
@@ -762,17 +777,21 @@ impl Session {
         self.route_after_tick();
         let played = lap();
         let effects = self.play.effects.clone();
-        // spec: S-0201 claim 15 (in a network game the opener's machine draws no new frame of the battlefield while the options menu is open; the ticks go on) and claim 16 (nor while its window lacks the focus)
-        let draw = !(self.network && (self.paused || !self.focused));
+        let put_off = self.put_off_frames;
         let parts = self.with_live(|live, inputs, scene| {
             live.world.effects = effects;
             live.lap_clock = clock;
             live.after_tick();
-            if draw {
+            if draw && put_off {
+                // design: render (#138) (a tick no frame sees puts its frame off)
+                live.put_off_frame(inputs, scene);
+            } else if draw {
                 live.redraw(inputs, scene);
             }
-            live.laps
+            (live.laps, live.owes_frame())
         });
+        let (parts, owed) = parts.map_or((None, false), |(l, o)| (Some(l), o));
+        self.frame_owed = owed;
         let drawn = lap();
         let house = self.play.local;
         if let Some(r) = self.radar.as_mut() {
@@ -788,6 +807,26 @@ impl Session {
             };
         }
         true
+    }
+
+    /// Draws the frame a tick put off, if one waits (design: render
+    /// (#138)): before a frame is drawn, a pick is made from the scene or a
+    /// tick draws no frame. Through [`Session::with_live`], so the scene's
+    /// stamp moves on and the frame's picks are made again.
+    pub fn draw_owed_frame(&mut self) {
+        if !std::mem::take(&mut self.frame_owed) {
+            return;
+        }
+        if self.live_only(|live, _| live.owes_frame()) == Some(true) {
+            self.with_live(|live, inputs, scene| live.redraw(inputs, scene));
+        }
+    }
+
+    /// Whether a tick's frame was put off and waits for
+    /// [`Session::draw_owed_frame`] (tests).
+    #[cfg(test)]
+    pub(crate) fn frame_owed(&self) -> bool {
+        self.frame_owed
     }
 
     /// What the person looks at now, for a pathing report (M8 A4): the
@@ -1297,6 +1336,8 @@ impl Session {
     /// [`Session::end_frame`] each point is picked once ([`Session::under`]).
     // design: render (#120)
     pub fn begin_frame(&mut self) {
+        // design: render (#138) (the frame shows the ticks whose frames were put off)
+        self.draw_owed_frame();
         self.picks = Some(Vec::new());
     }
 
@@ -1319,6 +1360,8 @@ impl Session {
     /// battlefield: within a drawn frame, the frame's pick of the point
     /// (design: render (#120)).
     pub fn under(&mut self, p: Point) -> (CellXY, Option<ObjectId>) {
+        // design: render (#138) (a pick reads the scene a redraw after every tick would have left)
+        self.draw_owed_frame();
         let key = (p, self.centre, self.screen);
         if let Some(&(_, hit)) = self
             .picks
@@ -1373,6 +1416,8 @@ impl Session {
     /// Debug diagnostic: every drawn item covering the screen point `p`
     /// (see `Live::trace_point`); empty without a live game.
     pub fn trace_at(&mut self, p: Point) -> Vec<String> {
+        // design: render (#138)
+        self.draw_owed_frame();
         let (qx, qy) = self.world_point(p);
         let top = self.view().origin.1;
         let statics = self.loaded.built.objects.clone();

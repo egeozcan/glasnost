@@ -63,6 +63,52 @@ fn clamp_overflow(r: f64, finite_inputs: bool) -> f64 {
     }
 }
 
+/// Whether Dekker's product of [`product_residual`] is exact for a factor
+/// `x`: its magnitude lies in [2⁻⁴⁰⁰, 2⁴⁰¹), so that Veltkamp's split does
+/// not overflow and no partial product or residual leaves the normal range.
+fn split_safe(x: f64) -> bool {
+    let e = (x.to_bits() >> 52) & 0x7FF;
+    (1023 - 400..=1023 + 400).contains(&e)
+}
+
+/// Veltkamp's split of `x` into a high part of 26 bits and the exact rest.
+fn split(x: f64) -> (f64, f64) {
+    // 2^27 + 1, the splitting factor of a 53-bit significand.
+    const FACTOR: f64 = 134_217_729.0;
+    let c = FACTOR * x;
+    let hi = c - (c - x);
+    (hi, x - hi)
+}
+
+/// `a·b − p` exactly, for `p` the product rounded to nearest: Dekker's
+/// error-free product where both factors are [`split_safe`], a fused
+/// multiply-add elsewhere. Dekker's product needs no fused multiply-add,
+/// which WebAssembly computes in software (design: render (#143)).
+fn product_residual(a: f64, b: f64, p: f64) -> f64 {
+    if split_safe(a) && split_safe(b) {
+        let (ah, al) = split(a);
+        let (bh, bl) = split(b);
+        al * bl - (((p - ah * bh) - al * bh) - ah * bl)
+    } else {
+        a.mul_add(b, -p)
+    }
+}
+
+/// `a − q·b` exactly, for `q` the quotient `a ÷ b` rounded to nearest
+/// (finite, non-zero): with `p = q·b` rounded and its exact residual `e`
+/// from Dekker's product, `a − p` is exact (`p` lies within a factor of
+/// two of `a`) and so is `(a − p) − e`, the representable remainder. A
+/// fused multiply-add where the factors are not [`split_safe`]
+/// (design: render (#143)).
+fn remainder(a: f64, b: f64, q: f64) -> f64 {
+    if split_safe(q) && split_safe(b) {
+        let p = q * b;
+        (a - p) - product_residual(q, b, p)
+    } else {
+        (-q).mul_add(b, a)
+    }
+}
+
 /// `a + b` at 53-bit precision, rounded toward zero (S-0105 F0).
 pub fn add_rz(a: f64, b: f64) -> f64 {
     let s = a + b;
@@ -86,10 +132,37 @@ pub fn mul_rz(a: f64, b: f64) -> f64 {
     if !p.is_finite() {
         return clamp_overflow(p, a.is_finite() && b.is_finite());
     }
-    // a·b − p, exact (fused multiply-add rounds once, and the residual of a
-    // product is representable).
-    let e = a.mul_add(b, -p);
+    // a·b − p, exact (the residual of a product is representable).
+    let e = product_residual(a, b, p);
     correct(p, e)
+}
+
+/// `a × b` of two widened singles at 53-bit precision, rounded toward zero
+/// (S-0105 F0), equal to [`mul_rz`] of the widened values. The product of
+/// two 24-bit significands has at most 48 bits and no product of finite
+/// singles leaves the normal range of a double, so the product is exact:
+/// it has no residual and needs no fused multiply-add, which WebAssembly
+/// computes in software (design: render (#143)).
+pub fn mul_f32_exact(a: f32, b: f32) -> f64 {
+    let p = f64::from(a) * f64::from(b);
+    debug_assert_eq!(p.to_bits(), mul_rz(f64::from(a), f64::from(b)).to_bits());
+    p
+}
+
+/// `a × b` for a power of two `b` not below 1 at 53-bit precision, rounded
+/// toward zero (S-0105 F0), equal to [`mul_rz`]: scaling by a power of two
+/// is exact until it overflows, which keeps [`mul_rz`]'s overflow rule
+/// (design: render (#143)).
+pub fn mul_pow2_rz(a: f64, b: f64) -> f64 {
+    debug_assert!(b >= 1.0 && b.is_finite() && b.to_bits() & ((1 << 52) - 1) == 0);
+    let p = a * b;
+    let r = if p.is_finite() {
+        p
+    } else {
+        clamp_overflow(p, a.is_finite())
+    };
+    debug_assert_eq!(r.to_bits(), mul_rz(a, b).to_bits());
+    r
 }
 
 /// `a ÷ b` at 53-bit precision, rounded toward zero (S-0105 F0).
@@ -102,7 +175,7 @@ pub fn div_rz(a: f64, b: f64) -> f64 {
         return q;
     }
     // r = a − q·b exactly; the exact quotient is q + r / b.
-    let r = (-q).mul_add(b, a);
+    let r = remainder(a, b, q);
     let err_sign_negative = (r < 0.0) != (b < 0.0);
     if r != 0.0 && err_sign_negative != (q < 0.0) {
         toward_zero_f64(q)
@@ -127,13 +200,14 @@ pub fn to_f32_rz(x: f64) -> f32 {
 /// `a × b` of two singles, stored in single precision truncated toward zero
 /// (the product itself is exact at 53 bits).
 pub fn mul_f32_rz(a: f32, b: f32) -> f32 {
-    to_f32_rz(mul_rz(f64::from(a), f64::from(b)))
+    to_f32_rz(mul_f32_exact(a, b))
 }
 
 /// A dot product of single-precision vectors at 53-bit precision rounded
 /// toward zero, summed left to right: ((a₀b₀ + a₁b₁) + a₂b₂). Not stored.
+/// Each product is exact ([`mul_f32_exact`]).
 pub fn dot3_rz(a: [f32; 3], b: [f32; 3]) -> f64 {
-    let p = |i: usize| mul_rz(f64::from(a[i]), f64::from(b[i]));
+    let p = |i: usize| mul_f32_exact(a[i], b[i]);
     add_rz(add_rz(p(0), p(1)), p(2))
 }
 
@@ -257,6 +331,170 @@ mod tests {
             let away_units = away * f64::powi(2.0, shift);
             assert_eq!(away_units.fract(), 0.0);
             assert!((away_units as i128).abs() > exact.abs(), "{a} {b} {shift}");
+        }
+    }
+
+    /// design: render (#143) (Dekker's residuals equal the fused
+    /// multiply-add's, and so `mul_rz` and `div_rz` give the results they
+    /// gave with it: random significands with exponents across the safe
+    /// range, its edges and beyond, specials and subnormals)
+    #[test]
+    fn dekker_residuals_equal_fused_multiply_add() {
+        let mut s = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s
+        };
+        // A double with the sign and significand of random `r` and an
+        // exponent field in `lo..=hi`.
+        let value = |r: u64, lo: u64, hi: u64| {
+            let e = lo + (r >> 52) % (hi - lo + 1);
+            f64::from_bits((r & (1 << 63)) | (e << 52) | (r.rotate_left(11) & ((1 << 52) - 1)))
+        };
+        let mul_fma = |a: f64, b: f64| {
+            let p = a * b;
+            if !p.is_finite() {
+                return clamp_overflow(p, a.is_finite() && b.is_finite());
+            }
+            correct(p, a.mul_add(b, -p))
+        };
+        let div_fma = |a: f64, b: f64| {
+            let q = a / b;
+            if !q.is_finite() {
+                return clamp_overflow(q, a.is_finite() && b.is_finite() && b != 0.0);
+            }
+            if q == 0.0 {
+                return q;
+            }
+            let r = (-q).mul_add(b, a);
+            if r != 0.0 && ((r < 0.0) != (b < 0.0)) != (q < 0.0) {
+                toward_zero_f64(q)
+            } else {
+                q
+            }
+        };
+        let check = |a: f64, b: f64| {
+            let p = a * b;
+            if p.is_finite() {
+                let want = a.mul_add(b, -p);
+                let got = product_residual(a, b, p);
+                assert!(
+                    got == want || (got.is_nan() && want.is_nan()),
+                    "{a:e} {b:e}"
+                );
+            }
+            assert_eq!(
+                mul_rz(a, b).to_bits(),
+                mul_fma(a, b).to_bits(),
+                "{a:e} {b:e}"
+            );
+            assert_eq!(
+                div_rz(a, b).to_bits(),
+                div_fma(a, b).to_bits(),
+                "{a:e} {b:e}"
+            );
+        };
+        let edges = [
+            (623, 623),
+            (1423, 1423),
+            (622, 622),
+            (1424, 1424),
+            (0, 0),
+            (2046, 2046),
+        ];
+        for _ in 0..300_000 {
+            // Within the safe range, with the exponents of voxel rendering.
+            check(value(next(), 1013, 1033), value(next(), 1013, 1033));
+            check(value(next(), 623, 1423), value(next(), 623, 1423));
+            // Anywhere, edges of the safe range included.
+            check(value(next(), 0, 2046), value(next(), 0, 2046));
+            let (lo, hi) = edges[(next() % edges.len() as u64) as usize];
+            check(value(next(), lo, hi), value(next(), 623, 1423));
+            check(value(next(), 623, 1423), value(next(), lo, hi));
+        }
+        let specials = [
+            0.0,
+            -0.0,
+            1.0,
+            3.0,
+            1.0 / 3.0,
+            f64::MAX,
+            f64::MIN_POSITIVE,
+            f64::from_bits(1),
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+        ];
+        for &a in &specials {
+            for &b in &specials {
+                check(a, b);
+                check(-a, b);
+            }
+        }
+    }
+
+    /// spec: S-0105 Formulas F0; design: render (#143) (the exact products
+    /// give `mul_rz`'s result bit for bit: random bit patterns, specials,
+    /// extremes and subnormals)
+    #[test]
+    fn exact_products_equal_mul_rz() {
+        let mut s = 0x0F1E_2D3C_4B5A_6978u64;
+        let mut next = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s
+        };
+        let specials = [
+            0.0f32,
+            -0.0,
+            1.0,
+            -1.0,
+            f32::MAX,
+            -f32::MAX,
+            f32::MIN_POSITIVE,
+            f32::from_bits(1),
+            -f32::from_bits(1),
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+            1.0 / 3.0,
+            0.1,
+        ];
+        let same = |a: f64, b: f64| a.to_bits() == b.to_bits();
+        for &a in &specials {
+            for &b in &specials {
+                let want = mul_rz(f64::from(a), f64::from(b));
+                assert!(same(mul_f32_exact(a, b), want), "{a} {b}");
+            }
+        }
+        for _ in 0..200_000 {
+            let a = f32::from_bits(next() as u32);
+            let b = f32::from_bits((next() >> 32) as u32);
+            let want = mul_rz(f64::from(a), f64::from(b));
+            assert!(same(mul_f32_exact(a, b), want), "{a} {b}");
+            assert_eq!(mul_f32_rz(a, b).to_bits(), to_f32_rz(want).to_bits());
+        }
+        let powers = [1.0, 2.0, 16.0, 256.0, 2f64.powi(1000)];
+        for _ in 0..200_000 {
+            let a = f64::from_bits(next());
+            for &b in &powers {
+                assert!(same(mul_pow2_rz(a, b), mul_rz(a, b)), "{a} {b}");
+            }
+        }
+        for a in [
+            f64::MAX,
+            -f64::MAX,
+            f64::INFINITY,
+            f64::NAN,
+            -0.0,
+            f64::from_bits(1),
+        ] {
+            for &b in &powers {
+                assert!(same(mul_pow2_rz(a, b), mul_rz(a, b)), "{a} {b}");
+            }
         }
     }
 }

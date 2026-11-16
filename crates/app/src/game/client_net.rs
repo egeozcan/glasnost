@@ -1255,6 +1255,8 @@ impl Client {
                 out.clear();
             }
             let mut blocked = false;
+            // design: render (#138): the update's one frame shows the catch-up's ticks; theirs are put off to it
+            let put_off = std::mem::replace(&mut s.put_off_frames, true);
             for _ in 0..CATCH_UP_TICKS {
                 let ev = &mut net.evidence;
                 let kept = &mut net.checkpoints;
@@ -1276,6 +1278,7 @@ impl Client {
                     break;
                 }
             }
+            s.put_off_frames = put_off;
             s.play.cues.clear();
             s.play.acks.clear();
             if blocked && !net.caught_up_sent {
