@@ -239,9 +239,7 @@ fn take_destination_with(w: &mut World, id: ObjectId, forced: bool) {
     // spec: S-0208 claim 19 (Landing choice while a warp is pending, r66, Q-3142: for infantry too, from the leaving stage until the departure, being erased drops the destination before any choice, S-0207 claim 20 a)
     // spec: S-0207 claim 27 (Q-1130 table, third row: with no suppression pending the order-level destination becomes empty and nothing is consumed)
     // spec: S-0214 Terms and S-0513 Terms and claim 40 (phasing in is also a superweapon warp member's, from departure until its arrival hold ends, #361)
-    if phasing_in(w, id)
-        || crate::parasite::held(w, id)
-        || crate::superweapons::being_erased(w, id)
+    if phasing_in(w, id) || crate::parasite::held(w, id) || crate::superweapons::being_erased(w, id)
     {
         st.for_dest = None;
         set_state(w, id, st);

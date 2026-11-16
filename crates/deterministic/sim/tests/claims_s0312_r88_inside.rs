@@ -97,7 +97,12 @@ fn at(dx: i32, dy: i32) -> CellXY {
 /// with it as S-0507 claim 15 has it for an open-topped one. Returns the
 /// world, the passenger, the carrier and the passenger's position when it
 /// went inside.
-fn inside(r: &Ruleset, kind: Kind, passenger: &str, carrier: &str) -> (World, ObjectId, ObjectId, Pos) {
+fn inside(
+    r: &Ruleset,
+    kind: Kind,
+    passenger: &str,
+    carrier: &str,
+) -> (World, ObjectId, ObjectId, Pos) {
     let mut w = testkit::game_with(r, SIZE, 7);
     testkit::run(&mut w, 2);
     let p = testkit::spawn(&mut w, kind, passenger, 0, at(3, 0), 0);
@@ -173,7 +178,10 @@ fn open_topped_transport_the_death_animation_comes_at_the_transport() {
     let here = w.obj(t).unwrap().pos;
     kill(&mut w, p, "DK1");
     assert_eq!(anims(&w), [("ROW0".to_string(), here)]);
-    assert!(w.obj(p).is_none(), "a row with no sequence: removed at once");
+    assert!(
+        w.obj(p).is_none(),
+        "a row with no sequence: removed at once"
+    );
     assert_eq!(transport::count(&w, t), 0);
 }
 
@@ -192,7 +200,11 @@ fn the_switch_off_closed_transport_passengers_show_nothing() {
     let (mut w, p, t, _) = inside(&r, Kind::Infantry, "ANIMED", "OPEN");
     let here = w.obj(t).unwrap().pos;
     kill(&mut w, p, "DK1");
-    assert_eq!(anims(&w), [("ROW0".to_string(), here)], "open-topped: unchanged");
+    assert_eq!(
+        anims(&w),
+        [("ROW0".to_string(), here)],
+        "open-topped: unchanged"
+    );
 }
 
 // spec: S-0312 claim 34 (a) (the passenger leaves the list at the hit and the open-topped transport no longer moves it) and (c) (S-0107 claim 17's death sequence plays in its own turns, off the map; meanwhile it takes no damage; at its completion the corpse comes at part b's position and the unit is removed)
@@ -221,7 +233,11 @@ fn open_topped_transport_infantry_plays_its_death_sequence_off_the_map() {
         }
     }
     assert!(w.obj(p).is_none(), "removed at the sequence's completion");
-    assert_eq!(anims(&w), [("BODYA".to_string(), here)], "the corpse at part b's position");
+    assert_eq!(
+        anims(&w),
+        [("BODYA".to_string(), here)],
+        "the corpse at part b's position"
+    );
 }
 
 // spec: S-0312 claim 34 (d) (infantry inside a closed transport: a death sequence is replaced by the removal at once, with no corpse and no corpse-pick draw)

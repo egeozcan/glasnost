@@ -1190,9 +1190,7 @@ fn engineer_friendly(w: &World, actor: ObjectId, t: ObjectId) -> bool {
     // spec: S-0214 table I (revision 84, Q-3164, #358: a repairable building, not vehicle-like, that is allied with the actor, garrisonable or not and erased or not, or belongs to a passive neutral house, can be garrisoned and is not being erased; the repairable and not-vehicle-like tests apply in both cases)
     repairable
         && (allied(w, actor, t)
-            || (passive_neutral
-                && b.raw.can_be_occupied.unwrap_or(false)
-                && !being_erased(w, t)))
+            || (passive_neutral && b.raw.can_be_occupied.unwrap_or(false) && !being_erased(w, t)))
 }
 
 // ---------------------------------------------------------------------------

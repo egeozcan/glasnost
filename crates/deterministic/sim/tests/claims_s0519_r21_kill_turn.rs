@@ -14,7 +14,9 @@ use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
 use glasnost_num::F64;
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{Decimal, LocomotionClass, Locomotor, MovementZone, UnitType, WarheadType};
+use glasnost_rules::sim::{
+    Decimal, LocomotionClass, Locomotor, MovementZone, UnitType, WarheadType,
+};
 use glasnost_sim::air;
 use glasnost_sim::bomb::Bomb;
 use glasnost_sim::combat::damage;
@@ -130,7 +132,10 @@ fn a_vessel_its_bomb_sinks_descends_in_the_detonation_turn() {
         after += 1;
         assert!(after <= 200, "it leaves play");
     }
-    assert_eq!(after, 80, "it leaves play in the 80th tick after the detonation");
+    assert_eq!(
+        after, 80,
+        "it leaves play in the 80th tick after the detonation"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +206,11 @@ fn an_aircraft_its_bomb_kills_takes_its_first_crash_step_in_that_turn() {
     assert!(killed(&w, a), "killed by its bomb");
     assert!(air::crashing(&w, a), "it crashes");
     let s = w.obj(a).unwrap().air.clone().unwrap_or_default();
-    assert_eq!(s.crash, Some(1), "the fall counter after the detonation tick");
+    assert_eq!(
+        s.crash,
+        Some(1),
+        "the fall counter after the detonation tick"
+    );
     assert!(
         air::height(&w, a) < before,
         "it is lower at the end of the detonation tick"
