@@ -618,6 +618,8 @@ pub fn set_own_target(ob: &mut crate::world::Object, t: Option<Target>) {
     // A nonempty target's retarget let-go needs the world: the caller makes it (`crate::emitters::retarget_let_go`).
     crate::emitters::cleared(ob);
     if t.is_none() && had {
+        // spec: S-0301 claim 4 (when the firer's target is cleared its burst counter is set to 0; a change from one target to another keeps it)
+        ob.combat.burst = 0;
         request_clear(ob, true);
     }
 }
@@ -639,6 +641,7 @@ pub fn explicit_clear_own_target(ob: &mut crate::world::Object) {
     let had = ob.target.is_some();
     if had {
         ob.combat.target_epoch = ob.combat.target_epoch.wrapping_add(1); // spec: S-0519 claim 19 (a target change)
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
     ob.target = None;
     crate::emitters::cleared(ob);
@@ -656,6 +659,7 @@ pub fn redirected_to_none(ob: &mut crate::world::Object) {
     ob.combat.opportunity = false;
     if ob.target.is_some() {
         ob.combat.target_epoch = ob.combat.target_epoch.wrapping_add(1); // spec: S-0519 claim 19 (a target change)
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
     ob.target = None;
     crate::emitters::cleared(ob);
@@ -1539,6 +1543,9 @@ pub fn aircraft_return(w: &mut World, x: ObjectId, spawner: ObjectId) {
         return;
     }
     if let Some(o) = w.obj_mut(x) {
+        if o.target.is_some() {
+            o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        }
         o.target = None;
         crate::emitters::cleared(o);
         o.dest = Some(Target::Object(spawner));
