@@ -58,7 +58,8 @@ impl Pump {
         if !client.networked() || !self.stale(now_ms) {
             return false;
         }
-        client.update(now_ms);
+        // design: render (#138): no frame sees this update's tick, so its frame is put off to the next frame
+        client.update_unseen(now_ms);
         true
     }
 

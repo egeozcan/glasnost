@@ -574,6 +574,9 @@ pub struct Live {
     /// level, beams, bolts and beam flashes (#93). A redraw with no tick
     /// between is not a new drawn frame and shows these again.
     drawn_lines: Option<DrawnLines>,
+    /// A tick's drawn frame was put off ([`Live::put_off_frame`]) and no
+    /// redraw has drawn it since (design: render (#138)).
+    owed: bool,
     /// The battlefield view's origin and size at the latest redraw, for the
     /// electric bolts' view test (S-0316 claim 5); `None` (no view known):
     /// every bolt counts as in view.
@@ -1448,6 +1451,7 @@ impl Live {
             target_lines: BTreeMap::new(),
             cosmetic,
             drawn_lines: None,
+            owed: false,
             battlefield: None,
             status_view: None,
             debug_markers: true,
@@ -3684,10 +3688,28 @@ impl Live {
         })
     }
 
+    /// The drawn frame of a tick that no one sees (a rejoining peer's
+    /// catch-up ticks before the update's frame, the network pump's ticks
+    /// while the window draws no frames), in place of [`Live::redraw`]
+    /// after [`Live::after_tick`]. The next redraw draws the scene as a
+    /// redraw after every such tick would have left it (design: render
+    /// (#138)).
+    pub fn put_off_frame(&mut self, inputs: &Inputs, scene: &mut Scene) {
+        self.redraw(inputs, scene);
+    }
+
+    /// Whether a frame put off ([`Live::put_off_frame`]) waits for a
+    /// redraw (design: render (#138)).
+    pub fn owes_frame(&self) -> bool {
+        self.owed
+    }
+
     /// Rebuilds the object pass of `scene`: the cell pass stays, the static
     /// ground entries are reused and the mobile objects are drawn from the
     /// game, all in ground-layer order.
     pub fn redraw(&mut self, inputs: &Inputs, scene: &mut Scene) {
+        // design: render (#138) (this redraw draws every frame put off before it)
+        self.owed = false;
         // design: render (#145) (the benchmark's parts of the scene update)
         let mut lap = self.lap_start();
         // design: render (#139) (the redraw finds the status order afresh)

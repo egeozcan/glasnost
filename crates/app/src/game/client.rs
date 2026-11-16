@@ -224,6 +224,9 @@ pub struct Client {
     pub audio: Option<Audio>,
     /// Whether the window has the focus (S-0201 claim 9).
     pub focused: bool,
+    /// The update runs between frames ([`Client::update_unseen`]): its
+    /// ticks' frames are put off to the next frame (design: render (#138)).
+    unseen: bool,
     /// Whether the battlefield is composed here on the CPU (else the window
     /// layer draws it on the GPU).
     pub cpu_map: bool,
@@ -361,6 +364,7 @@ impl Client {
             status: "Pick the game's install folder to begin.".into(),
             audio: None,
             focused: true,
+            unseen: false,
             cpu_map: true,
             game_serial: 0,
             can_quit: true,
@@ -1406,6 +1410,7 @@ impl Client {
         };
         s.clock_ms = now_ms;
         s.focused = self.focused;
+        s.put_off_frames = self.unseen;
         // spec: S-0213 claim 25 (status lines expire at display updates, also while paused or unfocused)
         s.play.update_messages(now_ms);
         // spec: S-0213 Edge cases (Unfittable status text: an importer warning for the offending text)
@@ -1501,6 +1506,15 @@ impl Client {
                 self.keep_rejoin(None);
             }
         }
+    }
+
+    /// [`Client::update`] for an update no frame follows (the network pump,
+    /// `pump.rs`): the ticks it runs put their frames off to the next frame
+    /// (design: render (#138)).
+    pub fn update_unseen(&mut self, now_ms: i64) {
+        self.unseen = true;
+        self.update(now_ms);
+        self.unseen = false;
     }
 
     /// The frame's draw list, and the images that changed (the battlefield
