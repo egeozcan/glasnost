@@ -846,6 +846,92 @@ fn catch_up_scene(put_off: bool) -> (Scene, glasnost_sim::rng::Rng) {
 /// The ticks of [`catch_up_scene`].
 const CATCH_UP: usize = 6;
 
+/// design: render (#138): a timing probe of a rejoining peer's catch-up
+/// update (10 ticks, then the update's frame) on a synthetic game of 40
+/// buildings and 300 infantry of HUTX and MANX, the drawing's work only
+/// (after the tick, the redraws or the frames put off, and the frame's
+/// redraw), each frame redrawn against the frames put off; with the
+/// frames put off that fell back on a redraw. Run it in release with
+/// `--ignored --nocapture`; it prints mean milliseconds an update.
+#[test]
+#[ignore = "a timing probe (#138)"]
+fn catch_up_probe() {
+    const SIDE: i32 = 64;
+    const UPDATES: u32 = 20;
+    const TICKS: u32 = 10;
+    let (import, catalogue, assets) = import_with("");
+    let map = testkit::empty_map(SIDE);
+    let rules = rules(false);
+    let setup = setup();
+    let mut world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    for k in 0..40 {
+        let at = testkit::mid(SIDE, k % 8 * 6 - 24, k / 8 * 6 - 15);
+        testkit::spawn(&mut world, SimKind::Building, "HUTX", k as u8 % 2, at, 0);
+    }
+    for k in 0..300 {
+        let at = testkit::mid(SIDE, k % 20 * 2 - 20, k / 20 * 2 - 14);
+        testkit::spawn(&mut world, SimKind::Infantry, "MANX", k as u8 % 2, at, 0);
+    }
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let run = |put_off: bool| {
+        let (mut built, painter) = build_parts(&inputs, true);
+        let mut live = Live::new(
+            &inputs,
+            &mut built,
+            painter,
+            (world.clone(), rules.clone(), setup.clone(), Vec::new()),
+        );
+        let mut scene = built.scene;
+        live.redraw(&inputs, &mut scene);
+        let mut drawing = std::time::Duration::ZERO;
+        let mut fell_back = 0;
+        for _ in 0..UPDATES {
+            for _ in 0..TICKS {
+                glasnost_sim::tick::step(&mut live.world);
+                let t = std::time::Instant::now();
+                live.after_tick();
+                if put_off {
+                    live.put_off_frame(&inputs, &mut scene);
+                    fell_back += u32::from(!live.owes_frame());
+                } else {
+                    live.redraw(&inputs, &mut scene);
+                }
+                drawing += t.elapsed();
+            }
+            let t = std::time::Instant::now();
+            if live.owes_frame() {
+                live.redraw(&inputs, &mut scene);
+            }
+            drawing += t.elapsed();
+        }
+        (
+            drawing.as_secs_f64() * 1000.0 / f64::from(UPDATES),
+            fell_back,
+            scene.items.len(),
+        )
+    };
+    let (every, _, items) = run(false);
+    let (put_off, fell_back, put_off_items) = run(true);
+    assert_eq!(items, put_off_items);
+    println!(
+        "catch-up probe: {items} items; an update of {TICKS} ticks, drawing: every frame redrawn {every:.3} ms, frames put off {put_off:.3} ms ({fell_back} of {} put off fell back on a redraw)",
+        UPDATES * TICKS
+    );
+}
+
 /// design: render (#138) (the frames of ticks no frame sees are put off to the next redraw, which
 /// draws the scene a redraw after every tick leaves); spec: S-0201 claim 6 (one drawn frame per
 /// tick), S-0316 claims 5 and 9 (a bolt's draws are taken in every drawn frame, from the cosmetic
