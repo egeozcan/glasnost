@@ -1060,3 +1060,30 @@ Seams left:
 - #382/#383: `spawn::start_crash`'s call of `kill` is not a death inside and is unchanged.
 
 The P3 census rule: no fix makes or moves a spawn controller, bomb, charger list, dropper or aircraft-kind back-reference of `World::census`. `lift::leaving_play` only clears droppers and ends grips, and its drop goes through `end_grip`, which already calls `census::forget`. #385's `strike::turn` runs inside `holders_drop` while its census is live; a cancel only empties the linked aircraft's ammunition and queues their retreat, which makes none of those references (aircraft state is never noted).
+
+## Batch A6c: #284 and #367
+
+Step M8 A6c, base main e2c2efe, not rebased. The answers to Q-3152 (S-0520 r17, #284) and Q-3149 (S-0409 r17, #367) come first; the arena triage that follows them is in [a6c-arena-triage.md](a6c-arena-triage.md). Each test is committed before its fix (604e663, a49bc4c) and fails on the commit before the fix (both of #284's on df1facd, #367's new test on a49bc4c; logs in `local-lane/m8/a6c/`); no fix commit changes a test. df1facd is a test correction of its own: under r17 a crate that holds no place stays when it is picked up, so the two effect tests that picked up such a crate (`pick` and `a_pickup_with_crates_on_places_a_replacement` in `claims_s0520_effects.rs`) now give their crate a place with the new fixture `crate_common::placed_crate_at`; they pass on base and after. b1c588e is rustfmt on the r17 test file. No request is filed for these two. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (M8 A6c: the answers to Q-3152 and Q-3149)* (58e253b).
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #284 | A named crate overlay that holds no place and is no map crate was removed by its pickup (S21's interim for Q-3152) | fixed (ad8a830) | S-0520 r17 claim 11: `crates::free_and_remove` removes the crate only when the pickup frees a place (and its overlay is a named crate overlay) or when it is a map's own crate. Otherwise the crate stays: the pickup gives its effect and the random replacement, and the crate can be collected again. With `quirks.crate_place_by_cell` off, a named crate overlay that no crate placement placed frees no place, so it stays even with an occupied place on its cell | `claims_s0520_r17.rs` (`a_named_crate_overlay_without_a_place_stays_when_picked_up`, `a_named_crate_overlay_no_placement_placed_and_a_place_on_its_cell`, both switch positions) |
+| #367 | The waypoint reveal made for an unmarked house reached an allied house whose whole-map-revealed mark is set (S20's interim for Q-3149) | fixed (5e79c09) | S-0409 r17 claims 2 and 17: the new `shroud::waypoint_reveal`, called by `triggers::reveal` for each house it reveals for, gives the cells to that house and, under ally reveal, only to allied player houses whose mark is clear | `claims_s0409_reveal_action.rs::claim_17_reveal_action_skips_a_marked_ally` (the marked ally keeps its seen state and counts; the unmarked house is explored) |
+
+Formats: neither fix adds saved or hashed state, so save 150, AI game 127 and wire 12 are unchanged (the step's numbers 157 and 133 are not used). The sim-gate goldens pass unchanged.
+
+Lanes compare base e2c2efe with the batch at b1c588e.
+
+**Oracle arena** (`--record all`, four threads). Every output file is byte-identical to base: M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 and M-0021 10 of 50 failing.
+
+**Sweeps.** M6c, M7a and M7b over seeds 1–16 pass and print the same lines as base (smallest minimum 0, 2 and drain 3).
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games). Every game ends on the same tick with the same winner as base, and all 36 are over before 120000 ticks; only the timings differ.
+
+**Suites.** The AI suite with its ignored tests passes 362 before and after. The sim gate with its ignored tests passes 17 on base and here, against the unchanged goldens.
+
+Seams left:
+- #284: S21's seam stands: an overlay written straight into a cell without `overlays::place_overlay` or `crush::remove_overlay` does not forget the cell's crate owner.
+- #367: only the waypoint reveal (trigger action 17) goes through `waypoint_reveal`. `shroud::area_reveal` is unchanged (claim 2's ally rule without the mark test); after this fix no simulation path calls it, only the AI crate, the app and tests.
+
+The P3 census rule: neither fix makes or moves a back-reference of `World::census`. The crate state holds cells and place numbers only, and the waypoint reveal writes shroud cells only.
