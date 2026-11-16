@@ -91,10 +91,22 @@ fn claim_34_c_a_click_released_left_of_or_above_the_view_acts_on_cell_0_0() {
     let cases = [
         // Pressed by the left edge, sampled outside, released there: the
         // limited pointer stays within 4 pixels of the press.
-        (Point::new(2, 300), Some(Point::new(-30, 300)), Point::new(-30, 300)),
-        (Point::new(300, 2), Some(Point::new(300, -20)), Point::new(300, -20)),
+        (
+            Point::new(2, 300),
+            Some(Point::new(-30, 300)),
+            Point::new(-30, 300),
+        ),
+        (
+            Point::new(300, 2),
+            Some(Point::new(300, -20)),
+            Point::new(300, -20),
+        ),
         // Released beyond the upper-right corner with no sample outside.
-        (Point::new(m.right() - 3, 2), None, Point::new(SIZE.0 + 20, -20)),
+        (
+            Point::new(m.right() - 3, 2),
+            None,
+            Point::new(SIZE.0 + 20, -20),
+        ),
     ];
     for (press, outside, release) in cases {
         let mut c = game();
@@ -209,7 +221,10 @@ fn claim_34_d_a_right_release_outside_is_a_right_click() {
     c.pointer_down(Button::Right, press);
     c.pointer_left();
     up(&mut c, Button::Right, Point::new(-30, 300));
-    assert!(session(&c).play.selection.is_empty(), "the selection is cleared");
+    assert!(
+        session(&c).play.selection.is_empty(),
+        "the selection is cleared"
+    );
 }
 
 /// Puts the view centre in the middle of F5's limits.
@@ -246,7 +261,11 @@ fn claim_34_d_a_scroll_drag_samples_the_limited_pointer() {
     };
     let (start, inside) = drag(false);
     assert_ne!(inside, start, "the drag scrolls");
-    assert_eq!(drag(true), (start, inside), "outside, at the limited pointer");
+    assert_eq!(
+        drag(true),
+        (start, inside),
+        "outside, at the limited pointer"
+    );
 }
 
 /// spec: S-0214 claim 34 (f) (with either host, the game's window losing the input focus while a
