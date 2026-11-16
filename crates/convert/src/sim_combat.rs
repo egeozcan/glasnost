@@ -1719,6 +1719,12 @@ const DAMAGE_WARN: i32 = 1 << 24; // spec: S-0302 Edge cases (a damage field abo
 const COVERED_MUZZLE_POINTS: usize = 32; // nocite: how many MuzzleFlash keys the coverage table lists, our own bound
 const MUZZLE_POINTS_READ: i32 = 256; // nocite: a bound on the points read (S-0313 Edge cases: every point up to the capacity), our own safety limit
 const MAX_OCCUPANTS_QUIET: i32 = 10; // spec: S-0313 Edge cases (more than ten garrison muzzle points)
+/// The most pips the view draws in one row (#153).
+const VIEW_PIP_ROW_LIMIT: i32 = 1024; // design: sim (#153) (the view's pip-row bound)
+/// The view's bound on a pixel shift it adds to a position (#153).
+const VIEW_PIXEL_LIMIT: u32 = 1 << 20; // design: sim (#153) (±2²⁰ pixels)
+/// The most height levels the view draws a building's box over (#153).
+const VIEW_LEVEL_LIMIT: u32 = 128; // design: sim (#153) (±128 levels)
 
 /// The scan radius range without a warning (S-0303 Edge cases).
 const SPREAD_QUIET: (i128, i128) = (0, 11); // spec: S-0303 Edge cases (a spread outside 0 to 11)
@@ -3202,6 +3208,24 @@ impl Builder<'_> {
         self.each_int(key(t, "MaxNumberOccupants"), |n| n > MAX_OCCUPANTS_QUIET, |v| {
             format!("{name} MaxNumberOccupants {v} is above 10; the original supports at most ten garrison muzzle points (S-0313 Edge cases, a departure)")
         });
+        for (k, what) in [
+            ("TurretAnimX", "turret anchor"),
+            ("TurretAnimY", "turret anchor"),
+            ("TurretAnimZAdjust", "turret depth bias"),
+        ] {
+            // design: sim (#153) (the view adds these to the turret's anchor or depth without a bound; the importer warns beyond ±2²⁰ pixels and keeps the value)
+            self.each_int(key(t, k), |v| v.unsigned_abs() > VIEW_PIXEL_LIMIT, |v| {
+                format!("{name} {k} {v} lies beyond ±{VIEW_PIXEL_LIMIT} pixels: the view adds it to the {what} without a bound (#153)")
+            });
+        }
+        // design: sim (#153) (the view draws a building's box at most 128 levels high or deep; the importer warns for each image value beyond and keeps it)
+        for (v, line) in self.art_values(kind, index, t, "Height") {
+            if let Some(h) = value::integer(&v).filter(|h| h.unsigned_abs() > VIEW_LEVEL_LIMIT) {
+                self.art_warn(line, format!(
+                    "{name} art Height {h} lies beyond ±{VIEW_LEVEL_LIMIT} levels: the view draws its box at most {VIEW_LEVEL_LIMIT} levels high or deep (#153)"
+                ));
+            }
+        }
         for k in ["InfantryGainSelfHeal", "UnitsGainSelfHeal"] {
             // spec: S-0314 Edge cases (the importer warns for a negative self-heal count, in either setting of quirks.negative_self_heal_counts)
             self.each_int(key(t, k), |n| n < 0, |v| {
@@ -4246,6 +4270,13 @@ impl Builder<'_> {
                         format!("{name} has a negative PipWrap: it shows no ammunition pips (S-0111 claim 15)"),
                     ));
                 }
+                // design: sim (#153) (the view draws at most 1024 pips in a row; the value is kept as read)
+                if let Some(w) = int_of(key(t, "PipWrap")).filter(|&w| w > VIEW_PIP_ROW_LIMIT) {
+                    out.push((
+                        key(t, "PipWrap").cloned(),
+                        format!("{name} has a PipWrap of {w}: the view draws at most {VIEW_PIP_ROW_LIMIT} ammunition pips (#153)"),
+                    ));
+                }
                 // spec: S-0111 Import mapping (Passengers absent 0, S-0507 and S-0605)
                 let capacity = int_of(key(t, "Passengers")).unwrap_or(0);
                 // spec: S-0111 Edge cases (the importer warns about a type with a passenger capacity whose pip-scale kind is not passengers)
@@ -4287,6 +4318,18 @@ impl Builder<'_> {
                     5 => primary.map_or(0, |w| int_of(key(w, "Damage")).unwrap_or(0)),
                     _ => 0,
                 };
+                // design: sim (#153) (the view draws at most 1024 pips in a row; the value is kept as read)
+                if row > VIEW_PIP_ROW_LIMIT {
+                    let at = match pip_kind {
+                        1 => key(t, "Ammo"),
+                        3 => key(t, "Passengers"),
+                        _ => primary.and_then(|w| key(w, "Damage")),
+                    };
+                    out.push((
+                        at.cloned(),
+                        format!("{name} has a pip row of {row} pips: the view draws at most {VIEW_PIP_ROW_LIMIT} (#153)"),
+                    ));
+                }
                 // spec: S-0111 claim 12 (a gunner transport whose row length is 0: the original's pip 0 is unspecified; our engine draws none; the importer warns)
                 if capacity > 0 && bool_of(key(t, "Gunner")) == Some(true) && row <= 0 {
                     out.push((
@@ -4333,8 +4376,46 @@ impl Builder<'_> {
         }
     }
 
+    /// Warnings for unit values past the view's bounds (#153): the value is
+    /// kept as read, and the view bounds what it draws.
+    fn view_bound_checks(&mut self) {
+        let outcome = self.i.outcome;
+        let empty = Vec::new();
+        for kind in [Kind::Infantry, Kind::Vehicles, Kind::Aircraft] {
+            for t in outcome.registries.get(&kind).unwrap_or(&empty) {
+                let name = format!("{} {}", kind.key(), show(&t.name));
+                let k = "PixelSelectionBracketDelta";
+                // design: sim (#153) (the view bounds the unit bar's bracket delta to ±2²⁰ pixels)
+                self.each_int(key(t, k), |v| v.unsigned_abs() > VIEW_PIXEL_LIMIT, |v| {
+                    format!("{name} {k} {v} lies beyond ±{VIEW_PIXEL_LIMIT} pixels, the view's bound for the unit bar (#153)")
+                });
+            }
+        }
+        // design: sim (#153) (the importer warns for an edge-scroll multiplier outside F9's range and keeps it as read)
+        let state = self.global(b"AudioVisual", "ScrollMultiplier");
+        let rule = self.rule();
+        self.each(
+            state.as_ref(),
+            |v| decimal_of(v, rule).is_some_and(|m| Exact::of(&m).negative()),
+            |v| format!("[AudioVisual] ScrollMultiplier {v} is negative: S-0101 F9 is given for a non-negative multiplier; the value is kept as read (#153)"),
+        );
+        self.each(
+            state.as_ref(),
+            |v| {
+                decimal_of(v, rule).is_some_and(|m| {
+                    // spec: S-0101 F9 (T(0) = 448, the largest magnitude; the product rounded toward zero, then truncated)
+                    let p = m.mul_rz(&Binary::from_i64(Format::Double, 448), Format::Double);
+                    let p = Exact::of(&p);
+                    !p.negative() && p.int > i128::from(i32::MAX)
+                })
+            },
+            |v| format!("[AudioVisual] ScrollMultiplier {v}: 448 times the multiplier does not fit a signed 32-bit integer (S-0101 F9); the view clamps the scroll step, the value is kept as read (#153)"),
+        );
+    }
+
     pub(super) fn cross_checks(&mut self) {
         self.pip_scale_checks();
+        self.view_bound_checks();
         let outcome = self.i.outcome;
         let empty = Vec::new();
         let weapons = outcome.registries.get(&Kind::Weapons).unwrap_or(&empty);

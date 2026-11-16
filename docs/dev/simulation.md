@@ -2251,3 +2251,36 @@ Step A6c of the M8 plan takes two answered requests before its arena triage. The
 
 - *#284, a named crate overlay that holds no place (S-0520 r17 claim 11, Q-3152).* A pickup now removes a crate only when it frees a place and the crate's overlay is a named crate overlay, or when the crate is a map's own crate. So a named crate overlay on a cell that no occupied place has, made by an overlay placement that is no crate placement (the resource bounce of S-0319 claim 10 over modded data), stays on its cell: the pickup still gives its effect and, with the crate setting on, makes its random replacement, and the crate can be collected again. With `quirks.crate_place_by_cell` off, a named crate overlay that no crate placement placed belongs to no place (`CrateWorld::owners` holds none for it), so its pickup frees none and it stays even when an occupied place has its cell. This replaces the interim in which such a pickup removed every named crate overlay. No new state and no new switch.
 - *#367, the waypoint reveal through an ally (S-0409 r17 claims 2 and 17, Q-3149).* `triggers::reveal` still makes the reveal for each player house whose whole-map-revealed mark is clear. Each reveal now goes through `shroud::waypoint_reveal`, which applies claim 2's ally rule only to allies whose mark is clear, so a marked house gets nothing from the waypoint reveal by any route. An unmarked ally of a marked house still has the reveal made for itself. The other area reveals of claim 17 keep `area_reveal`, which counts for every ally under claim 2. No new state.
+
+## Simulation (foundations F3: extreme modded values on the deterministic side, #153)
+
+Render batches R10 and R12 held the view against rules and art values far outside any real data (#153). This batch takes the deterministic side: the animation clock, the game-speed normalisation and the importer's warnings. Real data plays exactly as before. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch F3 (foundations)*.
+
+**Integer results wrap (S-0205 claim 1).** S-0205 claim 1 says that an integer result outside the signed 32-bit range wraps, in every spec that does not say otherwise, and that the original neither saturates nor clamps unless a topic spec states a clamp. Release builds already wrap, because the release profile has no overflow checks. A debug build panics instead. The sites below now wrap explicitly, so debug and release builds agree. This is the spec's rule, not a bound of our own, so these sites carry no `design:` marker.
+
+- *The animation clock (`anim_clock`).* The clock now wraps these results:
+  - the ticks since the last advance (S-0109 claim 5);
+  - the end limit λₑ − *a* and the lower turn λₛ − *a* (claims 6 and 9);
+  - a new pass's stage λₛ − *a*, and λₑ − *a* − 1 with `quirks.anim_reverse_raw_loop_end` off (F3);
+  - a reversed start λₑ − 1, and λₑ − *a* − 1 with that switch off (claim 8).
+
+  S-0109 F3 calls its arithmetic "integers, exact arithmetic". Our reading is that this is S-0109's usual phrase for exact integer, not floating-point, arithmetic. S-0205's terms define a wrap as the reduction of the exact integer result, and S-0109 F4 states its rule for every 32-bit stage and end value, so the stage is a 32-bit integer. If the lead reads F3 as arithmetic wider than 32 bits, these sites change and no other code does.
+
+  The view plays its animations through the same `anim_clock::Player`, so the two clocks agree. The view's `slots::read_anim` therefore takes no bound of its own.
+- *The game-speed normalisation (`infantry::normalised`).* S-0107 F3's 8*b* wraps. The spec states no 64-bit intermediate, and the truncating division follows S-0205 claim 2. On the animation rate path the products are already exact: a rate gives *d* = ⌊900 / ρ⌋ ≤ 900 (S-0109 F1), and the random-rate pair converts the same way. The random loop delay is never normalised. Two callers can pass a base delay above 2²⁸, so their products used to overflow: a building's body delay (S-0108 claim 6) and the low-funds speech delay (S-0701 claim 38).
+- *A building's pixel-shifted fire point (`combat::position::fire_point`).* The lepton form of a primary fire pixel shift (S-0313 claim 7, with or without the dual-shift flag) and of a voxel turret's anchor shift (claim 8) is added to the point with a wrapping add. `pixel_to_leptons` already wraps its own conversion (S-0205 claim 7).
+
+Seams:
+- In `combat::position`, the garrisoned building's muzzle shift (S-0313 claim 6), claim 1's translation-column adds and the lateral part σ*L* are still plain additions and products. They wrap in release builds but would panic in a debug one; no test reaches them with extreme data yet.
+- The clock's stage advance, its step back and its image frame *a* + *k* saturate where S-0205 claim 1 wraps. They never panic, and they were left as they are.
+- The view's `slots::first_frame` holds a reversed animation's first frame *a* + λₑ − 1 to 32 bits (design: render (#153)). The clock instead wraps *k*₀ = λₑ − 1. So for λₑ = −2³¹ with `quirks.anim_reverse_raw_loop_end` on, the view's first frame and the clock's first frame differ.
+
+**Importer warnings for the view's bounds (design: sim (#153)).** The view holds some values to bounds of its own (design: render (#153)). The importer now warns when a value lies past one of them. It keeps every value as read: these are warnings, not bounds.
+
+- A building's art `Height` beyond ±128 levels: the view's `LEVEL_LIMIT`.
+- A pip row longer than 1024 pips: the view's `PIP_ROW_LIMIT`. This covers a `PipWrap`, and the row length S-0111 T2 gives for the ammunition kind (the ammunition capacity), the passengers kind (the passenger capacity) and the mind-control kind (the primary weapon's damage). These are gameplay values, so the warning changes nothing.
+- An `[AudioVisual] ScrollMultiplier` μ that is negative, or whose magnitude trunc₀(rz(448 × μ)) does not fit a signed 32-bit integer. These are the values outside S-0101 F9's stated range. The test forms 448 × μ exactly as the view's `scroll::magnitude` does.
+- A unit type's `PixelSelectionBracketDelta` beyond ±2²⁰ pixels, R12's bound for the view's unit bar.
+- A building type's `TurretAnimX`, `TurretAnimY` or `TurretAnimZAdjust` beyond ±2²⁰ pixels. The view adds these to its turret anchor and depth bias without a check.
+
+  The importer does not hold these values. The view reads all three keys from the layered rules text (`mapview::build::rule_int`), not from the converted record, so a bound in the record would not reach the view's adds. On the simulation side, the turret anchor shift is a position in leptons, and S-0205 claim 1 says it wraps.

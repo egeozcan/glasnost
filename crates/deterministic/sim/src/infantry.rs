@@ -201,7 +201,8 @@ pub fn normalised(b: i32, s: u8) -> i32 {
         // spec: S-0107 F3 (N(0, s) = 0; table for 1 … 4; ⌊8b / (s + 1)⌋ from 5)
         0 => 0,
         1..=4 => A[(b - 1) as usize][s], // spec: S-0107 F3 (table T3 for b = 1 … 4)
-        _ => 8 * b / (s as i32 + 1),     // spec: S-0107 F3 (⌊8b / (s + 1)⌋ from b = 5)
+        // spec: S-0107 F3 (⌊8b / (s + 1)⌋ from b = 5); S-0205 claims 1 and 2 (8b wraps; the quotient truncates toward zero)
+        _ => b.wrapping_mul(8) / (s as i32 + 1),
     }
 }
 

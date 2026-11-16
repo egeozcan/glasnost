@@ -1845,3 +1845,26 @@ fn named_area_fire_deployer_flag() {
     let (s, _) = sim("[VehicleTypes]\n1=DESO\n[DESO]\nX=1\n", "", "");
     assert_eq!(s.vehicles["DESO"].named_area_fire_deployer, None);
 }
+
+/// design: sim (#153) (the importer warns for an edge-scroll multiplier outside S-0101 F9's range and keeps it as read); spec: S-0101 F9 (finite non-negative μ whose magnitude trunc₀(rz(448 × μ)) fits a signed 32-bit integer)
+#[test]
+fn a_scroll_multiplier_outside_f9s_range_warns() {
+    let run = |v: &str| sim(&format!("[AudioVisual]\nScrollMultiplier={v}\n"), "", "");
+    let negative = "is negative: S-0101 F9";
+    let wide = "does not fit a signed 32-bit integer";
+    // 448 × 4793490 = 2147483520 fits; 448 × 4793491 = 2147483968 does not.
+    for v in ["1", "0", "-0", "50%", "4793490"] {
+        let (_, w) = run(v);
+        assert!(!warned(&w, negative) && !warned(&w, wide), "{v}: {w:#?}");
+    }
+    for v in ["-1", "-0.5"] {
+        let (s, w) = run(v);
+        assert!(warned(&w, negative), "{v}: {w:#?}");
+        assert!(s.general.scroll_multiplier.is_some());
+    }
+    for v in ["4793491", "1e30"] {
+        let (s, w) = run(v);
+        assert!(warned(&w, wide), "{v}: {w:#?}");
+        assert!(s.general.scroll_multiplier.is_some());
+    }
+}

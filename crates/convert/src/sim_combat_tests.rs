@@ -2034,6 +2034,54 @@ fn pip_scale_warnings() {
     }
 }
 
+/// design: sim (#153) (the importer warns for a value past the view's bound and keeps it as read: a pip row above 1024 pips, a bracket delta, turret anchor shift or turret depth adjustment beyond ±2²⁰ pixels, a building art height beyond ±128 levels); spec: S-0111 T2 (the row length by pip-scale kind)
+#[test]
+fn values_past_the_views_bounds_warn() {
+    let base = "[InfantryTypes]\n1=Ant\n2=Bee\n\
+                [VehicleTypes]\n1=Tank\n2=Jeep\n3=Bus\n4=Coach\n5=Mind\n6=Wit\n\
+                [BuildingTypes]\n1=Hut\n2=Shed\n[WeaponTypes]\n1=Zap\n2=Ping\n\
+                [Ant]\nPixelSelectionBracketDelta=1048577\n\
+                [Bee]\nPixelSelectionBracketDelta=-1048576\n\
+                [Tank]\nPipScale=Ammo\nAmmo=1025\nPipWrap=1025\n\
+                [Jeep]\nPipScale=Ammo\nAmmo=1024\nPipWrap=1024\n\
+                [Bus]\nPipScale=Passengers\nPassengers=1025\n\
+                [Coach]\nPipScale=Passengers\nPassengers=1024\n\
+                [Mind]\nPipScale=MindControl\nPrimary=Zap\n[Zap]\nDamage=1025\n\
+                [Wit]\nPipScale=MindControl\nPrimary=Ping\n[Ping]\nDamage=1024\n\
+                [Hut]\nTurretAnimX=1048577\nTurretAnimY=-1048577\nTurretAnimZAdjust=-1048577\n\
+                [Shed]\nTurretAnimX=1048576\nTurretAnimY=-1048576\nTurretAnimZAdjust=1048576\n";
+    let art = "[Hut]\nHeight=129\n[Shed]\nHeight=-128\n[Ant]\nHeight=-129\n";
+    let (s, w) = sim(base, "", art);
+    for text in [
+        "Ant PixelSelectionBracketDelta 1048577 lies beyond",
+        "Tank has a pip row of 1025 pips",
+        "Tank has a PipWrap of 1025",
+        "Bus has a pip row of 1025 pips",
+        "Mind has a pip row of 1025 pips",
+        "Hut TurretAnimX 1048577 lies beyond",
+        "Hut TurretAnimY -1048577 lies beyond",
+        "Hut TurretAnimZAdjust -1048577 lies beyond",
+        "Hut art Height 129 lies beyond",
+    ] {
+        assert!(warned(&w, text), "{text}: {w:#?}");
+    }
+    for quiet in [
+        "Bee PixelSelectionBracketDelta",
+        "Jeep has a pip row",
+        "Jeep has a PipWrap",
+        "Coach has a pip row",
+        "Wit has a pip row",
+        "Shed TurretAnim",
+        "Shed art Height",
+        "Ant art Height",
+    ] {
+        assert!(!warned(&w, quiet), "{quiet}: {w:#?}");
+    }
+    // The values are kept as read.
+    assert_eq!(s.buildings["Hut"].turret_anim_xy, Some([1048577, -1048577]));
+    assert_eq!(s.vehicles["Tank"].combat.ammo, Some(1025));
+}
+
 /// spec: S-0408 Edge cases (A crew choice that always gives an engineer: the importer warns for a side crew type or a technician type that is an engineer type)
 #[test]
 fn engineer_crew_types_warn() {

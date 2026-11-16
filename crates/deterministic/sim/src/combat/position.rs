@@ -135,21 +135,21 @@ pub fn fire_point(w: &World, firer: ObjectId, slot: usize, k: i32) -> Pos {
         && let Some([px, py]) = bt.building.fire_pixel
         && !bt.building.dual_offset
     {
-        // spec: S-0313 claim 7 (a primary fire pixel shift without the dual-shift flag: the base point shifted, at its height)
+        // spec: S-0313 claim 7 (a primary fire pixel shift without the dual-shift flag: the base point shifted, at its height); S-0205 claim 1 (the sum wraps)
         let (dx, dy) = pixel_to_leptons(w, px, py);
-        return Pos::new(base.x + dx, base.y + dy, base.z);
+        return Pos::new(base.x.wrapping_add(dx), base.y.wrapping_add(dy), base.z);
     }
     let mut p = claim1_point(w, firer, base, flh, k);
     if let Some(bt) = b {
         if let Some([px, py]) = bt.building.fire_pixel {
-            // spec: S-0313 claim 7 (with the dual-shift flag: the claim-1 fire point shifted)
+            // spec: S-0313 claim 7 (with the dual-shift flag: the claim-1 fire point shifted); S-0205 claim 1 (the sum wraps)
             let (dx, dy) = pixel_to_leptons(w, px, py);
-            p = Pos::new(p.x + dx, p.y + dy, p.z);
+            p = Pos::new(p.x.wrapping_add(dx), p.y.wrapping_add(dy), p.z);
         } else if bt.building.voxel_turret && !bt.building.voxel_barrel {
-            // spec: S-0313 claim 8 (a voxel turret and no voxel barrel: shifted by the turret anchor's pixel shift, x and y only)
+            // spec: S-0313 claim 8 (a voxel turret and no voxel barrel: shifted by the turret anchor's pixel shift, x and y only); S-0205 claim 1 (the sum wraps)
             let [px, py] = bt.building.turret_anim;
             let (dx, dy) = pixel_to_leptons(w, px, py);
-            p = Pos::new(p.x + dx, p.y + dy, p.z);
+            p = Pos::new(p.x.wrapping_add(dx), p.y.wrapping_add(dy), p.z);
         }
         // A voxel barrel's own rule is an open question of S-0313 (claim 8): the claim-1 point is used.
     }

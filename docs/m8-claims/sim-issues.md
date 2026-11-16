@@ -1168,3 +1168,36 @@ Seams left:
 - #367: only the waypoint reveal (trigger action 17) goes through `waypoint_reveal`. `shroud::area_reveal` is unchanged (claim 2's ally rule without the mark test); after this fix no simulation path calls it, only the AI crate, the app and tests.
 
 The P3 census rule: neither fix makes or moves a back-reference of `World::census`. The crate state holds cells and place numbers only, and the waypoint reveal writes shroud cells only.
+
+## Batch F3 (foundations)
+
+Step foundations F3 (#153, the deterministic side), base main 5a9c6dc, not rebased. Design section first: [docs/dev/simulation.md](../dev/simulation.md), *Simulation (foundations F3: extreme modded values on the deterministic side, #153)* (6b14456, with the fire point's sites added in 8d8d6ee). Each test is committed before its fix and fails on the commit before it in a debug build: the clock's five tests on 873a1e3 (overflowing subtractions in `update_held`, `advance` and `initial_stage`), the normalisation's on b94f46d (an overflowing multiply), the importer's two on 8e09208 and 2a711e0 (no such warning), the fire point's three on 9803e58 (overflowing adds at each of the three sites). No fix commit changes a test; 3cb5dfa is rustfmt. No request is filed. Where S-0205 claim 1 says the result wraps, the code wraps and carries no `design:` marker; the importer's thresholds are design choices (`design: sim (#153)`) and only warn.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #153 (clock) | The animation clock's tick difference, loop limit λₑ − *a*, lower turn λₛ − *a*, new-pass stage and reversed start were unchecked 32-bit expressions: a debug build panicked on extreme modded loop ends, starts or ticks | fixed (08b4dc9) | S-0205 claim 1: the five results wrap (`wrapping_sub`), so debug builds agree with release builds. The view plays through the same `anim_clock::Player`, so `mapview::slots::read_anim` takes no bound and is not changed | `claims_s0205_anim_clock_wrap.rs` (five tests: `anim_reverse_raw_loop_end` on and off, `anim_pingpong_lower_turn` off) |
+| #153 (rates) | `infantry::normalised`'s 8*b* overflowed for a base delay above 2²⁸. The animation rate path is exact (*d* ≤ 900); a building's body delay and the low-funds speech delay can pass larger values | fixed (dee72ea) | S-0205 claims 1 and 2: 8*b* wraps, the quotient truncates toward zero | `claims_s0205_normalised_wrap.rs` (wrapped products; the largest exact product and two in-range values unchanged) |
+| #153 (art Height) | A building image's art `Height` beyond ±128 levels passed the view's `LEVEL_LIMIT` unwarned | warned (78ce9d2) | `VIEW_LEVEL_LIMIT` 128 (`design: sim (#153)`): a warning for each image value beyond it, the value kept | `values_past_the_views_bounds_warn` (129 warns; −128 and an infantry −129 quiet) |
+| #153 (pip row) | A pip row longer than the view's `PIP_ROW_LIMIT` passed unwarned: S-0111 T2's ammunition capacity, passenger capacity or mind-control primary's damage | warned (78ce9d2) | `VIEW_PIP_ROW_LIMIT` 1024 (`design: sim (#153)`), located at Ammo, Passengers or the weapon's Damage; the value kept | `values_past_the_views_bounds_warn` (1025 warns for each kind; 1024 quiet) |
+| #153 (PipWrap) | A `PipWrap` above the view's pip-row bound passed unwarned | warned (78ce9d2) | `VIEW_PIP_ROW_LIMIT` 1024 (`design: sim (#153)`); the value kept | `values_past_the_views_bounds_warn` (1025 warns; 1024 quiet) |
+| #153 (scroll) | A `ScrollMultiplier` outside S-0101 F9's range (negative, or 448 × μ past 2³¹ − 1) passed unwarned | warned (78ce9d2) | Two warnings (`design: sim (#153)`), 448 × μ formed in double precision rounded toward zero and truncated, as the view's `scroll::magnitude`; the value kept | `a_scroll_multiplier_outside_f9s_range_warns` (−1, −0.5, 4793491 and 1e30 warn; 1, 0, −0, 50% and 4793490 quiet) |
+| #153 (bracket) | A unit's `PixelSelectionBracketDelta` beyond R12's ±2²⁰-pixel unit-bar bound passed unwarned | warned (78ce9d2) | `VIEW_PIXEL_LIMIT` 2²⁰ (`design: sim (#153)`), infantry, vehicles and aircraft, each layer's value; kept | `values_past_the_views_bounds_warn` (1048577 warns; −1048576 quiet) |
+| #153 (turret anchor) | A building's `TurretAnimX`, `TurretAnimY` or `TurretAnimZAdjust` beyond ±2²⁰ pixels passed unwarned; the view adds them to its turret anchor and depth bias reading the rules text, so the importer cannot bound them. A building's pixel-shifted fire point (S-0313 claims 7 and 8) added the shift's lepton form with a plain add, which panicked in a debug build for a `TurretAnimX/Y` or `PrimaryFirePixelOffset` past the range | warned (78ce9d2); fixed (bade2c2) | `VIEW_PIXEL_LIMIT` 2²⁰ (`design: sim (#153)`), each layer's value, kept; S-0205 claim 1: the three adds in `combat::position::fire_point` wrap | `values_past_the_views_bounds_warn` (±1048577 warn; ±1048576 quiet); `claims_s0205_fire_point_wrap.rs` (three tests) |
+
+Formats: no fix adds saved or hashed state, so save 150, AI game 127 and wire 12 are unchanged (the step's numbers 160 and 136 are not used). The sim-gate goldens pass unchanged.
+
+Lanes compare base 5a9c6dc with the batch at 8d8d6ee (arena and quick lane from release `glasnost-headless` binaries of each).
+
+**Oracle arena** (`--record all`, two threads). Every output file is byte-identical to base; the printed rows differ only in paths and run times.
+
+**Sweeps.** M6c, M7a and M7b over seeds 1–16 print the same lines as base, apart from build lines and run times.
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games). Every game ends on the same tick with the same winner as base; the reports differ only in run times.
+
+**Suites.** The AI suite with its ignored tests passes 364 before and after. The sim gate with its ignored tests passes 17 on base and here.
+
+Seams left:
+- The clock's stage advance, step back and image frame *a* + *k* saturate where S-0205 claim 1 wraps; the view's `slots::first_frame` holds a reversed first frame to 32 bits, so at λₑ = −2³¹ the view's and the clock's first frames differ.
+- In `combat::position`, the garrisoned muzzle shift (S-0313 claim 6), claim 1's translation-column adds and σ*L* are plain arithmetic.
+- The view reads a building's art `Height` from the last image, while the importer warns for each image value.
+- The bracket bound ±2²⁰ is R12's, which is not on this base; the warning names the bound, not R12's code.
