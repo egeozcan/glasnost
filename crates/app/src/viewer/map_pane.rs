@@ -50,17 +50,36 @@ pub enum MapAction {
 
 /// A request for the shell's GPU map pass.
 pub struct GpuRequest {
-    /// The scene (its generation tells the shell when to re-upload).
+    /// The scene (the key's generation tells the shell when to re-upload).
     pub scene: Rc<Scene>,
-    /// Scene generation.
+    /// The light alpha.
+    pub alpha: Light,
+    /// What the picture is drawn from: the view and filter among it.
+    pub key: MapKey,
+}
+
+/// The light-alpha values of the view after the shroud covers (S-0110),
+/// row by row, with their tag (the same values while the tag holds,
+/// `MapRenderer::render_lit_tagged`); `None`: 127 everywhere.
+pub type Light = Option<(Rc<Vec<u8>>, u64)>;
+
+/// What the battlefield picture is drawn from (design: render (#129)): the
+/// load (its generation), the scene's changes since (its stamp), the view,
+/// the filter and the light alpha (its tag). The drawing reads nothing
+/// else, so a frame with the key of the picture drawn last can show it as
+/// it is.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MapKey {
+    /// The load's generation.
     pub generation: u64,
-    /// View.
+    /// The scene's stamp ([`scene_mut`]).
+    pub stamp: u64,
+    /// The view.
     pub view: View,
-    /// Filter.
+    /// The filter.
     pub filter: Filter,
-    /// The light-alpha values of the view after the shroud covers (S-0110),
-    /// row by row; `None`: 127 everywhere.
-    pub alpha: Option<Vec<u8>>,
+    /// The light alpha's tag; `None` without covers drawn.
+    pub light: Option<u64>,
 }
 
 /// A loaded map as the pane keeps it.
@@ -96,6 +115,17 @@ struct Shown {
     radar_tick: i32,
     /// Draw the shroud covers (S-0110) of the controlled house.
     shroud: bool,
+    /// Moves with every change of the scene (design: render (#129)).
+    stamp: u64,
+}
+
+/// A shown map's scene to change (`Shown::scene`), moving its stamp
+/// (`Shown::stamp`), so that the next frame draws the picture again
+/// (design: render (#129)). It takes the two fields, not the map, so that
+/// the map's other fields stay free while the scene is changed.
+fn scene_mut<'a>(scene: &'a mut Rc<Scene>, stamp: &mut u64) -> &'a mut Scene {
+    *stamp += 1;
+    Rc::make_mut(scene)
 }
 
 /// The pane.
@@ -120,6 +150,12 @@ pub struct MapPane {
     pending_jump: Option<(i32, i32)>,
     /// The cheer rate limit, kept for the whole session (S-0213 claim 19).
     cheer: targeting::CheerMemory,
+    /// The tags given to the light alpha so far: each new alpha takes the
+    /// next (design: render (#129)).
+    light_tags: u64,
+    /// Frames that composed the CPU picture.
+    #[cfg(test)]
+    cpu_composes: usize,
     /// Status line.
     pub status: String,
 }
@@ -146,6 +182,9 @@ impl Default for MapPane {
             explain: String::new(),
             pending_jump: None,
             cheer: targeting::CheerMemory::default(),
+            light_tags: 0,
+            #[cfg(test)]
+            cpu_composes: 0,
             status: "Mount an install, then find its maps.".into(),
         }
     }
@@ -258,6 +297,7 @@ impl MapPane {
             radar_texture: None,
             radar_tick: -1,
             shroud: true,
+            stamp: 0,
         });
         self.set_centre(start);
         self.pinned = None;
@@ -296,37 +336,51 @@ impl MapPane {
     }
 
     /// What the shell should draw on the GPU this frame, if anything.
-    pub fn gpu_request(&self) -> Option<GpuRequest> {
-        let s = self.shown.as_ref()?;
+    pub fn gpu_request(&mut self) -> Option<GpuRequest> {
         if !self.use_gpu {
             return None;
         }
+        let (alpha, key) = self.frame_light()?;
+        let s = self.shown.as_ref()?;
         Some(GpuRequest {
             scene: s.scene.clone(),
-            generation: s.generation,
-            view: self.view(),
-            filter: self.filter(),
-            alpha: self.light_alpha(),
+            alpha,
+            key,
         })
     }
 
-    /// The light-alpha values of the view after the controlled house's
-    /// shroud covers (S-0110 claims 1 to 10), or `None` when no cover is
-    /// drawn: no live game, the sandbox (every owner's objects, no single
-    /// player), or the covers turned off.
-    fn light_alpha(&self) -> Option<Vec<u8>> {
+    /// This frame's light alpha with its tag, and the key of the picture
+    /// drawn with it; `None` without a map shown.
+    fn frame_light(&mut self) -> Option<(Light, MapKey)> {
+        let alpha = self.light_alpha();
         let s = self.shown.as_ref()?;
-        let live = s.loaded.live.as_ref()?;
-        if !s.shroud || live.setup.sandbox {
-            return None;
-        }
-        Some(cover::light_alpha(
-            &live.world,
-            s.house,
-            &self.view(),
-            &s.loaded.covers,
-            &ShroudQuirks::default(),
-        ))
+        let key = MapKey {
+            generation: s.generation,
+            stamp: s.stamp,
+            view: self.view(),
+            filter: self.filter(),
+            light: alpha.as_ref().map(|a| a.1),
+        };
+        Some((alpha, key))
+    }
+
+    /// The light-alpha values of the view after the controlled house's
+    /// shroud covers (S-0110 claims 1 to 10) with their tag, or `None`
+    /// when no cover is drawn: no live game, the sandbox (every owner's
+    /// objects, no single player), or the covers turned off.
+    fn light_alpha(&mut self) -> Light {
+        let view = self.view();
+        let q = ShroudQuirks::default();
+        let lit = self.shown.as_ref().and_then(|s| {
+            let live = s.loaded.live.as_ref()?;
+            (s.shroud && !live.setup.sandbox)
+                .then(|| (s.generation, cover::covers(&live.world, s.house, &view, &q)))
+        });
+        let (_, covers) = lit?;
+        let s = self.shown.as_ref()?;
+        let alpha = cover::alpha_of(&covers, &view, &s.loaded.covers, &q);
+        self.light_tags += 1;
+        Some((Rc::new(alpha), self.light_tags))
     }
 
     /// Local snapshots: issues the deploy order of the controlled house's
@@ -389,7 +443,7 @@ impl MapPane {
             return;
         };
         for _ in 0..n.max(0) {
-            let scene = Rc::make_mut(&mut shown.scene);
+            let scene = scene_mut(&mut shown.scene, &mut shown.stamp);
             let (inputs, live) = shown.loaded.split();
             let Some(live) = live else {
                 return;
@@ -819,11 +873,18 @@ impl MapPane {
         let texture = if self.use_gpu {
             self.gpu_texture
         } else {
+            let Some((alpha, key)) = self.frame_light() else {
+                return;
+            };
+            #[cfg(test)]
+            {
+                self.cpu_composes += 1;
+            }
             let frame = scene.compose_lit(
-                &self.view(),
-                &self.filter(),
+                &key.view,
+                &key.filter,
                 &ComposeQuirks::default(),
-                self.light_alpha(),
+                alpha.map(|(a, _)| Rc::unwrap_or_clone(a)),
             );
             let img = egui::ColorImage::from_rgba_unmultiplied(
                 [size.0 as usize, size.1 as usize],
@@ -1042,7 +1103,7 @@ impl MapPane {
             self.explain.clear();
         }
         if marks_changed {
-            let scene = Rc::make_mut(&mut shown.scene);
+            let scene = scene_mut(&mut shown.scene, &mut shown.stamp);
             let (inputs, live) = shown.loaded.split();
             if let Some(live) = live {
                 live.redraw_status(&inputs, scene);
@@ -1164,7 +1225,7 @@ fn run_ticks(ctx: &egui::Context, shown: &mut Shown) {
     if !tick {
         return;
     }
-    let scene = Rc::make_mut(&mut shown.scene);
+    let scene = scene_mut(&mut shown.scene, &mut shown.stamp);
     let (inputs, live) = shown.loaded.split();
     if let Some(live) = live {
         live.step();

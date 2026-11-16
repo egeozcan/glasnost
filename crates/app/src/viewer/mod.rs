@@ -443,7 +443,7 @@ impl Gfx {
         // full), or the whole scene again when the atlas is at the device's
         // limit (design: render (#105)).
         let synced = match self.map.as_mut() {
-            Some(m) if m.generation == r.generation => {
+            Some(m) if m.generation == r.key.generation => {
                 match m.renderer.sync(&self.device, &self.queue, &r.scene) {
                     Ok(()) => true,
                     Err(e) => {
@@ -468,7 +468,7 @@ impl Gfx {
                 r.scene.images.len()
             );
             self.map = Some(MapGpu {
-                generation: r.generation,
+                generation: r.key.generation,
                 renderer,
                 size: (0, 0),
                 targets: None,
@@ -477,7 +477,7 @@ impl Gfx {
         }
         let device = &self.device;
         let m = self.map.as_mut().ok_or("no map")?;
-        let size = r.view.size;
+        let size = r.key.view.size;
         if m.size != size || m.targets.is_none() {
             let (color, depth) = targets(device, size, COLOR_FORMAT);
             let display = map_display::MapDisplay::new(&color);
@@ -502,23 +502,23 @@ impl Gfx {
         let (color, depth, _display) = m.targets.as_ref().ok_or("no targets")?;
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("map") });
-        m.renderer.render_lit(
+        m.renderer.render_lit_tagged(
             device,
             &self.queue,
             &mut encoder,
             color,
             &depth.create_view(&Default::default()),
             &r.scene,
-            &r.view,
-            &r.filter,
+            &r.key.view,
+            &r.key.filter,
             &glasnost_render::compose::ComposeQuirks::default(),
-            r.alpha.as_deref(),
+            r.alpha.as_ref().map(|(a, tag)| (a.as_slice(), Some(*tag))),
         );
         self.queue.submit([encoder.finish()]);
         if self.frames_presented.is_multiple_of(120) {
             log::info!(
                 "map view drawn on the GPU at {:?}, {}×{}",
-                r.view.origin,
+                r.key.view.origin,
                 size.0,
                 size.1
             );
