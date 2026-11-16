@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 83
+revision: 84
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-15
+approved-on: 2026-11-16
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356, Q-2426, Q-3131]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356, Q-2426, Q-3131, Q-3164]
 supersedes: []
 ---
 
@@ -252,7 +252,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   claim 36). Whether a unit below the surface can be selected remains unidentified (low; Open
   questions). Rows G2, G10, claim 3 and claim 12 all ask this one question.
 - **Passive neutral house.** A house whose type carries the passive flag (Import mapping). Its
-  buildings count as engineer-friendly for table I.
+  buildings can count as engineer-friendly for table I, under the second case of
+  *engineer-friendly building* (table I).
 - **Self-teleporting type.** A type that teleports itself to where it is sent (the teleporter flag of
   Import mapping).
 - **Underground type.** A type whose movement zone is *subterranean* (S-0211, claim 12). The
@@ -593,8 +594,16 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
      I13 is backed by S-0605 claim 1, scenarios A1 and A1b, which set capacity 3, 0 and −1
      for an entry and for a healer.
      The rows that the list after Scenario T10 gives
-     as `unmeasured` have no step, each with its reason.
-   - Confidence: medium (low where a row says so)
+     as `unmeasured` have no step, each with its reason. In the definition of
+     *engineer-friendly building* (table I), that the allied case does not test whether the
+     building can be garrisoned is `measurable` (Scenario T5, the own damaged building of a type
+     that cannot be garrisoned). That the passive-neutral case tests the repairable and
+     not-vehicle-like conditions, and that the allied case does not test whether the building is
+     being erased, are `unmeasured`: no scenario here places an engineer over a damaged building
+     of a passive neutral house whose type is not repairable or is vehicle-like, or over a damaged
+     allied building while an erasing weapon is locked onto it.
+   - Confidence: medium (low where a row says so); medium for each condition of
+     *engineer-friendly building*, whether `measurable` (T5) or `unmeasured`
 
 8. **Vehicles, aircraft and buildings on an object.** The final action of an own vehicle follows
    table V, of an own aircraft table AC and of an own building table B, in the same way.
@@ -1686,9 +1695,13 @@ whether the target is being erased. That difference is the original's, not an om
 *g*₁ and *g*₂, each defined in full below. The derived values of this table and of table V are
 functions of the actor, the target, the modifiers held and *g*. Values *e*, *v* and *x* are given by small tables; when multiple row conditions hold, the value is the one in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions. No row of table I reads the result of another row.
 "Engineer", "spy" and the rest name type flags (Import mapping). An *engineer-friendly building*
-is a repairable building, not vehicle-like, that is allied with the actor, or that belongs to a
-passive neutral house, can be garrisoned and is not being erased. A *deployed in-place deployer*
-is an in-place deployer in its deployed state.
+is a repairable building, not vehicle-like, that meets one of these (Q-3164):
+- it is allied with the actor, whether or not it can be garrisoned and whether or not it is being
+  erased, or
+- it belongs to a passive neutral house, can be garrisoned and is not being erased.
+
+The repairable and not-vehicle-like tests apply in both cases. This is the original's rule.
+A *deployed in-place deployer* is an in-place deployer in its deployed state.
 
 *Entry verdict e.* Defined only when the target is a building allied with the actor and not being
 erased. Where no row matches, *e* is undefined.
@@ -2652,7 +2665,8 @@ cell, by table GC). Falsified if any of these differs.
   and a deployer infantry, deployed and not. Targets: an enemy capturable building at full
   health and at a health ratio below the capture field (a named test rules file sets the capture
   field to 50 %), an enemy building that is neither capturable nor spyable, an own damaged
-  building, an own undamaged building, a bridge repair hut with its bridge destroyed and intact
+  building of a repairable type that cannot be garrisoned, an own undamaged building, a bridge
+  repair hut with its bridge destroyed and intact
   (repeat with own, allied and enemy huts), plus S-0511 claim 21's mixed-candidate and
   link-chain variants, a
   neutral garrisonable building, an allied hospital (tried with a plain armed infantry unit, hurt
@@ -2665,7 +2679,8 @@ cell, by table GC). Falsified if any of these differs.
 - Observable: the cursor for each pair, and the order recorded on a click.
 - Expected: the actions of table I, mapped by table M. In particular: the engineer gets capture
   below the capture field and damaging entry above it, repair building on the damaged own
-  building and no-repair on the undamaged one; the vehicle thief hijacks the harvester in both
+  building (row I6: the allied case of *engineer-friendly building* does not test the garrison
+  flag) and no-repair on the undamaged one; the vehicle thief hijacks the harvester in both
   cases; with force-fire held, the unarmed infiltrator shows no-move over the enemy building that
   it cannot infiltrate, and a click moves it there (row I25); the hurt plain infantry gets enter on the hospital and the
   unhurt one no-enter; the hurt engineer gets enter on the allied hospital whatever the

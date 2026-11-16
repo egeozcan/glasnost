@@ -1,9 +1,9 @@
 ---
 id: Q-3164
 title: Which conditions of the engineer-friendly building apply to which of its two branches
-status: open
+status: answered
 related: [S-0214, S-0509, S-0514]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need

@@ -3,7 +3,7 @@ id: Q-3158
 title: What a transport's passenger shows when its own house's defeat hits it inside
 status: open
 related: [S-0414, S-0312, S-0507, S-0107, S-0605]
-answered-by: []
+answered-by: [S-0312]
 ---
 
 ## Need
