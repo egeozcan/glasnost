@@ -1164,6 +1164,113 @@ mod tests {
         }
     }
 
+    /// [`compose`] as before render perf batch RP7 (#137): each pixel's list
+    /// looked up in the arrivals by pixel.
+    fn compose_by_lookup(
+        w: &World,
+        view: &View,
+        arrivals: &Arrivals,
+        g: &Grid,
+        img: &Image,
+        terrain: &[Rgb],
+    ) -> Vec<RadarColour> {
+        let h = view.house;
+        let shift = w.rules().quirks.radar_pixel_cell_shift;
+        let gaps = friendly_gap_cells(w, h);
+        let listed = arrivals.by_pixel();
+        let mut out = Vec::with_capacity(terrain.len());
+        for q in 0..img.height {
+            for p in 0..img.width {
+                let i = (q * img.width + p) as usize;
+                let t = terrain.get(i).copied().unwrap_or([0, 0, 0]);
+                if let Some(at) = listed.get(&(p, q))
+                    && let Some(id) =
+                        winner_among_on(w, h, (p, q), g, img, view.on_flat_grid, at.iter().copied())
+                {
+                    let o = w.obj(id);
+                    let c = crate::cloak::view::radar_house(w, id, Some(h))
+                        .map_or(view.neutral, |ow| (view.house_colour)(ow));
+                    let mut rc = radar_colour(c, view.bits);
+                    let t_left = (view.flash)(id);
+                    if o.is_some_and(|o| o.owner == Some(h))
+                        && t_left >= 1
+                        && flash_inverted(t_left, view.flash_frame_time)
+                    {
+                        rc = inverted(rc, view.bits);
+                    }
+                    out.push(rc);
+                    continue;
+                }
+                let c = cell_at_pixel(g, img, p, q, shift);
+                if in_friendly_gap(w, c, &gaps, view.on_flat_grid) {
+                    out.push(halved(radar_colour(t, view.bits)));
+                } else if cell_shrouded_on(w, h, c, view.on_flat_grid) {
+                    out.push([0, 0, 0]);
+                } else {
+                    out.push(radar_colour(t, view.bits));
+                }
+            }
+        }
+        out
+    }
+
+    // spec: S-0410 claims 6, 8 and 10 (every pixel's colour from the composition equals the colour from each pixel's list looked up: own and other houses' objects crowded on pixels, flashing objects, gap fields, arrivals listed outside the image, under both settings of quirks.shroud_on_flat_grid, by compose and compose_kept)
+    #[test]
+    fn composition_matches_the_looked_up_lists() {
+        let mut w = world();
+        spawn(&mut w, Kind::Building, "GAP", 1, 2, 2);
+        spawn(&mut w, Kind::Building, "GAP", 0, -3, 0);
+        testkit::run(&mut w, 3);
+        let g = grid(&w).expect("usable cells");
+        let img = image(&g);
+        let shift = w.rules().quirks.radar_pixel_cell_shift;
+        let cells = pixel_cells(&g, &img, shift);
+        let terrain: Vec<Rgb> = (0..img.width * img.height)
+            .map(|i| [(i % 251) as u8, (i % 113) as u8, (i % 37) as u8])
+            .collect();
+        let colour = |h: HouseId| [40 + 50 * h.0, 200, 10];
+        let flash = |id: ObjectId| (id.0 % 3) as i32;
+        let mut shown = 0;
+        for h in [HouseId(0), HouseId(1)] {
+            let mut arr = Arrivals::default();
+            arr.observe(&w, h, &g, &img);
+            let some = arr.at.keys().next().map(|&(id, _)| id).expect("an arrival");
+            // Arrivals at pixels outside the image show nowhere.
+            for px in [(-1, 0), (0, -1), (img.width, 2), (3, img.height)] {
+                arr.at.insert((some, px), (0, 0));
+            }
+            for flat in [true, false] {
+                let view = View {
+                    house: h,
+                    house_colour: &colour,
+                    neutral: [7, 7, 7],
+                    flash: &flash,
+                    flash_frame_time: 1,
+                    bits: Bits([5, 6, 5]),
+                    on_flat_grid: flat,
+                };
+                let want = compose_by_lookup(&w, &view, &arr, &g, &img, &terrain);
+                let label = format!("house {}, flat {flat}", h.0);
+                assert_eq!(
+                    compose(&w, &view, &arr, &g, &img, &terrain),
+                    want,
+                    "{label}"
+                );
+                assert_eq!(
+                    compose_kept(&w, &view, &arr, &g, &img, &terrain, &cells),
+                    want,
+                    "{label}"
+                );
+                shown += want
+                    .iter()
+                    .zip(&terrain)
+                    .filter(|&(c, t)| *c != radar_colour(*t, view.bits) && *c != [0, 0, 0])
+                    .count();
+            }
+        }
+        assert!(shown > 0, "some pixel shows an object or a gap field");
+    }
+
     // spec: S-0410 claim 6 (with no covered cell the friendly-gap test is false at every cell, as the full test answers; with gap fields the two answers agree at every cell, under both settings of quirks.shroud_on_flat_grid)
     #[test]
     fn friendly_gap_short_cut_matches_the_full_test() {
