@@ -147,11 +147,15 @@ fn a_frame_visits_only_the_stack_copies_that_meet_the_view() {
         (50, 20),
         (950, 5950),
     ];
+    // The most copies that can meet the view's 72 rows: (72 + 16) / 8 + 1 = 12 for each 16-row
+    // stack of spacing 8, (72 + 20) / 5 + 1 = 19 for each 20-row stack of spacing 5, and the
+    // plain item.
+    let most = 12 + 12 + 19 + 19 + 1;
     for origin in views {
         let (differing, visited) = draw(&device, &queue, &mut r, &s, origin);
         assert_eq!(differing, 0, "view at {origin:?}: as the CPU draws it");
         assert!(
-            visited <= 40,
+            visited <= most,
             "view at {origin:?}: {visited} items visited for 5 items"
         );
     }
