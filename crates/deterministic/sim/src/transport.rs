@@ -37,6 +37,11 @@ pub struct TransportState {
     pub kept: i32,
     /// The transport a passenger rides in (claim 6).
     pub riding: Option<ObjectId>,
+    /// A passenger's position when it went inside, the transport's for one
+    /// that was never placed (S-0312 claim 34 (b)): set at each boarding,
+    /// read only while it rides.
+    #[serde(default)]
+    pub went_in: Option<Pos>,
 }
 
 /// The unloading phases of a vehicle transport (table U), kept in its
@@ -559,6 +564,12 @@ pub fn board(w: &mut World, p: ObjectId, t: ObjectId) {
     // spec: S-0507 claim 6 and S-0609 claim 11 (it resets its gattling stage, spin value and elapsed-tick count to 0)
     reset_gattling_spin(w, p);
     release_mind_control(w, p);
+    // spec: S-0312 claim 34 (b) (the position it had when it went inside; one put inside without going in itself counts as having gone inside at the transport's position at that moment)
+    let went_in = w
+        .obj(p)
+        .filter(|o| o.on_map)
+        .map(|o| o.pos)
+        .or_else(|| w.obj(t).map(|o| o.pos));
     // spec: S-0507 claim 6 and S-0203 claim 3 (it leaves the map; it leaves play)
     crate::objects::take_inside(w, p);
     let pos = w.obj(t).map(|o| o.pos);
@@ -570,6 +581,7 @@ pub fn board(w: &mut World, p: ObjectId, t: ObjectId) {
             ob.pos = pos;
         }
         ob.transport.riding = Some(t);
+        ob.transport.went_in = went_in;
         // spec: glossary contact (contact lasts until the exchange ends: boarding ends it)
         ob.contact = None;
     }
@@ -1454,10 +1466,33 @@ pub fn kill_passengers(w: &mut World, t: ObjectId, hit: &crate::combat::damage::
         if let Some(ob) = w.obj_mut(p) {
             ob.transport.riding = None;
         }
+        if w.obj(p).is_some_and(crate::combat::damage::dead) {
+            // spec: S-0312 claim 34 (a) (a passenger whose own killing hit is still in progress when an action its raises fire ends the transport is passed over: it leaves the list here and its own hit goes on)
+            continue;
+        }
         // spec: S-0312 claim 5 (the passengers of a passenger die before it does)
         kill_passengers(w, p, hit);
         died_with_transport(w, p, hit);
     }
+}
+
+/// Takes passenger `p` off its transport's passenger list at once, freeing
+/// its seat (S-0312 claim 34 (a)); it stays where it is, off the map.
+pub fn leave_list(w: &mut World, p: ObjectId) {
+    if let Some(t) = riding(w, p)
+        && let Some(tb) = w.obj_mut(t)
+    {
+        tb.transport.passengers.retain(|&x| x != p);
+    }
+    if let Some(ob) = w.obj_mut(p) {
+        ob.transport.riding = None;
+    }
+}
+
+/// The position passenger `p` had when it went inside (S-0312 claim 34
+/// (b)), set by [`board`].
+pub fn went_in(w: &World, p: ObjectId) -> Option<Pos> {
+    w.obj(p).and_then(|o| o.transport.went_in)
 }
 
 /// A passenger's death with its transport (S-0312 claims 5 and 12): as a
@@ -1539,6 +1574,13 @@ pub fn escape(w: &mut World, t: ObjectId, hit: &crate::combat::damage::Hit) {
     for p in passengers(w, t) {
         if let Some(tb) = w.obj_mut(t) {
             tb.transport.passengers.retain(|&x| x != p);
+        }
+        if w.obj(p).is_some_and(crate::combat::damage::dead) {
+            // spec: S-0312 claim 34 (a) (a passenger whose own killing hit is in progress is passed over: it leaves the list and is not let out)
+            if let Some(ob) = w.obj_mut(p) {
+                ob.transport.riding = None;
+            }
+            continue;
         }
         if let Some(ob) = w.obj_mut(p) {
             ob.transport.riding = None;
