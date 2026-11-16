@@ -913,6 +913,43 @@ fn hovering(w: &World, id: ObjectId) -> bool {
             .is_none_or(|h| !crate::econ::power::has_centre(w, h, o.type_index)))
 }
 
+/// Whether a cell's tile is a wet tile (S-0513 Terms): in the shore role's
+/// or the water role's range of S-0010 table R, or in one of the four
+/// waterfall roles' ranges, all unchecked, whatever the cell's land type.
+/// An unset role's range counts from the unset start under
+/// `quirks.unset_role_range` and passes no tile without it (S-0010 claim
+/// 5).
+pub(crate) fn wet_tile(w: &World, c: CellXY) -> bool {
+    let Some(cat) = w.catalogue.as_deref() else {
+        // A world without a tile catalogue (synthetic maps) has no tile roles.
+        return false;
+    };
+    let Some(tile) = w.cells.cell(c).map(|x| x.tile) else {
+        // A cell off the map has no tile.
+        return false;
+    };
+    let unset_range = w.rules().quirks.unset_role_range;
+    let roles = &cat.roles;
+    // spec: S-0513 Terms (wet tile: the shore role's range, S-0010 table R, 42 tiles; the water role's, 14; each waterfall role's, 4)
+    let ranges = [
+        (roles.shore, 42),
+        (roles.water, 14),
+        (roles.waterfalls[0], 4),
+        (roles.waterfalls[1], 4),
+        (roles.waterfalls[2], 4),
+        (roles.waterfalls[3], 4),
+    ];
+    ranges.into_iter().any(|(start, n)| {
+        if start < 0 && !unset_range {
+            // spec: S-0010 claim 5 (quirks.unset_role_range off: an unset role's range passes no tile)
+            return false;
+        }
+        let start = start.max(-1); // spec: S-0010 claim 4 (the unset start −1) and S-0513 Terms (an unset role's range counted from the unset start, the waterfall roles too)
+        // spec: S-0010 claim 5 (an unchecked role's range: the n tiles from its start)
+        (start..start + n).contains(&tile)
+    })
+}
+
 /// The arrival effects (claims 38, 39 and 41).
 fn arrive(w: &mut World, id: ObjectId, m: Member) {
     let Some(o) = w.obj(id).cloned() else { return };
@@ -949,12 +986,15 @@ fn arrive(w: &mut World, id: ObjectId, m: Member) {
         sink(w, id, Some(m.house));
         fate_done = true;
     } else {
-        let road = land_type == land::ROAD && (r.quirks.warp_naval_road_cell || !water);
+        // spec: S-0513 claim 38 (revision 124: the sink test of this branch reads the landing cell's tile, a wet tile, whatever its land type)
+        let wet = wet_tile(w, c);
+        // spec: S-0513 claim 38 (revision 124: a road cell is one of the road land type, whatever its tile; quirks.warp_naval_road_cell off: one with a wet tile is not a road cell here)
+        let road = land_type == land::ROAD && (r.quirks.warp_naval_road_cell || !wet);
         let enters = crate::passability::enterable_by_class(&r, w, c, class, zone, deck);
         // spec: S-0513 claim 38 (a member for which the cell cannot be entered, or a naval member on a deck or road cell; quirks.warp_naval_road_cell)
         if !enters || (naval && (deck || road)) {
-            if water && !infantry {
-                // spec: S-0513 claims 38 and 41 (sinks with no credit on a water tile when not infantry)
+            if wet && !infantry {
+                // spec: S-0513 claims 38 and 41 (revision 124: sinks with no credit on a wet tile when not infantry)
                 sink(w, id, None);
             } else {
                 // spec: S-0513 claims 38 and 41 (otherwise killed with no credit, as in claim 37)

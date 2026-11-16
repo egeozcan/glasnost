@@ -239,8 +239,10 @@ pub fn seize_hit(
     damage: i32,
     warhead: crate::combat::data::WarheadId,
 ) {
-    // spec: S-0607 claim 2 (the hit does nothing at all when the firer has left play); Q-3119 (interim: an open-topped transport's passenger, off the map, counts as having left play, as claim 21 counts going inside a transport, so its seizing hit does nothing; the glossary keeps such a passenger in play) (#285)
-    let Some(f) = firer.filter(|&f| w.obj(f).is_some_and(|o| o.on_map)) else {
+    // spec: S-0607 claim 2 (revision 50: the hit does nothing at all when the firer is gone or out of play; a firer that was already a passenger of an open-topped transport when it fired is in play while it rides, S-0507 claim 14, so its hit is tested as any other; a firer that has left play or started to cloak since the shot arrives here as none, `projectile::seize_attacker`; one killed since the shot too, `death::mark_killed`)
+    let Some(f) = firer.filter(|&f| {
+        w.obj(f).is_some_and(|o| o.on_map) || crate::transport::open_topped_carrier(w, f).is_some()
+    }) else {
         return;
     };
     // spec: S-0607 claim 2 (the hit does nothing at all when the firer is itself seized)
@@ -1032,6 +1034,48 @@ pub fn removing(w: &mut World, id: ObjectId) {
     for k in dropped {
         upd(w, k, |l| l.dropper = None);
     }
+}
+
+/// An object leaves play by going inside a transport, a bunker or a
+/// building while it stays in the world (S-0607 claims 2, 12, 14 and 21,
+/// revision 50; `objects::take_inside`).
+pub fn leaving_play(w: &mut World, id: ObjectId) {
+    // spec: S-0607 claim 14 (revision 50: a dropper that leaves play: its dropped units no longer have a dropper but keep their dropper house; those it drops as it leaves, below, keep it as dropper)
+    if !crate::census::none(w, crate::census::Held::Dropped) {
+        let dropped: Vec<ObjectId> = w
+            .objects
+            .iter()
+            .filter(|(_, o)| o.lift.dropper == Some(id))
+            .map(|(&k, _)| k)
+            .collect();
+        for k in dropped {
+            upd(w, k, |l| l.dropper = None);
+        }
+    }
+    // spec: S-0607 claim 12 (revision 50: the leaving-play row: a lifter going inside while it grips ends the grip and its target is cleared; the dropped unit keeps the lifter as its dropper, claim 14's exception)
+    end_grip(w, id, true);
+    // spec: S-0607 claim 12 (the gripped unit leaves play: the grip ends and the lifter's target is cleared)
+    if let Some(l) = lifter_of(w, id) {
+        upd(w, id, |s| s.lifter = None);
+        if st(w, l).is_some_and(|s| s.gripped == Some(id)) {
+            upd(w, l, |s| {
+                s.gripped = None;
+                s.grip_dest = None;
+            });
+            if let Some(o) = w.obj_mut(l) {
+                crate::spawn::clear_own_target(o);
+                o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+            }
+        }
+    }
+    // spec: S-0607 claim 21 (revision 50: the wave ends when its firer or its target leaves play, going inside a transport, a bunker or a building; marked here, it fades from the wave's next update on, as the end test there would have found; for an open-topped transport this holds although the passenger enters play again at once)
+    for v in w.waves.values_mut() {
+        if v.firer == id || v.target == Target::Object(id) {
+            v.ended = true;
+        }
+    }
+    // spec: S-0607 claim 2 (revision 50: a firer that has left play since the shot seizes nothing, even if it re-enters play)
+    crate::combat::projectile::void_seizes_of(w, id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1976,6 +2020,19 @@ fn in_play(w: &World, x: ObjectId) -> bool {
     }) && crate::structures::bunker::bunkered_in(w, x).is_none()
 }
 
+/// Whether the wave's firer is in play for its end test (S-0607 claim 21,
+/// revision 50): as [`in_play`], except that a passenger of an open-topped
+/// transport is in play while it rides (S-0507 claim 14). Its boarding,
+/// which is leaving play, has ended the wave already (`leaving_play`).
+fn firer_in_play(w: &World, f: ObjectId) -> bool {
+    if crate::transport::open_topped_carrier(w, f).is_some() {
+        // spec: S-0607 claim 21 (revision 50: a firer that is already a passenger of an open-topped transport when it fires creates a wave as any other firer does, and only the ending conditions end it)
+        return w.obj(f).is_some_and(|o| o.structure.inside.is_none())
+            && crate::structures::bunker::bunkered_in(w, f).is_none();
+    }
+    in_play(w, f)
+}
+
 fn wave_update(w: &mut World, id: ObjectId) {
     let Some(mut v) = w.waves.get(&id).copied() else {
         return;
@@ -1984,7 +2041,7 @@ fn wave_update(w: &mut World, id: ObjectId) {
     let q = fade_step(mode);
     let one = F64::from_i64(1, mode);
     if !v.ended {
-        let firer_gone = !in_play(w, v.firer);
+        let firer_gone = !firer_in_play(w, v.firer);
         let target_gone = matches!(v.target, Target::Object(t) if !in_play(w, t));
         let retargeted = w.obj(v.firer).and_then(|o| o.target) != Some(v.target);
         // spec: S-0607 claim 21 (the wave ends when its firer or its target leaves play, going inside a transport, a bunker or a building included, or when its firer's target, as it stands at the wave's turn, is no longer the wave's target)

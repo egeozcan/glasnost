@@ -322,6 +322,11 @@ pub struct Projectile {
     /// [`crate::loops`]).
     #[serde(default)]
     pub looped: bool,
+    /// Its firer has left play or started to cloak since the shot, even if
+    /// it entered play again since: a seizing detonation seizes nothing
+    /// (S-0607 claim 2, revision 50).
+    #[serde(default)]
+    pub seize_void: bool,
 }
 
 /// The unscaled damage multiplier of a projectile, ×1 in 1/256 (S-0518
