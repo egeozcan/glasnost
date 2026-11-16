@@ -7063,6 +7063,200 @@ fn relit_tile_tables_give_their_rows_back() {
     });
 }
 
+/// The palette rows and the brightness each lit drawing of `items` takes.
+fn resolved_shades(
+    scene: &Scene,
+    items: &[glasnost_render::scene::Item],
+) -> Vec<(Vec<[u16; 256]>, u16)> {
+    items
+        .iter()
+        .filter_map(|i| match i.paint {
+            Paint::Lit(s) | Paint::LitDiamond(s) | Paint::Translucent(s, _) => Some((
+                scene.rows[s.base as usize..][..usize::from(s.rows)].to_vec(),
+                s.rho,
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+/// design: render (#132): however a relight finds what changed since the
+/// last one, every cell's light is the full recompute of S-0104 claims 9
+/// and 11 over the current light sources, and every terrain tile draws as
+/// the tiles of a view lit once at that light do, over a run of random
+/// light changes: building and field lights added, removed and moved, the
+/// ambient stepped, and the lighting set's terms and tint changed.
+/// spec: S-0104 claims 9, 11 and 12 (a full recompute of every cell the lights reach), S-0525 claim
+/// 13 (field lights add up with the other light sources)
+#[test]
+fn a_relight_matches_a_full_recompute() {
+    use glasnost_render::light::{DetailLevel, LightQuirks, LightSource, full_recompute};
+    with_rules_inputs(false, RULES, |inputs, painter, scene| {
+        let mut held = scene.items.clone();
+        let normal = inputs.map.lighting.normal;
+        // A fixed xorshift sequence: the run is the same every time.
+        let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = |n: i32| -> i32 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % n as u64) as i32
+        };
+        let side = 10 * 256;
+        // Invented light values, leptons and ‰.
+        let source = |next: &mut dyn FnMut(i32) -> i32| LightSource {
+            x: next(side + 1024) - 512,
+            y: next(side + 1024) - 512,
+            radius: next(5) * 300,
+            intensity: next(1500) - 300,
+            tint: [next(1200) - 200, next(1200) - 200, next(1200) - 200],
+            required_detail: [DetailLevel::Low, DetailLevel::Medium, DetailLevel::High]
+                [next(3) as usize],
+        };
+        let mut buildings: Vec<LightSource> = Vec::new();
+        let mut fields: Vec<LightSource> = Vec::new();
+        let (mut ambient, mut set) = (normal.ambient, normal);
+        for step in 0..60 {
+            for _ in 0..1 + next(2) {
+                match next(9) {
+                    0 | 1 => buildings.push(source(&mut next)),
+                    2 if !buildings.is_empty() => {
+                        let k = next(buildings.len() as i32) as usize;
+                        buildings.remove(k);
+                    }
+                    3 if !buildings.is_empty() => {
+                        let k = next(buildings.len() as i32) as usize;
+                        buildings[k].x += next(700) - 350;
+                        buildings[k].radius = next(5) * 300;
+                    }
+                    4 => fields.push(LightSource::field(
+                        (next(10), next(10)),
+                        next(4) * 400,
+                        next(1000),
+                        [next(800), next(800), next(800)],
+                    )),
+                    5 if !fields.is_empty() => {
+                        let k = next(fields.len() as i32) as usize;
+                        fields[k].intensity = next(1000);
+                    }
+                    6 => ambient = next(160),
+                    7 => {
+                        set.level = next(60) - 10;
+                        set.ground = next(300);
+                    }
+                    8 => set.tint = [next(150) + 20, next(150) + 20, next(150) + 20],
+                    _ => {}
+                }
+            }
+            if step % 7 == 3 {
+                // The same light again: two equal sources at one place.
+                if let Some(&s) = buildings.first() {
+                    buildings.push(s);
+                }
+            }
+            painter.set_building_lights(buildings.clone());
+            painter.set_field_lights(fields.clone());
+            painter.relight(inputs, scene, &mut held, ambient, set);
+            painter.free_unused_rows(held.iter());
+            let all: Vec<LightSource> = buildings.iter().chain(&fields).copied().collect();
+            for (c, cell) in inputs.map.cells.iter() {
+                let want = full_recompute(
+                    ambient,
+                    set.level,
+                    set.ground,
+                    set.tint,
+                    (c.x, c.y),
+                    i32::from(cell.level),
+                    &all,
+                    inputs.options.detail,
+                    &LightQuirks::default(),
+                );
+                assert_eq!(painter.cell_light(c), Some(want), "step {step}, cell {c:?}");
+            }
+            // A view built afresh and lit once at this light.
+            let (fresh, mut once) = build_parts(inputs, true);
+            let mut fresh_scene = fresh.scene;
+            let mut fresh_held = fresh_scene.items.clone();
+            once.set_building_lights(buildings.clone());
+            once.set_field_lights(fields.clone());
+            once.relight(inputs, &mut fresh_scene, &mut fresh_held, ambient, set);
+            assert_eq!(
+                resolved_shades(scene, &held),
+                resolved_shades(&fresh_scene, &fresh_held),
+                "step {step}: the tiles"
+            );
+        }
+    });
+}
+
+/// design: render (#132): a timing probe of `Painter::relight` on a large
+/// synthetic map with 40 lit buildings: one building's light going out and
+/// coming on again, and an ambient step with the lights unchanged. Run it
+/// in release with `--ignored --nocapture`; it prints mean milliseconds.
+#[test]
+#[ignore = "a timing probe (#132)"]
+fn relight_probe() {
+    use glasnost_render::light::{DetailLevel, LightSource};
+    let (import, catalogue, assets) = context_with(RULES);
+    let map = testkit::empty_map(200);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene = built.scene;
+    let mut held = scene.items.clone();
+    let normal = map.lighting.normal;
+    let cells = map.cells.iter().count();
+    // Invented light values: 40 lights spread over the map, 8 cells' reach.
+    let lights: Vec<LightSource> = (0..40)
+        .map(|k| LightSource {
+            x: (k % 8 * 50 + 20) * 256 + 128,
+            y: (k / 8 * 70 + 30) * 256 + 128,
+            radius: 2048,
+            intensity: 500,
+            tint: [100, 60, 20],
+            required_detail: DetailLevel::Low,
+        })
+        .collect();
+    painter.set_building_lights(lights.clone());
+    painter.relight(&inputs, &mut scene, &mut held, normal.ambient, normal);
+    const N: u32 = 20;
+    let mut toggle = std::time::Duration::ZERO;
+    for _ in 0..N {
+        painter.set_building_lights(lights[1..].to_vec());
+        let t = std::time::Instant::now();
+        painter.relight(&inputs, &mut scene, &mut held, normal.ambient, normal);
+        toggle += t.elapsed();
+        painter.set_building_lights(lights.clone());
+        let t = std::time::Instant::now();
+        painter.relight(&inputs, &mut scene, &mut held, normal.ambient, normal);
+        toggle += t.elapsed();
+    }
+    let mut ambient = std::time::Duration::ZERO;
+    for k in 0..N as i32 {
+        let t = std::time::Instant::now();
+        let step = normal.ambient + k % 2 + 1;
+        painter.relight(&inputs, &mut scene, &mut held, step, normal);
+        ambient += t.elapsed();
+    }
+    let ms = |d: std::time::Duration, n: u32| d.as_secs_f64() * 1000.0 / f64::from(n);
+    println!(
+        "relight probe: {cells} cells, {} cell-pass items, 40 lights; one light out or on {:.3} ms; ambient step {:.3} ms",
+        held.len(),
+        ms(toggle, 2 * N),
+        ms(ambient, N)
+    );
+}
+
 /// design: render (#107): the house-colour tables of an effect tint gone
 /// give their rows to the next tint's tables; a kept drawing that still
 /// takes an old tint's table keeps it.
