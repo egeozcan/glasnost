@@ -519,8 +519,9 @@ fn free_and_remove(w: &mut World, c: CellXY) {
         w.crates.places.remove(&k);
     }
     let o = w.cells.cell(c).map_or(NO_OVERLAY, |x| x.overlay);
-    // spec: S-0520 claim 11 (revision 12: freeing the place removes the crate when its overlay is a named crate overlay; a crate of another overlay type stays, Edge cases, unsafe data; a map's own crate is removed whatever its overlay type). Q-3152 (interim: a named crate overlay is removed by its pickup whether or not the pickup freed a place, as before revision 12)
-    if map_crate || named(w, o) {
+    // spec: S-0520 claim 11 (revision 12: freeing the place removes the crate when its overlay is a named crate overlay; a crate of another overlay type stays, Edge cases, unsafe data; a map's own crate is removed whatever its overlay type)
+    // spec: S-0520 claim 11 (revision 17, Q-3152: a pickup that frees no place removes no crate, whatever its overlay type, except a map's own crate; with quirks.crate_place_by_cell off a named crate overlay that no crate placement placed frees none and stays) (#284)
+    if map_crate || (freed.is_some() && named(w, o)) {
         crate::crush::remove_overlay(w, c);
     }
 }
