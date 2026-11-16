@@ -1118,9 +1118,9 @@ impl Browser {
         ui.heading("View");
         ui.horizontal(|ui| {
             ui.label("zoom");
-            if ui.add(egui::Slider::new(&mut self.zoom, 1..=8)).changed() {
-                self.texture_dirty = true;
-            }
+            // design: render (#129): the zoom scales the display only, so
+            // the texture stays
+            ui.add(egui::Slider::new(&mut self.zoom, 1..=8));
         });
         if let Preview::Shp(bytes) = &self.preview {
             let frames = Shp::parse(bytes).map_or(0, |s| s.frames.len());
@@ -1688,6 +1688,40 @@ mod tests {
                 })
                 .collect();
             assert!(pictures.windows(2).all(|w| w[0] == w[1]), "{name}");
+        }
+    }
+
+    /// Timing probe (design: render (#129); ignored, run by hand in
+    /// release): the header parse the preview's frame slider runs on every
+    /// egui frame, for synthetic SHP files of 100 and 1 000 frames.
+    #[test]
+    #[ignore = "timing probe: run by hand with --release --ignored --nocapture"]
+    fn shp_frame_count_probe() {
+        use glasnost_fmt::image::IndexedImage;
+        use glasnost_fmt::shp::{ShpWriter, WriteFrame};
+        for n in [100, 1000] {
+            let bytes = ShpWriter {
+                width: 8,
+                height: 8,
+                frames: (0..n)
+                    .map(|i| WriteFrame {
+                        x: 0,
+                        y: 0,
+                        image: IndexedImage::new(8, 8, vec![(i % 200) as u8 + 1; 64]).unwrap(),
+                        compression: 1,
+                    })
+                    .collect(),
+            }
+            .write();
+            let runs = 10_000;
+            let t = std::time::Instant::now();
+            for _ in 0..runs {
+                std::hint::black_box(
+                    Shp::parse(std::hint::black_box(&bytes)).map(|s| s.frames.len()),
+                )
+                .ok();
+            }
+            println!("{n} frames: {:?} a parse", t.elapsed() / runs);
         }
     }
 
