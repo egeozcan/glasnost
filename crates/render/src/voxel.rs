@@ -63,7 +63,10 @@ use glasnost_fmt::hva::{self, Hva};
 use glasnost_fmt::vpl::Vpl;
 use glasnost_fmt::vxl::{Limb, Vxl};
 
-use crate::rz::{add_rz, div_rz, dot3_rz, mul_f32_rz, mul_rz, sub_rz, to_f32_rz, trunc_i64};
+use crate::rz::{
+    add_rz, div_rz, dot3_rz, mul_f32_exact, mul_f32_rz, mul_pow2_rz, mul_rz, sub_rz, to_f32_rz,
+    trunc_i64,
+};
 
 // ---------------------------------------------------------------------------
 // Quirk switches
@@ -402,7 +405,7 @@ impl Mat34 {
         let mut out = [[0.0f32; 4]; 3];
         for (i, row) in out.iter_mut().enumerate() {
             for (j, v) in row.iter_mut().enumerate() {
-                let p = |k: usize| mul_rz(f64::from(a[i][k]), f64::from(b[k][j]));
+                let p = |k: usize| mul_f32_exact(a[i][k], b[k][j]);
                 let mut s = add_rz(add_rz(p(0), p(1)), p(2));
                 if j == 3 {
                     s = add_rz(s, f64::from(a[i][3]));
@@ -1327,7 +1330,7 @@ impl ShadeFrame {
         let k = SPECULAR_SHARPNESS;
         let den = add_rz(sub_rz(k, mul_rz(eta, k)), eta);
         let g = f64::from(to_f32_rz(div_rz(eta, den))).max(0.0);
-        let q = trunc_i64(mul_rz(SHADE_LEVELS, add_rz(a, g)));
+        let q = trunc_i64(mul_pow2_rz(add_rz(a, g), SHADE_LEVELS));
         q.rem_euclid(256) as u8
     }
 }
@@ -1379,7 +1382,7 @@ pub fn projectile_shade_table(draw: &Mat34, mode: u8, quirks: &VoxelQuirks) -> [
             if d < 0.0 {
                 0
             } else {
-                trunc_i64(mul_rz(SHADE_LEVELS, d)).clamp(0, i64::from(FORCED_SHADE)) as u8
+                trunc_i64(mul_pow2_rz(d, SHADE_LEVELS)).clamp(0, i64::from(FORCED_SHADE)) as u8
             }
         } else if !quirks.voxel_stale_normal_shades {
             // spec: S-0105 claim 20 (switch off: every out-of-table index → 16)
@@ -2015,6 +2018,7 @@ enum Step {
 /// `quirks.voxel_mode0_misread` on, where it holds one value drawn unlit
 /// (claim 35). Top-down, a voxel's values are taken in file order from
 /// just before the current reading position.
+#[cfg(test)]
 fn column_steps(
     data: &[u8],
     nz: u8,
@@ -2023,6 +2027,23 @@ fn column_steps(
     depth_buffered: bool,
     quirks: &VoxelQuirks,
 ) -> Vec<Step> {
+    let mut steps = Vec::new();
+    fill_column_steps(data, nz, top_down, mode, depth_buffered, quirks, &mut steps);
+    steps
+}
+
+/// [`column_steps`] into `steps`, cleared first, so that one buffer serves
+/// every column of a draw (design: render (#143)).
+fn fill_column_steps(
+    data: &[u8],
+    nz: u8,
+    top_down: bool,
+    mode: u8,
+    depth_buffered: bool,
+    quirks: &VoxelQuirks,
+    steps: &mut Vec<Step>,
+) {
+    steps.clear();
     // spec: S-0105 claim 35 (mode 0: one value per voxel, unlit)
     let per = if mode == 0 && quirks.voxel_mode0_misread {
         1
@@ -2044,13 +2065,13 @@ fn column_steps(
         }
     };
     if !quirks.voxel_topdown_column_origin {
-        return fixed_column_steps(data, nz, top_down, per, voxel);
+        steps.extend(fixed_column_steps(data, nz, top_down, per, voxel));
+        return;
     }
     // spec: S-0105 claims 35, 36, Edge cases (quirks.voxel_topdown_column_origin: the
     // boundary is taken modulo 256, or modulo 4294967296 in the depth-buffered mode)
     let mask = if depth_buffered { u32::MAX } else { 0xFF };
     let at_boundary = |count: u32| count & mask == u32::from(nz);
-    let mut steps = Vec::new();
     let mut count = 0u32;
     if !top_down {
         let mut pos = 0usize;
@@ -2066,7 +2087,7 @@ fn column_steps(
             steps.push(Step::Empty(u32::from(e)));
             for _ in 0..n {
                 let Some(v) = data.get(pos..pos + per) else {
-                    return steps;
+                    return;
                 };
                 steps.push(voxel(v));
                 pos += per;
@@ -2090,7 +2111,7 @@ fn column_steps(
             end = at;
             for _ in 0..n {
                 let Some(start) = end.checked_sub(per) else {
-                    return steps;
+                    return;
                 };
                 steps.push(voxel(&data[start..end]));
                 end = start;
@@ -2107,7 +2128,6 @@ fn column_steps(
             count = count.wrapping_add(u32::from(n)).wrapping_add(u32::from(e));
         }
     }
-    steps
 }
 
 /// Column steps with `quirks.voxel_topdown_column_origin` off (S-0105 Edge
@@ -2319,9 +2339,9 @@ impl Bounds {
 /// 1/256 pixel.
 fn origin_units(p: f32, c: f32) -> i64 {
     // spec: S-0105 Formulas F5 (o = trunc(256 × (P₀ + 128 − c)), unwrapped)
-    let v = mul_rz(
-        SUBPIXEL,
+    let v = mul_pow2_rz(
         sub_rz(add_rz(f64::from(p), IMAGE_ORIGIN), f64::from(c)),
+        SUBPIXEL,
     );
     trunc_i64(v)
 }
@@ -2333,7 +2353,7 @@ fn step_units(to: f32, from: f32, n: u8) -> i64 {
     }
     // spec: S-0105 Formulas F5 (Δ = trunc(256 × (P_ξ − P₀) / N_ξ))
     trunc_i64(div_rz(
-        mul_rz(SUBPIXEL, sub_rz(f64::from(to), f64::from(from))),
+        mul_pow2_rz(sub_rz(f64::from(to), f64::from(from)), SUBPIXEL),
         f64::from(n),
     ))
 }
@@ -2746,6 +2766,8 @@ fn raster_section(
     // spec: S-0105 claim 21 (bottom-up when the farthest corner is on the
     // bottom face, top-down when it is on the top face)
     let top_down = far & 4 != 0;
+    // One buffer for every column's steps (design: render (#143)).
+    let mut steps = Vec::new();
     // spec: S-0105 claim 21 (ascending (n_y, n_x, n_z))
     for n_y in 0..ny {
         let j = if far & 2 != 0 { ny - 1 - n_y } else { n_y };
@@ -2755,7 +2777,16 @@ fn raster_section(
                 continue;
             };
             let mut n_z: i64 = 0;
-            for st in column_steps(data, sz, top_down, sec.normal_mode, depth_buffered, quirks) {
+            fill_column_steps(
+                data,
+                sz,
+                top_down,
+                sec.normal_mode,
+                depth_buffered,
+                quirks,
+                &mut steps,
+            );
+            for &st in &steps {
                 match st {
                     Step::Empty(e) => {
                         // spec: S-0105 Formulas F5 (empty cells advance n_z)
