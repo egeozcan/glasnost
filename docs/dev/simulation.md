@@ -2217,6 +2217,34 @@ The twenty-second batch of the game-logic audit applies the answers to Q-3119 (S
 
 **Formats.** Save format 155 and AI game format 131 (the projectile flag; renumbered to 150 and 127 at the merge); the wire version stays 12.
 
+## Simulation (sim issues S24: the answers to Q-3158, Q-3159, Q-3160 and Q-3164)
+
+The twenty-fourth batch of the game-logic audit replaces the interims of batch S22 with the answers to Q-3160 (S-0513 r126, #364), Q-3159 (S-0519 r21, #384), Q-3158 (S-0312 r88 claim 34, #383) and Q-3164 (S-0214 r84, #358). Each change of behaviour has a test on synthetic data committed before it. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S24*.
+
+**#364, a landing cell with no tile (S-0513 r126 Terms, claim 38).** `warp::wet_tile` already compares the cell's stored tile number with each role range as it stands, and a cell with no tile stores the no-tile marker 65535 (`glasnost_map::NO_TILE`). That is what revision 126 gives: no separate test for the marker, wet only when a range reaches 65535, and an unset range counted from −1 never does. So the S22 interim stays as the rule; only its citations change. No new state.
+
+**#384, the kill turn of a carrier that sinks or crashes (S-0519 r21 claim 4).** The detonation does not end the turn of a carrier that its bomb kills and that stays in play because it starts to sink or crash. `object_turn` read the sinking state before the bomb, so a vessel its own bomb set sinking took a step of its ship locomotor and no descent in that turn. It now reads the state again after the bomb: a vessel that started to sink in this turn takes its first descent (`naval::sinking_turn`) at the movement step instead of its locomotor, so from height 0 it is at −5 at the end of the detonation tick and leaves play in the 80th tick after it (part a). The aircraft's first crash fall step (part b) and the jumpjet vehicle's first crash update (part c, in our engine also when it is not moving, S-0502 claim 3) already came at the movement step, as did the ordinary cloak update after the detonation (part d). The rest of the turn after the movement (the launch pass, the late start, the firing and the aircraft's end of turn) is open in S-0519 and keeps the S22 behaviour, marked provisional at the site. No new state.
+
+**#383, a passenger killed inside its transport (S-0312 r88 claim 34).** `death::kill_in` sends a transport passenger (`transport::riding`) to `passenger_killed_inside`; a garrison occupant and an absorbed passenger keep `passenger_removed`, outside the claim's scope. In claim 1's order:
+- Before the destruction raises it reads what the hit decides: whether the transport is open-topped and the place of part (b). For an open-topped transport that is the transport's position at the hit; for any other transport it is the passenger's own position when it went inside.
+- After the raises, a passenger the raises' action removed is gone and nothing follows (the scope's design rule). Otherwise part (a) takes it off the passenger list, freeing its seat, and sets its position to part (b)'s place.
+- Then come the killing-hit steps that follow the raises for any object: the slave group's end (claim 30), the lost slave, the spawn and mind-control releases.
+- Then the death effects of claims 4 to 7 at that place: the debris; for an exploding passenger, its own passengers' deaths and its death weapon; and the bomb, which `bomb::carrier_killed` removes silently because the passenger is off the map.
+- An infantry passenger then takes S-0107 claim 17's choice with an `Inside` mode:
+  - Inside an open-topped transport (part c), a death sequence plays out in its own turns. It stays in the update order, off the map, and takes no move, fire or orders, as for any killed unit (`tick::object_turn`'s dead branch). A crash start, or a request turned down with `quirks.refused_death_keeps_unit` on, removes it at once with no corpse.
+  - Inside a closed transport (part d), it is removed at once with no sequence, corpse or pick. The animations of the rows that show no sequence, and the extra virus effect of row 4, still come.
+- A vehicle passenger (part e) is removed at once, with no animation, sinking, crash, crew, crate or wreck. `objects::remove` then kills its own passengers as a removed transport's (S-0507 claim 16).
+- With the new `quirks.closed_passenger_death_effects` off (part f), a passenger of a closed transport has none of these effects: after part (a) and the killing-hit steps, the bomb is removed and the passenger is removed.
+- An aircraft passenger, which claim 34 does not cover, keeps the interim removal.
+
+The passenger lists that a raise's action reaches while the hit is in progress (`transport::kill_passengers`, `escape`, and the claim 16 cleanup through them) pass over a listed passenger that is already dead: they only take it off the list, and its hit goes on. Part (a) makes this the only way a dead passenger can still be listed.
+
+New state: `TransportState::went_in`, the passenger's position when it went inside. `transport::board` sets it before the passenger leaves the map, and uses the transport's position for one never placed (a paradrop plane's creations). It is cleared when the passenger leaves. No effect in this path reads the height above the surface, so no height is stored: S-0107 claim 17's water row is not applied, and part (e) takes none of claims 9 to 15. `transport::sync` still moves a closed transport's passengers with it (S-0507 claim 15 gives that only for open-topped ones); `went_in` makes that irrelevant here, and the sync is left as it is.
+
+**#358, the engineer-friendly building (S-0214 r84 table I).** `targeting::engineer_friendly` tests the repairable and not-vehicle-like conditions for both cases: allied with the actor, or of a passive neutral house, garrisonable and not being erased. No new state.
+
+**Seam (d), a vehicle in the warp's leaving stage (S-0207 r85 claim 20 a).** The leaving stage counts as being erased (glossary, *leaving stage*; S-0214 Terms). Claim 20 (a) drops an offered destination while the object is being erased, before part (b) is reached. So `teleport::take_destination` now drops for `superweapons::being_erased`, which covers both the temporal beam's erasure and the leaving stage, for every kind; the infantry-only leaving-stage branch it replaces gave the same drop. Part (b)'s warp-pending immobilization now acts only from the accepted warp until the leaving stage begins. No new state.
+
 ## Simulation (M8 A6c: the answers to Q-3152 and Q-3149)
 
 Step A6c of the M8 plan takes two answered requests before its arena triage. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch A6c: #284 and #367*; the triage is [docs/m8-claims/a6c-arena-triage.md](../m8-claims/a6c-arena-triage.md).
