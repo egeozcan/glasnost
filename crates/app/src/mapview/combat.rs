@@ -255,9 +255,15 @@ impl Pip {
     }
 }
 
+/// The farthest a unit's bar is moved by its bracket delta δ, pixels: a δ
+/// beyond it is held to it. 2²⁰ pixels are beyond any view we draw, and the
+/// bar's places and the anchor added to them stay well within 32 bits; no
+/// stock type's delta comes near.
+pub const BRACKET_DELTA_LIMIT: i32 = 1 << 20; // design: render (#153)
+
 /// The health bar of a vehicle, aircraft or infantry unit (S-0111 claim 6),
 /// in drawing order: the bracket image when selected, then the filled
-/// segments.
+/// segments; δ is held to [`BRACKET_DELTA_LIMIT`].
 pub fn unit_bar(
     infantry: bool,
     delta: i32,
@@ -266,6 +272,8 @@ pub fn unit_bar(
     selected: bool,
     r: &Ratios,
 ) -> Vec<Pip> {
+    // design: render (#153) (δ held to ±BRACKET_DELTA_LIMIT)
+    let delta = delta.clamp(-BRACKET_DELTA_LIMIT, BRACKET_DELTA_LIMIT);
     // spec: S-0111 claim 6 (table: segments, segment place and bracket image by kind)
     let (n, x0, y, bracket_frame, bracket_at) = if infantry {
         (INFANTRY_SEGMENTS, -5, delta - 24, 1, (11, delta - 25))
