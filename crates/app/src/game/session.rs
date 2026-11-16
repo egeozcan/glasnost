@@ -822,6 +822,13 @@ impl Session {
         }
     }
 
+    /// Whether a tick's frame was put off and waits for
+    /// [`Session::draw_owed_frame`] (tests).
+    #[cfg(test)]
+    pub(crate) fn frame_owed(&self) -> bool {
+        self.frame_owed
+    }
+
     /// What the person looks at now, for a pathing report (M8 A4): the
     /// selection, the view and the cells under its corners, the cell
     /// under the pointer and the game speed. The ring adds the clicks.

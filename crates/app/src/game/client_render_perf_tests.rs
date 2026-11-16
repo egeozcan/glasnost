@@ -320,3 +320,65 @@ fn render_perf_118_b_scrolled_light_alpha_follows_the_shroud_and_the_view() {
     let closed = check(&mut c, "a scroll as the shroud closes");
     assert!(closed != opened, "the closed shroud shows");
 }
+
+/// design: render (#138) (the frames of ticks no frame sees are put off to
+/// the next frame or pick; the battlefield a frame keeps holds only while
+/// the scene's stamp stands, #112): after ticks whose frames were put off,
+/// the next frame shows the redrawn scene, through a draw that keeps its
+/// battlefield as through a new draw; a pick draws the owed frame first.
+#[test]
+fn render_perf_138_a_frame_after_put_off_ticks_shows_them() {
+    use glasnost_render::offscreen::OFFSCREEN_FORMAT;
+    let Ok(g) = glasnost_render::gpu::shared_device() else {
+        eprintln!("skipping: no GPU adapter");
+        return;
+    };
+    let (device, queue) = (g.device, g.queue);
+    let size = (800, 600);
+    let mut c = client(size, 100);
+    start_by_keyboard_with(&mut c, fixture::rules());
+    // A drawing no redraw makes: the redraw after a tick takes it away.
+    draw_lit_ground(session_mut(&mut c));
+    let mut kept = crate::game::GpuDraw::new(&device, OFFSCREEN_FORMAT);
+    let m = session(&c).map_rect();
+    let field = move |rgba: &[u8]| -> Vec<u8> {
+        let w = size.0;
+        (m.y..m.y + m.h)
+            .flat_map(|y| {
+                let at = ((y * w + m.x) * 4) as usize;
+                rgba[at..at + (m.w * 4) as usize].to_vec()
+            })
+            .collect()
+    };
+    let first = field(&gpu_frame(&device, &queue, &mut kept, &mut c));
+    let s = session_mut(&mut c);
+    s.put_off_frames = true;
+    for _ in 0..3 {
+        s.step();
+    }
+    s.put_off_frames = false;
+    let owed = s.frame_owed();
+    let stamp = s.scene_stamp();
+    let k = field(&gpu_frame(&device, &queue, &mut kept, &mut c));
+    if owed {
+        assert_ne!(
+            session(&c).scene_stamp(),
+            stamp,
+            "the owed frame moves the stamp on"
+        );
+    }
+    assert!(!session(&c).frame_owed(), "the frame drew the owed frame");
+    let mut fresh = crate::game::GpuDraw::new(&device, OFFSCREEN_FORMAT);
+    let f = field(&gpu_frame(&device, &queue, &mut fresh, &mut c));
+    let differs = k.chunks(4).zip(f.chunks(4)).position(|(a, b)| a != b);
+    assert!(differs.is_none(), "pixel {differs:?} differs");
+    assert!(k != first, "the ticks' redraw shows");
+    // A pick after ticks whose frames were put off reads the redrawn scene.
+    let s = session_mut(&mut c);
+    s.put_off_frames = true;
+    s.step();
+    s.put_off_frames = false;
+    let p = glasnost_ui::geom::Point::new(m.x + m.w / 2, m.y + m.h / 2);
+    let _ = s.under(p);
+    assert!(!s.frame_owed(), "the pick drew the owed frame");
+}

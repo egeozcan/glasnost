@@ -3704,6 +3704,12 @@ impl Live {
         self.owed
     }
 
+    /// The drawing's cosmetic stream as it stands (tests).
+    #[cfg(test)]
+    pub(super) fn cosmetic(&self) -> &glasnost_sim::rng::Rng {
+        &self.cosmetic
+    }
+
     /// Rebuilds the object pass of `scene`: the cell pass stays, the static
     /// ground entries are reused and the mobile objects are drawn from the
     /// game, all in ground-layer order.

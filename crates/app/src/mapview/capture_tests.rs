@@ -646,6 +646,253 @@ fn a_map_building_that_turns_spins_or_unloads_is_drawn_live() {
     }
 }
 
+/// The paint of a drawing as it shows: its kind and the palette rows it
+/// takes, by their contents.
+fn paint_shown(scene: &Scene, paint: &Paint) -> String {
+    let table = |s: &glasnost_render::compose::Shade| {
+        format!(
+            "{:?} rho {} mask {}",
+            &scene.rows[s.base as usize..][..usize::from(s.rows)],
+            s.rho,
+            s.mask
+        )
+    };
+    match paint {
+        Paint::Row(r) => format!("row {:?}", scene.rows[*r]),
+        Paint::Diamond(r) => format!("diamond {:?}", scene.rows[*r]),
+        Paint::Lit(s) => format!("lit {}", table(s)),
+        Paint::LitDiamond(s) => format!("lit diamond {}", table(s)),
+        Paint::Translucent(s, t) => format!("translucent {t:?} {}", table(s)),
+        Paint::Shadow => "shadow".into(),
+        Paint::Pixel(c) => format!("pixel {c:?}"),
+    }
+}
+
+/// Every drawing of `scene` in order as it shows: its place, depth test,
+/// depth (its depth images by their contents), paint, group, flags,
+/// object and stack, with its image's size and pixels. Two scenes compare
+/// equal by this whatever image and row numbers they hold.
+fn scene_shown(scene: &Scene) -> Vec<String> {
+    use glasnost_render::scene::ItemDepth;
+    scene
+        .items
+        .iter()
+        .map(|i| {
+            let image = &scene.images[i.image as usize];
+            let depth = match i.depth {
+                ItemDepth::Tile {
+                    depth,
+                    reference_row,
+                } => format!(
+                    "tile {:?} {reference_row}",
+                    depth.map(|d| scene.images[d as usize].pixels().to_vec())
+                ),
+                ItemDepth::Profile {
+                    profile,
+                    bias,
+                    companion,
+                } => format!(
+                    "profile {profile:?} {bias} {:?}",
+                    companion.map(|(k, x, y)| (format!("{:?}", scene.signed[k as usize]), x, y))
+                ),
+            };
+            format!(
+                "{:?} {:?} {depth} {} {:?} {} {:?} {:?} {:?} {:?}",
+                (i.x, i.y),
+                i.test,
+                paint_shown(scene, &i.paint),
+                i.group,
+                i.provisional,
+                i.object,
+                i.stack,
+                (image.width(), image.height()),
+                image.pixels(),
+            )
+        })
+        .collect()
+}
+
+/// The scene after a catch-up of [`CATCH_UP`] ticks of a game with a map
+/// building held in the cell pass, a wall of the map and a gun firing a
+/// bolt, and the drawing's cosmetic stream after it. Each tick's world is
+/// changed after the tick as `act` says; with `put_off` the frames of
+/// every tick but the last are put off ([`Live::put_off_frame`]), without
+/// it every tick is redrawn.
+fn catch_up_scene(put_off: bool) -> (Scene, glasnost_sim::rng::Rng) {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let (import, catalogue, assets) = import_with("");
+    let mut map = testkit::empty_map(SIZE);
+    let at = testkit::mid(SIZE, 2, 0);
+    map.objects.structures.push(Structure {
+        placed: Placed {
+            key: b"0".to_vec(),
+            owner: b"Neutral".to_vec(),
+            type_name: b"HUTX".to_vec(),
+            health: 256,
+            cell: at,
+            facing: 0,
+            raw: Vec::new(),
+        },
+    });
+    // A wall of the map's (FENCEX, the import's overlay 2, with data value 1), drawn in the cell pass.
+    let wall = testkit::mid(SIZE, -5, 4);
+    let fresh = testkit::mid(SIZE, -3, 5);
+    {
+        let cell = map.cells.get_mut(wall).unwrap();
+        cell.overlay = 2;
+        cell.overlay_data = 1;
+    }
+    let rules = rules(true);
+    let setup = setup();
+    let mut world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let b = world
+        .objects
+        .values()
+        .find(|o| o.kind == SimKind::Building && o.pos.cell() == at)
+        .map(|o| o.id)
+        .expect("the map's building");
+    let firer = testkit::spawn(
+        &mut world,
+        SimKind::Infantry,
+        "MANX",
+        0,
+        testkit::mid(SIZE, -4, 0),
+        0,
+    );
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
+    live.set_bolt_colours(super::bolts::Colours {
+        side: [10, 10, 10],
+        alt_side: [5, 5, 5],
+        main: [15, 15, 15],
+    });
+    let mut scene = built.scene;
+    for _ in 0..4 {
+        live.step();
+    }
+    live.redraw(&inputs, &mut scene);
+    for k in 0..CATCH_UP {
+        glasnost_sim::tick::step(&mut live.world);
+        let w = &mut live.world;
+        match k {
+            0 => {
+                // The map's building leaves its start pose (#97) and a new wall is built.
+                w.obj_mut(b).unwrap().combat.anim_frame += 1;
+                let cell = w.cells.grid.get_mut(fresh).unwrap();
+                cell.overlay = 2;
+                cell.overlay_data = 1;
+            }
+            1 => {
+                // The building is back at its start pose; the map's wall changes.
+                w.obj_mut(b).unwrap().combat.anim_frame -= 1;
+                w.cells.grid.get_mut(wall).unwrap().overlay_data = 0;
+            }
+            2 => {
+                // The map's wall is as it started; a long bolt is fired.
+                w.cells.grid.get_mut(wall).unwrap().overlay_data = 1;
+                w.effects.push(Effect::Bolt {
+                    firer,
+                    weapon: 0,
+                    slot: 0,
+                    burst: 0,
+                    from: Pos {
+                        x: 8 * 256,
+                        y: 8 * 256,
+                        z: 0,
+                    },
+                    to: Pos {
+                        x: 13 * 256,
+                        y: 11 * 256,
+                        z: 0,
+                    },
+                    building: None,
+                    vehicle_on_map: false,
+                });
+            }
+            // An invented change of the current ambient, hundredths: the cells are lit again.
+            3 => w.lighting.current += 37,
+            _ => {}
+        }
+        live.after_tick();
+        if put_off && k + 1 < CATCH_UP {
+            live.put_off_frame(&inputs, &mut scene);
+        } else {
+            live.redraw(&inputs, &mut scene);
+        }
+    }
+    (scene, live.cosmetic().clone())
+}
+
+/// The ticks of [`catch_up_scene`].
+const CATCH_UP: usize = 6;
+
+/// design: render (#138) (the frames of ticks no frame sees are put off to the next redraw, which
+/// draws the scene a redraw after every tick leaves); spec: S-0201 claim 6 (one drawn frame per
+/// tick), S-0316 claims 5 and 9 (a bolt's draws are taken in every drawn frame, from the cosmetic
+/// stream), S-0108 claim 2 and #97 (a map building that left its start pose is drawn live from
+/// then on), S-0112 claims 1 to 9 (a wall changed in play is drawn from the game's cells from then
+/// on), S-0104 claims 4 and 5 (a lighting change lights the cells again): a catch-up with its
+/// frames put off shows what a catch-up redrawn after every tick shows, item by item, spot by spot
+/// and pixel by pixel, and leaves the cosmetic stream where it leaves it.
+#[test]
+fn a_catch_up_with_its_frames_put_off_draws_what_every_frame_draws() {
+    use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE};
+    use glasnost_render::scene::{Filter, View};
+    let (every, every_rng) = catch_up_scene(false);
+    let (put_off, put_off_rng) = catch_up_scene(true);
+    assert!(
+        every.items.len() > every.cell_pass_len,
+        "something is drawn live"
+    );
+    assert!(
+        every.spots.iter().any(|g| g.at == usize::MAX),
+        "the bolt is drawn"
+    );
+    assert_eq!(put_off.cell_pass_len, every.cell_pass_len, "the cell pass");
+    assert_eq!(scene_shown(&put_off), scene_shown(&every), "the drawings");
+    assert_eq!(put_off.spots, every.spots, "the spots");
+    assert_eq!(put_off_rng, every_rng, "the cosmetic stream");
+    // The whole scene composed on the CPU.
+    let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    for i in &every.items {
+        let image = &every.images[i.image as usize];
+        x0 = x0.min(i.x);
+        y0 = y0.min(i.y);
+        x1 = x1.max(i.x + image.width() as i32);
+        y1 = y1.max(i.y + image.height() as i32);
+    }
+    let view = View {
+        origin: (x0, y0),
+        size: ((x1 - x0) as u32, (y1 - y0) as u32),
+        reference: DEPTH_REFERENCE,
+    };
+    let compose = |s: &Scene| {
+        s.compose(&view, &Filter::default(), &ComposeQuirks::default())
+            .to_rgba()
+    };
+    assert!(compose(&put_off) == compose(&every), "the pixels");
+}
+
 /// spec: S-0104 claim 3 (under an effect, the house-colour tables are rebuilt with the chosen
 /// set's tint; at "normal" each table goes back to its own tint, white here) and claim 5: a map
 /// building held in the cell pass takes the effect's tint too (#75)
