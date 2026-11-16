@@ -328,9 +328,12 @@ pub fn lost(w: &mut World, id: ObjectId) {
 }
 
 /// The first existing house, in house-creation order, whose country
-/// belongs to the civilian side (S-0312 claim 30; S-0408 claim 10a).
+/// belongs to the civilian side (S-0312 claim 30; S-0408 claim 10a). A
+/// house the unused-house cleanup removed does not exist (S-0009 claim 28).
 fn civilian_recipient(w: &World) -> Option<HouseId> {
     (0..w.houses.len())
+        // spec: S-0312 claim 30 (the first existing house) and S-0009 claim 28 (a removed house owns nothing from then on)
+        .filter(|&i| !w.houses[i].removed)
         .map(|i| HouseId(i as u8))
         .find(|&h| super::setup::civilian(w, h))
 }

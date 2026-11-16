@@ -663,12 +663,17 @@ pub fn hand_down_target(w: &mut World, t: ObjectId) {
     }
 }
 
-/// Keeps a transport's passengers at its position (claim 15): whenever the
-/// transport moves to a new position, its passengers' positions become
-/// its position at once.
+/// Keeps an open-topped transport's passengers at its position (claim 15):
+/// whenever the transport moves to a new position, its passengers'
+/// positions become its position at once. Any other transport's
+/// passengers keep their positions (S-0312 claim 34 (b)).
 pub fn sync(w: &mut World, t: ObjectId) {
     let Some(o) = w.obj(t) else { return };
     if o.transport.passengers.is_empty() {
+        return;
+    }
+    // spec: S-0507 claim 15 and S-0312 claim 34 (b) (only an open-topped transport moves its passengers with itself)
+    if !open_topped(w, t) {
         return;
     }
     let pos = o.pos;
@@ -1477,15 +1482,26 @@ pub fn kill_passengers(w: &mut World, t: ObjectId, hit: &crate::combat::damage::
 }
 
 /// Takes passenger `p` off its transport's passenger list at once, freeing
-/// its seat (S-0312 claim 34 (a)); it stays where it is, off the map.
+/// its seat (S-0312 claim 34 (a)); it stays where it is, off the map. A
+/// gunner vehicle it leaves empty goes back to weapon number 0 (S-0308
+/// claim 6).
 pub fn leave_list(w: &mut World, p: ObjectId) {
-    if let Some(t) = riding(w, p)
+    let t = riding(w, p);
+    if let Some(t) = t
         && let Some(tb) = w.obj_mut(t)
     {
         tb.transport.passengers.retain(|&x| x != p);
     }
     if let Some(ob) = w.obj_mut(p) {
         ob.transport.riding = None;
+    }
+    if let Some(t) = t
+        && count(w, t) == 0
+        && gunner(w, t)
+    {
+        // spec: S-0308 claim 6 and S-0312 claim 34 (a) (the killed passenger leaves the transport at the hit: when it was the last, the weapon number becomes 0 and the temporal beam goes back)
+        crate::combat::weapon::set_weapon_number(w, t, 0);
+        temporal_hand_back(w, t, p);
     }
 }
 

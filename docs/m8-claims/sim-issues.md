@@ -1201,3 +1201,56 @@ Seams left:
 - In `combat::position`, the garrisoned muzzle shift (S-0313 claim 6), claim 1's translation-column adds and σ*L* are plain arithmetic.
 - The view reads a building's art `Height` from the last image, while the importer warns for each image value.
 - The bracket bound ±2²⁰ is R12's, which is not on this base; the warning names the bound, not R12's code.
+
+## Batch S25: the seams left open
+
+Base main a0cf7c7, not rebased. The batch takes the seams that S24 left for #383 and S20 left for #375, #368, #374, #381, #305 and #371. It hands back early, before S20's #291, S18's rests (#344, #339, #346, #263, #252) and A6c's (#284, #367), which stay untouched. Each test is committed before its fix (e8a1326, fc21d02, 847baaf, 716d7eb, d8d7200). The new tests were run on the base code before any fix was written, and each fails there except the guard and control tests named below. Logs are in `local-lane/sim-issues/s25/tests-on-base.txt` and `tests-on-base-burst.txt`. No fix commit changes a test. acb8792 is rustfmt on three of the test files, and 6eb638a regenerates the goldens. No request is filed. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S25: the seams left open)* (95c7f2b, corrected in dfd32a3).
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #383 (a) | Row 7's conversion of a passenger killed inside ran `mutation::convert` as for an object on the map. A crashable new unit started a crash, and a refused conversion freed (or recorded) a standing position the passenger does not hold | fixed (4c04b79) | S-0312 claim 34 (c) and (d): `convert` takes `inside`, which `death::kill_in` passes for a passenger. Inside, a refused conversion frees no position and records none, and the new unit starts no crash. The conversion animation still comes where claim 34 (b) puts the death effects: at an open-topped transport, or where the passenger went inside a closed one | `claims_s0312_r88_inside_conversion.rs` (`closed_transport_the_conversion_animation_comes_where_the_passenger_went_in`, `open_topped_transport_the_conversion_animation_comes_at_the_transport`, `closed_transport_a_crashable_converted_passenger_starts_no_crash`, `a_refused_conversion_inside_frees_no_position_it_does_not_hold`) |
+| #383 (b) | `transport::sync` moved a closed transport's passengers with it | fixed (f8f611f) | S-0507 claim 15 and S-0312 claim 34 (b): `sync` moves the passengers of an open-topped transport only. A closed transport's passengers keep the position they had when they went inside, until a way out sets a new one. This change alone moves the goldens and one quick-lane game (below) | `claims_s0507_closed_positions.rs` (`a_closed_transport_does_not_move_its_passengers`, `an_open_topped_transport_moves_its_passengers`) |
+| #383 (c) | A gunner vehicle whose last passenger was killed inside kept that passenger's weapon number | fixed (cef2531) | S-0308 claim 6 and S-0312 claim 34 (a): `transport::leave_list` sets an emptied gunner transport back to weapon number 0 and gives a held temporal target back, as a passenger leaving it by getting out does | `claims_s0308_gunner_killed_inside.rs` (`a_gunner_vehicle_whose_last_passenger_is_killed_inside_goes_back_to_weapon_number_0`, `a_gunner_vehicle_keeps_its_weapon_number_while_a_passenger_remains`) |
+| #383 (d) | `superweapons::warp_leaving` had no caller in the simulation, only the r66 landing test | removed (11b00ca); test-only edit (18555cf) | S-0513 and S-0208 claim 19: the r66 test reads the warp member's leaving stage itself, and the query goes | `claims_s0208_r66_warp_landing.rs` (unchanged assertions) |
+| #375 | `slaves::civilian_recipient` and `garrison::civilian_house` still ranged over removed houses | fixed (d74d13a) | S-0312 claim 30, S-0009 claim 28 and S-0414 Terms: both skip a removed house, as `victory::destroy_all` already did | `claims_s0402_slaves.rs` (`s0312_claim_31_removed_civilian_house_is_no_recipient`, `s0508_removed_civilian_house_is_not_the_civilian_house`) |
+| #368 | S-0009 claim 29's References rule is not built | left | Not worth doing in this batch: the rule needs the header-pair marks, which the scenario loader does not build. It is a feature of its own, not a seam | — |
+| #374 | The game-start crate placements test had no timeout | test-only (383f4be) | S-0520 claim 1: the test runs on a watchdog thread and fails after 60 seconds instead of hanging. The thread and its channel belong to the harness, as in `spawn_cycle.rs` | `claims_s0520.rs::claim_1_start_placements_past_the_last_place_are_skipped` |
+| #381 | The walker expiry site had no test of its own | test-only (7d40840) | S-0205 claim 1 at S-0615 claim 11's expiry stage: running frames whose 8 R + 1 overflows wrap | `claims_s0205_walker_expiry_wrap.rs::walker_expiry_stage_wraps_for_huge_running_frames` |
+| #305 | The 5 x 5 search of an empty cell ahead had no test of its own | test-only (8871844) | S-0212 claim 19: the first unit of the block whose locomotion heads to the cell ahead is considered, and its remaining steps are marked. Control: a unit not heading there is not found | `claims_s0212_congestion_deck.rs::an_empty_cell_ahead_considers_a_unit_of_the_block_heading_to_it` |
+| #371 | Target clears other than `drop_allied_targets` kept the firer's burst counter | fixed (e70fe74) | S-0301 claim 4: `spawn::set_own_target` (when a set target is cleared), `explicit_clear_own_target`, `redirected_to_none` and `aircraft_return` set the counter to 0. A change from one target to another keeps it | `claims_s0301_burst_clear.rs` (`clearing_the_own_target_resets_the_burst_counter`, `an_explicit_clear_resets_the_burst_counter`, `a_redirect_to_none_resets_the_burst_counter`, `a_change_to_another_target_keeps_the_burst_counter`, `going_inside_resets_the_burst_counter`, `a_slot_object_returning_to_its_spawner_resets_the_burst_counter`) |
+
+Guard and control tests that pass on base:
+- #383 (a): the two conversion animation tests.
+- #383 (b): the open-topped test.
+- #383 (c): the test with a passenger remaining.
+- #371: `a_change_to_another_target_keeps_the_burst_counter`.
+- #383 (d), #374, #381 and #305: test-only, so these pass at once.
+
+Every other new test fails on the base code: 2 of 4 for #383 (a), 1 of 2 for (b), 1 of 2 for (c), 2 of 2 for #375 and 5 of 6 for #371.
+
+Formats: no fix adds saved or hashed state, so save 151, AI game 128 and wire 12 are unchanged. The sim-gate goldens were regenerated once, after the last fix, with the ignored tests (6eb638a). Four of the nine move (duel, duel-m7a, duel-naval and duel-diagonal), all because of #383 (b). Each moves only in windows while passengers ride a closed transport, and matches its old hashes again after each window, the last samples included.
+
+Lanes compare base a0cf7c7 with the batch at acb8792 (dfd32a3 changes only the design text, 6eb638a only the goldens). Logs are in `local-lane/sim-issues/s25/`.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). Every output file is byte-identical to base: M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 and M-0021 10 of 50 failing.
+
+**Sweeps** (`m6c-base.txt`/`m6c-after.txt`, and likewise for m7a and m7b). M6c, M7a and M7b over seeds 1–16 pass and print the same lines as base (smallest minimum 0, 2 and drain 3).
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-after-7.txt` to `quick-after-10.txt`). 35 games end on the same tick with the same winner as base. Seed 7, map 0, game 3 ends at 47257 instead of 46922, with house 1 winning both times. With #383 (b) disabled, that game ends at 46922 again (`quick-without-1b-7-map0.txt`). Player-house dumps every 5000 ticks (`dump-without-1b.txt`, `dump-after.txt`) differ only in passenger positions up to tick 40000, and in on-map objects by tick 45000. All 36 games are over before 120000 ticks.
+
+**Suites.** The AI suite with its ignored tests passes 364 before and after (`ai-suite-base.txt`, `ai-suite-after.txt`), and no AI golden moves. The sim gate with its ignored tests passes 17 on base (`sim-gate-base.txt`). After #383 (b) it fails at duel tick 798 until the goldens are regenerated (`sim-gate-after.txt`); with (b) disabled it passes 17 (`sim-gate-without-1b.txt`). Against the regenerated goldens it passes 17 (`sim-gate-final.txt`). These all pass on the final tree:
+- `cargo test --workspace --no-fail-fast`, with no failures;
+- `cargo clippy --workspace --all-targets -- -D warnings`;
+- `cargo fmt --check`;
+- the wasm32 build of glasnost-app;
+- `cargo xtask check`;
+- `cargo xtask gate`, native and wasm32 on all nine goldens.
+
+Seams left:
+- #383 (b): something reads a closed transport passenger's kept position, since the quick-lane game above changes. Every way out sets the position, and the AI's ferry and gunner code read none. The reader is not traced.
+- #383 (c): `transport::removing` has the same gap for a passenger removed from the list in other ways. It was not changed, since no test reaches it.
+- #368: S-0009 claim 29's References rule (above).
+- Not taken: S20's #291 (a bouncing conversion animation is given no infantry-making state; the mech locomotor maps to no layer rule; no path detaches an attached animation while it plays), S18's #344, #339, #346, #263 and #252, and A6c's #284 and #367.
+- `docs/dev/play-notes.md` still names `warp_leaving` in its history.
+
+The P3 census rule: no fix makes or moves a back-reference of `World::census`. The conversion inside goes through `mutation::convert`'s existing replacement, `sync` and `leave_list` touch positions and weapon numbers, the civilian house scans read house flags, and the burst counter is a combat field.

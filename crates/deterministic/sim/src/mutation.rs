@@ -565,8 +565,10 @@ fn building_listed(w: &World, c: CellXY) -> bool {
 /// The conversion of a killed infantry unit `id` whose death reached
 /// S-0107 claim 17's row 7 (claims 6 to 8). Returns whether it converted
 /// (the victim has left play, or begun its type's crash); `false` when the
-/// test refused, and the caller makes row 7's die-2 request.
-pub fn convert(w: &mut World, id: ObjectId, hit: &Hit) -> bool {
+/// test refused, and the caller makes row 7's die-2 request. `inside`: the
+/// victim is a passenger killed inside its transport (S-0312 claim 34), off
+/// the map, holding no standing position and starting no crash.
+pub fn convert(w: &mut World, id: ObjectId, hit: &Hit, inside: bool) -> bool {
     let Some(o) = w.obj(id).cloned() else {
         return false;
     };
@@ -608,7 +610,9 @@ pub fn convert(w: &mut World, id: ObjectId, hit: &Hit) -> bool {
         chosen.is_none() || building_listed(w, c)
     };
     if refused {
-        if q.refused_mutation_frees_position {
+        if inside {
+            // spec: S-0312 claim 34 (c) and (d) (a passenger killed inside is not on the map and holds no standing position: a refused conversion frees none and records none)
+        } else if q.refused_mutation_frees_position {
             // spec: S-0611 claim 7 (the refused victim's standing position is shown free from the tick of its death; its removal frees it again)
             w.cells
                 .clear_position(spot.cell, spot.layer, spot.position, oq);
@@ -625,7 +629,8 @@ pub fn convert(w: &mut World, id: ObjectId, hit: &Hit) -> bool {
     }
     let u = rules.unit(o.kind, o.type_index);
     let mut crashed = false;
-    if u.is_some_and(|u| u.vehicle.crashable) {
+    // spec: S-0312 claim 34 (c) and (d) (a passenger killed inside starts no crash: our engine removes it at once at the end of its death effects instead)
+    if !inside && u.is_some_and(|u| u.vehicle.crashable) {
         // spec: S-0611 claim 7 (Q-1461: for a victim that starts a crash, the standing position is marked taken again in the death tick)
         for (cc, l, r) in records.clone() {
             if let Some(x) = w.cells.occ_mut(cc, l) {
