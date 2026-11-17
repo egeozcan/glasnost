@@ -130,3 +130,19 @@ fn claim_17_reveal_action_skips_a_marked_ally() {
         "the unmarked ally still has the reveal made for itself"
     );
 }
+
+// spec: S-0409 claim 2 (an area reveal counts for the house it is made for and, with ally reveal, its allies) and claim 17 (revision 17: only the waypoint reveal leaves a marked ally out; another spec's area reveal keeps claim 2's ally rule; S1 row 6 makes the cells seen)
+#[test]
+fn claim_17_another_specs_area_reveal_still_counts_for_a_marked_ally() {
+    let (mut w, wp) = allied_game();
+    run_to(&mut w, 2);
+    shroud::defeat_reveal(&mut w, B);
+    assert!(shroud::whole_map_revealed(&w, B), "set-up: B is marked");
+    assert!(!shroud::seen(&w, B, wp), "set-up: explored only, not seen");
+    shroud::area_reveal(&mut w, A, glasnost_sim::world::Pos::centre(wp, 0), 2);
+    assert!(shroud::seen(&w, A, wp), "made for A");
+    assert!(
+        shroud::seen(&w, B, wp),
+        "counted for the marked ally through claim 2"
+    );
+}

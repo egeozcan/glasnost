@@ -1036,9 +1036,11 @@ pub fn removing(w: &mut World, id: ObjectId) {
     }
 }
 
-/// An object leaves play by going inside a transport, a bunker or a
-/// building while it stays in the world (S-0607 claims 2, 12, 14 and 21,
-/// revision 50; `objects::take_inside`).
+/// An object leaves play by going inside a transport or a building while
+/// it stays in the world (S-0607 claims 2, 12, 14 and 21, revision 50;
+/// `objects::take_inside`). Going into a vehicle bunker is not leaving play,
+/// and the riders of an open-topped transport that goes inside do not leave
+/// play (revision 52).
 pub fn leaving_play(w: &mut World, id: ObjectId) {
     // spec: S-0607 claim 14 (revision 50: a dropper that leaves play: its dropped units no longer have a dropper but keep their dropper house; those it drops as it leaves, below, keep it as dropper)
     if !crate::census::none(w, crate::census::Held::Dropped) {
@@ -1068,7 +1070,7 @@ pub fn leaving_play(w: &mut World, id: ObjectId) {
             }
         }
     }
-    // spec: S-0607 claim 21 (revision 50: the wave ends when its firer or its target leaves play, going inside a transport, a bunker or a building; marked here, it fades from the wave's next update on, as the end test there would have found; for an open-topped transport this holds although the passenger enters play again at once)
+    // spec: S-0607 claim 21 (revision 50: the wave ends when its firer or its target leaves play, going inside a transport or a building; marked here, it fades from the wave's next update on, as the end test there would have found; for an open-topped transport this holds although the passenger enters play again at once)
     for v in w.waves.values_mut() {
         if v.firer == id || v.target == Target::Object(id) {
             v.ended = true;
@@ -2012,23 +2014,24 @@ pub fn wave_turn(w: &mut World, id: ObjectId) {
 }
 
 /// Whether an object is in play for the wave's end test (S-0607 claim 21):
-/// present and on the map, and not inside a transport, a bunker or a
-/// building.
+/// present and on the map, and not inside a transport or a building. A
+/// bunkered vehicle is in play (revision 52).
 fn in_play(w: &World, x: ObjectId) -> bool {
+    // spec: S-0607 claim 21 (revision 52, Vehicle bunkers and riders: going into a vehicle bunker is not leaving play for the wave, S-0606 claim 7; a target that goes in and a firer that is bunkered are left to the other ending conditions)
     w.obj(x).is_some_and(|o| {
         o.on_map && o.structure.inside.is_none() && crate::transport::riding(w, x).is_none()
-    }) && crate::structures::bunker::bunkered_in(w, x).is_none()
+    })
 }
 
 /// Whether the wave's firer is in play for its end test (S-0607 claim 21,
 /// revision 50): as [`in_play`], except that a passenger of an open-topped
-/// transport is in play while it rides (S-0507 claim 14). Its boarding,
-/// which is leaving play, has ended the wave already (`leaving_play`).
+/// transport is in play while it rides (S-0507 claim 14), also while that
+/// transport is bunkered or inside (revision 52). Its boarding, which is
+/// leaving play, has ended the wave already (`leaving_play`).
 fn firer_in_play(w: &World, f: ObjectId) -> bool {
     if crate::transport::open_topped_carrier(w, f).is_some() {
-        // spec: S-0607 claim 21 (revision 50: a firer that is already a passenger of an open-topped transport when it fires creates a wave as any other firer does, and only the ending conditions end it)
-        return w.obj(f).is_some_and(|o| o.structure.inside.is_none())
-            && crate::structures::bunker::bunkered_in(w, f).is_none();
+        // spec: S-0607 claim 21 (revision 50: a firer that is already a passenger of an open-topped transport when it fires creates a wave as any other firer does, and only the ending conditions end it; revision 52, Vehicle bunkers and riders: a firer whose open-topped transport goes into a vehicle bunker or goes inside does not leave play, and the loss of its target ends the wave by the target condition)
+        return w.obj(f).is_some_and(|o| o.structure.inside.is_none());
     }
     in_play(w, f)
 }
@@ -2044,7 +2047,7 @@ fn wave_update(w: &mut World, id: ObjectId) {
         let firer_gone = !firer_in_play(w, v.firer);
         let target_gone = matches!(v.target, Target::Object(t) if !in_play(w, t));
         let retargeted = w.obj(v.firer).and_then(|o| o.target) != Some(v.target);
-        // spec: S-0607 claim 21 (the wave ends when its firer or its target leaves play, going inside a transport, a bunker or a building included, or when its firer's target, as it stands at the wave's turn, is no longer the wave's target)
+        // spec: S-0607 claim 21 (the wave ends when its firer or its target leaves play, going inside a transport or a building included but not going into a vehicle bunker, revision 52, or when its firer's target, as it stands at the wave's turn, is no longer the wave's target)
         if firer_gone || target_gone || retargeted {
             v.ended = true;
         }

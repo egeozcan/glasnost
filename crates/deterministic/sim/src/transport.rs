@@ -1544,17 +1544,12 @@ pub fn remove_passengers(w: &mut World, t: ObjectId) {
 }
 
 /// An object is removed from the game: a removed passenger leaves its
-/// transport's passenger order, and a removed transport's remaining
+/// transport's passenger order, a gunner vehicle it leaves empty going back
+/// to weapon number 0 (S-0308 claim 6), and a removed transport's remaining
 /// passengers die (claim 16).
 pub fn removing(w: &mut World, id: ObjectId) {
-    if let Some(t) = riding(w, id)
-        && let Some(tb) = w.obj_mut(t)
-    {
-        tb.transport.passengers.retain(|&x| x != id);
-    }
-    if let Some(ob) = w.obj_mut(id) {
-        ob.transport.riding = None;
-    }
+    // spec: S-0308 claim 6 (a gunner vehicle's weapon number is its passenger count, 0 when it carries none: a removed last passenger leaves it at 0, as a killed one does)
+    leave_list(w, id);
     remove_passengers(w, id);
 }
 

@@ -1314,6 +1314,34 @@ Lanes compare base a5df3f6 with the batch at 0eb2ef6. Logs are in `local-lane/si
 **AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-after-7.txt` to `quick-after-10.txt`). All 36 games end on the same tick with the same winner as base, so no winner needs tracing. All are over before 120000 ticks.
 
 **Suites.** The AI suite with its ignored tests passes 364 before and after (`ai-suite-base.txt`, `ai-suite-after.txt`), and no AI golden moves. The sim gate with its ignored tests passes 17 on base (`sim-gate-base.txt`) and 17 after, against the regenerated goldens (`sim-gate-after.txt`). These all pass on the final tree:
+
+## Batch S26: bunkers and riders for the lift, and S25's seams
+
+Base main a5df3f6, not rebased. The batch builds S-0607 r52's answers to Q-3182 and Q-3183 (#285) and takes S25's three seams of #383. Of the seams S25 did not reach, it adds the test for A6c's #367. It hands back #284, #291, #344, #339, #346, #263 and #252 untouched. The design text came first (740b7ab), and each test was committed before its fix (e8a4ef0, ea096f5, 033ce1e). The new tests were run with the base worktree checked out at 033ce1e, the last test commit, which holds every new test and no fix (`tests-at-033ce1e.txt`).
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #285 (a) | A lifter that took a vehicle bunker as its destination and then gripped lost its grip on the approach. The enter processing gives the bunker as destination again (S-0606 claim 4, S-0215 claim 29), and `econ::assign_destination` took every non-empty destination as an acceptance | fixed (f94e4df) | S-0607 claim 12 r52 (*Lifters and vehicle bunkers*): a destination it already holds is not an acceptance. `assign_destination` ends a grip by row 2 only when the destination it gives differs from the one held | `claims_s0607_r52.rs::a_lifter_that_grips_while_it_goes_into_a_bunker_keeps_its_grip` |
+| #285 (b) | The wave's end test counted a bunkered firer or target as out of play. A wave ended when its target went in, and a bunkered firer's wave ended in the update that made it | fixed (b16d9a7) | S-0607 claim 21 r52 (*Vehicle bunkers and riders*): going into a vehicle bunker is not leaving play. `lift::in_play` and `firer_in_play` drop the bunker test, and the comments of `take_inside` and `lift::leaving_play` no longer name a bunker | `claims_s0607_r52.rs` (`a_wave_lasts_when_its_target_goes_into_a_bunker`, `a_bunkered_firers_wave_lasts`) |
+| #285 (c) | The rest of r52 (Q-3182 and Q-3183): a dropper that goes into a bunker, a seizing shot in flight as its firer is bunkered, the update order at the let-out, and the riders of an open-topped transport that goes into a bunker, a closed transport or a building | already right | The bunker entry calls no leaving-play hook, and `objects::take_inside` acts only on the object going in. Guards only | `claims_s0607_r52.rs`, ten tests |
+| #383 (S25 seam 1) | Something reads a closed transport passenger's kept position: quick lane seed 7, map 0, game 3 ends at 47257, not 46922 | request (Q-3207) | Traced with player-house dumps, then per-tick watches, at fc21d02 against f8f611f. The first on-map difference is at tick 41271. A hover transport at rest in *guard* holds as its destination the infantry unit it took by S-0507 claim 5, which has just boarded it. The destination's point is that passenger's position. With the kept position it is one cell off the transport's own point, so S-0207 claim 26's guard row no longer removes it. The transport holds it until the AI re-orders it, between ticks 41300 and 41350. The read is right under the approved claims (S-0312 claim 34 (b)), and no claim says whether that destination should stay. Code unchanged | — |
+| #383 (S25 seam 2) | `transport::removing` took a removed passenger off the list without the gunner reset | fixed (596e560) | S-0308 claim 6: `removing` goes through `leave_list` | `claims_s0308_gunner_killed_inside.rs` (`a_gunner_vehicle_whose_last_passenger_is_removed_goes_back_to_weapon_number_0`, control `…keeps_its_weapon_number_while_a_passenger_remains_after_a_removal`) |
+| #383 (S25 seam 3) | `docs/dev/play-notes.md` still named `warp_leaving` | docs (6f6fa05) | Now names `superweapons::warp_pending_or_leaving` | — |
+| #367 | `shroud::area_reveal` keeps claim 2's ally rule with no mark test | test-only (033ce1e) | S-0409 claim 17 r17 leaves a marked ally out of the waypoint reveal only. No simulation path calls `area_reveal` yet (the drop-zone reveal, S-0011 claim 36, is not built) | `claims_s0409_reveal_action.rs::claim_17_another_specs_area_reveal_still_counts_for_a_marked_ally` |
+
+Guard and control tests that pass on base: ten of the thirteen r52 tests, the gunner test with a passenger remaining, and #367's test (test-only). Every other new test fails on the base code: 3 of 13 for #285 and 1 of 2 for the gunner removal.
+
+Formats: no fix adds saved or hashed state, so save 151, AI game 128 and wire 12 are unchanged. No switch is added (r52 names none). No golden moves.
+
+Lanes compare base a5df3f6 with the batch at 681a547 (27ad1d5 and 681a547 change only the request and the design text). Logs are in `local-lane/sim-issues/s26/`.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). Every output file is byte-identical to base: M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 and M-0021 10 of 50 failing.
+
+**Sweeps** (`m6c-base.txt`/`m6c-after.txt`, and likewise for m7a and m7b). M6c, M7a and M7b over seeds 1–16 pass and print the same lines as base (smallest minimum 0, 2 and drain 3).
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-after-7.txt` to `quick-after-10.txt`). All 36 games end on the same tick with the same winner as base.
+
+**Suites.** The AI suite with its ignored tests passes 364 before and after (`ai-suite-base.txt`, `ai-suite-after.txt`). The sim gate with its ignored tests passes 17 before and after (`sim-gate-base.txt`, `sim-gate-after.txt`). On the final commit these also pass:
 - `cargo test --workspace --no-fail-fast`, with no failures;
 - `cargo clippy --workspace --all-targets -- -D warnings`;
 - `cargo fmt --check`;
@@ -1328,3 +1356,9 @@ Seams left:
 - Q-3213 (a house the cleanup removes), Q-3214 (`double_start_resolution` off) and Q-3215 (marks at positions N and above) await answers. Their interim rules are in the design.
 
 The P3 census rule: marks are positions' house numbers, not object back-references, so no fix makes or moves a back-reference of `World::census`.
+
+- Q-3207 (above): what a transport's destination naming the unit that boarded it does.
+- #284: A6c's other overlay writers still skip `crates::overlay_changed`. These are `crush.rs`, `load.rs`, five sites in `overlays.rs`, the high, low and hut bridge code, `econ/placement.rs`, two sites in `econ/resource.rs` and `econ/sell.rs`. Not taken.
+- Not taken: S20's #291 and S18's #344, #339 (perf, not measured), #346, #263 and #252.
+
+The P3 census rule: no fix makes or moves a back-reference of `World::census`. The wave fix reads object state, the held-destination test compares two destinations, and `removing` reuses `leave_list`, which touches the passenger list and weapon numbers.

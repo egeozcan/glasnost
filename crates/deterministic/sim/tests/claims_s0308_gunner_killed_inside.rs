@@ -1,5 +1,6 @@
 //! S-0308 claim 6 with S-0312 revision 88 claim 34 (a) (S24's seam of
-//! #383): a gunner vehicle whose last passenger is killed inside. Synthetic
+//! #383): a gunner vehicle whose last passenger is killed inside, or removed
+//! from the game while it rides (S25's seam of the same issue). Synthetic
 //! rules: the test kit's combat rules plus GUN (an unarmed BUGGY of a gunner
 //! type with 2 seats), SEAT (a WALKER whose mode index is 3) and warhead DK0
 //! (infantry-death kind 0, versus 1). Every name and number is invented; no
@@ -12,7 +13,7 @@ use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::combat::weapon;
 use glasnost_sim::rules::Kind;
 use glasnost_sim::world::{ObjectId, World};
-use glasnost_sim::{testkit, transport};
+use glasnost_sim::{objects, testkit, transport};
 
 const SIZE: i32 = 24;
 /// SEAT's mode index.
@@ -109,6 +110,24 @@ fn a_gunner_vehicle_whose_last_passenger_is_killed_inside_goes_back_to_weapon_nu
 fn a_gunner_vehicle_keeps_its_weapon_number_while_a_passenger_remains() {
     let (mut w, ps, t) = boarded(2);
     kill(&mut w, ps[0]);
+    assert_eq!(transport::count(&w, t), 1, "set-up: one left");
+    assert_eq!(weapon::weapon_number(&w, t), MODE);
+}
+
+// spec: S-0308 claim 6 (when its last passenger leaves, a gunner vehicle's weapon number becomes 0) and S-0312 claim 34 (a passenger that an action removes is taken off its transport's passenger list at that moment, freeing its seat)
+#[test]
+fn a_gunner_vehicle_whose_last_passenger_is_removed_goes_back_to_weapon_number_0() {
+    let (mut w, ps, t) = boarded(1);
+    objects::remove(&mut w, ps[0]);
+    assert_eq!(transport::count(&w, t), 0, "set-up: the seat is free");
+    assert_eq!(weapon::weapon_number(&w, t), 0);
+}
+
+// spec: S-0308 claim 6 (a passenger leaving while at least one remains changes nothing)
+#[test]
+fn a_gunner_vehicle_keeps_its_weapon_number_while_a_passenger_remains_after_a_removal() {
+    let (mut w, ps, t) = boarded(2);
+    objects::remove(&mut w, ps[0]);
     assert_eq!(transport::count(&w, t), 1, "set-up: one left");
     assert_eq!(weapon::weapon_number(&w, t), MODE);
 }
