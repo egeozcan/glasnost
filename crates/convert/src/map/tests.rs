@@ -994,3 +994,46 @@ fn claim_29_unread_header_components() {
     };
     assert!(warned("Waypoint1:") && warned("Waypoint9:") && warned("Waypoint10:"));
 }
+
+/// spec: S-0009 Import mapping and S-0003 claim 9 ([Header] WaypointN: a key written with an empty value gives the value in force for the whole pair, as a missing one does: no unread-component departure and no warning)
+#[test]
+fn claim_29_empty_header_pair_is_missing() {
+    let text = format!("{BASE}[Header]\nNumberStartingPoints=9\nWaypoint1=\nWaypoint9=\n");
+    let d = decode_text(&text);
+    let p = &d.map.header.pairs;
+    assert_eq!(p[0], Some([Some(0), Some(0)]));
+    assert_eq!(p[8], None);
+    assert!(
+        !d.warnings.iter().any(|w| w.text.contains("cannot be read")),
+        "{:?}",
+        d.warnings
+    );
+}
+
+/// The warnings of `ini` that cite S-0009 claim 29 and contain `part`.
+fn claim_29_warned(ini: &str, part: &str) -> bool {
+    decode_text(ini)
+        .warnings
+        .iter()
+        .any(|w| w.text.contains("S-0009 claim 29") && w.text.contains(part))
+}
+
+/// spec: S-0009 claim 29 (unspecified cases, departures: a mark at a position numbered N or above is ignored, and a house that finds every position below N taken gets none; the importer warns: pairs 13 … 16 always mark positions 8 and above, pairs 9 … 12 may mark positions at or above the map's start waypoint count, and pairs may mark every start position)
+#[test]
+fn claim_29_unspecified_case_warnings() {
+    // Two start waypoint markers (K = 2): positions 0 and 1 always exist.
+    let wps = "[Waypoints]\n0=10003\n1=10005\n";
+    let ini = |pairs: &str| format!("{BASE}{wps}[Header]\nNumberStartingPoints=16\n{pairs}");
+    // Pair 13 marks positions 8 and 9, which no game has.
+    assert!(claim_29_warned(&ini("Waypoint13=0,-1\n"), "position 8"));
+    assert!(!claim_29_warned(&ini("Waypoint13=-1,-1\n"), "position 8"));
+    // Pair 10 marks positions 2 and 3: only a game of more than 2 players has them.
+    assert!(claim_29_warned(&ini("Waypoint10=-1,1\n"), "position 3"));
+    assert!(!claim_29_warned(&ini("Waypoint9=1,0\n"), "position 1"));
+    // Pair 9 marks both start positions of the map.
+    assert!(claim_29_warned(&ini("Waypoint9=5,5\n"), "every start position"));
+    assert!(!claim_29_warned(&ini("Waypoint9=5,-1\n"), "every start position"));
+    assert!(claim_29_warned(&ini("Waypoint9=0,0\n"), "every start position"));
+    // Each player of a two-player game holds one of them: no house is left over.
+    assert!(!claim_29_warned(&ini("Waypoint9=1,0\n"), "every start position"));
+}
