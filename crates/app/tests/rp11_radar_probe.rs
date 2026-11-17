@@ -50,7 +50,14 @@ fn radar_picture_probe() {
     let mut ticked = Vec::new();
     let marks = |w: &glasnost_sim::world::World| -> Vec<u8> {
         house
-            .and_then(|h| w.econ.shroud.houses.get(usize::from(h.0)).cloned().flatten())
+            .and_then(|h| {
+                w.econ
+                    .shroud
+                    .houses
+                    .get(usize::from(h.0))
+                    .cloned()
+                    .flatten()
+            })
             .map(|s| s.marks)
             .unwrap_or_default()
     };
