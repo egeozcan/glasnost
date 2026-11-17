@@ -2285,6 +2285,17 @@ Seams:
 
   The importer does not hold these values. The view reads all three keys from the layered rules text (`mapview::build::rule_int`), not from the converted record, so a bound in the record would not reach the view's adds. On the simulation side, the turret anchor shift is a position in leptons, and S-0205 claim 1 says it wraps.
 
+## Simulation (foundations F4: a debug-build overflow sweep and F3's seams)
+
+Release builds have no overflow checks, so an integer result past the 32-bit range wraps there, as S-0205 claim 1 says it must, while a debug build panics. F4 looks for the places where real data reaches such a result, and closes the seams F3 left. Real data plays exactly as before. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch F4 (foundations)*.
+
+**The sweep.** The headless tools and the sim gate were built as release builds with overflow checks on (`CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true`, a target dir of their own) and run over the AI quick lane (seeds 7 to 10, maps 0, 2 and 8), the sim gate with its ignored tests (which play the M6c, M7a and M7b sweeps over seeds 1 to 16) and the oracle arena. The ledger lists every panic found, with its site and the run that hit it.
+
+**F3's seams follow S-0205 claim 1.** Each site below is an integer result, and no topic spec states a clamp for it, so it wraps. This is the spec's rule, not a bound of our own, so the sites carry no `design:` marker. In range nothing changes.
+
+- *The animation clock (`anim_clock`).* The stage *k* is an integer (S-0109 Terms). An advance *k* + σ, the step back *k* − σ of a refused end (S-0611 claim 11) and the image frame *a* + *k* (S-0109 claim 1) now wrap, where they used to saturate. Saturation never panicked, so this is a change at the ends of the range only: an advance from 2³¹ − 1 now goes on at −2³¹ where it used to stay at 2³¹ − 1, and a wrapped image frame can land inside the sprite (−2³¹ + −2³¹ is frame 0) where a saturated one drew nothing. The view reads the same `Player::frame`, so it shows the wrapped frame too.
+- *The fire point (`combat::position`).* A garrisoned building's muzzle shift added to its base point (S-0313 claim 6), the three adds of claim 1's shift (trunc *u*, trunc(−*v*), trunc *w*) to the base point, and the lateral part σ*L* of F1 wrap. F1 says σ*L* is converted from an integer to single precision, so σ*L* is an integer product: for *L* = −2³¹ and an odd burst counter it wraps to −2³¹, and the shot comes from the even counter's point. These were plain adds and a plain product, which already wrapped in release builds.
+
 ## Simulation (sim issues S25: the seams left open)
 
 The twenty-fifth batch of the game-logic audit takes seams that earlier batches listed as left open: S24's rests of #383 and S20's rests. Each change of behaviour has a test on synthetic data committed before it. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S25*.
