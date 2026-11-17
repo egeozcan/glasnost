@@ -497,6 +497,13 @@ pub struct World {
     /// Import mapping).
     #[serde(default)]
     pub map_flags: MapFlags,
+    /// The start position marks of positions 0 … 15 (S-0009 claim 29):
+    /// present only when the map's header count is 9 or more. They hold
+    /// the early-phase marks between the two phases (for the map objects'
+    /// "player at position X") and the late-phase marks from the late
+    /// phase on (for References). Never consulted when absent.
+    #[serde(default)]
+    pub start_marks: Option<Vec<i32>>,
     /// The hover slots (S-0502 Terms): the jumpjet that holds the slot of a
     /// cell, at most one per cell.
     #[serde(default)]

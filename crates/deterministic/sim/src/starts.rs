@@ -2,12 +2,12 @@
 //! with their random start cells, and the assignment of positions to
 //! houses, in the early and late phases of map loading.
 
-use glasnost_map::{CellXY, Map};
+use glasnost_map::{CellXY, Header, Map};
 use glasnost_num::geom::root_floor;
 
 use crate::load::LoadError;
 use crate::path::{self, StartAreas};
-use crate::world::{HouseRole, World};
+use crate::world::{HouseId, HouseRole, World};
 
 /// Start waypoint markers 0 … 7 (S-0009 Terms).
 const START_WAYPOINTS: u16 = 8; // spec: S-0009 Constants (start waypoint markers)
@@ -113,23 +113,105 @@ fn distance_sum(w: &World, list: &[CellXY], p: usize, taken: &[usize]) -> i64 {
         .sum()
 }
 
+/// Start positions that carry a mark, 0 … 15 (S-0009 claim 29).
+pub const MARKED_POSITIONS: usize = 16; // spec: S-0009 Constants (start positions that carry a mark 16)
+
+/// The mark of a free position (S-0009 claim 29).
+pub const FREE: i32 = -1; // spec: S-0009 Constants (free mark −1)
+
+/// The first header pair that acts as marks (S-0009 claim 29).
+const FIRST_MARK_PAIR: i32 = 9; // spec: S-0009 Constants (header pairs that act as marks 9 … min(N_h, 16))
+
+/// The last header pair our engine applies (S-0009 claim 29: pairs 17 and
+/// beyond are unspecified; our engine ignores them, a departure).
+const LAST_MARK_PAIR: i32 = 16; // spec: S-0009 Constants (header pairs that act as marks 9 … min(N_h, 16))
+
+/// Whether the map's header pairs act as start position marks, and the
+/// References rule reads the marks: a header count of 9 or more (S-0009
+/// claim 29).
+pub fn marks_apply(header: &Header) -> bool {
+    header.count >= FIRST_MARK_PAIR
+}
+
+/// The marks of a game before any phase: every position free.
+pub fn free_marks() -> Vec<i32> {
+    vec![FREE; MARKED_POSITIONS]
+}
+
+/// Applies header pairs 9 … min(N_h, 16) that the header holds to `marks`
+/// (S-0009 claim 29): pair i sets positions 2(i − 9) and 2(i − 9) + 1; an
+/// absent pair, or an unread component, leaves the mark as it stands. A
+/// mark at a position numbered `n` or above is not kept (a departure, and
+/// Q-3215's interim rule for References): it is noted and stays free.
+pub fn apply_pairs(w: &mut World, header: &Header, marks: &mut [i32], n: usize) {
+    for i in FIRST_MARK_PAIR..=header.count.min(LAST_MARK_PAIR) {
+        let Some(Some(pair)) = header.pairs.get(i as usize - 1) else {
+            continue;
+        };
+        for (j, c) in pair.iter().enumerate() {
+            // spec: S-0009 claim 29 (pair i marks positions 2(i − 9) and 2(i − 9) + 1)
+            let pos = 2 * (i - FIRST_MARK_PAIR) as usize + j;
+            let Some(m) = *c else { continue };
+            if pos < n {
+                marks[pos] = m;
+            } else if m != FREE {
+                // spec: S-0009 claim 29 (a mark at a position numbered N or above: unspecified; our engine ignores it, a departure; Q-3215)
+                w.note("S-0009 claim 29: a header pair marks a start position numbered N or above; our engine ignores the mark (a departure)");
+            }
+        }
+    }
+}
+
+/// The highest-numbered position below `n` whose mark is house `h`'s
+/// number (S-0009 claim 29: a house holds a position whose mark is its
+/// house number, and takes the highest-numbered it holds).
+pub fn highest_held(marks: &[i32], n: usize, h: usize) -> Option<u32> {
+    (0..n.min(marks.len()))
+        .rev()
+        .find(|&p| i64::from(marks[p]) == h as i64)
+        .map(|p| p as u32)
+}
+
+/// "Player at position" `k` (S-0009 claims 21 and 29): with the marks in
+/// force (a header count of 9 or more), the house whose house number is
+/// mark `k`, which may be passive, and none when no house has it; a house
+/// the cleanup removed is no house (Q-3213's interim rule). Otherwise the
+/// house that holds start position `k` and is not removed.
+pub fn player_at(w: &World, k: u32) -> Option<HouseId> {
+    match &w.start_marks {
+        // spec: S-0009 claim 29 (References: with N_h ≥ 9, the house whose house number equals mark X; Q-3213's interim rule: a removed house is none)
+        Some(marks) => {
+            let m = *marks.get(k as usize)?;
+            let h = usize::try_from(m).ok()?;
+            w.houses
+                .get(h)
+                .filter(|x| !x.removed)
+                .map(|_| HouseId(h as u8))
+        }
+        // spec: S-0009 claim 21 (the house holding start position X)
+        None => w
+            .houses
+            .iter()
+            .position(|h| !h.removed && h.start == Some(k))
+            .map(|i| HouseId(i as u8)),
+    }
+}
+
 /// Gives each house of `order` that holds no position one, in that order
 /// (S-0009 claim 19), against `list`: one ranged draw over 0 … N − 1 when
-/// no position is taken, the farthest-sum rule otherwise. A house that
-/// finds every position below N taken gets none (claim 29, a departure).
-pub fn assign(w: &mut World, order: &[usize], list: &[CellXY]) {
-    let n = list.len();
+/// no position is taken, the farthest-sum rule otherwise. A position is
+/// taken when its mark is not −1 (claim 29), and a position given out
+/// takes the house's number. A house that finds every position below N
+/// taken gets none (claim 29, a departure).
+pub fn assign(w: &mut World, order: &[usize], list: &[CellXY], marks: &mut [i32]) {
+    let n = list.len().min(marks.len());
     let q = w.rules().quirks;
     for &h in order {
         if w.houses[h].start.is_some() {
             continue;
         }
-        let taken: Vec<usize> = w
-            .houses
-            .iter()
-            .filter_map(|x| x.start.map(|s| s as usize))
-            .filter(|&s| s < n)
-            .collect();
+        // spec: S-0009 claim 29 (every position below N whose mark is not −1 counts as taken)
+        let taken: Vec<usize> = (0..n).filter(|&p| marks[p] != FREE).collect();
         let pos = if taken.is_empty() {
             if n == 0 {
                 None
@@ -150,6 +232,11 @@ pub fn assign(w: &mut World, order: &[usize], list: &[CellXY]) {
             }
             best.map(|b| b.1).or(first_free)
         };
+        match pos {
+            Some(p) => marks[p] = h as i32,
+            // spec: S-0009 claim 29 (every position below N taken: unspecified; our engine gives the house no start position and so no starting units, a departure)
+            None => w.note("S-0009 claim 29: every start position below N is taken; a house gets no start position and no starting units (a departure)"),
+        }
         w.houses[h].start = pos.map(|p| p as u32);
     }
 }

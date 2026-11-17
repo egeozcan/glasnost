@@ -145,6 +145,13 @@ const LAST_HEADER_PAIR: i32 = 16; // spec: S-0009 Constants (header pairs that a
 /// Header pairs that are preview markers, 1 … 8 (S-0009 claim 25).
 const PREVIEW_PAIRS: i32 = 8; // spec: S-0009 claim 25 (markers drawn only when 1 ≤ N_h ≤ 8)
 
+/// Start waypoint markers 0 … 7, and so the most positions a game has
+/// (S-0009 claim 17: N = max(P, K), and the lobby seats at most 8).
+const START_POSITIONS: u16 = 8; // spec: S-0009 Constants (start waypoint markers 8)
+
+/// The mark of a free position (S-0009 claim 29).
+const FREE_MARK: i32 = -1; // spec: S-0009 Constants (free mark −1)
+
 /// Byte widths of the six terrain-record values (module docs; encoding
 /// outside S-0009).
 const RECORD_FIELDS: [usize; 6] = [2, 2, 4, 1, 1, 1]; // spec: S-0012 claim 6 (record layout)
@@ -249,6 +256,7 @@ impl Decoder<'_> {
         let has_overlay_data = self.overlays(&mut cells, format_version);
         let (waypoints, home_waypoint) = self.waypoints(&footprint);
         let header = self.header();
+        self.header_mark_warnings(&header, &waypoints);
         let preview = self.preview();
         let lighting = self.lighting();
         let basic = self.basic();
@@ -799,6 +807,68 @@ impl Decoder<'_> {
             origin,
             extent,
             pairs,
+        }
+    }
+
+    /// Warnings about the cases S-0009 claim 29 leaves unspecified, which
+    /// our engine resolves by departures: a mark at a position numbered N
+    /// or above is ignored, and a house that needs a position when every
+    /// position below N is taken gets none. N is only known when a game
+    /// starts; the map's start waypoint markers bound it from below.
+    fn header_mark_warnings(&mut self, header: &Header, waypoints: &BTreeMap<u16, (i16, i16)>) {
+        // spec: S-0009 claim 17 (K: start waypoint markers defined consecutively from 0, at most 8)
+        let k = (0..START_POSITIONS)
+            .take_while(|i| waypoints.contains_key(i))
+            .count();
+        // The marks pairs 9 … 16 set, an unread component leaving −1 (the early phase's free mark).
+        let mut marks = [FREE_MARK; 2 * (LAST_HEADER_PAIR - PREVIEW_PAIRS) as usize];
+        // spec: S-0009 claim 29 (pairs 9 … min(N_h, 16) apply; pair i marks positions 2(i − 9) and 2(i − 9) + 1)
+        for i in PREVIEW_PAIRS + 1..=header.count.min(LAST_HEADER_PAIR) {
+            let Some(Some(pair)) = header.pairs.get(i as usize - 1) else {
+                continue;
+            };
+            let key = format!("Waypoint{i}");
+            for (j, c) in pair.iter().enumerate() {
+                let Some(m) = *c else { continue };
+                let pos = 2 * (i - PREVIEW_PAIRS - 1) as usize + j;
+                marks[pos] = m;
+                if m == FREE_MARK {
+                    continue;
+                }
+                if pos >= usize::from(START_POSITIONS) {
+                    // spec: S-0009 claim 29 (a mark at a position numbered N or above: unspecified; N ≤ 8, so positions 8 … 15 never exist; our engine ignores the mark, a departure)
+                    self.warn(
+                        self.line_of(b"Header", key.as_bytes()),
+                        format!(
+                            "[Header] {key} marks position {pos}; a game has at most 8 positions, so our engine ignores the mark (S-0009 claim 29, a departure)"
+                        ),
+                    );
+                } else if pos >= k {
+                    // spec: S-0009 claim 29 (a mark at a position numbered N or above: unspecified; our engine ignores it, a departure)
+                    self.warn(
+                        self.line_of(b"Header", key.as_bytes()),
+                        format!(
+                            "[Header] {key} marks position {pos}; the map defines {k} start waypoint markers, so the position exists only in a game of more than {pos} players, and otherwise our engine ignores the mark (S-0009 claim 29, a departure)"
+                        ),
+                    );
+                }
+            }
+        }
+        let held = &marks[..k];
+        if k > 0 && held.iter().all(|&m| m != FREE_MARK) {
+            let mut names: Vec<i32> = held.to_vec();
+            names.sort_unstable();
+            names.dedup();
+            if names.len() < k {
+                // spec: S-0009 claim 29 (a house that needs a position when every position below N is taken: unspecified; our engine gives it none, a departure)
+                self.warn(
+                    self.line_of(b"Header", b"NumberStartingPoints"),
+                    format!(
+                        "the header pairs mark every start position of the map with {} house numbers: a game of more players finds every position taken, and our engine gives the players left no start position and no starting units (S-0009 claim 29, a departure)",
+                        names.len()
+                    ),
+                );
+            }
         }
     }
 

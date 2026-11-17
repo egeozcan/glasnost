@@ -564,6 +564,7 @@ pub fn new_game(
             inert: map.basic.inert,
             harvester_immune: map.basic.harvester_immune,
         },
+        start_marks: None,
         rules: Some(rules.clone()),
         catalogue: Some(catalogue.clone()),
         regions: Default::default(),
@@ -601,12 +602,10 @@ pub fn new_game(
 
     // Early phase: lists 1 and 2 and the random-position draws (S-0009
     // claims 19, 20 and 33), on blank cells.
+    // The start position marks (S-0009 claim 29), carried from the early
+    // phase through the cleanup to the late phase.
+    let mut marks = starts::free_marks();
     if !setup.sandbox && q.double_start_resolution {
-        // spec: S-0009 claim 29 (a header count above 8: pairs beyond the eighth act as start position marks)
-        if map.header.count > 8 {
-            // S-0009 claim 29 (header pairs beyond the eighth as start position marks) is not implemented.
-            w.note("S-0009 claim 29: header pairs beyond the eighth are not applied as start position marks (not implemented)");
-        }
         let early_passive = |w: &World, h: usize| {
             rules
                 .countries
@@ -627,17 +626,27 @@ pub fn new_game(
         w.cells = real;
         let list2 = list2?;
         let n = list2.len();
-        // spec: S-0009 claim 19 (players who chose a position get it; passive houses get none)
-        let mut order = Vec::new();
-        for (h, hs) in setup.houses.iter().enumerate() {
-            if early_passive(&w, h) {
-                continue;
+        // spec: S-0009 claim 29 (early phase: the applied pairs set their marks first)
+        starts::apply_pairs(&mut w, &map.header, &mut marks, n);
+        // spec: S-0009 claims 19 and 29 (each chooser's house number overwrites its chosen position's mark; passive houses get none)
+        let order: Vec<usize> = (0..setup.houses.len())
+            .filter(|&h| !early_passive(&w, h))
+            .collect();
+        for &h in &order {
+            if let Some(s) = setup.houses[h].start.filter(|&s| (s as usize) < n) {
+                marks[s as usize] = h as i32;
             }
-            w.houses[h].start = hs.start.filter(|&s| (s as usize) < n);
-            order.push(h);
         }
-        // spec: S-0009 claim 19 (the others in house order, against list 2)
-        starts::assign(&mut w, &order, &list2);
+        // spec: S-0009 claim 29 (a non-passive house holding positions takes the highest-numbered)
+        for &h in &order {
+            w.houses[h].start = starts::highest_held(&marks, n, h);
+        }
+        // spec: S-0009 claims 19 and 29 (the others in house order, against list 2)
+        starts::assign(&mut w, &order, &list2, &mut marks);
+        if starts::marks_apply(&map.header) {
+            // spec: S-0009 claim 29 (the early-phase marks answer "player at position X" for the map's objects, S-0009 claim 27)
+            w.start_marks = Some(marks.clone());
+        }
     }
 
     if !setup.sandbox {
@@ -691,22 +700,38 @@ pub fn new_game(
     if !setup.sandbox {
         // spec: S-0202 claim 14 and S-0009 claim 28 (the unused-house cleanup follows the second pass and precedes the late phase; its removals recalculate the occupied cells)
         cleanup(&mut w, setup);
+        for (h, house) in w.houses.iter().enumerate() {
+            if house.removed {
+                // spec: S-0009 claims 28 and 29 (a removed house takes no position, so its marks are free; S-0009 Open questions, Q-3213's interim rule)
+                for m in marks.iter_mut().filter(|m| i64::from(**m) == h as i64) {
+                    *m = starts::FREE;
+                }
+            }
+        }
         let list3 = starts::build_list(&mut w, map, players)?;
         let n = list3.len();
-        let mut order = Vec::new();
-        for (h, hs) in setup.houses.iter().enumerate() {
-            // spec: S-0009 claim 28 (a removed house takes no position in the late phase)
-            if late_passive(&w, h) || w.houses[h].removed {
-                continue;
+        // spec: S-0009 claim 28 (a removed house takes no position in the late phase)
+        let order: Vec<usize> = (0..setup.houses.len())
+            .filter(|&h| !late_passive(&w, h) && !w.houses[h].removed)
+            .collect();
+        // spec: S-0009 claim 29 (late phase: the pairs again, over the early-phase marks; an unread component keeps the early mark)
+        starts::apply_pairs(&mut w, &map.header, &mut marks, n);
+        if !q.double_start_resolution {
+            // spec: S-0009 Edge cases (quirks.double_start_resolution off: one list, after the terrain is loaded); claim 29 with the switch off, Q-3214's interim rule: the early-phase rule, choosers over the pairs
+            for &h in &order {
+                if let Some(s) = setup.houses[h].start.filter(|&s| (s as usize) < n) {
+                    marks[s as usize] = h as i32;
+                }
             }
-            if !q.double_start_resolution {
-                // spec: S-0009 Edge cases (quirks.double_start_resolution off: one list, after the terrain is loaded)
-                w.houses[h].start = hs.start.filter(|&s| (s as usize) < n);
-            }
-            order.push(h);
+        }
+        // spec: S-0009 claim 29 (a non-passive house holding positions takes the highest-numbered)
+        for &h in &order {
+            w.houses[h].start = starts::highest_held(&marks, n, h);
         }
         // spec: S-0009 claims 28 and 29 (a non-passive house without a position is assigned against list 3, in house order)
-        starts::assign(&mut w, &order, &list3);
+        starts::assign(&mut w, &order, &list3, &mut marks);
+        // spec: S-0009 claim 29 (References read the late-phase marks when N_h ≥ 9)
+        w.start_marks = starts::marks_apply(&map.header).then(|| marks.clone());
         for (h, b) in bases.iter_mut().enumerate() {
             // spec: S-0009 claim 20 (the base cell is the position's entry in list 3)
             *b = w.houses[h]

@@ -979,11 +979,8 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
             .position(|p| p.as_bytes() == name)
             .map(|k| k as u32)
         {
-            return w
-                .houses
-                .iter()
-                .position(|h| h.start == Some(k))
-                .map(|i| HouseId(i as u8));
+            // spec: S-0009 claims 21 and 29 (the player at the position: by the early-phase marks when N_h ≥ 9)
+            return crate::starts::player_at(w, k);
         }
         w.houses
             .iter()

@@ -1254,3 +1254,48 @@ Seams left:
 - `docs/dev/play-notes.md` still names `warp_leaving` in its history.
 
 The P3 census rule: no fix makes or moves a back-reference of `World::census`. The conversion inside goes through `mutation::convert`'s existing replacement, `sync` and `leave_list` touch positions and weapon numbers, the civilian house scans read house flags, and the burst counter is a combat field.
+
+## Batch S27: header pairs as start position marks
+
+Base main a5df3f6, not rebased. The batch builds S-0009 claim 29 (r45), *Header pairs beyond the eighth act as start position marks*: the rest of #368, which S25 left. The requests Q-3213, Q-3214 and Q-3215 come first (6c1896c), then the design in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S27: header pairs as start position marks)* (556b181, corrected with this section). Each part's tests are committed before its fix (8e803cc, ad4273d, 2be69bb, 0d8cd69). To show them failing, the base worktree was checked out at each test commit and the tests run there: `local-lane/sim-issues/s27/red-importer.txt`, `red-early.txt`, `red-late.txt` and `red-references.txt`. No fix commit changes a test. 0eb2ef6 is rustfmt on the importer and three test files. The tests use synthetic maps: four start waypoints and house 2 as a neutral house where claim 28's passivity is needed. No quirk switch is added: `quirks.header_pairs_as_start_marks` already gates the import, and M13b's variants E and F are measurements, not switches.
+
+| Part | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| Import | The importer read pairs 9 … 16 already. An empty value already counts as missing, since the document keeps no empty value. Nothing warned about the cases claim 29 leaves unspecified | fixed (b7823b3; 87c3e30 drops its redundant empty-value filter) | S-0009 claim 29 and S-0003 claim 9: new `Decoder::header_mark_warnings`, called by `decode` after `header()`. It warns about a mark at position 8 or above. It warns about a mark at or above the map's K start waypoint markers. It warns about pairs that mark every one of positions 0 … K − 1 with fewer than K house numbers | `convert::map::tests` (`claim_29_empty_header_pair_is_missing`, `claim_29_unspecified_case_warnings`) |
+| Early phase | Pairs 9 … min(N_h, 16) marked nothing; `load` only noted "not implemented" | fixed (18bceba) | S-0009 claim 29, first bullet: new `starts::apply_pairs`, `highest_held`, `free_marks` and `marks_apply`. In `load::new_game` the pairs are applied, then each non-passive chooser writes its number over its position. Each non-passive holder takes its highest position. The rest go through `assign`, which counts every mark other than −1 below N as taken and writes the house's number on the position it gives. With every position taken a house gets none, with a note. A mark at N or above is ignored with a note (Q-3215). The marks are carried to the late phase, and the cleanup frees a removed house's marks (Q-3213) | `claims_s0009_r45_header_marks.rs` (`variant_a_pair_9_places_both_players`, `variant_c_pairs_above_the_count_are_not_applied`, `variant_d_pair_10_marks_positions_2_and_3`, `variant_e_the_highest_position_held`, `variant_f_a_mark_that_names_no_house`, `a_chooser_wins_over_the_pair_early`, `an_unread_component_keeps_the_free_mark_early`, `marks_at_positions_n_and_above_are_ignored`, `every_position_taken_gives_no_start`, `eight_pairs_read_change_nothing`) |
+| Late phase | The late phase did not apply the pairs again | fixed (6d5b703) | S-0009 claim 29, second bullet, and claim 28: after the cleanup the pairs are applied again over the early marks, so an unread component keeps the early mark. Each house that is neither late-passive nor removed takes its highest held position; the rest are assigned against list 3. With `quirks.double_start_resolution` off the one resolution applies the pairs, then the choosers (Q-3214) | `claims_s0009_r45_header_marks_late.rs` (`variant_b_pair_9_frees_chosen_positions_in_the_late_phase`, `an_unread_component_keeps_the_early_mark_late`, `a_house_passive_early_holds_its_mark_late`, `a_removed_house_frees_its_position`, `one_resolution_applies_the_pairs_once`) |
+| References | "Player at position X" read only claim 21's holder | fixed (2d3f7aa) | S-0009 claim 29, third bullet, and claim 21: new `World::start_marks` (saved and hashed; `Some` only with N_h ≥ 9) and `starts::player_at`. With marks, the answer is the house whose number is mark k (a passive house may be named; a removed house is none, Q-3213). Otherwise it is claim 21's holder. `mp_triggers::resolve_house` and the owner lookup in `objects::place_map_objects` call it. The objects are placed with the early marks | `claims_s0009_r45_header_marks_references.rs` (`variant_e_references_follow_the_marks`, `variant_f_a_mark_that_names_no_house_is_empty`, `references_read_the_late_marks`, `references_at_positions_n_and_above_are_empty`, `a_reference_may_name_a_passive_house`, `a_removed_house_is_no_reference`, `eight_pairs_read_keep_the_holders`, `marks_survive_a_save_round_trip`) |
+
+Guard and control tests that pass on base:
+- Import: `claim_29_empty_header_pair_is_missing` (the document already drops an empty value).
+- Early phase: `variant_c_pairs_above_the_count_are_not_applied` and `eight_pairs_read_change_nothing` (guards). `an_unread_component_keeps_the_free_mark_early` also passes on base. That is a coincidence: at seed 1 the draw gives the same positions as a free mark.
+- Late phase: `a_house_passive_early_holds_its_mark_late` passes at 2be69bb, which already holds the early fix, since the carried marks keep the passive house's mark.
+- References: `references_at_positions_n_and_above_are_empty`, `a_removed_house_is_no_reference`, `variant_f_a_mark_that_names_no_house_is_empty` and `eight_pairs_read_keep_the_holders`. Under claim 21 these give the same answer.
+
+Every other new test fails on the code before its fix: 1 of 2 for the import, 7 of 10 for the early phase, 4 of 5 for the late phase and 4 of 8 for the References rule.
+
+Formats: `World::start_marks` is new saved and hashed state, so the save format goes from 151 to 167 and the AI game format from 128 to 143. Wire stays 12. The sim-gate goldens were regenerated once, in 2d3f7aa, with the ignored tests. All nine move in their hash lines only, from the new field's layout. No sim-gate scene sets a header, so N_h is the default −1 and the field is `None` in each.
+
+Lanes compare base a5df3f6 with the batch at 0eb2ef6. Logs are in `local-lane/sim-issues/s27/`.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). Every output file is byte-identical to base: M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 and M-0021 10 of 50 failing.
+
+**Sweeps** (`m6c-base.txt`/`m6c-after.txt`, and likewise for m7a and m7b). M6c, M7a and M7b over seeds 1–16 pass and print the same lines as base, apart from build and timing lines.
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-after-7.txt` to `quick-after-10.txt`). All 36 games end on the same tick with the same winner as base, so no winner needs tracing. All are over before 120000 ticks.
+
+**Suites.** The AI suite with its ignored tests passes 364 before and after (`ai-suite-base.txt`, `ai-suite-after.txt`), and no AI golden moves. The sim gate with its ignored tests passes 17 on base (`sim-gate-base.txt`) and 17 after, against the regenerated goldens (`sim-gate-after.txt`). These all pass on the final tree:
+- `cargo test --workspace --no-fail-fast`, with no failures;
+- `cargo clippy --workspace --all-targets -- -D warnings`;
+- `cargo fmt --check`;
+- the wasm32 build of glasnost-app;
+- `cargo xtask check`;
+- `cargo xtask gate`, native and wasm32 on all nine goldens.
+
+Seams left:
+- `an_unread_component_keeps_the_free_mark_early` passes on base by the draw at seed 1. Its assertion holds, but it does not tell the free mark apart from the draw.
+- Two choosers of one position: the later chooser in house order writes last and holds it. The lobby never allows this, and claim 29 does not say.
+- The importer's every-position warning counts distinct house numbers. It cannot know which numbers a game's players will have.
+- Q-3213 (a house the cleanup removes), Q-3214 (`double_start_resolution` off) and Q-3215 (marks at positions N and above) await answers. Their interim rules are in the design.
+
+The P3 census rule: marks are positions' house numbers, not object back-references, so no fix makes or moves a back-reference of `World::census`.
