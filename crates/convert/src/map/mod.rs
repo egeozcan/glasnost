@@ -774,11 +774,7 @@ impl Decoder<'_> {
         };
         for i in 1..=count.min(last) {
             let key = format!("Waypoint{i}");
-            // spec: S-0003 claim 9 and S-0009 Import mapping (a key with an empty value reads as missing: the value in force for the whole pair, no warning)
-            let stored = self
-                .doc
-                .value(b"Header", key.as_bytes())
-                .filter(|v| !v.trim_ascii().is_empty());
+            let stored = self.doc.value(b"Header", key.as_bytes());
             let pair = match stored {
                 // spec: S-0009 Import mapping (pairs 1 … 8 default to (0, 0); pairs 9 … 16 leave the marks)
                 None => (i <= PREVIEW_PAIRS).then_some([Some(0), Some(0)]),
