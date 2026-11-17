@@ -71,7 +71,10 @@ pub fn assign_destination(
     o.dest = dest;
     // spec: S-0607 claim 12 (row 2: a mobile lifter that accepts a non-empty destination lets go, its target cleared)
     if dest.is_some() {
-        crate::lift::lifter_accepts(w, id);
+        // spec: S-0607 claim 12 (revision 52, Lifters and vehicle bunkers: a destination it already holds, such as the bunker given again on the approach, S-0606 claim 4 and S-0215 claim 29, is not an acceptance and plays no part in row 2)
+        if dest != before {
+            crate::lift::lifter_accepts(w, id);
+        }
     } else {
         // spec: S-0607 claims 12 and 23 (a unit gripped with a stand-in that is given no destination: the grip ends at once and the unit is set down)
         crate::lift::given_no_destination(w, id);
