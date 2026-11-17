@@ -43,3 +43,4 @@ Records of what the original game does when run and observed: timings, counts, c
 | [M-0023](structures/M-0023-released-infantry-walled-pen-order.md) | A released infantry unit given a move order into a walled pen before its first turn (S-0417 U10 part g run 1) | structures | confirms | local |
 | [M-0024](simulation/M-0024-hunt-scatter-from-damage.md) | The scatter from damage for hunting vehicles of computer-controlled houses (S-0215 B6 part f) | simulation | confirms | committed |
 | [M-0025](simulation/M-0025-hunt-scatter-own-allied-unharmable.md) | The scatter from damage for a hunting vehicle hit by its own house, an allied house or an enemy it cannot harm (S-0215 B6 part g) | simulation | confirms | committed |
+| [M-0026](combat/M-0026-gas-on-and-under-a-high-bridge-deck.md) | Gas clouds made on and under a high bridge's deck, and a chaos drone deployed on the deck (S-0613 G14) | combat | confirms | committed |
