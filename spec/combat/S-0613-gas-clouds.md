@@ -2,13 +2,13 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 22
-sources-class: [decomp, design]
+revision: 24
+sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-14
-measurements: []
-requests: [Q-0662, Q-1240, Q-1241, Q-1242, Q-1244, Q-3054]
+approved-on: 2026-11-17
+measurements: [M-0026]
+requests: [Q-0662, Q-1240, Q-1241, Q-1242, Q-1244, Q-3054, Q-3206]
 supersedes: []
 ---
 
@@ -111,9 +111,10 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    claim 14: its particle type, its particle count times) are all created in the shared gas system
    at the animation's position, *whatever their type's behaviour kind*.
    - Backing: `measurable` (G2 part a for animation position, ownership, shared-system
-     membership and particle count; G2 part d for ownership without an attacker object; G14 for
-     the position at a bridge deck's height)
-   - Confidence: high, the bridge-deck height included (G14)
+     membership and particle count; G2 part d for ownership without an attacker object).
+     `measured` for the position at a bridge deck's height (M-0026: the particles of a unit that
+     dies on a high bridge's deck appear at its last position, at the deck's height)
+   - Confidence: high, the bridge-deck height included (M-0026)
 
 3. **Virus death without the animation's middle event.** In the two extra-animation cases of
    S-0107 claim 17 (an infantry type that is not human, and a parachutist killed by a virus death),
@@ -276,8 +277,9 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     kind, poison and other damage effects follow S-0302 and S-0107 claim 17. For a berserk-causing
     warhead, S-0302 claim 10 decides whether the hit takes effect and its duration; effective hits
     then follow S-0610 claims 4 to 7. A death it causes can create further clouds (claims 2 and 3).
-    - Backing: `measurable` (scenario G4; G10 for house credit and no attacker).
-      A completed zero-interval cycle is `unmeasured`:
+    - Backing: `measurable` (scenario G4; G10 for house credit and no attacker). `measured` for
+      G4 variant a's deck case (M-0026: a cloud made on the ground under a high bridge never hits
+      the infantry on the deck above it). A completed zero-interval cycle is `unmeasured`:
       G4 tests its wrap and absence of early hits, but reaching update 65536 also needs the
       unforced initial-zero lifetime of claim 5, with no earlier stage deletion.
     - Confidence: high (cadence, ground layer, no detonation). Medium for *D*: it uses the lift of
@@ -410,6 +412,11 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
       still level with the deck.
     - Over a cell without a high bridge, F3's bridge crossing no longer applies; the height rules,
       which never read the deck, do not change.
+    - A gas particle made by claim 5 on the ground or water under the bridge, which starts with a
+      vertical speed of zero, is not affected by the deck either: in a system whose turn moves it,
+      it settles 5 leptons above the
+      terrain there and stays under the deck (claims 9 and 11), and it hits the ground layer of its
+      cell, not the objects on the deck (claim 13).
     - It is drawn at its own world height, with the particle depth of S-0616 claim 27 (the
       particle-sprite row of S-0102 claim 13), and with no rule of its own for bridges. Like every
       particle it reads depth and never writes it, so the deck, which writes depth (S-0102 claim
@@ -432,20 +439,34 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     Once the particle is over a cell without a high bridge it uses *H* again and sinks there as
     claims 9 and 11 give; it does not return to a deck it is below. Claim 10 (F3), including its
     bridge crossing at *h* + 416, is the same with the switch off.
-    - Backing: `measurable` (scenario G14 for the sinking, the passage below the deck's height at
-      the first odd-tick move and the hits on objects under the bridge; G4 variant a for objects
-      on the deck and a cloud below it). `unmeasured` for objects on the deck while the cloud is
+    - Backing: `measured` (M-0026, the original on a stock map's high bridge over land: the clouds
+      of a unit that dies on the deck sink from the deck's height, are below it after their first
+      odd-tick move, follow F4 and F5 to 5 leptons above the terrain under the bridge and stay
+      there, also where they drift off the bridge's cells over land of the same height; an
+      infantry on the deck in the clouds' own cell is never hit, although hits fall due while
+      particles are in its cell; clouds made on the ground under the bridge stay under it and
+      never hit the infantry on the deck above, with hits falling due in its cell as well).
+      `measurable` (scenario G14) for the hits on objects under the bridge: M-0026's infantry
+      under the deck left their cell before any cloud's first due hit, so no such hit was
+      recorded, and G14's C part needs infantry that stay in their cell, which M-0026's did not.
+      `unmeasured` for a cloud made over water under the bridge: no run makes one, and it
+      follows from claims 9 and 11.
+      `unmeasured` for objects on the deck while the cloud is
       still level with the deck: G14's clouds are level with it only until their first odd-tick
       move, G14 does not ensure a hit due before that move, and no scenario records the health
       of objects on a deck while a cloud is level with it. `unmeasured` for a gas successor made
       at the deck's height, which G14 does not make: it follows from claim 7, F4 and F5.
-      `unmeasured` for the drawing: it rests on S-0102 claim 15 and S-0616 claim 27, and G14
-      records the screen but falsifies nothing on it. The bridge-crossing bullets are backed as
+      `unmeasured` for the drawing: it rests on S-0102 claim 15 and S-0616 claim 27, M-0026 has
+      no screen record, and G14 records the screen but falsifies nothing on it. The bridge-crossing bullets are backed as
       claim 10 (G8). The **Off** behaviour is a design choice, `unmeasured`: the original has no
       such behaviour to observe.
     - Confidence: high for the sinking, the passage below the deck's height at the first odd-tick
-      move and the ground-layer hits once the cloud is below the deck (G14, G4 variant a). Medium
-      for objects on the deck not being hit while the cloud is still level with the deck, as no
+      move, the settling under the bridge, objects on the deck not being hit once the cloud is
+      below the deck, and a cloud made under the bridge staying under it without hitting the
+      deck's objects (M-0026). Medium for a cloud made over water under the bridge, which rests
+      on claims 9 and 11 without a run of its own. Medium for objects under the bridge being hit, which rests on claim
+      13's ground layer, as no run has yet kept one in a cloud's cell under a deck. Medium for
+      objects on the deck not being hit while the cloud is still level with the deck, as no
       run ensures a hit then. Medium for a gas successor made at the deck's height, as it is not
       measured. High for the zero deflection over a flat bridge cell and medium for the bridge
       crossing's trigger, on that cell and its absence elsewhere, as claim 10 rates them. Medium
@@ -489,19 +510,36 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 
     The overload sparks of a mind controller (S-0601 claim 16) come from its overload pulses, not
     from a shot, so they are not a route here. Which of these routes a particular object's data
-    enables, a drone's for example, is outside this spec.
+    enables, a drone's for example, is outside this spec, apart from the chaos drone
+    observed below.
 
     What the objects it damages or destroys then make (their own death weapons, the systems of
     S-0616 claim 1 that belong to them) is theirs, not the shot's. An area berserk weapon (S-0610
     claim 8) adds no route of its own: its area fire and the berserk effect of its hits make no
-    particle, and its berserk hits are its area damage (S-0303), not gas hits. Where its
-    animations appear when the firer stands on a high bridge's deck or under it depends on where
-    its shot detonates, which is S-0306's (Open questions).
+    particle, and its berserk hits are its area damage (S-0303), not gas hits. So when such a weapon's data gives it no particle route, its cloud is its
+    animations, not gas: claims 8 to 13 neither move them nor make them hit. In the original, a
+    chaos drone deployed on a high bridge's deck makes no particle; its animations appear at the deck's
+    height and keep that height for their whole life, and the berserk effect of its hits reaches
+    an infantry on the deck beside it (S-0610 claim 8). Where its animations appear depends on
+    where its shot detonates, which is S-0306's. For a firer in a high-bridge cell, on the deck or
+    under it, whose shot meets the conditions of S-0306 claim 3 (a), that claim gives the point:
+    with the exception it states, the centre of the firer's cell at the deck height, so that its
+    animations are made at that height and its area damage looks at the bridge-deck layer
+    (S-0303 claims 4 and 21).
+    For other shots it stays open here (Open questions).
     - Backing: `measurable` (scenario G15: run G15-none for the area berserk weapon, run G15-gas
-      for the warhead route). `unmeasured` for the other routes: G15 makes none of them, and each
+      for the warhead route). `measured` for the chaos drone on a deck (M-0026: no particle in any
+      run; each pulse's animation in the drone's cell at the deck's height, the same height
+      for its whole life; the infantry on the deck in the next cell berserk from the first pulse
+      on). The detonation at the deck height for the other firers in a high-bridge cell, on the deck
+      or under it, and the layer the area damage looks at, the drone's included, are backed as
+      S-0306 claim 3 (a) is (its scenario P17 run c). `unmeasured` for the other routes: G15 makes none of them, and each
       follows from the claims it cites.
     - Confidence: high for an area berserk weapon's area fire and berserk effect making no particle
-      (G15-none) and for the warhead route's first particle (G15-gas); medium for the other routes
+      (G15-none), for the warhead route's first particle (G15-gas) and for the chaos drone
+      deployed on a deck, its animations' height and the berserk infantry on the deck (M-0026).
+      Medium for the layer the area damage looks at, the drone's included, and for the other
+      firers in a high-bridge cell, as S-0306 rates claim 3 (a). Medium for the other routes
       listed, as their cited claims rate them at most, and for the completeness of the list, since
       G15 tests one weapon.
 
@@ -949,9 +987,10 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   On screen the clouds are first drawn over the deck and are hidden by it, where they overlap,
   once below, except at pixels that the upright depth profile of S-0616 claim 27 puts on the
   other side of the deck's depth.
-  Run three times.
+  Run three times. C's part is void in a run in which C leaves its cell before the first hit
+  due from a cloud in it (M-0026's infantry under the deck did); the other parts stand.
   *Falsified if* a cloud stays at or settles on the deck, B is hit after every cloud is below
-  the deck, or C is not hit at the predicted ticks. A hit on B before then falsifies nothing: it
+  the deck, or C, staying in its cell, is not hit at the predicted ticks. A hit on B before then falsifies nothing: it
   is claim 19's medium, `unmeasured` case. The screen capture is recorded for the drawing, which stays medium; it
   falsifies nothing, since the upright depth profile of S-0616 claim 27 can put pixels of a cloud
   below the deck nearer than the deck.
@@ -973,12 +1012,11 @@ position, count or draw mismatch. Named test rules/art files are removed after e
 
 ## Open questions
 
-- **An area-fire animation on a high bridge.** Where the invisible shot of an area-fire weapon
-  fired by a unit standing on a high bridge's deck detonates, and so where its animations appear,
-  is not known here. It depends on the shot target and stored target point of a high-bridge cell
-  and on the target's reference point that the 32-lepton test measures from, which belong to
-  S-0306 claims 3 (a), 9 and 20. This spec makes no claim about it. Claim 20 says that such a
-  weapon's area fire and the berserk effect of its hits make no particle.
+- **An area-fire animation on a high bridge.** Where the shot of an area-fire weapon fired from a
+  high-bridge cell detonates, and so where its animations appear, is not known here for a shot
+  that does not meet the conditions of S-0306 claim 3 (a). Claim 20 gives the shots that meet
+  them, and the measured case of a chaos drone on a deck (M-0026). Claim 20 says that such a weapon's area fire and
+  the berserk effect of its hits make no particle.
 - **Adaptive drawing cutoff.** Claim 16 establishes the suppression test, but the settings and
   complete tuning of the shared performance-cutoff mechanism are not specified here; their
   import mapping remains untraced. This omission is `unmeasured` in this draft because no
