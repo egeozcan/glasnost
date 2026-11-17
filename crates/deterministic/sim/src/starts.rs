@@ -7,7 +7,7 @@ use glasnost_num::geom::root_floor;
 
 use crate::load::LoadError;
 use crate::path::{self, StartAreas};
-use crate::world::{HouseRole, World};
+use crate::world::{HouseId, HouseRole, World};
 
 /// Start waypoint markers 0 … 7 (S-0009 Terms).
 const START_WAYPOINTS: u16 = 8; // spec: S-0009 Constants (start waypoint markers)
@@ -170,6 +170,31 @@ pub fn highest_held(marks: &[i32], n: usize, h: usize) -> Option<u32> {
         .rev()
         .find(|&p| i64::from(marks[p]) == h as i64)
         .map(|p| p as u32)
+}
+
+/// "Player at position" `k` (S-0009 claims 21 and 29): with the marks in
+/// force (a header count of 9 or more), the house whose house number is
+/// mark `k`, which may be passive, and none when no house has it; a house
+/// the cleanup removed is no house (Q-3213's interim rule). Otherwise the
+/// house that holds start position `k` and is not removed.
+pub fn player_at(w: &World, k: u32) -> Option<HouseId> {
+    match &w.start_marks {
+        // spec: S-0009 claim 29 (References: with N_h ≥ 9, the house whose house number equals mark X; Q-3213's interim rule: a removed house is none)
+        Some(marks) => {
+            let m = *marks.get(k as usize)?;
+            let h = usize::try_from(m).ok()?;
+            w.houses
+                .get(h)
+                .filter(|x| !x.removed)
+                .map(|_| HouseId(h as u8))
+        }
+        // spec: S-0009 claim 21 (the house holding start position X)
+        None => w
+            .houses
+            .iter()
+            .position(|h| !h.removed && h.start == Some(k))
+            .map(|i| HouseId(i as u8)),
+    }
 }
 
 /// Gives each house of `order` that holds no position one, in that order

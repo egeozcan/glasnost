@@ -564,6 +564,7 @@ pub fn new_game(
             inert: map.basic.inert,
             harvester_immune: map.basic.harvester_immune,
         },
+        start_marks: None,
         rules: Some(rules.clone()),
         catalogue: Some(catalogue.clone()),
         regions: Default::default(),
@@ -642,6 +643,10 @@ pub fn new_game(
         }
         // spec: S-0009 claims 19 and 29 (the others in house order, against list 2)
         starts::assign(&mut w, &order, &list2, &mut marks);
+        if starts::marks_apply(&map.header) {
+            // spec: S-0009 claim 29 (the early-phase marks answer "player at position X" for the map's objects, S-0009 claim 27)
+            w.start_marks = Some(marks.clone());
+        }
     }
 
     if !setup.sandbox {
@@ -725,6 +730,8 @@ pub fn new_game(
         }
         // spec: S-0009 claims 28 and 29 (a non-passive house without a position is assigned against list 3, in house order)
         starts::assign(&mut w, &order, &list3, &mut marks);
+        // spec: S-0009 claim 29 (References read the late-phase marks when N_h ≥ 9)
+        w.start_marks = starts::marks_apply(&map.header).then(|| marks.clone());
         for (h, b) in bases.iter_mut().enumerate() {
             // spec: S-0009 claim 20 (the base cell is the position's entry in list 3)
             *b = w.houses[h]

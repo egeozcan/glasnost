@@ -164,12 +164,8 @@ pub fn resolve_house(w: &World, value: i32, triggering: Option<HouseId>) -> Opti
         TRIGGERING_HOUSE => triggering,
         NO_HOUSE => None,
         POSITION_A..=POSITION_H => {
-            // spec: S-0011 claim 23 and S-0009 claim 21 (the house holding start position 0 … 7; S-0009 claim 29's rule for header counts of 9 or more is not built, so it is not applied)
-            let k = (value - POSITION_A) as u32;
-            w.houses
-                .iter()
-                .position(|h| !h.removed && h.start == Some(k))
-                .map(|i| HouseId(i as u8))
+            // spec: S-0011 claim 23 and S-0009 claims 21 and 29 (the player at start position 0 … 7: the house named by the mark when N_h ≥ 9, else the house holding the position)
+            crate::starts::player_at(w, (value - POSITION_A) as u32)
         }
         // spec: S-0011 claim 23 (the first house in house order playing the country with registration index c)
         c => u32::try_from(c)
