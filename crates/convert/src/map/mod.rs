@@ -817,7 +817,9 @@ impl Decoder<'_> {
     /// starts; the map's start waypoint markers bound it from below.
     fn header_mark_warnings(&mut self, header: &Header, waypoints: &BTreeMap<u16, (i16, i16)>) {
         // spec: S-0009 claim 17 (K: start waypoint markers defined consecutively from 0, at most 8)
-        let k = (0..START_POSITIONS).take_while(|i| waypoints.contains_key(i)).count();
+        let k = (0..START_POSITIONS)
+            .take_while(|i| waypoints.contains_key(i))
+            .count();
         // The marks pairs 9 … 16 set, an unread component leaving −1 (the early phase's free mark).
         let mut marks = [FREE_MARK; 2 * (LAST_HEADER_PAIR - PREVIEW_PAIRS) as usize];
         // spec: S-0009 claim 29 (pairs 9 … min(N_h, 16) apply; pair i marks positions 2(i − 9) and 2(i − 9) + 1)

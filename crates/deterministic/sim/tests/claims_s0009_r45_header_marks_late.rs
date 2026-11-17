@@ -96,7 +96,10 @@ fn variant_b_pair_9_frees_chosen_positions_in_the_late_phase() {
         assert_eq!(w.rng.taken(), c.rng.taken() + 1, "seed {seed}");
         moved |= first != 0;
     }
-    assert!(moved, "the late draw places the first house elsewhere than its choice");
+    assert!(
+        moved,
+        "the late draw places the first house elsewhere than its choice"
+    );
 }
 
 /// spec: S-0009 claim 29 and Import mapping (late phase: an unread component keeps the early-phase mark, so the two phases complete it differently; S-0003 claim 9, a departure)
@@ -173,7 +176,11 @@ fn a_removed_house_frees_its_position() {
         let first = w.houses[0].start.expect("assigned anew");
         // Only house 0's position is taken when house 1's turn comes: the
         // removed house's position 2 is free again.
-        assert_eq!(w.houses[1].start, Some(FARTHEST_FROM[first as usize]), "seed {seed}");
+        assert_eq!(
+            w.houses[1].start,
+            Some(FARTHEST_FROM[first as usize]),
+            "seed {seed}"
+        );
     }
 }
 

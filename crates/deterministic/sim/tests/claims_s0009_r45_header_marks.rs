@@ -235,13 +235,19 @@ fn every_position_taken_gives_no_start() {
     });
     let control = load(&s);
     assert!(control.houses.iter().all(|h| h.start.is_some()));
-    assert!(!control.objects.is_empty(), "the object goes to the player at A");
+    assert!(
+        !control.objects.is_empty(),
+        "the object goes to the player at A"
+    );
     // N = 2, and pair 9 = (5, 5) takes both positions for no house.
     s.map.header = header(9, &[pair(5, 5)]);
     let w = load(&s);
     assert_eq!(starts(&w), [None, None]);
     assert_eq!((base(&w, 0), base(&w, 1)), (None, None));
-    assert!(w.objects.is_empty(), "no starting units, and the object is dropped");
+    assert!(
+        w.objects.is_empty(),
+        "no starting units, and the object is dropped"
+    );
     assert!(
         w.notes
             .iter()

@@ -1031,9 +1031,21 @@ fn claim_29_unspecified_case_warnings() {
     assert!(claim_29_warned(&ini("Waypoint10=-1,1\n"), "position 3"));
     assert!(!claim_29_warned(&ini("Waypoint9=1,0\n"), "position 1"));
     // Pair 9 marks both start positions of the map.
-    assert!(claim_29_warned(&ini("Waypoint9=5,5\n"), "every start position"));
-    assert!(!claim_29_warned(&ini("Waypoint9=5,-1\n"), "every start position"));
-    assert!(claim_29_warned(&ini("Waypoint9=0,0\n"), "every start position"));
+    assert!(claim_29_warned(
+        &ini("Waypoint9=5,5\n"),
+        "every start position"
+    ));
+    assert!(!claim_29_warned(
+        &ini("Waypoint9=5,-1\n"),
+        "every start position"
+    ));
+    assert!(claim_29_warned(
+        &ini("Waypoint9=0,0\n"),
+        "every start position"
+    ));
     // Each player of a two-player game holds one of them: no house is left over.
-    assert!(!claim_29_warned(&ini("Waypoint9=1,0\n"), "every start position"));
+    assert!(!claim_29_warned(
+        &ini("Waypoint9=1,0\n"),
+        "every start position"
+    ));
 }
