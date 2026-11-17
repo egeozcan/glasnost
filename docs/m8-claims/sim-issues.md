@@ -1202,6 +1202,35 @@ Seams left:
 - The view reads a building's art `Height` from the last image, while the importer warns for each image value.
 - The bracket bound ±2²⁰ is R12's, which is not on this base; the warning names the bound, not R12's code.
 
+## Batch F4 (foundations)
+
+Step foundations F4 (a debug-build overflow sweep and F3's seams), base main a5df3f6, not rebased. Design section first: [docs/dev/simulation.md](../dev/simulation.md), *Simulation (foundations F4: a debug-build overflow sweep and F3's seams)* (34d6a8a). Each test is committed before its fix (80c54cf, 96e398c) and fails on the code before it in a debug build: the clock's three by assertion (saturation never panicked), the fire point's three by an overflow panic at each site. No fix commit changes a test. No request is filed. Every fix follows S-0205 claim 1 (an integer result wraps), so none carries a `design:` marker.
+
+**The sweep.** The headless tools and the sim gate were built as release builds with overflow checks on (`CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true`, target `found4-ovf`; the build log shows `overflow-checks=on` for `glasnost_sim`) from the base code, and run over the AI quick lane (seeds 7 to 10, maps 0, 2 and 8, 36 games), the sim gate with its ignored tests (17 tests, among them the M6c, M7a and M7b sweeps over seeds 1 to 16) and the oracle arena (`--record all`). **No run hit an overflow panic.** The lane and the arena catch a game's panic and go on, so each run lists every game's. The overflow lane's 36 games end on the same tick with the same winner as base, and its arena output files are byte-identical to base's.
+
+| Item | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| Sweep | No overflow panic in the quick lane, the sim gate with its ignored tests (with the three sweeps) or the arena | nothing to fix | — | — |
+| Seam: animation clock | `anim_clock::Player::advance`, `Player::step_back` and `Player::frame` saturated *k* + σ, *k* − σ and *a* + *k*. The stage is an integer (S-0109 Terms) and S-0109 states no clamp | fixed (9040eef) | S-0205 claim 1: the three results wrap. At the ends of the range only: an advance from 2³¹ − 1 goes on at −2³¹, and a wrapped frame can land inside the sprite | `claims_s0205_anim_stage_wrap.rs` (`an_advance_past_the_range_wraps`, `a_step_back_past_the_range_wraps`, `the_image_frame_past_the_range_wraps`) |
+| Seam: fire point | `combat::position::fire_point`'s garrisoned muzzle shift (S-0313 claim 6) and `claim1_point`'s three adds of F1's shift to the base point were plain adds, σ*L* a plain product: debug builds panicked past the range | fixed (c620391) | S-0205 claim 1: the adds wrap, and σ*L*, an integer converted to single precision by F1, wraps (−1 × −2³¹ is −2³¹) | `claims_s0205_fire_point_claim1_wrap.rs` (`claim_1s_shift_past_the_range_wraps`, `the_lateral_part_of_an_odd_burst_counter_wraps`, `a_garrison_muzzle_shift_past_the_range_wraps`) |
+| Seam: `slots::first_frame` (crates/app, not this batch's) | The view's fallback first frame of a reversed animation forms *a* + λₑ − 1 in 64 bits and clamps it (design: render (#153)); the clock now wraps both λₑ − 1 and *a* + *k*. They differ wherever *a* + λₑ − 1 passes the range, not only at λₑ = −2³¹ | left | — | — |
+
+Formats: no fix adds saved or hashed state, so save 151, AI game 128 and wire 12 are unchanged (the step's numbers 164 and 140 are not used). The sim-gate goldens pass unchanged.
+
+Lanes compare base a5df3f6 (a base worktree and target of its own) with the batch at c620391, whose later commits are docs only. Arena and quick lane come from release `glasnost-headless` binaries of each.
+
+**Oracle arena** (`--record all`, two threads). Every output file is byte-identical to base: M-0001 10 of 96 pairings failing, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6 rows, M-0020 0 of 25, M-0021 10 of 50, both sides.
+
+**Sweeps.** M6c, M7a and M7b over seeds 1–16 print the same lines as base, apart from build lines, paths and run times (smallest minimum M6c 0, M7a 2, M7b drain 3).
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games). Every game ends on the same tick with the same winner as base.
+
+**Suites.** The sim gate with its ignored tests passes 17 on base and here.
+
+Seams left:
+- The view's `slots::first_frame` (crates/app) clamps a reversed animation's fallback first frame *a* + λₑ − 1, where the clock now wraps it; the two differ wherever that sum passes the 32-bit range.
+- `combat::position::claim1_point` forms a non-turreted building's aim direction from `tp.x - rp.x` and `tp.y - rp.y` as 32-bit subtractions before widening; positions on a map are far from the range, and no run reached it.
+
 ## Batch S25: the seams left open
 
 Base main a0cf7c7, not rebased. The batch takes the seams that S24 left for #383 and S20 left for #375, #368, #374, #381, #305 and #371. It hands back early, before S20's #291, S18's rests (#344, #339, #346, #263, #252) and A6c's (#284, #367), which stay untouched. Each test is committed before its fix (e8a1326, fc21d02, 847baaf, 716d7eb, d8d7200). The new tests were run on the base code before any fix was written, and each fails there except the guard and control tests named below. Logs are in `local-lane/sim-issues/s25/tests-on-base.txt` and `tests-on-base-burst.txt`. No fix commit changes a test. acb8792 is rustfmt on three of the test files, and 6eb638a regenerates the goldens. No request is filed. The design is in [docs/dev/simulation.md](../dev/simulation.md), *Simulation (sim issues S25: the seams left open)* (95c7f2b, corrected in dfd32a3).

@@ -400,8 +400,8 @@ impl Player {
     /// The image frame shown, *a* + *k* (claim 1); outside 0 … N − 1 it
     /// draws nothing.
     pub fn frame(&self) -> i32 {
-        // spec: S-0109 claim 1 (image frame a + k)
-        self.play.start.saturating_add(self.k)
+        // spec: S-0109 claim 1 (image frame a + k); S-0205 claim 1 (wraps)
+        self.play.start.wrapping_add(self.k)
     }
 
     /// The current type's name as text.
@@ -437,9 +437,9 @@ impl Player {
         if !self.ended {
             return;
         }
-        // spec: S-0611 claim 11 (it steps back one frame and tries again when that frame is next due)
+        // spec: S-0611 claim 11 (it steps back one frame and tries again when that frame is next due); S-0205 claim 1 (k − σ wraps)
         self.ended = false;
-        self.k = self.k.saturating_sub(self.step);
+        self.k = self.k.wrapping_sub(self.step);
     }
 
     /// Keeps stage `k` of the animation this one replaces (S-0108 claim
@@ -524,8 +524,8 @@ impl Player {
 
     /// One advance and what follows from it (F3).
     fn advance(&mut self, tick: i32, env: &mut dyn Env, q: &AnimQuirks) {
-        // spec: S-0109 Terms (an advance: one change of k by σ)
-        self.k = self.k.saturating_add(self.step);
+        // spec: S-0109 Terms (an advance: one change of k by σ); S-0205 claim 1 (k + σ wraps)
+        self.k = self.k.wrapping_add(self.step);
         self.last = tick;
         // spec: S-0109 claims 14 and 28 and State and ordering (the damage and middle event of an advance precede the turn and pass tests and either pass-boundary delay choice)
         env.advanced(&self.play, self.k);

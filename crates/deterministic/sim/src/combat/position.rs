@@ -126,10 +126,10 @@ pub fn fire_point(w: &World, firer: ObjectId, slot: usize, k: i32) -> Pos {
         .get(o.type_index as usize)
         .filter(|_| o.kind == Kind::Building);
     if o.kind == Kind::Building && crate::structures::garrison::garrisoned(w, firer) {
-        // spec: S-0313 claim 6 (a garrisoned building fires from its base point shifted by its muzzle point k, F3, map x and y only; the height is the base point's)
+        // spec: S-0313 claim 6 (a garrisoned building fires from its base point shifted by its muzzle point k, F3, map x and y only; the height is the base point's); S-0205 claim 1 (the sums wrap)
         let k = crate::structures::garrison::current_index(w, firer).unwrap_or(0);
         let (dx, dy) = crate::structures::garrison::muzzle_shift(w, firer, k);
-        return Pos::new(base.x + dx, base.y + dy, base.z);
+        return Pos::new(base.x.wrapping_add(dx), base.y.wrapping_add(dy), base.z);
     }
     if let Some(bt) = b
         && let Some([px, py]) = bt.building.fire_pixel
@@ -250,7 +250,8 @@ fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos 
     // spec: S-0313 claim 2 (the lateral part negated for an odd burst counter)
     let sigma = if k.rem_euclid(2) == 1 { -1 } else { 1 };
     let delta = tc.turret_offset;
-    let tr_flh = M34::translation(flh[0], sigma * flh[1], flh[2], mode); // spec: S-0313 claim 2 (odd burst counter: lateral part negated)
+    // spec: S-0313 claim 2 (odd burst counter: lateral part negated); F1 (σL an integer, converted to single precision); S-0205 claim 1 (σL wraps)
+    let tr_flh = M34::translation(flh[0], flh[1].wrapping_mul(sigma), flh[2], mode);
     let tm = if o.kind == Kind::Building && !r.quirks.building_fire_point_shift_fixed {
         // spec: S-0313 Edge cases (building_fire_point_shift_fixed off: T = Rz(θ) · Tr(δ) · Tr(F, σL, H))
         M34::rz(theta, mode, bias)
@@ -263,11 +264,11 @@ fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos 
             .mul(&tr_flh, mode)
     };
     let (u, v, wz) = (tm.0[0][3], tm.0[1][3], tm.0[2][3]); // spec: S-0313 F1 (the translation column of the 3 × 4 matrix)
-    // spec: S-0313 F1 (shift = (trunc u, trunc(−v), trunc w))
+    // spec: S-0313 F1 (shift = (trunc u, trunc(−v), trunc w)); S-0205 claim 1 (the sums with the base point wrap)
     Pos::new(
-        base.x + u.to_i32_common(),
-        base.y + v.negated().to_i32_common(),
-        base.z + wz.to_i32_common(),
+        base.x.wrapping_add(u.to_i32_common()),
+        base.y.wrapping_add(v.negated().to_i32_common()),
+        base.z.wrapping_add(wz.to_i32_common()),
     )
 }
 
