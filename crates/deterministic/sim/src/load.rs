@@ -709,8 +709,10 @@ pub fn new_game(
         let order: Vec<usize> = (0..setup.houses.len())
             .filter(|&h| !late_passive(&w, h) && !w.houses[h].removed)
             .collect();
+        // spec: S-0009 claim 29 (late phase: the pairs again, over the early-phase marks; an unread component keeps the early mark)
+        starts::apply_pairs(&mut w, &map.header, &mut marks, n);
         if !q.double_start_resolution {
-            // spec: S-0009 Edge cases (quirks.double_start_resolution off: one list, after the terrain is loaded)
+            // spec: S-0009 Edge cases (quirks.double_start_resolution off: one list, after the terrain is loaded); claim 29 with the switch off, Q-3214's interim rule: the early-phase rule, choosers over the pairs
             for &h in &order {
                 if let Some(s) = setup.houses[h].start.filter(|&s| (s as usize) < n) {
                     marks[s as usize] = h as i32;
