@@ -285,3 +285,66 @@ fn a_kept_radar_follows_shroud_houses_gaps_and_heights() {
         assert!(height[0] != hostile[0], "the raised cell's pixel follows");
     }
 }
+
+/// Each kept radar's picture is the one the simulation's composition gives.
+fn same_as_sim(w: &mut World, radars: &mut [Radar; 2], label: &str) {
+    with_radar(w);
+    let w = &*w;
+    for (h, r) in radars.iter_mut().enumerate() {
+        let house = HouseId(h as u8);
+        r.observe(w, Some(house));
+        assert_eq!(
+            r.rgba(w, Some(house)),
+            r.rgba_composed(w, Some(house)),
+            "{label}, house {h}"
+        );
+    }
+}
+
+/// The first candidate cell of the radar's point test for cell `c`
+/// (S-0410 claim 6, S-0110 claim 8).
+fn first_candidate(w: &World, c: CellXY) -> CellXY {
+    let p = glasnost_sim::world::Pos::centre(c, 0);
+    let p = glasnost_sim::world::Pos::new(p.x, p.y, w.surface_at(p.x, p.y));
+    shroud::point_candidates_on(p, w.rules().quirks.shroud_negative_odd_pair, true).0
+}
+
+// spec: S-0410 claims 6, 7 and 8 (render perf batch RP11, #137: the kept layers give the simulation's composition tick after tick, with towers, carts and gap fields friendly and hostile, and after odd, even and negative levels, quirks.radar_pixel_cell_shift on and off)
+#[test]
+fn a_kept_radar_shows_the_sims_composition() {
+    for shift in [true, false] {
+        let mut w = testkit::game_with(&rules(shift), SIZE, 3);
+        spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
+        spawn(&mut w, Kind::Building, "TOWER", 1, 9, 2);
+        spawn(&mut w, Kind::Vehicle, "CART", 0, 1, 1);
+        spawn(&mut w, Kind::Vehicle, "CART", 1, 2, 0);
+        spawn(&mut w, Kind::Vehicle, "CART", 1, 8, 3);
+        let mut radars = [radar_of(&w), radar_of(&w)];
+        for t in 0..3 {
+            testkit::run(&mut w, 1);
+            same_as_sim(&mut w, &mut radars, &format!("tick {t}, shift {shift}"));
+        }
+        spawn(&mut w, Kind::Building, "GAP", 1, 3, 0);
+        spawn(&mut w, Kind::Building, "GAP", 0, 8, 1);
+        for t in 0..3 {
+            testkit::run(&mut w, 1);
+            same_as_sim(&mut w, &mut radars, &format!("gap tick {t}, shift {shift}"));
+        }
+        for (dx, level) in [(-1, 1), (0, 3), (1, -1), (2, -3), (3, 2)] {
+            if let Some(cell) = w.cells.grid.get_mut(testkit::mid(SIZE, dx, -1)) {
+                cell.level = level;
+            }
+        }
+        same_as_sim(&mut w, &mut radars, &format!("levels, shift {shift}"));
+        // A raised cell whose point test reads the cell up the grid.
+        let up = testkit::mid(SIZE, 4, -1);
+        w.cells.grid.get_mut(up).unwrap().level = 4;
+        assert!(
+            first_candidate(&w, up) != up,
+            "the raised cell reads another"
+        );
+        same_as_sim(&mut w, &mut radars, &format!("raised, shift {shift}"));
+        testkit::run(&mut w, 2);
+        same_as_sim(&mut w, &mut radars, &format!("after, shift {shift}"));
+    }
+}
