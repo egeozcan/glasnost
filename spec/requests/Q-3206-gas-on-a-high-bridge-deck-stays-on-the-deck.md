@@ -3,7 +3,7 @@ id: Q-3206
 title: S-0613 claim 19 (gas made on a high bridge's deck sinks through it) is reported wrong by the project lead
 status: open
 related: [S-0613, S-0616, S-0102]
-answered-by: []
+answered-by: [M-0026]
 ---
 
 ## Need
