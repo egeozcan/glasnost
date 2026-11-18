@@ -1666,3 +1666,45 @@ Seams left:
 - The client's viewer test for the marker (#441) is not built here.
 
 The P3 census rule: the marker reads `World::projectiles` and no census back-reference, so the batch makes or moves no back-reference of `World::census`.
+
+## Batch S37: a killed infantry unit left in play, and the infantry crash end's answers (Q-3239, #252; Q-3240, #291)
+
+Base main b4e1e09, not rebased. The batch builds the lead's answer to Q-3239 (S-0107 r55 claim 17a, S-0312 r91 claim 16) with its three new switches. Q-3240's answer (S-0611 r12, S-0614 r35, S-0109 r45) is handed back untouched. The switches came first (198381a), then the design text (4d062ab), in *Simulation (sim issues S37 …)*. Each test was committed before its fix, and no fix commit changes a test. Every red was shown in a separate base worktree checked out at the test commit (`t1-red.txt` and `t2-red.txt` in `local-lane/sim-issues/s37/`). No request is written.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #252 (S-0107 claim 17a, S-0312 claim 16) | A killed infantry unit left in play kept a health of 0. The jumpjet's request for *air-death-start* was forced. A further killing hit while it fell did nothing. The crash end in a high-bridge cell used the surface, and a turned-down *air-death-end* request removed the unit (the S32 interim) | fixed (b03908c; tests 1b9236a, 12 red; guard 99f6da9) | `combat::death::regains_health` and `regain_health_turn`, right after the warp step in `tick::object_turn`: an infantry unit with health 0 outside the die, wet-die and air-death kinds gets 1 and stays killed. Such a unit takes the living path, and `behave.rs` no longer turns away a killed unit with health. `jump::fly`: the *air-death-start* request is not forced. A further crash start of a falling or crashed infantry unit kills its passengers again and makes the empty destination assignment, without restarting the fall. `impact` places infantry in a high-bridge cell at the deck's height off the deck, and a vehicle on the terrain. A turned-down *air-death-end* keeps the unit | `claims_s0312_r91_crash_health.rs` (12 tests, both positions of each new switch). Moved: `claims_s0312_crash_infantry.rs` (the interim test now runs with the keep switch off), `claims_s0502_r24_crash.rs` (J31's crash end counts a unit left crashed), `claims_s0613.rs` (claim 3 takes out the revived drone; a new test for its second death in its cloud) |
+| #252 (importer) | S-0312 Edge cases: the importer warns about a crashable infantry type whose *air-death-end* entry has no image frames | fixed (06ddf60; test d33af68, 1 red) | `convert::sim::infantry_art` reads the entry's frame count from `sequence_table` and `Crashable` from the type | `sim_tests.rs` (`empty_air_death_end_entries_of_crashable_types_warn`) |
+| #291 (Q-3240) | The events that end an attachment, and S-0611 claim 15's rules after a detachment | handed back untouched | none | — |
+
+Switches: `quirks.crash_end_bridge_height`, `quirks.falling_infantry_regains_health` and `quirks.refused_air_death_end_keeps_unit`, all on by default. `quirks.refused_death_keeps_unit` keeps its meaning and default; only its doc now cites claim 17a. On the branch, the rules quirk test lists only S35's `buildup_twice_without_break_off` and S36's `hovering_jumpjet_body_on_heading`.
+
+Formats (149b1d5): save 157 to 187 and AI game 134 to 165 on the branch, since replays change. The AI game bump in `crates/deterministic/ai/src/game.rs` is forced by the sim change. Wire stays 12. The sim-gate goldens were regenerated once, with the ignored tests, and none moved (`golden-update.txt`: `golden.rs` 2 passed).
+
+Lanes compare base b4e1e09 with the batch at 99f6da9. Logs are in `local-lane/sim-issues/s37/`.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-fix.txt`). The recorded M-0001 to M-0003 CSVs are byte-identical to base, and the summary lines are the same: M-0019 0 of 6, M-0021 10 of 50 and M-0020 0 of 25 failing.
+
+**Sweeps** (`m6c-base.txt`/`m6c-fix.txt`, and likewise for m7a and m7b). M6c and M7a seed lines are identical to base: smallest minimum 0 and 2. M7b passes, with seeds 3, 10 and 15 moving in their drain and M7a counters and the summary's mutation, takeover and berserk spreads. A trace of seed 3 shows two infantry units with no current sequence regaining health at tick 6595, after a death request turned down for want of image frames (claim 17's `quirks.refused_death_keeps_unit`).
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-fix-7.txt` to `quick-fix-10.txt`). 12 games end on the same tick with the same winner as base. 24 move, and these seven change winner:
+
+| Seed | Game | Base ticks (winner) | Batch ticks (winner) |
+|---|---|---|---|
+| 7 | 1 | 68251 (house 0) | 117768 (house 1) |
+| 7 | 5 | 47071 (house 0) | 42818 (house 1) |
+| 8 | 7 | 40300 (house 1) | 39901 (house 0) |
+| 8 | 8 | 59415 (house 1) | 43789 (house 0) |
+| 9 | 2 | 29722 (house 0) | 70011 (house 1) |
+| 10 | 5 | 71431 (house 1) | 46172 (house 0) |
+| 10 | 7 | 50584 (house 0) | 72315 (house 1) |
+
+A trace of seed 7, map 0, finds five killed jumpjet infantry units in games 1 and 2. Each was killed while hovering or firing airborne, and the request for *air-death-start* that is no longer forced is turned down. Each then holds a health of 1 for its fall of about 11 ticks (S-0312 claim 16, *Health while it falls*), and the request for *air-death-end* succeeds at its crash end. None is in a high-bridge cell. The other changed games are not traced one by one.
+
+**Suites.** The AI suite with its ignored tests passes on base and on the batch (`ai-base.txt`, `ai-fix.txt`). The sim gate with its ignored tests passes 17 on the batch (`gate-fix.txt`), as on base.
+
+Seams left:
+- Q-3240 (#291): an `ended` map of detached animations in `anims`, the detaching events (death, sinking, crash start, leaving the map, removal, and cloaking for a non-building), the dispatch in `tick.rs` and `probe.rs`, and claim 15's rules after a detachment. The client needs no change, since it draws only `world.anims.anims`.
+- S-0107 claim 17a's early exit for a tunnel is not built, as our engine builds no tunnels.
+
+The P3 census rule: the batch makes or moves no back-reference of `World::census`.
