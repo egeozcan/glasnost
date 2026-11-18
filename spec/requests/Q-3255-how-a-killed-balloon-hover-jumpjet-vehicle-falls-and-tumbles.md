@@ -3,7 +3,7 @@ id: Q-3255
 title: How a killed balloon-hover jumpjet vehicle falls and tumbles
 status: open
 related: [S-0502, S-0113, S-0312]
-answered-by: [S-0502]
+answered-by: [S-0502, S-0113]
 ---
 
 ## Need
