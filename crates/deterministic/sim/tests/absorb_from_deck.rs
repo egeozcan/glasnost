@@ -139,3 +139,106 @@ fn issue_346_vehicle_absorbed_from_a_deck_releases_its_claim() {
         "(x, the deck record's vehicle count)"
     );
 }
+
+/// The ground record's vehicle count of the river cells (1, 0) … (5, 0).
+fn ground_counts(w: &World) -> Vec<(i32, u8)> {
+    (1..=5)
+        .map(|x| (x, w.cells.occ(cell(x, 0), Layer::Ground).unwrap().vehicles))
+        .collect()
+}
+
+// spec: S-0209 claim 1 (a step sets the flag of the cell it enters in the record of the cell layer its position is in there) and S-0207 claim 5 (into a high-bridge cell exactly 4 levels below the cell left: onto the deck)
+#[test]
+fn issue_346_a_vehicle_on_the_deck_sets_no_ground_flag() {
+    let mut s = river();
+    s.vehicle("CAR", unit_type(WHEEL, 40, 6));
+    s.place_unit(0, "CAR", cell(-2, 0), 64);
+    let mut w = s.build();
+    let car = objects_of(&w, Kind::Vehicle)[0];
+    open_orders(&mut w);
+    run(&mut w, 3);
+    assert!(orders::issue(&mut w, HouseId(0), move_to(car, cell(9, 0))));
+    let none: Vec<(i32, u8)> = (1..=5).map(|x| (x, 0)).collect();
+    let mut on_deck = 0;
+    for _ in 0..1500 {
+        tick::step(&mut w);
+        let o = w.obj(car).expect("car");
+        if o.layer == Layer::Deck {
+            on_deck += 1;
+            // Nothing stands on the river bed: no ground record holds a flag.
+            assert_eq!(
+                ground_counts(&w),
+                none,
+                "tick {}: (x, the ground record's vehicle count) with the car on the deck at {:?}",
+                w.tick,
+                (o.pos.cell().x - SIZE, o.pos.cell().y - SIZE)
+            );
+        }
+        if o.pos.cell() == cell(9, 0) {
+            break;
+        }
+    }
+    assert!(on_deck > 0, "the scenario: the car crossed on the deck");
+    assert_eq!(ground_counts(&w), none, "after the crossing");
+    assert_eq!(deck_counts(&w), none, "after the crossing");
+}
+
+// spec: S-0209 claim 1 (a step sets the flag of the cell it enters in the record of the cell layer its position is in there) and S-0207 claim 5; S-0605 claim 8 (the scene of the first test, with the issue's second car)
+#[test]
+fn issue_346_a_vehicle_entering_from_the_deck_sets_no_ground_flag() {
+    let mut s = river();
+    s.vehicle("CAR", unit_type(WHEEL, 40, 6));
+    let mut b = BuildingType {
+        strength: Some(1000),
+        foundation: Some([1, 1]),
+        unit_absorb: Some(true),
+        passengers: Some(2),
+        size_limit: Some(Decimal("3".into())),
+        ..Default::default()
+    };
+    b.econ.power = Some(10);
+    s.building("VBIO", b);
+    s.place_structure(0, "VBIO", cell(3, 0));
+    s.place_unit(0, "CAR", cell(-2, 0), 64);
+    s.place_unit(0, "CAR", cell(-3, 3), 64);
+    let mut w = s.build();
+    let car = objects_of(&w, Kind::Vehicle)[0];
+    let bio = objects_of(&w, Kind::Building)[0];
+    open_orders(&mut w);
+    run(&mut w, 3);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: car,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Object(bio)),
+        },
+    ));
+    let none: Vec<(i32, u8)> = (1..=5).map(|x| (x, 0)).collect();
+    let mut on_deck = 0;
+    for _ in 0..2000 {
+        tick::step(&mut w);
+        if absorb::absorbed_in(&w, car) == Some(bio) {
+            break;
+        }
+        let o = w.obj(car).expect("car");
+        if o.layer == Layer::Deck {
+            on_deck += 1;
+        }
+        // Nothing stands on the river bed: no ground record holds a flag.
+        assert_eq!(
+            ground_counts(&w),
+            none,
+            "tick {}: (x, the ground record's vehicle count) with the car at {:?} on {:?}",
+            w.tick,
+            (o.pos.cell().x - SIZE, o.pos.cell().y - SIZE),
+            o.layer
+        );
+    }
+    assert!(on_deck > 0, "the scenario: the car drove on the deck");
+    assert_eq!(absorb::absorbed_in(&w, car), Some(bio), "the scenario: it went in");
+    assert_eq!(ground_counts(&w), none, "after the entry");
+}
