@@ -621,6 +621,10 @@ impl HouseShroud {
 /// placement (S-0406 claims 5 and 6) and the AI read. A house that keeps no
 /// state (neutral, special) is answered yes.
 pub fn explored(w: &World, house: HouseId, cell: CellXY) -> bool {
+    // design: #439 (dummy mode: a dummy-mode house has every cell explored from tick 0 on, whatever its shroud state holds)
+    if w.dummy_house(Some(house)) {
+        return true;
+    }
     let Some(s) = hs(w, house) else { return true };
     match idx(w, cell) {
         Some(i) => s.has(i as usize, EXPLORED),
@@ -631,13 +635,19 @@ pub fn explored(w: &World, house: HouseId, cell: CellXY) -> bool {
 
 /// Whether a cell is seen for a house (S-0409 Terms).
 pub fn seen(w: &World, house: HouseId, cell: CellXY) -> bool {
+    // design: #439 (dummy mode: a dummy-mode house sees every cell)
+    if w.dummy_house(Some(house)) {
+        return true;
+    }
     let Some(s) = hs(w, house) else { return true };
     idx(w, cell).is_some_and(|i| s.has(i as usize, SEEN))
 }
 
 /// Whether a cell holds a pending re-cover mark for a house (S-0409 Terms).
 pub fn pending(w: &World, house: HouseId, cell: CellXY) -> bool {
-    hs(w, house).is_some_and(|s| idx(w, cell).is_some_and(|i| s.has(i as usize, PENDING)))
+    // design: #439 (dummy mode: no cell of a dummy-mode house waits to be covered again)
+    !w.dummy_house(Some(house))
+        && hs(w, house).is_some_and(|s| idx(w, cell).is_some_and(|i| s.has(i as usize, PENDING)))
 }
 
 /// The cover count *k* and hostile gap count *G* of a cell (S1), for tests.

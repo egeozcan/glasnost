@@ -82,6 +82,10 @@ pub fn anger_of(
     if w.of_idle_house(attacker) {
         return;
     }
+    // design: #439 (dummy mode: a dummy-mode house's hits make no other house angry with it, so no house makes it its enemy)
+    if w.dummy_spares(Some(vo), Some(ao)) {
+        return;
+    }
     let mode = w.rules().mode;
     // spec: S-0309 F8 (Δ = conv((d / S) × C), each a double-precision step)
     let delta = F64::from_i64(i64::from(dealt), mode)
@@ -199,6 +203,10 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) -> Retaliat
     }
     // spec: S-0216 claim 8 (Removal before the groups: no object targets an idle test house's objects, a retaliation included; design)
     if w.of_idle_house(attacker) {
+        return MayNot;
+    }
+    // design: #439 (dummy mode: an object of another house never retaliates against a dummy-mode house's attacker)
+    if w.dummy_spares(o_owner, a_owner) {
         return MayNot;
     }
     let rules = w.rules_arc();
@@ -731,6 +739,10 @@ fn candidate(
     }
     // spec: S-0216 claim 8 (Removal before the groups: no object targets an idle test house's objects; design)
     if w.of_idle_house(t) {
+        return Verdict::Reject;
+    }
+    // design: #439 (dummy mode: no object of another house takes a dummy-mode house's object as a target, before any draw)
+    if w.dummy_spares(ao.owner, to.owner) {
         return Verdict::Reject;
     }
     let ttc = type_combat(w, t);

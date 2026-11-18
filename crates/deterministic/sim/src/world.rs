@@ -358,6 +358,13 @@ pub struct GameSetup {
     /// Our viewer's sandbox: skip the start positions of S-0009 claims 17 to
     /// 20 and starting units, so that a map can be watched without players.
     pub sandbox: bool,
+    /// Our skirmish dummy mode, a testing tool that is not the original's
+    /// (#439): no house but a person's targets a person's objects, and a
+    /// person's house has no shroud. The loader marks each person-played
+    /// house ([`crate::econ::setup::HouseSetupState::dummy`]); off, nothing
+    /// changes.
+    #[serde(default)]
+    pub dummy: bool,
     /// The unit-count setting U (S-0009 claim 45).
     pub unit_count: i32,
     /// The bases setting (S-0009 claim 45).
@@ -602,6 +609,24 @@ impl World {
             .and_then(|o| o.owner)
             .and_then(|h| self.houses.get(usize::from(h.0)))
             .is_some_and(|h| h.idle_test_house)
+    }
+
+    /// Whether house `h` is a house of a dummy-mode game's person
+    /// ([`crate::econ::setup::HouseSetupState::dummy`], #439).
+    pub fn dummy_house(&self, h: Option<HouseId>) -> bool {
+        // design: #439 (dummy mode marks the person-played houses at game start)
+        h.and_then(|h| self.houses.get(usize::from(h.0)))
+            .is_some_and(|x| x.econ.setup.dummy)
+    }
+
+    /// Whether dummy mode spares the objects of house `target` from those
+    /// of house `actor` (#439): `target` is a dummy-mode house and `actor`
+    /// is not, so `actor`'s objects never take `target`'s as a target and
+    /// its AI never aims at them. The dummy house's own objects are spared
+    /// nothing. With dummy mode off it never holds.
+    pub fn dummy_spares(&self, actor: Option<HouseId>, target: Option<HouseId>) -> bool {
+        // design: #439 (the flag first: no house is marked with dummy mode off)
+        self.dummy_house(target) && !self.dummy_house(actor)
     }
 
     /// The facing an object's body has now.
