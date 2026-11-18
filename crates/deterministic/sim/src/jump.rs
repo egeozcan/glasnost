@@ -251,6 +251,13 @@ pub fn crashing(w: &World, id: ObjectId) -> bool {
         || (is_jumpjet(w, id) && crate::lift::dropped(w, id))
 }
 
+/// Whether the jumpjet's crash has started and not yet ended: a pending
+/// crash start or the *crashing* state, not *crashed* (claim 18; S-0107
+/// Edge cases, `quirks.falling_infantry_regains_health`).
+pub fn crash_in_progress(w: &World, id: ObjectId) -> bool {
+    st(w, id).is_some_and(|j| j.crash_started || j.phase == Phase::Crashing)
+}
+
 /// Whether a deploy-to-land vehicle holds a landing request (S-0517 claim 5,
 /// S-0502 claim 13).
 pub fn landing_requested(w: &World, id: ObjectId) -> bool {

@@ -221,7 +221,8 @@ pub fn turret_target_rows(w: &World, id: ObjectId, facing_error: bool) -> Vec<u1
 // spec: S-0107 claim 11 (four fire-frame fields)
 pub fn infantry_step(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
-    if o.kind != Kind::Infantry || o.combat.killed || o.health <= 0 {
+    // spec: S-0107 claim 17a (a killed unit that has regained health is a living unit for every rule) and S-0312 claim 16 (Killed and alive again: it fires, and its shots carry it)
+    if o.kind != Kind::Infantry || o.health <= 0 {
         return;
     }
     let rules = w.rules_arc();

@@ -138,6 +138,24 @@ fn turn_pass<P: Probe>(w: &mut World, p: &mut P) {
     w.update.end_pass();
 }
 
+/// A killed infantry unit with no health that plays *air-death-start* or
+/// *air-death-fall* takes its sequence's completion follow-up (S-0107
+/// claims 8 and 21) in its turn, so that the general follow-up can end
+/// *air-death-fall* and claim 17a can give it health afterwards.
+fn dead_air_death_follow_up(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let q = o.infantry.as_ref().and_then(|s| s.seq);
+    if o.kind == Kind::Infantry
+        && matches!(
+            q,
+            Some(infantry::Seq::AirDeathStart | infantry::Seq::AirDeathFall)
+        )
+    {
+        // design: S-0107 claim 17a (a killed unit that keeps a health of 0 while the air-death kinds play goes on with them, S-0107 claims 8 and 21; no movement in progress for it)
+        infantry::sequence_turn(w, id, false, false);
+    }
+}
+
 /// One object's turn. Within a turn: the behaviour part (S-0215 claims 2,
 /// 11 and 33), then the locomotor, then the infantry sequence rules
 /// (S-0107 claims 8 to 10 and 15 run after the movement of the tick).
@@ -196,7 +214,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
     }
     let Some(o) = w.obj(id) else { return };
     // A building in a delayed-kill countdown is killed but alive (S-0302 claim 16): it takes its whole turn.
-    let dead = crate::combat::damage::dead(o);
+    // spec: S-0107 claim 17a (a killed infantry unit that the test gives a health of 1 in this update is a living unit: it takes the living path, where the test is applied)
+    let dead = crate::combat::damage::dead(o) && !crate::combat::death::regains_health(w, id);
     let Some(o) = w.obj(id) else { return };
     let kind = o.kind;
     if let Some(ob) = w.obj_mut(id) {
@@ -226,6 +245,7 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         if crate::jump::crashing(w, id) && !crash_ended {
             // spec: S-0502 claim 18 and S-0312 claim 16 (a killed jumpjet that started to crash keeps its jumpjet movement until it hits the ground)
             crate::jump::tick(w, id);
+            dead_air_death_follow_up(w, id);
             return;
         }
         if crate::air::crashing(w, id) {
@@ -243,6 +263,7 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         }
         // A killed object that stays in play (an infantry unit in its death sequence) only plays it out.
         crate::combat::death::infantry_death_turn(w, id);
+        dead_air_death_follow_up(w, id);
         return;
     }
     // spec: S-0616 claim 1 (a deactivated vehicle's spark step comes first in its turn, before every other draw of that turn, also in turns that end early for another reason)
@@ -278,6 +299,10 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         crate::temporal::member_drop(w, id);
         // spec: S-0203 claim 4 and S-0301 claim 11 (the reload countdown's elapsed time still passes in an excluded warp turn; no grant, no restart)
         crate::combat::fire::reload_elapsed(w, id);
+        return;
+    }
+    // spec: S-0107 claim 17a (the test comes early in the update, before the unit's behaviour and its movement; an update that ends early because the unit is being chronoshifted, the warp step above, or travels through a tunnel, which our engine does not build, does not reach it); design: S-0107 claim 17a (its place among the other early steps, right after the warp step)
+    if on_foot && !crate::combat::death::regain_health_turn(w, id) {
         return;
     }
     // The member's arrival hold ended in this turn's hold-end test (S-0513 claim 40).
