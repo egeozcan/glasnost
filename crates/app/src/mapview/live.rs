@@ -1910,7 +1910,9 @@ impl Live {
     /// the air layer, S-0616 claim 30) entering at the end of their list
     /// when the drawing first sees them and leaving when they are gone.
     /// Newcomers of one tick enter as mobile objects, then animations by
-    /// creation, then particles by object number (our order within a tick).
+    /// creation (their place among the rest is Q-3248), then particles,
+    /// projectiles and debris pieces together in object order, which is the
+    /// order they were made (S-0616 claim 30, #432).
     fn sync_layers(&mut self, tick: bool) {
         let events_only = self.view_quirks.layer_change_on_events_only;
         let moments = std::mem::take(&mut self.layer_moments);
@@ -4374,9 +4376,12 @@ impl Live {
         }
     }
 
-    /// The items of every particle with a sprite (S-0613, S-0616; the
-    /// interim rule of Q-1520), by system and then in each system's
-    /// particle order (Q-1520 question 7 is open).
+    /// The items of every particle drawn this frame (S-0616 claims 23 to
+    /// 29), sprite kinds and pixel kinds alike, by object number. A particle
+    /// the detail level hides or whose type has no sprite has no entry; one
+    /// whose frame draws nothing has an empty one. The order they are drawn
+    /// in is the air layer's (S-0616 claim 30), not this map's or a
+    /// system's.
     fn particle_items(
         &mut self,
         inputs: &Inputs,

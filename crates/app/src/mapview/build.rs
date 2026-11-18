@@ -3778,9 +3778,6 @@ impl<'a> Builder<'a> {
         Some((t.layer, key, items))
     }
 
-    /// One particle of the live game: a sprite kind's image frame or a
-    /// pixel kind's pixel (S-0616 claims 27 and 28); no items without a
-    /// sprite or for a frame outside the sprite.
     /// One projectile in flight (S-0306 claims 28 to 32): its sprite body
     /// with its shadow first, or its voxel body; no items when nothing is
     /// drawn for it (no art, a frame the sprite does not hold, or no
@@ -4214,6 +4211,9 @@ impl<'a> Builder<'a> {
         out
     }
 
+    /// One particle of the live game: a sprite kind's image frame or a
+    /// pixel kind's pixel (S-0616 claims 27 and 28); no items without a
+    /// sprite or for a frame outside the sprite.
     fn live_particle(&mut self, d: &ParticleDraw) -> Vec<Item> {
         match *d {
             ParticleDraw::Sprite {
