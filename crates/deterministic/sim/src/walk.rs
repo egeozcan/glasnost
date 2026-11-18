@@ -267,7 +267,9 @@ fn kept_out(w: &mut World, id: ObjectId, lent: Option<Pos>) {
     }
     let dest = o.dest;
     let moved_to = match dest {
-        Some(Target::Cell(c)) if c != k.cell() => Some(Pos::centre(c, cell_destination_height(w, id, c))),
+        Some(Target::Cell(c)) if c != k.cell() => {
+            Some(Pos::centre(c, cell_destination_height(w, id, c)))
+        }
         _ => None,
     };
     let Some(ob) = w.obj_mut(id) else { return };
