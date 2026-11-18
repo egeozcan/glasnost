@@ -991,6 +991,7 @@ fn create_grab_anim(w: &mut World, host: ObjectId, p: ObjectId) {
             cell: None,
         },
         looped: false,
+        warning: None,
     };
     // spec: S-0614 claim 25 (the creation draws of S-0109 claims 3 and 13, from the scenario stream, in turn g; an absent type: none created and no draw)
     let made = crate::combat::effects::anim_spawn(w, GRAB_ANIM, at, spawn);

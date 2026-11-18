@@ -159,17 +159,24 @@ fn missile(
     id
 }
 
-/// The warning marker at the target cell's centre (claim 11). Its
-/// visibility and its end with its missile are presentation; the sim only
-/// creates it (S-0202 claim 10's creation draws).
-fn marker(w: &mut World, cell: CellXY) {
+/// The warning marker at the target cell's centre, attached to `missile`
+/// of house `house` (claim 11). It is game state: its creation draws
+/// (S-0202 claim 10) and its playback's draws (S-0109 claim 28) are the
+/// scenario stream's, and it ends when its missile leaves play
+/// ([`crate::anims::WarningMarker`]). Its visibility to a viewer is
+/// presentation.
+fn marker(w: &mut World, cell: CellXY, missile: ObjectId, house: Option<HouseId>) {
     if w.rules().animation(super::WARNING_MARKER).is_none() {
         // spec: S-0513 Edge cases (a missing marker animation type: no animation)
         return;
     }
     let p = super::cell_point(w, cell, false);
-    // spec: S-0513 claim 11 (the warning marker at the target cell's centre)
-    crate::combat::effects::anim(w, super::WARNING_MARKER, p);
+    // spec: S-0513 claim 11 (the warning marker at the target cell's centre, attached to its missile; it stays at the centre, Q-3253's interim rule)
+    let spawn = crate::anims::Spawn {
+        warning: Some(crate::anims::WarningMarker { missile, house }),
+        ..Default::default()
+    };
+    crate::combat::effects::anim_spawn(w, super::WARNING_MARKER, p, spawn);
 }
 
 /// The launch announcement and the siren at the target (claims 5 and 8).
@@ -194,9 +201,9 @@ pub fn one_time(w: &mut World, h: Option<HouseId>, i: u32, cell: CellXY) {
     let speed = w.rules().combat.weapon(payload).speed;
     // spec: S-0513 claim 10 and F2 (straight down at 100 leptons per tick; no owner, the payload weapon's damage, warhead and speed)
     let vel = [F64::ZERO, F64::ZERO, F64::from_i64(-ONE_TIME_SPEED, mode)];
-    missile(w, payload, None, None, p, vel, cell, speed);
-    // spec: S-0513 claim 10 (the warning marker is attached to the falling missile)
-    marker(w, cell);
+    let fall = missile(w, payload, None, None, p, vel, cell, speed);
+    // spec: S-0513 claims 10 and 11 (in a one-time launch the warning marker is attached to the falling missile; the launching house is the strike's)
+    marker(w, cell, fall, h);
 }
 
 /// A silo launch (claims 7 and 8). `silo` is the chosen silo, if any.
@@ -282,13 +289,13 @@ pub fn silo_turn(w: &mut World, s: ObjectId) {
     let mode = rules.mode;
     // spec: S-0513 claim 8 (straight up at 10 leptons per tick, top speed 255, owned by the silo, the weapon's damage and warhead)
     let vel = [F64::ZERO, F64::ZERO, F64::from_i64(UP_START_SPEED, mode)];
-    missile(w, weapon, Some(s), owner, from, vel, target, UP_TOP_SPEED);
+    let up = missile(w, weapon, Some(s), owner, from, vel, target, UP_TOP_SPEED);
     if let Some(a) = rules.superweapons.nuke_take_off.clone() {
         // spec: S-0513 claim 8 (the silo's take-off animation at the firing position)
         crate::combat::effects::anim(w, &a, from);
     }
-    // spec: S-0513 claim 11 (in a silo launch the marker is attached to the upward missile, from the silo's first update)
-    marker(w, target);
+    // spec: S-0513 claim 11 (in a silo launch the marker is attached to the upward missile, from the silo's first update; the launching house is the silo's)
+    marker(w, target, up, owner);
 }
 
 /// The upward missile's burst with a missile-maker warhead (claims 8 and

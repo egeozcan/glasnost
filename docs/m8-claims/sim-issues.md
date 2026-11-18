@@ -1622,3 +1622,47 @@ The P3 census rule: a crashed infantry unit now stays in play, dead, until *air-
 - The optional battlefield marker for dummy mode was not built.
 
 The P3 census rule: dummy mode adds a mark to house setup state and reads it in the gates. It makes or moves no back-reference of `World::census`.
+
+## Batch S34: the nuclear warning marker, refinery slots, a balloon-hover crash and the designator line (#441, #444, #446, #448)
+
+Base main 96ca8d8, not rebased. #441 is fixed. #444, #446 and #448 were traced first: in each the simulation does what the claims say, and the observation needs data or behaviour the specs do not give, so each has a request (Q-3254 to Q-3256) and nothing in the engine changes. Each trace is a committed claim test on synthetic rules. An opt-in local lane (`crates/tools/tests/s34_lane.rs`, ignored, never in CI) checks what an install's data give each path, printing positions, slot kinds and booleans only.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #441 (S-0513 claims 10 and 11, S-0109 claim 22) | The warning marker was a free animation with no owner, so a marker type that loops never ended | fixed (353b582) | `anims::WarningMarker { missile, house }` on `Anim::warning` (saved and hashed). A one-time launch ties it to the falling missile and a silo launch to the upward missile. At its first update after that missile has left `World::projectiles` it is deleted and does nothing else. It stays at the target cell's centre (interim Q-3253, 166bcb6) | `claims_s0513_nuke.rs`: `claim11_a_one_time_launch_marker_ends_when_its_falling_missile_leaves_play`, `claim11_a_silo_launch_marker_ends_at_the_upward_missiles_burst` (4bc30f9; both fail on their own tree, `local-lane/sim-issues/s34/t1-at-4bc30f9.txt`) |
+| #441, the viewer test | Claim 11's visibility (not allied with the launcher, an operating psychic sensor within 256 × its radius, re-tested every update) is presentation. The simulation gives the client the marker's missile and launching house | handed back (client) | none in the simulation | — |
+| #444 (S-0402 claim 11, S-0108) | The simulation starts the docking animation with the start row and the payment animation at each payment. On the empty-load row it starts the unloading animation and stops the payment animation. The *finishing* harvester waits for the unloading animation's end | not reproduced in the simulation; request Q-3254 (d6b26fa) | none | `claims_s0402_dock_anims.rs`: `claim_11_issue_444_the_slots_of_a_whole_cycle_from_contact` (0153a5d) |
+| #446 (S-0502 claim 18, S-0113 claim 16, S-0312 claim 16) | A crashable balloon-hover jumpjet vehicle takes the vehicle crash path from its first update. Its heading spins at its rate and its body facing follows the heading each step used. It steps along the heading only while its current speed is above 0, so killed while moving it drifts on a slow spiral, and killed while hovering it falls straight down. The client's crash rocking follows S-0113 claim 16 as written: no upper bound on the pitch | matches the claims; request Q-3255 (51c96a5) | none | `claims_s0502_crash.rs`: `claim_18_issue_446_a_balloon_hover_vehicle_crash_traced` (d428189, 45d9753) |
+| #448 (S-0519 claims 16 and 26, S-0518 claims 18 to 20 and 23, S-0514 claim 23) | An ordered infantry designator fires its S-0308 row 6 weapon. The shot reports its line, ending at the building's target point, and the strike is called. The laser flag and duration reach the simulation. By S-0518 claim 18 a beam is drawn only for a weapon with the laser flag. The claim 26 tint reads `strike::marked`, and the building is marked | matches the claims; request Q-3256 (6866de8) | none (no `beams.rs` fault) | `claims_s0519_strike.rs`: `issue_448_an_ordered_infantry_designation_reports_its_laser_line` (ab0c6bc) |
+
+Formats: `Anim::warning` is saved and hashed, so save goes from 154 to 181 and AI game from 131 to 157 on the branch, renumbered to 157 and 134 at the merge. The AI game bump in `crates/deterministic/ai/src/game.rs` is forced by the sim change. Wire stays 12. No built claim names a quirk switch, so none is added.
+
+Goldens (e731157): only `duel-m7b.txt` moves, from 353b582. 15 of its 800 hashes change, in eight runs from line 567 (tick 5660) to line 768 (tick 7670). Between the runs and after the last one, the hash returns to its old value through the file's end. That fits a state that differs only while a marker is in play. Its line count is unchanged, and the other goldens do not move.
+
+Lanes compare base 96ca8d8 with the batch at 6866de8. The goldens commit changes no code. Logs are in `local-lane/sim-issues/s34/`.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). `diff -rq` of `arena-base/` and `arena-after/` is empty. M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 and M-0021 10 of 50 failing, the same as at base.
+
+**Sweeps** (`m6c-base.txt`/`m6c-after.txt`, and likewise for m7a and m7b). M6c, M7a and M7b over seeds 1–16 pass. Apart from build lines, their seed and summary lines are identical to base: smallest minimum 0, 2, and drain 3.
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-after-7.txt` to `quick-after-10.txt`). 30 games end on the same tick with the same winner as base. Six games move, and every one keeps its winner:
+
+| Seed | Game | Base ticks | Batch ticks | Winner |
+|---|---|---|---|---|
+| 7 | 1 | 47024 | 51114 | house 1 |
+| 8 | 6 | 46665 | 50820 | house 0 |
+| 8 | 9 | 31029 | 34122 | house 0 |
+| 9 | 3 | 43485 | 85012 | house 0 |
+| 9 | 6 | 54791 | 49090 | house 0 |
+| 10 | 3 | 41664 | 42623 | house 0 |
+
+All six launch a nuclear missile at base, which fits #441's path: a marker that no longer stays in play. Seed 7's games 6 and 7 also launch one and do not move. None is traced, because no winner changes.
+
+**Suites.** The AI suite with its ignored tests passes 364 on base and on the batch (`ai-base.txt`, `ai-after.txt`). The sim gate with its ignored tests passes 17 on both (`gate-base.txt`, `gate-after.txt`), after the goldens were regenerated.
+
+Seams left:
+- S-0513's *Presentation fixed outright* removes a warning marker when its owner house leaves play. In our engine, a house leaves only at load (the unused-house cleanup, S-0009 claim 28), before any launch, so nothing is built for it.
+- Q-3253: the marker stays at the target cell's centre while it is attached.
+- The client's viewer test for the marker (#441) is not built here.
+
+The P3 census rule: the marker reads `World::projectiles` and no census back-reference, so the batch makes or moves no back-reference of `World::census`.

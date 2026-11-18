@@ -272,6 +272,79 @@ fn claim11_warning_marker_at_the_target_centre() {
     }
 }
 
+/// The ruleset with a warning-marker type that loops for ever (S-0109
+/// claim 7: loop count −1, endless), so only its missile can end it.
+fn endless_marker_rules() -> glasnost_rules::schema::Ruleset {
+    let mut r = ruleset();
+    r.sim.animations.insert(
+        superweapons::WARNING_MARKER.into(),
+        glasnost_rules::sim::AnimationType {
+            // spec: S-0109 claim 7 (loop count −1: endless)
+            loop_count: Some(-1),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("animations".into())
+        .or_default()
+        .push(superweapons::WARNING_MARKER.into());
+    r
+}
+
+/// The warning markers in play, with their positions.
+fn markers(w: &World) -> Vec<Option<glasnost_sim::world::Pos>> {
+    w.anims
+        .anims
+        .values()
+        .filter(|a| a.player.name == superweapons::WARNING_MARKER.as_bytes())
+        .map(|a| a.pos)
+        .collect()
+}
+
+#[test]
+fn claim11_a_one_time_launch_marker_ends_when_its_falling_missile_leaves_play() {
+    // spec: S-0513 claim 11 (in a one-time launch the marker is attached to the falling missile and ends when that missile leaves play) and S-0109 claim 22 (an attached animation whose owner is removed is deleted at its next update)
+    let r = endless_marker_rules();
+    let mut w = game(&r);
+    let target = at(1, 1);
+    nuke::one_time(&mut w, Some(ALPHA), STRIKE, target);
+    let c = superweapons::cell_point(&w, target, false);
+    assert_eq!(
+        markers(&w),
+        vec![Some(c)],
+        "one marker at the target centre"
+    );
+    run(&mut w, 5);
+    assert_eq!(missiles(&w, "NukePayload").len(), 1, "still falling");
+    assert_eq!(markers(&w).len(), 1, "in play while its missile is");
+    until(&mut w, 400, |w| missiles(w, "NukePayload").is_empty());
+    run(&mut w, 2);
+    assert!(
+        markers(&w).is_empty(),
+        "the marker ends with its missile, not with its own playback"
+    );
+}
+
+#[test]
+fn claim11_a_silo_launch_marker_ends_at_the_upward_missiles_burst() {
+    // spec: S-0513 claim 11 (in a silo launch the marker is attached to the upward missile from the silo's first update; it disappears at that missile's burst and the falling missile has none)
+    let r = endless_marker_rules();
+    let mut w = game(&r);
+    let silo = spawn(&mut w, "SILO", ALPHA, -6, -6);
+    ready_tick(&mut w, ALPHA, STRIKE, 200);
+    nuke::silo_launch(&mut w, ALPHA, STRIKE, at(2, 0), Some(silo));
+    until(&mut w, 10, |w| !missiles(w, "Lift").is_empty());
+    assert_eq!(markers(&w).len(), 1, "made with the upward missile");
+    until(&mut w, 200, |w| !missiles(w, "NukePayload").is_empty());
+    assert!(missiles(&w, "Lift").is_empty());
+    run(&mut w, 2);
+    assert_eq!(missiles(&w, "NukePayload").len(), 1, "still falling");
+    assert!(markers(&w).is_empty(), "the falling missile has no marker");
+    until(&mut w, 400, |w| missiles(w, "NukePayload").is_empty());
+    run(&mut w, 2);
+    assert!(markers(&w).is_empty());
+}
+
 // --- S-0524 claim 3 ------------------------------------------------------------------
 
 #[test]
