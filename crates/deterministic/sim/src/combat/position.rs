@@ -216,9 +216,10 @@ fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos 
                 Some(tg) => {
                     let tp = crate::combat::range::target_point(w, tg);
                     let rp = w.reference_point(firer);
+                    // spec: S-0204 F3 (X = x_Q − x_P, Y likewise); S-0205 claim 1 (an integer result outside the range wraps; neither S-0313 nor S-0204 states a clamp)
                     glasnost_num::geom::direction(
-                        i64::from(tp.x - rp.x),
-                        i64::from(tp.y - rp.y),
+                        i64::from(tp.x.wrapping_sub(rp.x)),
+                        i64::from(tp.y.wrapping_sub(rp.y)),
                         r.quirks.table_direction,
                     )
                 }
