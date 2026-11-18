@@ -27,7 +27,8 @@
 //!   infantry with none of the house's own or allied infantry in its reach
 //!   (S-0611).
 //! - [`air_attack`]: units under air attack moved to cover, home or out of
-//!   reach, and units that can hit the attacker sent at it (#434).
+//!   reach, and units that can hit the attacker sent at it (#434); a unit
+//!   that can hit a slow air attacker over it steps aside (#443).
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod absorber;

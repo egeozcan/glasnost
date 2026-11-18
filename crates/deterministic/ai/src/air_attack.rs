@@ -33,6 +33,16 @@
 //! it sees changes: a unit already on its way, at its goal, out of the
 //! attacker's reach or no longer shot is left alone.
 //!
+//! A unit that can hit its air attacker fights it (#443): retaliation
+//! gives it the attacker as its target (S-0215 claim 18). When the
+//! attacker is slow, still within [`OVERHEAD`] cells of the unit one think
+//! after it was, the unit steps [`STEP`] cells away from it, at most once
+//! in [`STEP_GAP`] ticks, so the attacker has to move to stay over it
+//! ([`Special::air_step`]). No attack order follows the step: retaliation
+//! brings the unit back to firing, as a fresh attack order would
+//! (`tests/air_step.rs`). A unit that answers another seen drainer in the
+//! air is left to `antiair`.
+//!
 //! What "can hit" means: the weapon the unit would use against the
 //! attacker (S-0308 claim 3) has an anti-air projectile and a warhead
 //! whose versus value for the attacker's armour is not zero (`antiair`'s
@@ -43,8 +53,9 @@
 //! It reads only the house's own objects, the enemies it sees (where they
 //! are, what they aim at, when they last fired: the shots a person sees)
 //! and the rules a person may read. It draws no random value. The
-//! counters [`crate::special::Uses::air_escapes`] and
-//! [`crate::special::Uses::air_helpers`] count its orders.
+//! counters [`crate::special::Uses::air_escapes`],
+//! [`crate::special::Uses::air_helpers`] and
+//! [`crate::special::Uses::air_steps`] count its orders.
 
 use std::collections::BTreeMap;
 
@@ -98,6 +109,18 @@ const HOLD: i32 = 450; // nocite: tuning of our own opponent
 /// Cells within which a unit has reached its goal.
 const ARRIVED: i64 = 2; // nocite: tuning of our own opponent
 
+/// The eight ways from a cell, clockwise from north.
+const WAYS: [(i32, i32); 8] = [
+    (0, -1),
+    (1, -1),
+    (1, 0),
+    (1, 1),
+    (0, 1),
+    (-1, 1),
+    (-1, 0),
+    (-1, -1),
+]; // nocite: the eight neighbour directions
+
 /// A unit sent away from an air attacker.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Away {
@@ -109,11 +132,28 @@ struct Away {
     from: ObjectId,
 }
 
+/// Cells from a unit within which an air attacker is over it (#443).
+pub const OVERHEAD: i64 = 2; // nocite: tuning of our own opponent
+
+/// Cells a unit under a slow air attacker steps aside (#443).
+pub const STEP: i32 = 3; // nocite: tuning of our own opponent
+
+/// The fewest ticks between two steps of one unit (#443).
+pub const STEP_GAP: i32 = 90; // nocite: tuning of our own opponent
+
 /// What the module remembers between thinks.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Watch {
     /// The units sent away from an air attacker.
     away: BTreeMap<ObjectId, Away>,
+    /// The units of the house that an air attacker shooting them was over
+    /// at a think (#443): the attacker and the tick of that think.
+    #[serde(default)]
+    over: BTreeMap<ObjectId, (ObjectId, i32)>,
+    /// The units of the house stepped aside from a slow air attacker
+    /// (#443): the goal and the tick of the order.
+    #[serde(default)]
+    stepped: BTreeMap<ObjectId, (CellXY, i32)>,
 }
 
 impl Away {
@@ -155,9 +195,17 @@ impl Watch {
         self.away.get(&id).is_some_and(|e| e.on_way(w, id))
     }
 
-    /// Forgets the units no longer kept back ([`Away::held`]).
+    /// Forgets the units no longer kept back ([`Away::held`]), the attackers
+    /// over a unit seen before the last think, and the steps older than
+    /// [`STEP_GAP`].
     fn prune(&mut self, w: &World) {
         self.away.retain(|&id, e| e.held(w, id));
+        let t = w.tick;
+        self.over.retain(|&id, &mut (_, at)| {
+            w.obj(id).is_some() && t.saturating_sub(at) <= scripted::THINK_PERIOD
+        });
+        self.stepped
+            .retain(|&id, &mut (_, at)| w.obj(id).is_some() && t.saturating_sub(at) < STEP_GAP);
     }
 
     /// Whether the brain keeps order `o`: an order to a unit kept back
@@ -358,16 +406,6 @@ fn escape_goal(
     let out = |c: CellXY| dist2(c, ac) > safe * safe;
     // The eight ways out from the attacker, at the safe distance; the one
     // nearest the unit is the shortest way out of reach.
-    const WAYS: [(i32, i32); 8] = [
-        (0, -1),
-        (1, -1),
-        (1, 0),
-        (1, 1),
-        (0, 1),
-        (-1, 1),
-        (-1, 0),
-        (-1, -1),
-    ];
     let s = i32::try_from(safe + 1).unwrap_or(i32::MAX / 2);
     WAYS.iter()
         .filter_map(|&(dx, dy)| {
@@ -404,8 +442,14 @@ impl Special {
             if ordered.contains(&x) || !own.contains(&x) || !army.contains(&x) {
                 continue;
             }
-            // design: own AI (#434): a unit that can hit its attacker fights; one on its way already is not clicked again
-            if !movable(w, x) || answers(w, x, a) || self.air.sent(w, x) {
+            // design: own AI (#434): one on its way already is not clicked again
+            if !movable(w, x) || self.air.sent(w, x) {
+                continue;
+            }
+            // design: own AI (#434, #443): a unit that can hit its attacker fights, and steps aside from a slow one
+            if answers(w, x, a) {
+                ordered.insert(x);
+                self.air_step(w, x, a, &drainer_answers, out);
                 continue;
             }
             let (Some(xc), Some(ac)) = (
@@ -467,6 +511,77 @@ impl Special {
             }
             self.air_helpers(w, own, &army, &drainer_answers, x, a, ac, &mut ordered, out);
         }
+    }
+
+    /// A unit that can hit its air attacker (#443): when the attacker was
+    /// over it ([`OVERHEAD`] cells) at the last think and is again now (a
+    /// slow attacker, which keeps over it), the unit fights it (holds it as
+    /// its target and fired within [`RECENT`] ticks), and it did not step
+    /// within [`STEP_GAP`] ticks, it steps [`STEP`] cells aside, to the cell
+    /// of its reach region (S-0212 claim 4) farthest from the attacker. No
+    /// attack order follows: retaliation (S-0215 claim 18, in guard with no
+    /// target and the weapon reaching the attacker) brings it back to
+    /// firing, as `tests/air_step.rs` checks against a fresh attack order.
+    /// A unit that answers another seen drainer in the air (`antiair`) is
+    /// left to that part.
+    fn air_step(
+        &mut self,
+        w: &World,
+        x: ObjectId,
+        a: ObjectId,
+        drainer_answers: &[(ObjectId, ObjectId)],
+        out: &mut Vec<Order>,
+    ) {
+        let (Some(xo), Some(ao)) = (w.obj(x), w.obj(a)) else {
+            return;
+        };
+        let (xc, ac) = (xo.pos.cell(), ao.pos.cell());
+        let t = w.tick;
+        let before = self.air.over.get(&x).copied();
+        if dist2(xc, ac) > OVERHEAD * OVERHEAD {
+            self.air.over.remove(&x);
+            return;
+        }
+        self.air.over.insert(x, (a, t));
+        // design: own AI (#443): slow is an attacker still over the unit one think later
+        let slow = before.is_some_and(|(b, at)| b == a && at < t);
+        // spec: S-0206 claim 9 (the tick of the unit's last shot)
+        let fighting =
+            xo.target == Some(Target::Object(a)) && t.saturating_sub(xo.last_fired) <= RECENT;
+        let rested = self
+            .air
+            .stepped
+            .get(&x)
+            .is_none_or(|&(_, at)| t.saturating_sub(at) >= STEP_GAP);
+        let kept = drainer_answers.iter().any(|&(d, n)| n == x && d != a);
+        if !slow || !fighting || !rested || kept {
+            return;
+        }
+        // design: own AI (#443): the step goes away from the attacker, so it has to move to stay over the unit
+        let away = |c: CellXY| dist2(c, ac) > dist2(xc, ac);
+        let goal = WAYS
+            .iter()
+            .filter_map(|&(dx, dy)| {
+                let g = CellXY::new(xc.x + dx * STEP, xc.y + dy * STEP);
+                drivable_near(w, x, g, away)
+            })
+            .filter(|&c| dist2(c, xc) > ARRIVED * ARRIVED)
+            .max_by_key(|&c| (dist2(c, ac), std::cmp::Reverse((c.y, c.x))));
+        let Some(goal) = goal else { return };
+        if !self.memory.ok(w, x, Target::Cell(goal))
+            || self.memory.pending(w, x, Target::Cell(goal))
+        {
+            return;
+        }
+        out.push(Order::Behaviour {
+            actor: x,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(goal)),
+        });
+        self.offer_use(Use::AirStep, out);
+        self.air.stepped.insert(x, (goal, t));
     }
 
     /// Sends up to [`HELPERS`] idle army units of the house within

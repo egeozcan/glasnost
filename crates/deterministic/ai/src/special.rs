@@ -210,6 +210,10 @@ pub struct Uses {
     /// (`air_attack`, #434).
     #[serde(default)]
     pub air_helpers: u32,
+    /// Units that can hit a slow air unit over them stepped aside
+    /// (`air_attack`, #443).
+    #[serde(default)]
+    pub air_steps: u32,
 }
 
 /// What an order the brain gives is for: the counter of [`Uses`] it adds
@@ -266,6 +270,7 @@ pub(crate) enum Use {
     Escort,
     AirEscape,
     AirHelp,
+    AirStep,
 }
 
 impl Uses {
@@ -322,6 +327,7 @@ impl Uses {
             Use::Escort => &mut self.escorts,
             Use::AirEscape => &mut self.air_escapes,
             Use::AirHelp => &mut self.air_helpers,
+            Use::AirStep => &mut self.air_steps,
         };
         *c = c.saturating_add(1);
     }
