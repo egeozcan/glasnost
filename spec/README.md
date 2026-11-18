@@ -141,6 +141,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0317](combat/S-0317-voxel-debris.md) | Debris pieces with voxel models (creation, flight, bounces, end of life, removal) | combat | 59 | approved | — |
 | [S-0319](combat/S-0319-bouncing-animations.md) | Bouncing animations (sprite debris and meteors): motion, landing and end | combat | 30 | approved | — |
 | [S-0216](simulation/S-0216-units-placed-mid-game.md) | Units placed after the game has started | simulation | 70 | approved | — |
-| [S-0113](rendering/S-0113-body-rocking.md) | Body rocking | rendering | 17 | approved | — |
+| [S-0113](rendering/S-0113-body-rocking.md) | Body rocking | rendering | 21 | approved | — |
 | [S-0015](formats/S-0015-string-table-layout.md) | String table file layout and lookup results | formats | 4 | approved | — |
 | [S-0217](simulation/S-0217-house-hunt-order-and-ai-checks.md) | House-wide hunt order and the computer player's periodic checks (original only) | simulation | 22 | approved | — |
