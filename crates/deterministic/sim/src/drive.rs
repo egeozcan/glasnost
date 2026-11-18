@@ -919,10 +919,7 @@ fn step_check_with(
             Some(&nd) if found && u.train => {
                 // spec: S-0212 claim 20 (a train's search result is stored after the step in progress, still up to 24 steps in total, so the quirk does not arise; the step and the result's first step choose the track as the current and next step of S-0207 claim 7)
                 e = Some(nd);
-                ob.path.steps = std::iter::once(d)
-                    .chain(new)
-                    .take(path::STORED)
-                    .collect();
+                ob.path.steps = std::iter::once(d).chain(new).take(path::STORED).collect();
             }
             Some(&nd) if found => {
                 if r.quirks.path_refresh_keeps_old_step {
