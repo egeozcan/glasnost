@@ -74,6 +74,9 @@ fn granted_countdowns_show_on_the_battlefield() {
     let mut c = client((800, 600), 100);
     start_by_keyboard_with(&mut c, countdown_rules());
     let s = session_mut(&mut c);
+    // The type has a label and no string table is read, so its name stands
+    // in for the display name (S-0004 claim 17, as the name tip has it).
+    s.loaded.import = superweapon_import("[NUKE]\nUIName=Name:Strike\n");
     assert!(s.countdown_rows().is_empty(), "nothing granted yet");
     let local = s.play.me();
     glasnost_sim::superweapons::charge::permanent_grant(&mut s.play.game.world, local, 0);
@@ -87,6 +90,55 @@ fn granted_countdowns_show_on_the_battlefield() {
     assert!(list.texts().contains(&"NUKE "), "{:?}", list.texts());
     assert!(rows[0].seconds > 0, "{rows:?}");
     assert!(list.texts().contains(&time.as_str()));
+}
+
+/// An import of an invented rules text: the fixture's superweapon `NUKE`
+/// registered, with the sections `sections`.
+fn superweapon_import(sections: &str) -> glasnost_convert::Import {
+    let base = glasnost_convert::inputs::InputFile {
+        name: "rules.ini".into(),
+        origin: "test".into(),
+        bytes: format!("[SuperWeaponTypes]\n0=NUKE\n{sections}").into_bytes(),
+    };
+    glasnost_convert::convert(
+        &glasnost_convert::inputs::Inputs {
+            base: Some(base),
+            ..Default::default()
+        },
+        &glasnost_convert::ImportOptions::default(),
+    )
+}
+
+/// spec: S-0512 claim 18 and Import mapping (a countdown row shows the
+/// superweapon's display name: its UIName label resolved through the
+/// string table) and S-0004 claim 17 (the label's text as the table holds
+/// it; a type that never had a label has an empty display name). The label
+/// and its text are invented, the text not ASCII.
+#[test]
+fn countdown_rows_show_the_display_name() {
+    let mut c = client((800, 600), 100);
+    start_by_keyboard_with(&mut c, countdown_rules());
+    let text = "Sonnenstrahl \u{e4}\u{f6} \u{2622}";
+    let s = session_mut(&mut c);
+    s.loaded.import = superweapon_import("[NUKE]\nUIName=Name:Strike\n");
+    s.strings = Some(crate::game::strings::StringTable::new(vec![(
+        b"Name:Strike".to_vec(),
+        text.encode_utf16().collect(),
+    )]));
+    let local = s.play.me();
+    glasnost_sim::superweapons::charge::permanent_grant(&mut s.play.game.world, local, 0);
+    let rows = s.countdown_rows();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].name, text);
+    let (list, _) = c.frame();
+    let shown = format!("{text} ");
+    assert!(list.texts().contains(&shown.as_str()), "{:?}", list.texts());
+    // A type with no label: an empty name, the table read or not.
+    let s = session_mut(&mut c);
+    s.loaded.import = superweapon_import("[NUKE]\n");
+    assert_eq!(s.countdown_rows()[0].name, "");
+    s.strings = None;
+    assert_eq!(s.countdown_rows()[0].name, "");
 }
 
 /// The fixture's rules with its superweapon's kind and aim action word.
