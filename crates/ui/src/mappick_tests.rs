@@ -243,6 +243,7 @@ fn with_no_match_the_selection_stays_and_the_game_does_not_start() {
     let list = Listed {
         any: false,
         shown: Shown::NONE,
+        dummy: false,
     };
     let (d, t) = setup.view_listed((800, 600), &r, &m, None, &list);
     let texts = d.texts();
@@ -536,6 +537,7 @@ fn the_setup_screen_fits_its_preview() {
     let list = Listed {
         any: true,
         shown: Shown::NONE,
+        dummy: false,
     };
     for size in [MIN_UI, (800, 600)] {
         let (d, t) = s

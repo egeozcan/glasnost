@@ -4,7 +4,9 @@
 //! file-system importer and the game itself; the shell lives in `glasnost-app`
 //! and is shared with the web build.
 //!
-//! Usage: `glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--relay-only] [--ice URL] [--backend auto|gl|vulkan] [--frames N]`.
+//! Usage: `glasnost [--game [--dummy] | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--relay-only] [--ice URL] [--backend auto|gl|vulkan] [--frames N]`.
+//! `--dummy` starts the skirmish setup with our own *Dummy mode* on (#439,
+//! a testing tool: no computer attacks the person, who has no shroud).
 //! With `--game`, the game client (M5b: menu, skirmish setup, a game against
 //! the AI, end screen), reading the install in `DIR`. With `--viewer`, the
 //! asset viewer (optionally mounting `DIR` at start, and opening the map
@@ -47,6 +49,7 @@ fn main() -> std::process::ExitCode {
     let mut ice: Vec<String> = Vec::new();
     let mut bench = None;
     let mut offscreen = false;
+    let mut dummy = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
@@ -63,6 +66,11 @@ fn main() -> std::process::ExitCode {
             }
             "--game" => {
                 game = true;
+                Ok(())
+            }
+            // design: #439 (the skirmish setup starts with dummy mode on)
+            "--dummy" => {
+                dummy = true;
                 Ok(())
             }
             "--game-dir" => value("--game-dir").map(|v| game_dir = Some(v)),
@@ -82,7 +90,7 @@ fn main() -> std::process::ExitCode {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: glasnost [--game [--bench SPEC [--offscreen]] | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--relay-only] [--ice URL] [--backend auto|gl|vulkan] [--frames N]"
+                    "usage: glasnost [--game [--dummy] [--bench SPEC [--offscreen]] | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--relay-only] [--ice URL] [--backend auto|gl|vulkan] [--frames N]"
                 );
                 return ExitCode::SUCCESS;
             }
@@ -114,8 +122,8 @@ fn main() -> std::process::ExitCode {
         eprintln!("glasnost: --game and --viewer exclude each other");
         return ExitCode::from(2);
     }
-    if (bench.is_some() || offscreen) && !game {
-        eprintln!("glasnost: --bench and --offscreen go with --game");
+    if (bench.is_some() || offscreen || dummy) && !game {
+        eprintln!("glasnost: --bench, --offscreen and --dummy go with --game");
         return ExitCode::from(2);
     }
     if offscreen {
@@ -152,6 +160,7 @@ fn main() -> std::process::ExitCode {
             test,
             bench,
             probe: false,
+            dummy,
         })
     } else if viewer {
         glasnost_app::run_viewer(ViewerOptions {

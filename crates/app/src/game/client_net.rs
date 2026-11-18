@@ -1059,6 +1059,8 @@ impl Client {
             // spec: S-0213 claim 15 (Network games: every machine checks an order's actor's owner immediately before applying it)
             Ok(mut l) => {
                 l.settings.network = true;
+                // design: #439 (no network game has dummy mode)
+                l.dummy = false;
                 l
             }
             Err(p) => {
@@ -1571,8 +1573,10 @@ impl Client {
             }
             SetupHit::Back => return None,
             // The map picker is the skirmish screen's (design: map picker
-            // (lead's request 2026-11-13)); the room never offers it.
-            SetupHit::OpenMaps
+            // (lead's request 2026-11-13)); the room never offers it, nor
+            // dummy mode (design: #439).
+            SetupHit::Dummy
+            | SetupHit::OpenMaps
             | SetupHit::PickMap(_)
             | SetupHit::SearchField
             | SetupHit::ClearSearch

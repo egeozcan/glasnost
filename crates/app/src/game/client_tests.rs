@@ -148,6 +148,43 @@ fn the_fixes_box_turns_the_layer_off() {
     }
 }
 
+/// The setup's *Dummy mode* box and the native `--dummy` flag (#439) turn
+/// dummy mode on for the game the start job loads; it is off at first.
+// design: #439 (the dummy-mode box and flag reach the game's setup)
+#[test]
+fn the_dummy_box_and_flag_set_the_game_setup() {
+    let start = |c: &mut Client, click_box: bool| {
+        c.done(Done::Prepared(
+            Vfs::default(),
+            Ok(Box::new(synthetic_install())),
+        ));
+        let _ = c.frame_rgba();
+        let r = c.menu_targets.rect_of(&MenuHit::Skirmish).unwrap();
+        click(c, r);
+        let _ = c.frame_rgba();
+        if click_box {
+            let r = c.setup_targets.rect_of(&SetupHit::Dummy).unwrap();
+            click(c, r);
+            let _ = c.frame_rgba();
+        }
+        let r = c.setup_targets.rect_of(&SetupHit::Start_).unwrap();
+        click(c, r);
+        match c.job.take() {
+            // The job's game setup takes the lobby's mode (`ui_setup::game_setup`; its own test).
+            Some(Job::Start { lobby, .. }) => lobby.dummy,
+            _ => panic!("Start hands out a start job"),
+        }
+    };
+    let mut c = Client::new();
+    assert!(!start(&mut c, false), "off at first");
+    let mut c = Client::new();
+    assert!(start(&mut c, true), "the box turns it on");
+    // `--dummy`: `run_game` sets the shell's mode from `GameOptions::dummy`.
+    let mut c = Client::new();
+    c.shell.dummy = true;
+    assert!(start(&mut c, false), "the flag turns it on");
+}
+
 /// The start job hands the session's palette state to the next game, and
 /// another install's first game starts from none (#152).
 /// spec: S-0103 claim 3 (the palettes are reloaded only when a game starts in a different theater

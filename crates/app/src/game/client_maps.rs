@@ -288,6 +288,7 @@ impl Client {
             let listed = Listed {
                 any: !list.is_empty(),
                 shown,
+                dummy: self.shell.dummy,
             };
             setup.view_listed(size, &rules, &maps, hover, &listed)
         };
