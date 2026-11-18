@@ -191,6 +191,9 @@ pub struct Session {
     /// order block: S-0201 claim 14).
     edge_live: bool,
     press: Option<(Point, Button)>,
+    /// A radar drag is held (design: #438): a left press inside the radar
+    /// image with no radar-aimed superweapon armed.
+    radar_drag: bool,
     /// Whether a left or right button pressed over the battlefield view is
     /// still held (blocks the name tip, S-0111 claim 20).
     view_button_held: bool,
@@ -581,6 +584,7 @@ impl Session {
             edge: EdgeScroll::default(),
             edge_live: true,
             press: None,
+            radar_drag: false,
             view_button_held: false,
             drag: None,
             right: None,
@@ -1428,6 +1432,13 @@ impl Session {
         // spec: S-0214 claim 34 (a) (while a press is held the gesture samples the limited pointer; inside the window it is the pointer itself)
         let p = band::limited(raw, self.screen);
         self.pointer_at(p);
+        // design: #438 (S-0410 claim 11 leaves radar camera input to the interface): each move while a radar drag is held centres the view on the cell under the pointer, the pointer held to the radar image's edge
+        if self.radar_drag
+            && !self.paused
+            && let Some(cell) = self.radar_cell(p, true)
+        {
+            self.centre_on_cell(cell);
+        }
         let mode = self.play.game.world.rules().mode;
         let m = self.map_rect();
         if let Some(d) = self.drag.as_mut() {
@@ -1475,6 +1486,33 @@ impl Session {
         }
     }
 
+    /// The cell the radar map names under screen pixel `p` (S-0410 F3):
+    /// none outside the radar image, or with `held` the pixel held to the
+    /// image's edge (design: #438); none without a radar map.
+    fn radar_cell(&self, p: Point, held: bool) -> Option<CellXY> {
+        let l = self.layout();
+        let r = self.radar.as_ref()?;
+        // The radar's pixel, in the logical pixels it is drawn in.
+        let u = self.ui.to_ui(p);
+        let (mut x, mut y) = (u.x - l.radar.x, u.y - l.radar.y);
+        if held {
+            let (left, top, w, h) = r.image_rect();
+            if w <= 0 || h <= 0 {
+                return None;
+            }
+            x = x.clamp(left, left + w - 1);
+            y = y.clamp(top, top + h - 1);
+        }
+        r.cell_at(&self.play.game.world, x, y)
+    }
+
+    /// Centres the battlefield view on `cell`, as camera input on the
+    /// radar map does (S-0410 claim 11, the view jump of S-0102).
+    fn centre_on_cell(&mut self, cell: CellXY) {
+        let (x, y) = glasnost_render::projection::cell_centre(cell.x, cell.y);
+        self.set_centre(project_lifted(x, y, 0));
+    }
+
     /// The pointer left the window. Our hosts keep reporting the pointer and
     /// the release outside the window (the window layer's
     /// `super::window`), so a held battlefield press of S-0214 claims 18,
@@ -1493,6 +1531,8 @@ impl Session {
         }
         self.pointer = None;
         self.press = None;
+        // design: #438 (a radar drag ends with the press)
+        self.radar_drag = false;
         self.drag = None;
         self.right = None;
         self.view_button_held = false;
@@ -1514,6 +1554,10 @@ impl Session {
     /// abandoned, so nothing is applied, an active band box disappears, a
     /// scroll drag stops and the later release does nothing.
     pub fn abandon_press(&mut self) {
+        // design: #438 (the focus going ends a radar drag, and its later release does nothing)
+        if std::mem::take(&mut self.radar_drag) {
+            self.press = None;
+        }
         // spec: S-0214 claim 34 (f) (with either host, the window losing the input focus while a press is held abandons it, as in (e); the next press starts afresh)
         if self.battlefield_press().is_some() {
             self.press = None;
@@ -1555,6 +1599,17 @@ impl Session {
         // The pointer takes over from the keyboard.
         self.hud_focus.shown = false;
         self.pause_focus.shown = false;
+        // design: #438 (S-0410 claim 11 leaves radar camera input to the interface): a left press inside the radar image starts a radar drag and centres the view on its cell at once; with a radar-aimed superweapon armed (claim 12's offers) the press waits for its release, a click
+        self.radar_drag = false;
+        if b == Button::Left
+            && !self.paused
+            && self.hud_at(p) == Some(HudHit::Radar)
+            && self.play.radar_aims().is_none()
+            && let Some(cell) = self.radar_cell(p, false)
+        {
+            self.radar_drag = true;
+            self.centre_on_cell(cell);
+        }
         let on_map = self.hud_at(p) == Some(HudHit::Map);
         // spec: S-0111 claim 20 (Blocked: a left or right button pressed over the battlefield view is held; a held middle button does not block; r49: in the route mode a held right button blocks as outside it)
         self.view_button_held = on_map && matches!(b, Button::Left | Button::Right);
@@ -1662,6 +1717,8 @@ impl Session {
         self.view_button_held = false;
         let drag = self.drag.take();
         let right = self.right.take();
+        // design: #438 (any release ends a radar drag)
+        let radar_drag = std::mem::take(&mut self.radar_drag);
         let Some((start, pb)) = self.press.take() else {
             return SessionEvent::None;
         };
@@ -1765,16 +1822,13 @@ impl Session {
                 }
                 self.show_markers();
             }
+            // design: #438 (the release ends a radar drag and gives no click of its own)
+            Some(HudHit::Radar) if radar_drag => {}
             Some(HudHit::Radar) if b == Button::Left => {
-                let l = self.layout();
-                // The radar's pixel, in the logical pixels it is drawn in.
-                let u = self.ui.to_ui(p);
-                if let Some(cell) = self.radar.as_ref().and_then(|r| {
-                    r.cell_at(&self.play.game.world, u.x - l.radar.x, u.y - l.radar.y)
-                }) && !self.play.click_radar(cell)
+                if let Some(cell) = self.radar_cell(p, false)
+                    && !self.play.click_radar(cell)
                 {
-                    let (x, y) = glasnost_render::projection::cell_centre(cell.x, cell.y);
-                    self.set_centre(project_lifted(x, y, 0));
+                    self.centre_on_cell(cell);
                 }
             }
             // spec: S-0411 claim 18 (a page button acts on release over the button after a press there)
@@ -2502,6 +2556,8 @@ impl Session {
         // spec: S-0213 claim 16h, End of route mode (in our engine route mode ends, with the commit, when the options menu is opened while it is on)
         self.route_key(false);
         self.paused = true;
+        // design: #438 (opening the menu ends a radar drag)
+        self.radar_drag = false;
         // spec: S-0111 claim 20 (Options menu: opening it hides a tip that shows and stops the wait)
         self.name_tip.off();
         self.menu_speed = self.speed_in_force();
