@@ -225,7 +225,7 @@ pub fn created(w: &mut World, id: ObjectId) {
     let Some(t) = w.obj(id).map(|o| (o.kind, o.type_index)) else {
         return;
     };
-    created_in(w, id, &mut vec![t]);
+    created_in(w, id, &mut crate::objects::Chain::rooted(t));
 }
 
 /// [`created`] inside a creation set whose enclosing creations, the new
@@ -239,6 +239,10 @@ pub(crate) fn created_in(w: &mut World, id: ObjectId, chain: &mut crate::objects
     // spec: S-0402 claim 19 (a positive count N creates N infantry of the named type; 0 or less creates none)
     // design: #344 (a slave count above our engine's limit creates the limit's number of slaves)
     for _ in 0..g.count.clamp(0, crate::spawn::MAX_CREATED_COUNT) {
+        if chain.full() {
+            // design: #344 (once the creation set is full, the master keeps only the slaves it has made)
+            break;
+        }
         // spec: S-0402 claim 19 and S-0611 F5 (in place order, each slave's own creation set before the next slave)
         let s = new_slave(w, id, g.slave, owner, chain);
         // spec: S-0402 claim 19 (they start ready, inside and off the map)
@@ -571,8 +575,14 @@ fn place_effects(w: &mut World, id: ObjectId, i: usize) {
         if t.wrapping_sub(m.since) >= g.regen {
             // spec: S-0402 claim 23 (a replacement belongs to the master's current house)
             let owner = w.obj(id).and_then(|o| o.owner);
-            // A fresh creation, outside any other creation in progress (an empty chain).
-            let s = new_slave(w, id, g.slave_type, owner, &mut Vec::new());
+            // A fresh creation, outside any other creation in progress (an empty chain, a set of its own).
+            let s = new_slave(
+                w,
+                id,
+                g.slave_type,
+                owner,
+                &mut crate::objects::Chain::default(),
+            );
             set_group(w, id, |g| {
                 if let Some(x) = g.members.get_mut(i) {
                     // spec: S-0402 claim 14 (a replacement is created inside the miner), claim 19 (ready) and the Terms (it keeps its place)

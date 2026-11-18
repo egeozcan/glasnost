@@ -1579,6 +1579,10 @@ impl SimRules {
         missiles
             .warnings
             .extend(crate::spawn::count_limits(&missiles, &econ.harvest));
+        // design: #344 (a full creation set above our engine's limit: the importer warns)
+        missiles
+            .warnings
+            .extend(crate::objects::creation_set_limits(&missiles, &econ.harvest));
         let superweapons = crate::superweapons::SwRules::new(r, &names, &combat, &animations, mode);
         let warhead_names: Vec<String> = combat.warheads.iter().map(|h| h.name.clone()).collect();
         for a in &mut animations {

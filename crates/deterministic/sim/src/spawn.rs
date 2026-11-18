@@ -533,6 +533,13 @@ pub(crate) fn created_in(w: &mut World, id: ObjectId, chain: &mut crate::objects
     crate::census::forget(w);
     let owner = w.obj(id).and_then(|o| o.owner);
     for i in 0..c.slots.len() {
+        if chain.full() {
+            // design: #344 (once the creation set is full, the spawner keeps only the slots it has filled)
+            if let Some(sc) = w.obj_mut(id).and_then(|o| o.spawn.as_mut()) {
+                sc.slots.truncate(i);
+            }
+            break;
+        }
         // spec: S-0506 claim 1 (each slot at once receives a new docked slot object; no regeneration time on the first fill)
         // spec: S-0506 claim 1 and S-0611 F5 (in increasing slot index, each slot object's own creation set before the next slot object)
         let x = new_slot_object(w, id, r.spawned, owner, chain);
@@ -975,8 +982,14 @@ fn slot_step(w: &mut World, spawner: ObjectId, i: usize) {
             if t >= slot.until {
                 // spec: S-0506 claim 9 (regeneration over: a new object for the spawner's current house, off the map, docked)
                 let owner = w.obj(spawner).and_then(|o| o.owner);
-                // A fresh creation, outside any other creation in progress (an empty chain).
-                let x = new_slot_object(w, spawner, r.spawned, owner, &mut Vec::new());
+                // A fresh creation, outside any other creation in progress (an empty chain, a set of its own).
+                let x = new_slot_object(
+                    w,
+                    spawner,
+                    r.spawned,
+                    owner,
+                    &mut crate::objects::Chain::default(),
+                );
                 if let Some(c) = controller_mut(w, spawner) {
                     c.slots[i] = Slot {
                         state: SlotState::Docked,
