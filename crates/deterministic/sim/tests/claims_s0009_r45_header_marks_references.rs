@@ -105,15 +105,41 @@ fn references_read_the_late_marks() {
     assert_eq!(at(&w, 2), Some(HouseId(1)));
 }
 
-/// spec: S-0009 claim 29 (Q-3215's interim rule: a mark at a position numbered N or above is not kept, so the reference there is empty) and S-0011 claim 23
+/// spec: S-0009 claim 29 r47 (References: for each of positions A … H whatever N is, a mark at a position numbered N or above names a house in the same way, or none when no house has that place; the first unspecified case: no house holds a position by such a mark, but the References rule still reads it; Q-3215's answer) and S-0011 claim 23
 #[test]
-fn references_at_positions_n_and_above_are_empty() {
+fn references_at_positions_n_and_above_read_the_marks() {
+    for seed in 1..=3 {
+        let mut plain = scene();
+        plain.setup.seed = seed;
+        let p = load(&plain);
+        let mut s = scene();
+        s.setup.seed = seed;
+        // Pair 11 marks positions 4 and 5 of a four-position game.
+        s.map.header = header(11, &[None, None, pair(0, 1)]);
+        let w = load(&s);
+        assert_eq!(starts(&w), starts(&p), "seed {seed}: no house holds 4 or 5");
+        assert_eq!(at(&w, 4), Some(HouseId(0)), "seed {seed}");
+        assert_eq!(at(&w, 5), Some(HouseId(1)), "seed {seed}");
+    }
     let mut s = scene();
-    // Pair 11 marks positions 4 and 5 of a four-position game.
-    s.map.header = header(11, &[None, None, pair(0, 1)]);
+    s.map.header = header(11, &[None, None, pair(5, -1)]);
     let w = load(&s);
-    assert_eq!(at(&w, 4), None);
-    assert_eq!(at(&w, 5), None);
+    assert_eq!((at(&w, 4), at(&w, 5)), (None, None), "no house has 5");
+}
+
+/// spec: S-0009 claim 29 r47 (References: a mark at a position numbered N or above may name a passive house; scenario M13b variant H: N_h = 11, pair 11 = (2, 2) with the neutral house passive, and "player at position E" names it) and S-0011 claim 23
+#[test]
+fn variant_h_a_reference_at_n_or_above_names_a_passive_house() {
+    let mut s = scene();
+    with_neutral(&mut s, true, true);
+    // An AI house is a computer player, so the cleanup does not run (claim 28).
+    s.setup.houses[1].human = false;
+    s.setup.houses[1].ai = true;
+    s.map.header = header(11, &[None, None, pair(2, 2)]);
+    let w = load(&s);
+    assert_eq!(w.houses[2].start, None, "a passive house takes no position");
+    assert_eq!(at(&w, 4), Some(HouseId(2)));
+    assert_eq!(at(&w, 5), Some(HouseId(2)));
 }
 
 /// Adds the neutral house (house 2) with the given passive fields: the
