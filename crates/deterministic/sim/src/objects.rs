@@ -150,8 +150,11 @@ pub(crate) fn creation_set_limits(
     missiles: &crate::spawn::MissileRules,
     harvest: &crate::econ::harvest::Rules,
 ) -> Vec<String> {
+    // A type, and the types it creates with their (capped) counts.
+    type Ty = (Kind, u32);
+    type Children<'a> = dyn Fn(Ty) -> Vec<(Ty, usize)> + 'a;
     let cap = |n: i32| n.clamp(0, crate::spawn::MAX_CREATED_COUNT) as usize;
-    let children = |t: (Kind, u32)| -> Vec<((Kind, u32), usize)> {
+    let children = |t: Ty| -> Vec<(Ty, usize)> {
         let mut v = Vec::new();
         if let Some(s) = missiles.spawners.get(&t) {
             v.push(((Kind::Aircraft, s.spawned), cap(s.count)));
@@ -165,11 +168,7 @@ pub(crate) fn creation_set_limits(
     };
     // The members of a creation set rooted at `t` inside the chain `path`,
     // saturating just above the limit (so the search stays small).
-    fn size(
-        t: (Kind, u32),
-        path: &mut Vec<(Kind, u32)>,
-        children: &dyn Fn((Kind, u32)) -> Vec<((Kind, u32), usize)>,
-    ) -> usize {
+    fn size(t: Ty, path: &mut Vec<Ty>, children: &Children<'_>) -> usize {
         let over = MAX_CREATION_SET + 1;
         if path.contains(&t) {
             return 1;
