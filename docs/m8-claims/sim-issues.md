@@ -1442,3 +1442,43 @@ Seams left:
 - A refilled slot or regenerated slave starts a creation set of its own, so each refill has its own limit of 1000, not the root's.
 
 The P3 census rule: crate places and map crates are not object back-references, so the overlay writers forget nothing in the census. The creation-set limit makes fewer slot objects and slaves. Each one made still goes through `spawn::created_in` and `census::forget` as before. No fix makes or moves a back-reference of `World::census`.
+
+## Batch S33: a tank under a jumpjet's fire, and dummy mode (#434, #439)
+
+Base main e249203, not rebased. The batch traces #434 and builds #439. The design text came first (5e9ee99), in *Simulation (sim issues S33 …)* in `docs/dev/simulation.md`. #434 changes no code: the trace matches the specs, so its tests are guards. #439 is new behaviour behind a setup flag that is off by default, so it has no red tests. Its proof is that every lane, golden and state hash stays the same with the flag off. Logs are in `local-lane/sim-issues/s33/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #434 | A player house's tank in *guard*, hit by a jumpjet infantry unit hovering at height 500, traced with a ground-only tank and an anti-air tank at 4 and 7 cells, with player-scatter on and off (`trace-434c.txt`). The ground-only tank's firing check is *illegal* (S-0306 claim 23), so retaliation answers *may not* at any distance (S-0309 claim 18). With player-scatter off, claim 19 case 2 does not apply to a house that counts as human-controlled, and the tank stands idle, as in the issue. With the setting on, it scatters. The anti-air tank takes slot 1 (S-0308 Table P row 19) and retaliates within F7, and is *held* beyond it. Every case matches S-0215 claims 18 and 19 and F7 | not a sim fault; guard (6f8a6ff) | None in the sim. The issue was retitled to an own-AI micro (*get out of reach or fall back to anti-air cover*) in `crates/deterministic/ai`. That is not built here and is handed back, to be shared with #443. No request is filed | `retaliate_airborne_jumpjet.rs` (`issue_434_a_ground_only_tank_stands_under_a_hovering_jumpjet`, `issue_434_a_ground_only_tank_scatters_with_the_player_scatter_setting`, `issue_434_an_anti_air_tank_retaliates_within_f7`, `issue_434_an_anti_air_tank_beyond_f7_is_held`) |
+| #439 | A skirmish dummy mode: the AI leaves the person alone, and the person sees the whole map | built (04c3335 sim, 3d85ae1 ai, 87549c4 ui, app and platforms; rustfmt 84d7fe1) | `design: #439`. `GameSetup::dummy`, off by default (`serde(default)`), marks every person-played house in `HouseSetupState` (bit 1 of the person-played byte, through `HouseSetupBytes`; a byte above 3 is refused). Sim gates go through `World::dummy_spares` and `World::dummy_house`. `acquire::candidate` rejects a marked house's objects, `retaliate` answers *may not*, `anger_of` adds no anger, and `drive::attack_obstacle` leaves them alone. `shroud::explored` and `seen` are true for a marked house, and `pending` is false. The AI planner leaves the marked house out of its scans, starts, captures, drains, lifts, domination and strikes. The person may attack, AI houses still fight each other, and cloak and disguise stay hidden. The skirmish setup has a *Dummy mode* box, and native has `--dummy`. Network rooms never offer it, and `client_net` forces it off | sim `dummy_mode.rs` (7 tests); ai `dummy_mode.rs` (`the_ai_leaves_the_person_alone_early`, ignored `the_ai_leaves_the_person_alone_all_game`); `ui::setup` `the_dummy_box_sets_the_game_setup`; app `the_dummy_box_and_flag_set_the_game_setup` |
+
+Formats: the mark is saved and hashed world state, so save goes from 152 to 179 and AI game from 129 to 155. Wire stays 12, because no message changes. `save::FORMAT_VERSION` covers replays, which gain `GameSetup`'s one byte. `net::setup_hash` covers `GameSetup`'s bytes, so a network game's setup hash differs from base's, though its value is the same for every flag-off game on HEAD. No switch is added, and no golden moves.
+
+Lanes compare base e249203 with the batch at 84d7fe1.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). `diff -r` of the two output directories is empty. These rows fail, on base and after:
+- M-0001: 10 of 96;
+- M-0002: 4 of 24;
+- M-0003: 3 of 35;
+- M-0019: 0 of 6;
+- M-0020: 0 of 25 checked;
+- M-0021: 10 of 50.
+
+**Sweeps** (`m6c-*`, `m7a-*`, `m7b-*`). M6c, M7a and M7b over seeds 1 to 16 pass, with smallest minimums 0, 2 and drain 3. Apart from timings, they print the same lines as base (`*-nt.txt`).
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-after-7.txt` to `quick-after-10.txt`). Apart from timings, every line of every seed's output equals base (`quick-*-nt.txt`), so all 36 games end on the same tick with the same winner and the same counts.
+
+**Suites.** The AI suite with its ignored tests passes 364 on base and 366 after: the 364, plus the two new dummy-mode tests. The sim gate with its ignored tests passes 17 on both. `debug_prefix_matches_golden` and `full_run_matches_golden` pass with no golden regenerated, so the flag-off state hashes equal base's. On the final commit these also pass:
+- `cargo test --workspace --no-fail-fast`, apart from base's known `quirks::tests::every_spec_quirk_has_a_switch` (S30 adds the switch);
+- `cargo clippy --workspace --all-targets -- -D warnings`;
+- `cargo fmt --check`;
+- the wasm32 build of glasnost-app;
+- `cargo xtask check`;
+- `cargo xtask gate`.
+
+Seams left:
+- #434's own-AI micro (retreat or fall back to anti-air cover) is handed back. It is AI design, not a spec question.
+- Dummy mode does not filter walls on an obstacle path, crushing, area damage that reaches the person's objects without targeting them, or S-0519's strike redirect to an object at the strike cell. AI orders are not hard-filtered at `orders::issue`.
+- The optional battlefield marker for dummy mode was not built.
+
+The P3 census rule: dummy mode adds a mark to house setup state and reads it in the gates. It makes or moves no back-reference of `World::census`.
