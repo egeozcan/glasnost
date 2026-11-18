@@ -116,6 +116,7 @@ const HOLD: i32 = 450; // nocite: tuning of our own opponent
 const ARRIVED: i64 = 2; // nocite: tuning of our own opponent
 
 /// The eight ways from a cell, clockwise from north.
+// nocite: the eight neighbour directions, not behaviour
 const WAYS: [(i32, i32); 8] = [
     (0, -1),
     (1, -1),
@@ -125,7 +126,7 @@ const WAYS: [(i32, i32); 8] = [
     (-1, 1),
     (-1, 0),
     (-1, -1),
-]; // nocite: the eight neighbour directions
+];
 
 /// A unit sent away from an air attacker.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -438,6 +439,7 @@ fn escape_goal(
     let out = |c: CellXY| dist2(c, ac) > safe * safe;
     // The eight ways out from the attacker, at the safe distance; the one
     // nearest the unit is the shortest way out of reach.
+    // nocite: half the largest value only keeps the cell sums from overflowing
     let s = i32::try_from(safe + 1).unwrap_or(i32::MAX / 2);
     WAYS.iter()
         .filter_map(|&(dx, dy)| {
