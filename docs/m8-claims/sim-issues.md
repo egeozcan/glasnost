@@ -1362,3 +1362,31 @@ The P3 census rule: marks are positions' house numbers, not object back-referenc
 - Not taken: S20's #291 and S18's #344, #339 (perf, not measured), #346, #263 and #252.
 
 The P3 census rule: no fix makes or moves a back-reference of `World::census`. The wave fix reads object state, the held-destination test compares two destinations, and `removing` reuses `leave_list`, which touches the passenger list and weapon numbers.
+
+## Batch S28: gas and the chaos drone on a high bridge (#424)
+
+Base main 1242a50, not rebased. The batch checks S-0613 revision 24's claim 20 (the chaos drone on a high bridge) and claim 19's new bullet (gas made under the deck) against measurement M-0026, on a synthetic map with a synthetic three-cell high bridge and invented rules (`tests/r24_deck_common`). The engine already does what the claims and M-0026's rows say, so every new test is a guard and no code changes. The tests are committed in 5bfff4e and ecfc938. Each was run in the base worktree checked out at its own commit, and all of them pass there (`local-lane/sim-issues/s28/tests-on-base-5bfff4e.txt`, `tests-on-base-ecfc938.txt`). No request is filed, and `quirks.gas_through_bridge_deck` keeps its default.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #424 claim 20 | A deploy-fire area berserk drone on a high bridge's deck, or under it, against M-0026's drone rows and S-0306 claim 3 (a) | guard (5bfff4e) | None needed. Area fire takes the firer's cell, an invisible straight projectile placed at the centre of that cell at the deck height detonates there in its first turn, and the area damage reads the deck layer (S-0306 claim 3 (a), S-0303 claims 4 and 21). The drone makes no particle. Each pulse's animation is made in its cell at the deck height and keeps that position until it ends. The infantry on the deck in the next cell is berserk from the first pulse on, and each pulse sets its time again. The infantry on the ground under it is never reached | `claims_s0613_r24_deck.rs` (`claim_20_a_drone_on_the_deck_pulses_at_the_deck_height`, `claim_20_a_drone_under_the_deck_pulses_at_the_deck_height`) |
+| #424 claim 19 | Gas made on and under a high bridge's deck, against M-0026's deck and under rows | guard (ecfc938) | None needed. Gas made at the deck height, with its first update on an even tick, is 3 below the deck after its first odd-tick move. It sinks 7 leptons per two ticks once v_z is −5, and reaches 5 above the ground 122 ticks after it is made, with the deck 416 above it. Gas made under the deck settles 5 above the ground from its first odd-tick move on. Both hit the ground layer only, never the object on the deck. Every row equals F4 and F5. A virus death on the deck makes its clouds at the dead unit's last position with v_z 0 | `claims_s0613_r24_gas.rs` (`claim_19_gas_made_on_the_deck_follows_m0026`, `claim_19_gas_made_under_the_deck_stays_under_it`, `claim_19_a_virus_death_on_the_deck_makes_its_cloud_at_the_deck_height`) |
+| #424 local lane | A local-lane comparison against M-0026's own setup | skipped | M-0026's Setup says "The cells, the levels and the bridge's extent are not given here", and it gives no tick for the deploy order. Rebuilding the setup would mean guessing the test cell, so the comparison is not built | — |
+
+Formats: no saved, hashed or wire state changes, so save 151, AI game 128 and wire 12 are unchanged and no golden moves.
+
+Lanes compare base 1242a50 with the batch at ecfc938, whose engine code is the base's. Logs are in `local-lane/sim-issues/s28/`.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). `diff -r` of the two output directories is empty (`arena-diff.txt`): M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 and M-0021 10 of 50 failing, as at S25.
+
+**Sweeps** (`m6c-base.txt`/`m6c-after.txt`, and likewise for m7a and m7b). M6c, M7a and M7b over seeds 1–16 pass. Their seed and summary lines are identical to base (smallest minimum 0, 2 and drain 3; `*-lines.txt`).
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-after-7.txt` to `quick-after-10.txt`). All 36 games end on the same tick with the same winner as base (`quick-*-over.txt`).
+
+**Suites.** The AI suite with its ignored tests passes 364 on base and on the batch (`ai-suite-base.txt`, `ai-suite-after.txt`). The sim gate with its ignored tests passes 17 on both (`sim-gate-base.txt`, `sim-gate-after.txt`), with no golden regenerated.
+
+Seams left:
+- The fixture's weapon has the omni-fire flag (S-0310 claim 2). Without it, the deploy-fire drone firing at its own cell (S-0517 claim 2) answers *not facing* for every processing and never fires. The direction from its reference point to its own cell's centre is the degenerate one. This is S-0310's and S-0204's question, not claim 20's, and it is not traced here.
+- Claim 19's `measurable` bullet, objects under the bridge being hit, is checked by both gas tests: the crusher on the ground in the cloud's cell is hit. Three `unmeasured` bullets have no test here: a cloud over water under the bridge, a successor made at the deck height, and objects on the deck while the cloud is still level with it. The deck test asserts no deck hit in any update, but does not make sure a hit falls due before the first odd-tick move.
+
+The P3 census rule: the batch changes no simulation code, so it makes or moves no back-reference of `World::census`.
