@@ -105,7 +105,7 @@ fn draw(
     (scene, items)
 }
 
-fn sprite_look() -> ProjectileLook {
+pub(super) fn sprite_look() -> ProjectileLook {
     ProjectileLook {
         rotates: true,
         shadow: true,
@@ -349,7 +349,7 @@ fn dotted_lines() {
 /// target-laser flag when `laser`) on an empty map of 24 with the Shell
 /// art `look`: a cart of house 0 and an unarmed walker of house 1 three cells
 /// apart.
-fn shell_live(
+pub(super) fn shell_live(
     look: ProjectileLook,
     laser: bool,
 ) -> (

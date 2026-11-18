@@ -9343,6 +9343,129 @@ fn a_mobile_drawn_again_follows_the_owner_colour_options() {
 }
 
 // ---------------------------------------------------------------------------
+// The newcomers of one tick in the air layer (#432)
+
+/// spec: S-0616 claim 30 and S-0102 claims 3 and 7 (an object entering the
+/// air layer goes to the end of its list, so the particles, projectiles and
+/// voxel pieces made in one tick are drawn in the order they were made,
+/// interleaved with one another by that rule and not grouped by kind; one
+/// counter gives out their object numbers as they are made)
+#[test]
+fn newcomers_of_one_tick_enter_the_air_layer_in_object_order() {
+    use super::slots::Layer;
+    use glasnost_num::{F32, F64};
+    use glasnost_sim::gas::{Particle, ParticleSystem};
+    use glasnost_sim::pieces::Piece;
+    let (mut live, ..) =
+        super::projectile_tests::shell_live(super::projectile_tests::sprite_look(), false);
+    let mut shot = None;
+    for _ in 0..400 {
+        live.step();
+        if let Some(p) = live.world.projectiles.values().next() {
+            shot = Some(p.clone());
+            break;
+        }
+    }
+    let shot = shot.expect("the cart fires");
+    let pos = shot.pos;
+    // Nothing of the three kinds in play, and so none in the air layer.
+    live.world.projectiles.clear();
+    live.world.gas.systems.clear();
+    live.world.pieces.clear();
+    live.after_tick();
+    let entrants = |live: &Live| -> Vec<Entrant> {
+        live.layer_list(Layer::Air)
+            .into_iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    Entrant::Particle(_) | Entrant::Projectile(_) | Entrant::Piece(_)
+                )
+            })
+            .collect()
+    };
+    assert!(entrants(&live).is_empty());
+    // Two systems, then, in the order of making: a projectile, a particle,
+    // a piece, a particle of the other system and a projectile.
+    let systems = [live.world.new_id(), live.world.new_id()];
+    let made: Vec<ObjectId> = (0..5).map(|_| live.world.new_id()).collect();
+    let particle = |id: ObjectId| Particle {
+        id,
+        type_index: 0,
+        pos,
+        vel: [0; 3],
+        defl: [F32(0); 2],
+        life: 100,
+        countdown: 0,
+        stage: 1,
+        dead: false,
+        speed: F32(0),
+        dir: [F32(0); 3],
+        fvel: [F32(0); 3],
+        step: [0; 3],
+        advance: 0,
+        translucency: 0,
+        colour: Default::default(),
+        origin: pos,
+        aim: pos,
+    };
+    for (key, id) in [(systems[0], made[1]), (systems[1], made[3])] {
+        live.world.gas.systems.insert(
+            key,
+            ParticleSystem {
+                type_index: 0,
+                owner: None,
+                pos,
+                lifetime: 100,
+                ending: false,
+                particles: vec![particle(id)],
+                owner_object: None,
+                owner_offset: [0; 3],
+                target: pos,
+                timer: F32(0),
+                sparks: 0,
+                target_object: None,
+                looped: Default::default(),
+            },
+        );
+    }
+    for id in [made[0], made[4]] {
+        live.world.projectiles.insert(
+            id,
+            glasnost_sim::combat::state::Projectile { id, ..shot.clone() },
+        );
+    }
+    live.world.pieces.insert(
+        made[2],
+        Piece {
+            type_index: 0,
+            house: None,
+            counter: 100,
+            pos,
+            flight: [F32(0); 3],
+            velocity: [F32(0); 3],
+            spin: F64::ZERO,
+            axis: [0; 3],
+            turns: 0,
+            reversed: false,
+            looped: false,
+        },
+    );
+    live.after_tick();
+    assert_eq!(
+        entrants(&live),
+        [
+            Entrant::Projectile(made[0]),
+            Entrant::Particle(made[1]),
+            Entrant::Piece(made[2]),
+            Entrant::Particle(made[3]),
+            Entrant::Projectile(made[4]),
+        ],
+        "in the order they were made"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // The layers synced after a tick are not synced again at its redraw (#146)
 
 /// design: render (#146): a move marker made after the tick's layers were
