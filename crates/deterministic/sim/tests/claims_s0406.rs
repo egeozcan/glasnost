@@ -372,7 +372,7 @@ fn claim_15_no_buildup_sprite() {
 #[test]
 fn claim_17_placed_buildup_twice_off() {
     let mut r = rules();
-    r.globals.quirks.placed_buildup_twice = false;
+    r.globals.quirks.buildup_twice_without_break_off = false;
     let mut w = game(&r);
     let (id, t) = lone_placed(&mut w, "HUT");
     assert!(w.obj(id).unwrap().beh.ready_mark);
@@ -886,7 +886,7 @@ fn claim_11_non_wall_fill_enters_as_placed() {
 #[test]
 fn claim_11_non_wall_fill_buildup_twice_off() {
     let mut r = rules();
-    r.globals.quirks.placed_buildup_twice = false;
+    r.globals.quirks.buildup_twice_without_break_off = false;
     let (w, fill) = non_wall_fill(&mut r);
     for id in fill {
         assert!(w.obj(id).unwrap().beh.ready_mark);

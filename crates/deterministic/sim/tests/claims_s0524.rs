@@ -1648,7 +1648,7 @@ fn claim15_restored_zero_delay_range_sets_the_mark_at_its_first_eligible_turn() 
 #[test]
 fn claim15_restored_replacement_follows_the_placed_buildup_twice_switch() {
     let mut r = ruleset();
-    r.globals.quirks.placed_buildup_twice = false;
+    r.globals.quirks.buildup_twice_without_break_off = false;
     let k = restored_construction(r, Some(10));
     assert!(k.mark_at_entry, "off: the mark is set at entry");
     let u = k

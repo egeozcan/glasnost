@@ -1017,8 +1017,8 @@ fn put_with(
 /// *construction* queued; a deploy (`deployed`) also sets the ready mark.
 pub fn begin_construction(w: &mut World, id: ObjectId, deployed: bool) {
     let t = w.tick;
-    // spec: S-0406 Edge cases (quirks.placed_buildup_twice off: a place order sets the ready mark at entry, as a deploy does)
-    let mark = deployed || !w.rules().quirks.placed_buildup_twice;
+    // spec: S-0406 Edge cases (quirks.buildup_twice_without_break_off; the switch's old reading is kept until its revision-19 behaviour is built: off sets the ready mark at entry, as a deploy does)
+    let mark = deployed || !w.rules().quirks.buildup_twice_without_break_off;
     // spec: S-0108 claim 6 (entering construction leaves the idle body)
     crate::econ::body::leave_idle(w, id);
     if let Some(o) = w.obj_mut(id) {
@@ -1195,7 +1195,7 @@ fn wall_fill(w: &mut World, t: u32, p: &PlaceType, house: HouseId, cell: CellXY,
             // spec: S-0406 claim 11 (each filling wall is a building created under S-0202 claim 10: one creation draw)
             let id = crate::objects::create(w, Kind::Building, t, Some(house));
             // spec: S-0406 claim 11 (a filling building passes no further test; it does not fill further)
-            // spec: S-0406 claims 11 and 17 (a filling building of a type that is not a wall type enters in its construction state exactly as the building the place order names: the ready mark clear at entry; quirks.placed_buildup_twice off sets it, Edge cases); S-0406 claim 16 (facing 0)
+            // spec: S-0406 claims 11 and 17 (a filling building of a type that is not a wall type enters in its construction state exactly as the building the place order names: the ready mark clear at entry; quirks.buildup_twice_without_break_off, Edge cases); S-0406 claim 16 (facing 0)
             put_with(w, id, c, false, false, 0);
         }
     }
