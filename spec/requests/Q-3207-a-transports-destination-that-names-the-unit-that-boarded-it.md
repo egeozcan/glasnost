@@ -1,9 +1,9 @@
 ---
 id: Q-3207
 title: A closed transport whose destination names the unit that has just boarded it
-status: open
+status: answered
 related: [S-0507, S-0312, S-0207, S-0503, S-0215]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need
