@@ -252,8 +252,8 @@ pub struct Quirks {
     // spec: S-0107 claim 22
     #[serde(default = "on")]
     pub two_sound_cues: bool,
-    /// A death request turned down because the die-1 or die-2 entry has no image frames leaves the unit in play with its current sequence; off: the resulting death kind counts as completed on the death tick.
-    // spec: S-0107 claim 17
+    /// A death request turned down because the die-1 or die-2 entry has no image frames leaves the unit in play with its current sequence, and it regains a health of 1 at its next update (S-0107 claim 17a); off: the resulting death kind counts as completed on the death tick.
+    // spec: S-0107 claims 17 and 17a
     #[serde(default = "on")]
     pub refused_death_keeps_unit: bool,
     /// The infantry house clears when no side position stays taken.
@@ -1056,6 +1056,22 @@ pub struct Quirks {
     // spec: S-0312 claim 16
     #[serde(default = "on")]
     pub crash_death_weapon_twice: bool,
+    /// In a high-bridge cell a crash end puts a vehicle on the terrain beneath the deck and an
+    /// infantry unit at the deck's height without the on-deck state, however the fall ended; off:
+    /// at height 0 above the surface the fall ended over (on the deck after crossing it).
+    // spec: S-0312 claim 16
+    #[serde(default = "on")]
+    pub crash_end_bridge_height: bool,
+    /// A crashed infantry unit whose forced air-death-end request is turned down stays in play
+    /// for good with a health of 1 and no corpse; off: it leaves play at its crash end, no corpse.
+    // spec: S-0312 claim 16
+    #[serde(default = "on")]
+    pub refused_air_death_end_keeps_unit: bool,
+    /// A falling jumpjet infantry unit regains a health of 1 by S-0107 claim 17a, so it can be
+    /// hit and killed again; off: the test does not apply from its killing hit to its crash end.
+    // spec: S-0107 claim 17a
+    #[serde(default = "on")]
+    pub falling_infantry_regains_health: bool,
     /// A destroyed building takes up to two ranged draws whose results are not used.
     // spec: S-0312 claim 19
     #[serde(default = "on")]
@@ -2624,6 +2640,9 @@ impl Default for Quirks {
             occupant_experience_next_in_turn: true,
             zero_kill_value_caps: true,
             crash_death_weapon_twice: true,
+            crash_end_bridge_height: true,
+            refused_air_death_end_keeps_unit: true,
+            falling_infantry_regains_health: true,
             building_smudge_discarded_draws: true,
             death_weapon_unplaced_projectile: true,
             bomb_mark_water_death_on_deck: true,
@@ -3555,6 +3574,15 @@ impl Quirks {
             ),
             ("zero_kill_value_caps", self.zero_kill_value_caps),
             ("crash_death_weapon_twice", self.crash_death_weapon_twice),
+            ("crash_end_bridge_height", self.crash_end_bridge_height),
+            (
+                "refused_air_death_end_keeps_unit",
+                self.refused_air_death_end_keeps_unit,
+            ),
+            (
+                "falling_infantry_regains_health",
+                self.falling_infantry_regains_health,
+            ),
             (
                 "building_smudge_discarded_draws",
                 self.building_smudge_discarded_draws,
