@@ -128,6 +128,10 @@ pub fn drain_target(w: &World, d: ObjectId, b: ObjectId) -> bool {
     if w.allied(dobj.owner, bo.owner) || !drain::drainable(w, b) || drain::being_drained(w, b) {
         return false;
     }
+    // design: #439 (dummy mode: a drainer never drains a dummy-mode house's building)
+    if w.dummy_spares(dobj.owner, bo.owner) {
+        return false;
+    }
     let target = Some(Target::Object(b));
     let slot = weapon::choose_slot(w, d, target);
     let Some(t) = w.rules().unit(dobj.kind, dobj.type_index) else {

@@ -594,6 +594,17 @@ pub(crate) fn dist2(a: CellXY, b: CellXY) -> i64 {
     dx * dx + dy * dy
 }
 
+/// The cell of house `h`'s first building by object number, else of its
+/// first object: where its start stands at game start (as
+/// [`Script::set_starts`] finds the house's own; #439).
+fn first_objects_cell(w: &World, h: HouseId) -> Option<CellXY> {
+    let mine = || w.objects.values().filter(move |o| o.owner == Some(h));
+    mine()
+        .find(|o| o.kind == Kind::Building)
+        .or_else(|| mine().next())
+        .map(|o| o.pos.cell())
+}
+
 /// An object the free-gap test looks at ([`Script::known_objects`]).
 #[derive(Clone, Debug)]
 struct Known {
@@ -1060,6 +1071,19 @@ impl Script {
                 .min_by_key(|&c| (dist2(c, h), c.y, c.x))
         });
         self.targets = starts.iter().copied().filter(|&c| Some(c) != own).collect();
+        // design: #439 (dummy mode: the start nearest a dummy-mode house's first objects is no start to visit)
+        let spared: Vec<CellXY> = (0..w.houses.len())
+            .map(|i| HouseId(i as u8))
+            .filter(|&h| w.dummy_spares(Some(self.house), Some(h)))
+            .filter_map(|h| first_objects_cell(w, h))
+            .filter_map(|at| {
+                starts
+                    .iter()
+                    .copied()
+                    .min_by_key(|&c| (dist2(c, at), c.y, c.x))
+            })
+            .collect();
+        self.targets.retain(|c| !spared.contains(c));
         if let Some(h) = home {
             self.targets.sort_by_key(|&c| dist2(c, h));
         }
@@ -2979,6 +3003,8 @@ impl Script {
                     && x.role == glasnost_sim::world::HouseRole::Player
                     && !x.removed
                     && !glasnost_sim::econ::victory::defeated(w, h)
+                    // design: #439 (dummy mode: a dummy-mode house is no enemy house the AI plays against)
+                    && !w.dummy_spares(Some(self.house), Some(h))
             })
             .count()
     }
@@ -3044,7 +3070,9 @@ impl Script {
                 // The house's view of the alliance, as the sim's targeting reads it (S-0309 claim 18).
                 let enemy = owner != self.house
                     && !me.allied_with(owner)
-                    && h.role == glasnost_sim::world::HouseRole::Player;
+                    && h.role == glasnost_sim::world::HouseRole::Player
+                    // design: #439 (dummy mode: a dummy-mode house's objects are no enemy the AI sees)
+                    && !w.dummy_spares(Some(self.house), Some(owner));
                 let c = o.pos.cell();
                 // A cloaked enemy the house does not sense is not seen (S-0516 claim 28: not drawn for it); a building by any explored cell of it (`crate::in_view`, #37).
                 let seen = || crate::in_view(w, self.house, o.id);
