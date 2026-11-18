@@ -1362,3 +1362,55 @@ The P3 census rule: marks are positions' house numbers, not object back-referenc
 - Not taken: S20's #291 and S18's #344, #339 (perf, not measured), #346, #263 and #252.
 
 The P3 census rule: no fix makes or moves a back-reference of `World::census`. The wave fix reads object state, the held-destination test compares two destinations, and `removing` reuses `leave_list`, which touches the passenger list and weapon numbers.
+
+## Batch S29: the other overlay writers, nested spawners and the seams left open
+
+Base main c481a2b, not rebased. The batch takes the seams earlier batches handed back, in the brief's order: A6c's rest of #284, S18's #344 and #346, S27's weak test and F4's subtraction in the fire point. It hands back #263, #252, #291 and #339 untouched. The design text came first (d40b8a0), in *Simulation (sim issues S29 …)*. Each test was committed before its fix. Every red was shown in a separate base worktree checked out at the test commit (`red-<commit>.txt` in `local-lane/sim-issues/s29/`).
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #284 (a) | `overlays::end_marker`'s pieces, `vein_placement` (the placed cell and its edge neighbours) and `rebuild_veins` wrote a cell's overlay without ending its crate entries. A map's own crate or a placed crate kept its place or its map-crate entry after the overlay changed | fixed (026f266; test 1ed7be1, 4 red) | S-0520 r17 claims 11 and 29: each writer calls `crates::overlay_changed` before the write | `overlays.rs` tests on the shared `crates::fixture` (new in `crates.rs`) |
+| #284 (b) | `bridges::low::write_strip`, `bridges::high::lose` and `bridges::hut::place_section` did the same | fixed (5889730; test d8bae0f, 3 red) | As (a) | tests in `bridges/low.rs`, `bridges/high.rs` and `bridges/hut.rs` |
+| #284 (c) | `econ::resource::empty_cell` (through `take_all`) and `econ::sell::wall_sale` removed a crate-flagged resource or wall type, which S-0520's Edge cases allow as a map's own crate, and left its entry | fixed (dfe9656; test c206098, 2 red) | As (a) | tests in `econ/resource.rs` and `econ/sell.rs` |
+| #284 (rest) | The other writers: `end_marker`'s end row, `econ::placement::put_wall`, `econ::resource::new_resource_cell`, the data write of `crates::put` and `load`'s grid copy. `crush::remove_overlay` and `overlays::place_overlay` already forget | already right | Each writes only to a cell with no overlay, keeps the overlay type, or runs before any crate state exists (design list) | — |
+| #344 | S18 capped each object's slot and slave lists, but a slot object that is itself a spawner fills its own slots, so the counts multiply: 100 slots of a type with 100 slots made 10101 objects | fixed (1cbc320; test 72dff49, 2 red; lint 96d3dfa, clippy 8f4b1e2) | `design: #344`: `objects::Chain` counts the creation set's members made so far, the root included, and a creation set holds at most `objects::MAX_CREATION_SET` (1000). A full set gives a spawner only the slots it filled and a slave master only the slaves it made. The importer warns for every type whose full creation set is above the limit (`objects::creation_set_limits`). Regeneration starts a set of its own | `creation_count_limit.rs` (`issue_344_nested_spawners_do_not_multiply`, `issue_344_slave_masters_in_slots_do_not_multiply`) |
+| #346 | A ground count at (1, 0) for a vehicle on the bridge deck | not reproduced | On base c481a2b neither a deck move nor an enter from the deck sets a ground flag. The layer-aware `claim_track` (bdda544, #181) landed after the audit commit and is the likely fix (not bisected). Guards only (60d0b31) | `absorb_from_deck.rs` (`issue_346_a_vehicle_on_the_deck_sets_no_ground_flag`, `issue_346_a_vehicle_entering_from_the_deck_sets_no_ground_flag`) |
+| S27's weak test | `an_unread_component_keeps_the_free_mark_early` passed on base by the draw at seed 1 | test-only (5e5d7ae) | The test runs seeds 1 to 5. A control with house 1 starting at 0 must take the same draws. With the rule removed (check commit 443c79b, never merged) it fails at seed 1 (7 raw values against 6) | `claims_s0009_r45_header_marks.rs` |
+| F4's seam | `combat::position::claim1_point` formed S-0204 F3's X and Y with a plain subtraction, which panics in a debug build when the difference leaves i32 | fixed (714de0a; test 740c7db, 1 red) | S-0205 claim 1: an integer result outside the range wraps, and neither S-0313 nor S-0204 states a clamp. Both differences use `wrapping_sub`, as a release build already did. The test was narrowed after the fix (c860486) so that it asserts only a wrapped difference inside F3's decided range. It still fails with the fix undone (check commit a197a72, never merged) | `position.rs::aim_difference_tests` |
+| #263 | The moving-blocker variant at T5 and the switch-off turn | not taken | Handed back untouched. The train refresh rule (S-0212 claim 20's last sentence), listed as buildable, is **still not built** | — |
+| #252, #291, #339 | The infantry crash end; S20's #291; `linked::recruit` perf | not taken | Handed back untouched. #339 was not measured | — |
+
+Of the new tests, the two #346 guards and S27's control pass on base. All the others fail on the base code, 12 in all: 9 for #284, 2 for #344 and 1 for F4. S27's test fails only with its rule removed.
+
+Formats: no fix adds saved or hashed state. `Chain` lives only while a creation set is being made. So save 152, AI game 129 and wire 12 are unchanged. No switch is added. No golden moves.
+
+Lanes compare base c481a2b with the batch at 8f4b1e2. Logs are in `local-lane/sim-issues/s29/`.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). Every output file is byte-identical to base, with these rows failing:
+- M-0001: 10 of 96;
+- M-0002: 4 of 24;
+- M-0003: 3 of 35;
+- M-0019: 0 of 6;
+- M-0020: 0 of 25;
+- M-0021: 10 of 50.
+
+**Sweeps** (`m6c-*`, `m7a-*`, `m7b-*`). M6c, M7a and M7b over seeds 1 to 16 pass. They print the same lines as base apart from timings.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games). All 36 games end on the same tick with the same winner as base.
+
+**Suites.** The AI suite with its ignored tests passes 364 before and after. The sim gate with its ignored tests passes 17 before and after. On the final commit these also pass:
+- `cargo test --workspace --no-fail-fast`;
+- `cargo clippy --workspace --all-targets -- -D warnings`;
+- `cargo fmt --check`;
+- the wasm32 build of glasnost-app;
+- `cargo xtask check`;
+- `cargo xtask gate`.
+
+Seams left:
+- #263: the train refresh rule of S-0212 claim 20 is buildable but not built, and its T5 and switch-off tests are not written.
+- #252, #291 and #339 are not taken.
+- #346 was not bisected to bdda544.
+- What S-0204 F3 gives for |X| or |Y| at or above 2²⁴ stays S-0204's open question. The wrapped difference is only its input.
+- A refilled slot or regenerated slave starts a creation set of its own, so each refill has its own limit of 1000, not the root's.
+
+The P3 census rule: crate places and map crates are not object back-references, so the overlay writers forget nothing in the census. The creation-set limit makes fewer slot objects and slaves. Each one made still goes through `spawn::created_in` and `census::forget` as before. No fix makes or moves a back-reference of `World::census`.
