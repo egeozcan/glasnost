@@ -2346,6 +2346,29 @@ The twenty-seventh batch builds S-0009 claim 29 (r45), the rest of #368: header 
 
 **Census (P3).** Marks are not object back-references, so nothing forgets the census.
 
+## Simulation (sim issues S30: S-0009 r47, current places and the answers to Q-3213 to Q-3215)
+
+The thirtieth batch builds S-0009 r47's changes to claim 29 and the claims it leans on. They are the new Terms entry *current place*, claim 29's *After the cleanup* with its quirk `quirks.cleanup_shifts_start_marks`, claim 21's hand-over to the References rule after a cleanup removal, and the lead's answers to Q-3213, Q-3214 and Q-3215, which replace S27's interim rules above. Tests on synthetic maps come before each fix. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S30*.
+
+**Current places (S-0009 Terms, claim 29).** `starts::current_place(w, h)` gives house h's current place: none for a house the cleanup removed. With `quirks.cleanup_shifts_start_marks` on (the original), it is h minus the number of removed houses before h in house order. Off, it is h. Only `load::cleanup` sets `House::removed`, so the place is derived from the houses and needs no new state. `starts::house_at_place(w, m)` is the inverse: the house whose current place is m, or none. Before the cleanup every current place is the house number, so the early phase is unchanged.
+
+**Marks after the cleanup (claim 29, *After the cleanup*; Q-3213).**
+
+- Switch on: the cleanup changes no mark. A mark is then read by current places in the late phase and for the References rule for the rest of the game. That includes the marks the late phase's pairs give. When the cleanup removes the neutral house and keeps the special house, a mark equal to the neutral house's number names the special house, and a mark one higher names no house. The special house holds every position marked with the neutral house's number and starts at the highest-numbered of them. With none, it is assigned anew, and the position it took early counts as taken.
+- Switch off (the fixed behaviour, which is S27's interim rule): current places never change. The cleanup sets every mark equal to a removed house's number to −1, and a late pair that gives that number again leaves the position taken by no player.
+- In both positions a house holds a position whose mark is its current place (`starts::highest_held` takes a place, not a house number), and `starts::assign` writes the house's current place on the position it gives.
+- Claim 29 applies these rules on every map, not only on maps with header pairs beyond the eighth. Without such pairs the marks are the early phase's choosers' and assignments' numbers, carried as before.
+
+**References (claims 21 and 29).** r47's claim 21 hands "player at position X" to the References rule on a map with N_h ≥ 9 and on any map once the cleanup has removed a house. `World::start_marks` is therefore set after the late phase when N_h ≥ 9 or when a house was removed, and `starts::player_at` names `house_at_place(mark X)`. That house may be passive, and there is none when no house has that place. S-0009's *Changes for other specs* asks S-0011 claim 23 and `quirks.entered_by_country_only` to say the same. `mp_triggers::resolve_house` and the switch's off path in `triggers::entered_by` already go through `player_at`, so they need no code change while S-0011 awaits its revision.
+
+**Positions numbered N or above (Q-3215).** A mark there is kept in the marks, so the References rule reads it for each of positions A … H whatever N is. No house holds a position by it: `highest_held` and `assign` look only below N, so a house with no marked position below N is assigned anew. `load` still notes the mark as the departure of claim 29's first unspecified case.
+
+**One resolution (`quirks.double_start_resolution` off; Q-3214).** The pairs are applied once, by the early phase's precedence: marks start at −1, the applied pairs set theirs (an unread component keeps −1), then each non-passive chooser's number wins on its chosen position. The one list is built after the second recalculation pass and before the cleanup, where list 3 stood. The resolution (holders, then `assign`) runs against it, also before the cleanup, so a neutral or special house that is not passive takes a position there even if the cleanup removes it later. Then the cleanup runs, *After the cleanup* applies to the marks, every kept non-passive house takes the highest-numbered position below N its current place holds, and a house that then holds none is assigned against the same list. That assignment's draw comes after the cleanup's and before the starting units. Where the list sits between the second pass and the cleanup is design, since the switch's fixed behaviour says only "after the terrain is loaded" and "before the cleanup".
+
+**Formats.** No new state is added. The marks of positions N and above, the current places after a removal and the one resolution's order change what a game started from a setup, or a saved game played on, comes to. The save format goes to 173 and the AI game format to 149 on the batch.
+
+**Census (P3).** Marks and current places are not object back-references, so nothing forgets the census.
+
 ## Simulation (sim issues S26: bunkers and riders for the lift, and S25's seams)
 
 The twenty-sixth batch of the game-logic audit builds S-0607 r52's answers to Q-3182 and Q-3183 (#285) and takes S25's seams. Each change of behaviour has a test on synthetic data committed before it. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S26*.
