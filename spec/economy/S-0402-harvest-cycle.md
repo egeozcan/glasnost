@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 84
+revision: 86
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-13
+approved-on: 2026-11-18
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130, Q-1759, Q-1870, Q-1990, Q-3062, Q-3063]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130, Q-1759, Q-1870, Q-1990, Q-3062, Q-3063, Q-3254]
 supersedes: []
 ---
 
@@ -819,6 +819,64 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     *finishing* row in the tick after it became *finishing*. The docking and payment animations
     never delay the harvester. Back in *harvest*, the harvester starts seeking and drives to its
     remembered cell (claim 3).
+
+    *What a docking shows.* The three animations take their names only from the building's own art
+    (Import mapping). Nothing else gives them a name: no other art key or art section, and nothing
+    that the harvester's type or the dock names. A start whose chosen variant names nothing plays
+    nothing and changes no row or timing above. Our engine copies this and adds no animation of its
+    own. For a refinery whose art names only the payment animation of the three:
+    - the start row plays nothing on the refinery.
+    - the payment animation enters play at the first payment row, unless one is still running
+      from an earlier docking (below). A later payment row neither stops nor restarts it while it
+      plays. Once it has ended on its own (S-0109), its slot is empty
+      (S-0108), so the next payment row starts it again, with new creation draws. The empty-load row
+      removes it if it is still playing. Each start is therefore drawn from its start until it ends
+      on its own or the empty-load row removes it, whichever comes first. It is drawn from a
+      payment up to the empty-load row only when its own run lasts at least that long.
+    - a harvester that docks with an empty load starts no animation on the refinery that is ever
+      drawn: the payment animation that the empty-load row starts leaves play before it is drawn
+      (above). A payment animation still running from an earlier docking, as after a harvester
+      that left the unloading state out of contact (the first row), stays drawn until this
+      harvester's empty-load row removes it.
+    - the *finishing* harvester waits for no unloading animation, unless one is still running from
+      an earlier start (above). When none is running, it takes its next *finishing* row in the tick
+      after it became *finishing*.
+
+    Unloading never changes the refinery's fill level. A payment adds credits to the owner's
+    balance only (claim 12) and stores nothing in the building, so the stored amount and the fill
+    level of S-0108 claim 15 stay as they were, and so does which fill-level slot runs. Among the
+    animations drawn on the refinery, its fill-level slot and the objects that enter play, the only
+    changes that unloading makes are the slot starts and stops above, the swap of S-0108 claim 12
+    that a start in the condition opposite to the building's slot condition makes first (above),
+    and the smoke systems of the smoke events, which the building makes when its type names a
+    refinery smoke type (S-0616 claim 1). On the harvester, a player sees its turn to map east, its
+    body drawn with its type's deployed image type (above) and, while they are shown (S-0111), its
+    resource pips. A payment removes the whole amount of one tiberium from the load, so neither
+    part of the pip row grows; whether the row shows fewer pips after a payment is S-0111 claim
+    14's rounding.
+    - Backing: `measurable` by scenario H29 for art that names only the payment animation: the
+      start row playing nothing, the payment animation's starts, restarts and removal, the empty
+      docking with nothing still running, the unchanged fill level, the changes among the
+      recorded objects and the harvester's pips. The *finishing* harvester's next row is also
+      `measurable` by H1 variant e run (iii). `unmeasured` that no source but the building's own
+      art gives the three animations a name: this is a claim of absence, and a scenario can show
+      only that a given other source names nothing that plays, not that no source does. Also
+      `unmeasured` for a payment animation still running from an earlier docking: H29 runs only
+      uninterrupted dockings, and no ordinary-input run is set up here that breaks a docking off
+      out of contact while its payment animation plays.
+    - Confidence: high for the start row playing nothing for this art, for the payment animation
+      being neither stopped nor restarted by a later payment row while it plays and started again
+      once it has ended, for its removal by the empty-load row, for an empty docking with no
+      animation running from an earlier docking showing none of the three animations, for the
+      unchanged fill level, and for the smoke systems and slot starts and stops being the only
+      changes among the recorded objects on a refinery above the yellow threshold whose slot
+      condition every start matches (H29's conditions); the swap of a start in the opposite
+      condition at the ratings given above; medium for no source but the building's own art
+      naming the three animations, and for the earlier docking's payment animation staying drawn
+      until the empty-load row, which follows from the rows above; high for the harvester's body
+      drawn with its deployed image type (H28, H29) and for neither part of its pip row growing at
+      a payment (H29); medium for the *finishing* harvester's next row in the following tick, as
+      for the delays of the two *finishing* rows above.
 
     *Turning body.* In every row above that starts a queued behaviour "if ready to change", a body
     that is still turning counts as moving (S-0215, claim 11), unless one of that claim's exceptions
@@ -3546,6 +3604,54 @@ is wrong). *Runs:* 3.
 - *Tool:* tick-labelled screen capture and the read-only recorder; ordinary orders only. This is
   a proposal for the oracle; no harness change is assumed beyond what the recorder already lists.
 
+**H29. A refinery whose art names only the payment animation (claim 11; Q-3254).**
+- *Setup:* as H28: a purpose-made two-player map with a small ore field, stock data otherwise, with
+  the director and mods off, at a fixed seed, and one refinery-flag, dock-unload refinery built by a
+  place order at the start of the run. Of the three animations, the refinery's test art names only
+  the payment animation, with its normal name only, and the building stays above the yellow
+  threshold. The payment animation is a purpose-made animation type that plays once, with a
+  distinguishable image and a descending random-rate pair whose converted bounds differ
+  (*d*<sub>1</sub>′ ≠ *d*<sub>2</sub>′, S-0109 claim 3), so that each creation takes exactly one
+  ranged draw. It comes in two versions: *long*, whose run at its shortest stage delay lasts more
+  than two payment intervals plus 10 ticks, and *short*, whose run at its longest stage delay lasts
+  at most half a payment interval. The test rules set the dump rate so that the payment interval
+  max(1, ⌈900 × *D*⌉) is known and at least 20 ticks, and the run records it. The art gives the four
+  fill-level slots distinguishable purpose-made images. As in H28, the refinery's type names a
+  refinery smoke type with one set smoke point, and the harvester type names a deployed image type
+  with a distinguishable image.
+- *Procedure:* with each version, (a) let a harvester with a load of one tiberium dock and unload.
+  (b) Do the same with a load of two tiberiums, as in H6 part a. (c) Give a newly produced
+  harvester, its load empty, an explicit enter order to the refinery, as in H28 part b.
+- *Observable:* per tick, the objects that enter play in the order the read-only recorder lists
+  them, and the scenario random stream's state before and after the harvester's processing; per
+  captured frame, every animation drawn on the refinery, identified by its image, and the
+  fill-level slot shown; the harvester's drawn body image and its resource pips, the harvester
+  being kept selected; the ticks of each payment, of the change to *finishing* and of the contact's
+  end.
+- *Expected:* in every run, no animation but the fill-level slot is drawn on the refinery from the
+  contact up to the first payment's tick, and the fill-level slot is that of level 0 (S-0108
+  claim 15) in every captured frame. A smoke system enters play in each payment tick and in the
+  empty-load tick. The harvester's next row comes 1 tick after its change to *finishing*, its body
+  shows the deployed image type's image while it unloads, and its pips change only in payment
+  ticks, with neither part of the row growing. Long version: in (a) and (b) one
+  payment animation enters play, with its one draw, in the first payment tick, and no payment
+  animation enters play in (b)'s second payment tick or in the empty-load tick; it is drawn in
+  every captured frame from its first one up to the empty-load tick, and is gone at the end of that
+  tick. Short version: in (a) and (b) a payment animation enters play with its draw in each payment
+  tick; in (b) none is drawn between the end of the first one and the second payment tick; in the
+  empty-load tick a further payment animation enters play with its draw and is never drawn. In (c),
+  with either version, the empty-load tick has a smoke system and then a payment animation with its
+  draw enter play, and no captured frame shows a payment animation.
+- *Falsified by:* any animation drawn on the refinery other than the payment animation and the
+  fill-level slot; any change of the fill-level slot; in the long version, in (a) or (b), a payment
+  animation entering play in (b)'s second payment tick or in that part's empty-load tick, or the
+  animation missing from a frame before the empty-load tick or drawn after it; in the short
+  version, no new payment animation in (b)'s second payment tick; in (c), a payment animation
+  drawn; a *finishing* that lasts more than 1 tick; a pip change outside a payment tick, or a part
+  of the pip row that grows.
+- *Runs:* 1 for each version and part, 6 in all.
+- *Tool:* tick-labelled screen capture and the read-only recorder; ordinary orders only, as in H28.
+
 ## Open questions
 
 - (Claim 17, Q-1759.) Q-1759 questions 1 to 4 are settled in S-0207 claim 28 (its answer
@@ -3625,9 +3731,6 @@ is wrong). *Runs:* 3.
   the counter increase and the processing within a turn (claim 5); scenario H1 settles both.
 - Further refusals in a refinery's answer to a contact request for harvesters, and whether a
   refinery that is being erased refuses (claim 10; scenario H4 part h).
-- What else the building does at each payment besides playing its payment animation (claim 11).
-  No observable effect is known, and scenario H1 would show one as a difference in its balance or
-  timing runs.
 - Weeders and the harvester truce are out of scope (Edge cases).
 - Whether H14 can reliably arrange every refusal precondition before the sale independently
   releases contact. The arrival event, acceptance and scatter rules are specified in claim 10.

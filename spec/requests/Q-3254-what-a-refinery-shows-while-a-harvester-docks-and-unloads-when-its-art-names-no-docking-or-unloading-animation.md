@@ -1,9 +1,9 @@
 ---
 id: Q-3254
 title: What a refinery shows while a harvester docks and unloads when its art names no docking or unloading animation
-status: open
+status: answered
 related: [S-0402, S-0108]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
