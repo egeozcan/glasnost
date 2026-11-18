@@ -300,6 +300,8 @@ fn end_marker(w: &mut World, c: CellXY, m: &Marker) -> bool {
             // spec: S-0202 Formulas (piece type t₀ + (x mod 4) for one raw value; data its place across)
             let raw = w.rng.raw();
             let piece = m.base + (raw % 4) as u8; // spec: S-0202 Formulas (bridge piece type: the lowest two bits)
+            // spec: S-0520 claims 11 and 29 (revision 17: a crate whose overlay a piece replaces no longer belongs to its place, nor is it a map's own crate) (#284)
+            crate::crates::overlay_changed(w, x);
             // spec: S-0202 claim 10 (a piece outside the map still takes its raw value; our engine writes nothing there, S-0009 claim 44)
             if let Some(cell) = w.cells.grid.get_mut(x) {
                 cell.overlay = piece;
@@ -413,6 +415,8 @@ fn vein_placement(w: &mut World, c: CellXY) {
     } else {
         sloped_value(slope, x)
     };
+    // spec: S-0520 claims 11 and 29 (revision 17) and Edge cases (a veins-flag type that carries the crate flag: the crate whose overlay the vein replaces no longer belongs to its place, nor is it a map's own crate) (#284)
+    crate::crates::overlay_changed(w, c);
     if let Some(cell) = w.cells.grid.get_mut(c) {
         cell.overlay = VEIN;
         cell.overlay_data = data;
@@ -456,6 +460,8 @@ fn vein_placement(w: &mut World, c: CellXY) {
             let x = w.rng.raw();
             3 * cpat + ((x as i32) % 3).unsigned_abs() as u8 // spec: S-0202 Formulas (rem 3)
         };
+        // spec: S-0520 claims 11 and 29 (revision 17) and Edge cases (a crate-flagged vein overlay that is rewritten no longer belongs to its place, nor is it a map's own crate) (#284)
+        crate::crates::overlay_changed(w, n);
         // spec: S-0009 claim 44 (our engine changes no cell outside the map; the raw value is taken)
         if let Some(cell) = w.cells.grid.get_mut(n) {
             cell.overlay = VEIN;
@@ -470,9 +476,12 @@ fn vein_placement(w: &mut World, c: CellXY) {
 pub fn rebuild_veins(w: &mut World, order: &[CellXY]) {
     let mut seeds = Vec::new();
     for &c in order {
-        if let Some(cell) = w.cells.grid.get_mut(c)
-            && cell.overlay == VEIN
-        {
+        if w.cells.cell(c).is_none_or(|x| x.overlay != VEIN) {
+            continue;
+        }
+        // spec: S-0520 claims 11 and 29 (revision 17) and Edge cases (a crate-flagged vein overlay that is removed no longer belongs to its place, nor is it a map's own crate) (#284)
+        crate::crates::overlay_changed(w, c);
+        if let Some(cell) = w.cells.grid.get_mut(c) {
             if cell.overlay_data >= PATTERN_CENTRE {
                 seeds.push(c);
             }
