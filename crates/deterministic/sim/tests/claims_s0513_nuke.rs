@@ -309,7 +309,11 @@ fn claim11_a_one_time_launch_marker_ends_when_its_falling_missile_leaves_play() 
     let target = at(1, 1);
     nuke::one_time(&mut w, Some(ALPHA), STRIKE, target);
     let c = superweapons::cell_point(&w, target, false);
-    assert_eq!(markers(&w), vec![Some(c)], "one marker at the target centre");
+    assert_eq!(
+        markers(&w),
+        vec![Some(c)],
+        "one marker at the target centre"
+    );
     run(&mut w, 5);
     assert_eq!(missiles(&w, "NukePayload").len(), 1, "still falling");
     assert_eq!(markers(&w).len(), 1, "in play while its missile is");
