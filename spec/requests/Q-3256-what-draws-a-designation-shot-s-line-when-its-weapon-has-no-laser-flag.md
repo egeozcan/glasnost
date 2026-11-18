@@ -1,9 +1,9 @@
 ---
 id: Q-3256
 title: What draws a designation shot's line when its weapon has no laser flag
-status: open
+status: answered
 related: [S-0519, S-0518, S-0514, S-0308]
-answered-by: []
+answered-by: [S-0519]
 ---
 
 ## Need
