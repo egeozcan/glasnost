@@ -220,7 +220,10 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
             crate::rocket::tick(w, id);
             return;
         }
-        if crate::jump::crashing(w, id) {
+        // spec: S-0312 claim 16 (Infantry crash end: a crashed infantry unit stays in play only to play out air-death-end)
+        let crash_ended = kind == Kind::Infantry
+            && crate::jump::phase(w, id) == Some(crate::jump::Phase::Crashed);
+        if crate::jump::crashing(w, id) && !crash_ended {
             // spec: S-0502 claim 18 and S-0312 claim 16 (a killed jumpjet that started to crash keeps its jumpjet movement until it hits the ground)
             crate::jump::tick(w, id);
             return;

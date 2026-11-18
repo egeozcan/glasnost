@@ -600,11 +600,14 @@ fn crashing_outcome(w: &mut World, id: ObjectId) {
 /// The impact of an ordinary crash (S-0312 claim 16). A vehicle's is the
 /// *Vehicle crash end*: a balloon-hover type sets off its death weapon at
 /// its position, any other type shows claim 9's animations, and it leaves
-/// play, alive or dead. For another kind (seam: the *Infantry crash end*
-/// is not implemented yet) a shot-down jumpjet's death weapon goes off at
-/// the impact point and it leaves play; one that still lives is destroyed
-/// by damage equal to its health, with the demolition warhead, ignoring
-/// defences, with the no-escape marker and no attacker.
+/// play, alive or dead. A killed infantry unit's is the *Infantry crash
+/// end*: it makes the forced request for *air-death-end*, sets off no death
+/// weapon, and stays in play until that sequence completes
+/// ([`crate::combat::death::infantry_death_turn`]). For another kind a
+/// shot-down jumpjet's death weapon goes off at the impact point and it
+/// leaves play; one that still lives is destroyed by damage equal to its
+/// health, with the demolition warhead, ignoring defences, with the
+/// no-escape marker and no attacker.
 pub fn impact(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
     // spec: S-0312 claim 16 (the impact is on the ground: the unit is at the surface under it, which also ends the crash for a unit that a deck crossing stopped above the terrain; the height in a high-bridge cell is an Open question)
@@ -623,6 +626,14 @@ pub fn impact(w: &mut World, id: ObjectId) {
         }
         // spec: S-0312 claim 16 (Vehicle crash end: it leaves play, the same whether it is alive or dead, with no demolition damage)
         crate::combat::death::leave_play(w, id);
+        return;
+    }
+    if o.kind == Kind::Infantry && damage::dead(&o) {
+        // spec: S-0312 claim 16 (Infantry crash end: put at ground height, the forced request for air-death-end, S-0107 claims 6 and 21; it sets off no death weapon at its crash end)
+        if !crate::infantry::request(w, id, crate::infantry::Seq::AirDeathEnd, true) {
+            // design: Q-3239 interim (what removes a unit whose request is turned down is an Open question of S-0312 claim 16: it leaves play at its crash end with no corpse, as before)
+            crate::combat::death::leave_play(w, id);
+        }
         return;
     }
     if damage::dead(&o) {

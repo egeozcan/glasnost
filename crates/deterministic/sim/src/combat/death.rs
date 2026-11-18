@@ -1303,7 +1303,11 @@ pub fn infantry_death_turn(w: &mut World, id: ObjectId) {
     }
     let Some(s) = o.infantry.as_ref() else { return };
     let Some(q) = s.seq else { return };
-    if !matches!(q, Seq::Die1 | Seq::Die2 | Seq::WetDie1 | Seq::WetDie2) {
+    // spec: S-0312 claim 16 (Infantry crash end: when air-death-end starts, its completion removes the unit) and S-0107 State and ordering (air-death-end complete: unit removed, no corpse)
+    if !matches!(
+        q,
+        Seq::Die1 | Seq::Die2 | Seq::WetDie1 | Seq::WetDie2 | Seq::AirDeathEnd
+    ) {
         return;
     }
     let c = w
@@ -1313,7 +1317,7 @@ pub fn infantry_death_turn(w: &mut World, id: ObjectId) {
         .map_or(0, |e| e.count);
     // spec: S-0107 claim 8 (a sequence is complete once its stage has reached C)
     if s.stage(t) >= c {
-        // spec: S-0107 claim 17 (die-1 to die-5 complete: a corpse animation is left and the unit is removed on the same tick; wet-die-1 and wet-die-2: no corpse)
+        // spec: S-0107 claim 17 (die-1 to die-5 complete: a corpse animation is left and the unit is removed on the same tick; wet-die-1 and wet-die-2: no corpse) and State and ordering (air-death-end: no corpse)
         if matches!(q, Seq::Die1 | Seq::Die2) {
             corpse(w, id);
         }
