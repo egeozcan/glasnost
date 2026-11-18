@@ -1087,3 +1087,227 @@ fn claim_1_place_order_through_production() {
     assert_eq!(placement::seen_behaviour(o), Some(Behaviour::Construction));
     assert!(e::line(&w, 0, plant).is_none());
 }
+
+/// A building of the production ruleset's PLANT type (a build-up sprite of
+/// 10 image frames: n = 5, d_b = 9, S-0108 claim 5) made by CONYARD and
+/// placed by a place order applied in the orders part of tick *T*; returns
+/// the world after that tick, the building and *T*.
+fn ordered_plant() -> (World, ObjectId, i32) {
+    use econ_common as e;
+    let mut r = e::ruleset();
+    r.sim.land_types.insert(
+        LandType::Clear,
+        LandRow {
+            buildable: Some(true),
+            ..Default::default()
+        },
+    );
+    {
+        let p = r.sim.buildings.get_mut("PLANT").unwrap();
+        p.cost = Some(50);
+        p.econ.buildup = Some(true);
+        p.econ.buildup_frames = Some(10);
+    }
+    let mut w = e::game(&r);
+    e::building(&mut w, "CONYARD", 0, -6, 0);
+    e::ready(&mut w);
+    e::set_credits(&mut w, 0, 1_000_000);
+    let p = Pos::centre(testkit::mid(e::SIZE, 0, 0), 0);
+    glasnost_sim::econ::shroud::area_reveal(&mut w, A, p, 10);
+    let plant = e::t(&w, Kind::Building, "PLANT");
+    assert!(e::issue(
+        &mut w,
+        0,
+        glasnost_sim::orders::Order::Build { what: plant }
+    ));
+    e::run_to_done(&mut w, 0, plant, 400).expect("done");
+    let obj = e::item(&w, 0, plant).unwrap().object;
+    assert_eq!(
+        glasnost_sim::econ::sell::buildup_ticks(&w, plant.index),
+        36,
+        "(n − 1) × d_b"
+    );
+    assert!(e::issue(
+        &mut w,
+        0,
+        glasnost_sim::orders::Order::Place {
+            what: plant,
+            cell: Some(testkit::mid(e::SIZE, -3, 0)),
+        }
+    ));
+    let t = w.tick;
+    e::step(&mut w);
+    assert!(w.obj(obj).is_some_and(|o| o.on_map), "placed in tick T");
+    (w, obj, t)
+}
+
+// measure: M-0027 (the building a place order names: after the logic of T + 1 its body is in the idle state with construction not yet current; C − T = 2; H − C = (stages − 1) × interval; guard current on H)
+// spec: S-0406 claim 17 and F7 (r19, Q-3243: the factory break-off requests the idle body as a deferred change that takes effect at the end of the building's update on its first turn T + 1; in the factory break-off window it is still under construction; a zero-delay idle range makes construction current at the first start of T + 2, processed in that turn, C = T + 2; one run, H = T + 2 + (n − 1) × d_b) and claims 14 and 15 (#440)
+#[test]
+fn claim_17_place_order_runs_the_build_up_once() {
+    let (mut w, id, t) = ordered_plant();
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(id).unwrap();
+    // spec: S-0406 claim 17 (after T + 1: the idle body, construction still queued, still under construction)
+    assert!(o.econ.idle_body.is_some(), "the idle body after T + 1");
+    assert_eq!(o.beh.current, None);
+    assert_eq!(o.beh.queued, Some(Behaviour::Construction));
+    assert!(
+        o.econ.construction.building_up,
+        "not construction-completed"
+    );
+    assert_eq!(o.econ.construction.first, None);
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(id).unwrap();
+    // spec: S-0406 claims 14 and 17 (C = T + 2: construction current and processed once; the window ends)
+    assert_eq!(o.econ.construction.first, Some(t + 2), "C = T + 2");
+    assert_eq!(o.beh.current, Some(Behaviour::Construction));
+    assert!(o.econ.idle_body.is_none(), "the construction range again");
+    let c = t + 2;
+    let mut h = None;
+    while w.tick <= c + 60 {
+        let now = w.tick;
+        glasnost_sim::tick::step(&mut w);
+        let o = w.obj(id).unwrap();
+        if !o.econ.construction.building_up {
+            // spec: S-0406 claim 15 (guard current at the second start of the handover tick)
+            assert_eq!(o.beh.current, Some(Behaviour::Guard));
+            h = Some(now);
+            break;
+        }
+        // spec: S-0406 claim 17 (one run: construction stays current from C to H)
+        assert_eq!(o.beh.current, Some(Behaviour::Construction), "at {now}");
+    }
+    // spec: S-0406 claim 15 and F6 (H = C + (n − 1) × d_b)
+    assert_eq!(h, Some(c + 36), "H = T + 2 + 36");
+}
+
+// spec: S-0406 claim 17 (r19: with an idle range of at least 2 stages and a positive delay, and a construction range that does not set the mark on T + 1, C is the first turn from T + 2 on whose body update the idle range advances onto its last stage; H follows F6) and S-0108 claim 6 (the idle range's first stage and delay after a deferred change) (#440)
+#[test]
+fn claim_17_positive_delay_idle_range_sets_c() {
+    let mut r = rules();
+    // An idle range of stages 0 … 2 with a positive delay δ: from the end of the first turn E it lands on stage 2 at E + 2δ (S-0108 claim 6).
+    r.sim.buildings.get_mut("HUT").unwrap().econ.anim_idle = Some([0, 3, 4]);
+    let mut w = game(&r);
+    let (id, e) = lone_placed(&mut w, "HUT");
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(id).unwrap();
+    // spec: S-0406 claim 17 (the window's stage and delay: the idle range's first stage and the idle delay as the building runs it)
+    let body = o.econ.idle_body.expect("the idle body after E");
+    assert_eq!(body.stage, 0);
+    let delay = body.delay;
+    assert!(delay > 0);
+    assert_eq!(o.beh.current, None);
+    let mut c = None;
+    for _ in 0..40 {
+        let now = w.tick;
+        glasnost_sim::tick::step(&mut w);
+        let o = w.obj(id).unwrap();
+        if let Some(first) = o.econ.construction.first {
+            c = Some(first);
+            break;
+        }
+        assert_eq!(o.beh.current, None, "construction still queued at {now}");
+    }
+    assert_eq!(c, Some(e + 2 * delay), "C on the idle range's last stage");
+}
+
+// spec: S-0406 claim 18 (r19: a deployed building with a positive-delay range of one stage or fewer makes construction current at the second start of its first turn and never hands over) and S-0415 claim 6 (the ready mark set at entry) (#440)
+#[test]
+fn claim_18_deployed_single_stage_never_completes() {
+    let r = single_stage();
+    let mut w = game(&r);
+    let t = ty(&w, "HUT");
+    let id = glasnost_sim::objects::create(&mut w, Kind::Building, t, Some(A));
+    placement::put_on_map(&mut w, id, c(0, 0), false);
+    let u = w.tick;
+    assert!(w.obj(id).unwrap().beh.ready_mark, "set at entry");
+    glasnost_sim::tick::step(&mut w);
+    assert_eq!(
+        w.obj(id).unwrap().beh.current,
+        Some(Behaviour::Construction),
+        "current at the second start of U"
+    );
+    testkit::run(&mut w, 400);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.econ.construction.first, Some(u + 1), "C = U + 1");
+    assert!(o.econ.construction.building_up, "never hands over");
+    assert_eq!(o.beh.current, Some(Behaviour::Construction));
+}
+
+/// Registers PUFF, an animation of four frames at rate 900 that removes
+/// itself in its own turn on the fourth tick after the tick it is made in
+/// (S-0109 claim 29).
+fn with_puff(r: &mut Ruleset) {
+    r.registries
+        .entry("animations".into())
+        .or_default()
+        .push("PUFF".into());
+    r.sim.animations.insert(
+        "PUFF".into(),
+        glasnost_rules::sim::AnimationType {
+            frame_count: Some(4),
+            rate: Some(900),
+            middle_frame: Some(2),
+            ..Default::default()
+        },
+    );
+}
+
+/// Runs the lone placed HUT `id` to its first construction processing,
+/// makes it miss its turn on tick *C* + `miss` (an animation directly
+/// before it in the update order removes itself in its own turn then,
+/// S-0203 claim 10), and returns *H* − *C*.
+fn handover_after_a_missed_turn(w: &mut World, id: ObjectId, miss: i32) -> i32 {
+    let c = loop {
+        glasnost_sim::tick::step(w);
+        if let Some(c) = w.obj(id).unwrap().econ.construction.first {
+            break c;
+        }
+        assert!(w.tick < 200, "construction starts");
+    };
+    while w.tick < c + miss - 4 {
+        glasnost_sim::tick::step(w);
+    }
+    let at = w.obj(id).unwrap().pos;
+    let puff = glasnost_sim::anims::spawn(w, "PUFF", Some(at), Default::default())
+        .id
+        .expect("PUFF is listed");
+    let order = &mut w.update.order;
+    order.retain(|&x| x != puff);
+    let p = order.iter().position(|&x| x == id).unwrap();
+    order.insert(p, puff);
+    loop {
+        let now = w.tick;
+        glasnost_sim::tick::step(w);
+        if now == c + miss - 1 {
+            assert!(w.update.order.contains(&puff), "still in play at {now}");
+        }
+        if now == c + miss {
+            assert!(!w.update.order.contains(&puff), "left in tick {now}");
+        }
+        if !w.obj(id).unwrap().econ.construction.building_up {
+            return now - c;
+        }
+        assert!(now < c + 200, "construction completes");
+    }
+}
+
+// spec: S-0406 claim 17 (r19: a stage advance that falls due on a tick on which the building takes no turn, S-0203 claim 10, is made at its next update and the next stage's delay counts from that update, so the later stages and the handover come one tick later; a missed turn on no due advance moves no stage, and the processing it delays follows on the next tick) and claim 15; S-0108 Terms (body stage, r111) (#440)
+// measure: M-0027 (refinery seed 2: a due stage advance held one tick, every later stage and the handover one tick later)
+#[test]
+fn claim_17_a_missed_turn_holds_a_due_stage_advance() {
+    let mut r = rules();
+    with_puff(&mut r);
+    // The first advance after C falls due on C + d_b = C + 9.
+    let mut w = game(&r);
+    let (id, _) = lone_placed(&mut w, "HUT");
+    assert_eq!(handover_after_a_missed_turn(&mut w, id, 9), 37, "held");
+    let mut w = game(&r);
+    let (id, _) = lone_placed(&mut w, "HUT");
+    assert_eq!(
+        handover_after_a_missed_turn(&mut w, id, 7),
+        36,
+        "no due advance"
+    );
+}

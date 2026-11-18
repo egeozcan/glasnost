@@ -11,7 +11,7 @@ use glasnost_sim::econ::{TypeRef, placement};
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit;
-use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
+use glasnost_sim::world::{HouseId, ObjectId, Pos, Target, World};
 
 const SIZE: i32 = 24;
 const A: HouseId = HouseId(0);
@@ -101,4 +101,72 @@ fn deploy_order_to_a_building_under_construction() {
         !o.econ.construction.building_up,
         "the construction state ends as without the order"
     );
+}
+
+/// BIG placed as a place order puts the building it names (before the
+/// turn pass of its first turn *E*) and run through *E*, so that its
+/// factory break-off window has begun (S-0406 claim 17). `buildup`: BIG
+/// with its build-up sprite (n = 5, a positive delay), whose construction
+/// range does not set the mark on *E*, so *construction* is still queued;
+/// without one its zero-delay construction range sets the mark on *E* and
+/// *construction* is current. Returns the world, BIG and *E*.
+fn in_the_window(buildup: bool) -> (World, ObjectId, i32) {
+    let mut r = rules();
+    if !buildup {
+        r.sim.buildings.get_mut("BIG").unwrap().econ.buildup = Some(false);
+    }
+    let (mut w, id) = placed(&r);
+    let e = w.tick;
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(id).unwrap();
+    assert!(
+        o.econ.idle_body.is_some(),
+        "in the factory break-off window"
+    );
+    assert!(o.econ.construction.building_up);
+    assert_eq!(o.econ.construction.first, None);
+    let current = if buildup {
+        None
+    } else {
+        Some(Behaviour::Construction)
+    };
+    assert_eq!(o.beh.current, current);
+    (w, id, e)
+}
+
+// spec: S-0213 claim 10 and S-0406 claim 17 and Changes for other specs (r19, Q-3243: in its factory break-off window, with construction queued, the building a place order names is outside its construction state and claim 10 applies as it reads: the deploy order queues unload in place of the queued construction; with construction current there it refuses the order, as in its construction state) (#440)
+#[test]
+fn deploy_order_in_the_factory_break_off_window() {
+    let (mut w, id, _) = in_the_window(true);
+    assert!(orders::issue(&mut w, A, Order::Deploy { actor: id }));
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(id).unwrap();
+    assert_eq!(placement::seen_behaviour(o), Some(Behaviour::Unload));
+    assert_eq!(o.econ.construction.first, None, "no first processing");
+    let (mut w, id, e) = in_the_window(false);
+    assert!(orders::issue(&mut w, A, Order::Deploy { actor: id }));
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Construction), "refused");
+    // spec: S-0406 claim 17 (construction current in the window: C on the next turn)
+    assert_eq!(o.econ.construction.first, Some(e + 1));
+}
+
+// spec: S-0213 claim 8, S-0215 claim 12 and S-0406 claim 17 and Changes for other specs (r19, Q-3243: in its factory break-off window, with construction queued, the building a place order names is outside its construction state and the stop order applies: its target becomes nothing; with construction current there the stop order does nothing, as in its construction state) (#440)
+#[test]
+fn stop_order_in_the_factory_break_off_window() {
+    for buildup in [true, false] {
+        let (mut w, id, _) = in_the_window(buildup);
+        let o = w.obj_mut(id).unwrap();
+        o.target = Some(Target::Cell(c(5, 5)));
+        o.combat.opportunity = false;
+        assert!(orders::issue(&mut w, A, Order::Stop { actor: id }));
+        glasnost_sim::tick::step(&mut w);
+        let kept = w.obj(id).unwrap().target;
+        if buildup {
+            assert_eq!(kept, None, "applied");
+        } else {
+            assert_eq!(kept, Some(Target::Cell(c(5, 5))), "refused");
+        }
+    }
 }
