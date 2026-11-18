@@ -2015,6 +2015,20 @@ fn slot_animation_tiled_zero_height() {
     );
 }
 
+/// spec: S-0109 claim 8, F3 (a reversed animation's first image frame a + λ_e − 1) and S-0205
+/// claim 1 (the sum wraps in the 32-bit range, as the simulation's clock does): Start
+/// −2147483648 with LoopEnd −2147483644 wraps to image frame 3 of six (render batch R13, F4 seam)
+#[test]
+fn a_reversed_slot_animation_starts_at_its_wrapped_frame() {
+    let (b, items) = one_slot(
+        "Start=-2147483648\nReverse=yes\nLoopEnd=-2147483644\n",
+        shp((20, 20), 6, (2, 2), (9, 9)),
+    );
+    assert_eq!(items.len(), 1, "the wrapped frame is drawn");
+    // Image frame 3 holds pixel value 4.
+    assert_eq!(b.scene.images[items[0].image as usize].pixels()[0], 4);
+}
+
 /// The map owners of `map_text` over the synthetic rules with `countries` added.
 fn map_owners(
     countries: &str,

@@ -348,3 +348,99 @@ fn a_kept_radar_shows_the_sims_composition() {
         same_as_sim(&mut w, &mut radars, &format!("after, shift {shift}"));
     }
 }
+
+// spec: S-0410 claims 6 and 7, S-0009 claim 4 and S-0524 claim 8 (render batch R13, RP11 seam: the map's local area changed in play between two pictures; a kept radar's picture is the simulation's composition with the smaller area and again with the first, quirks.radar_pixel_cell_shift on and off)
+#[test]
+fn a_kept_radar_follows_a_changed_local_area() {
+    for shift in [true, false] {
+        let mut w = testkit::game_with(&rules(shift), SIZE, 3);
+        spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
+        spawn(&mut w, Kind::Building, "TOWER", 1, 9, 2);
+        spawn(&mut w, Kind::Vehicle, "CART", 1, 2, 0);
+        testkit::run(&mut w, 3);
+        let mut radars = [radar_of(&w), radar_of(&w)];
+        same_as_sim(&mut w, &mut radars, &format!("start, shift {shift}"));
+        let me = Some(HouseId(0));
+        let whole = radars[0].rgba(&w, me);
+        let local = w.cells.grid.footprint().local;
+        let small = [local[0] + 4, local[1] + 4, local[2] - 8, local[3] - 8];
+        w.cells.grid.set_local(small);
+        assert_eq!(w.cells.grid.footprint().local, small);
+        same_as_sim(&mut w, &mut radars, &format!("smaller, shift {shift}"));
+        assert!(
+            radars[0].rgba(&w, me) != whole,
+            "the cells left out of the area change their pixels"
+        );
+        w.cells.grid.set_local(local);
+        same_as_sim(&mut w, &mut radars, &format!("back, shift {shift}"));
+        assert!(radars[0].rgba(&w, me) == whole, "the first picture again");
+    }
+}
+
+// spec: S-0410 claim 6, S-0110 claim 8 and Edge cases (quirks.shroud_point_cell_wrap), S-0409 claim 14 (quirks.offmap_cells_shared), S-0009 claim 4 (render batch R13, RP11 seam: a local area reaching above the map's top row, Ly < 0, which S-0009 does not rule out, makes raised cells at the top usable whose point test's candidate lies outside 0 … 511; a kept radar's picture is the simulation's composition as the shared state of the cells that are not legal changes, the wrap switch on and off)
+#[test]
+fn a_kept_radar_follows_a_point_test_outside_the_cell_range() {
+    for wrap in [true, false] {
+        let mut r = rules(true);
+        r.globals.quirks.shroud_point_cell_wrap = wrap;
+        r.globals.quirks.offmap_cells_shared = true;
+        let mut w = testkit::game_with(&r, SIZE, 3);
+        let tower = spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
+        testkit::run(&mut w, 3);
+        let local = w.cells.grid.footprint().local;
+        w.cells
+            .grid
+            .set_local([local[0], local[1] - 10, local[2], local[3]]);
+        // The legal cells of the first columns, raised 8 levels: u = 8, so the
+        // point test's candidate is (x − 4, y − 4), left of column 0.
+        let edge: Vec<CellXY> = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|c| c.x <= 3)
+            .collect();
+        for &c in &edge {
+            w.cells.grid.get_mut(c).expect("a legal cell").level = 8;
+        }
+        let outside = edge
+            .iter()
+            .filter(|&&c| {
+                let k = first_candidate(&w, c);
+                w.cells.usable(c) && !((0..=511).contains(&k.x) && (0..=511).contains(&k.y))
+            })
+            .count();
+        assert!(
+            outside > 0,
+            "a usable cell whose candidate lies outside 0 … 511"
+        );
+        let mut radars = [radar_of(&w), radar_of(&w)];
+        same_as_sim(&mut w, &mut radars, &format!("start, wrap {wrap}"));
+        let me = Some(HouseId(0));
+        let before = radars[0].rgba(&w, me);
+        // House 0's shared state of the cells that are not legal: explored.
+        let at = w.obj(tower).expect("the tower").pos.cell();
+        let shared = w.cells.grid.len();
+        let (explored, first) = {
+            let marks = &w.econ.shroud.houses[0].as_ref().expect("a player").marks;
+            (marks[w.cells.idx(at).expect("a legal cell")], marks[shared])
+        };
+        assert!(!shroud::explored(&w, HouseId(0), CellXY::new(509, 0)));
+        w.econ.shroud.houses[0].as_mut().unwrap().marks[shared] = explored;
+        assert!(shroud::explored(&w, HouseId(0), CellXY::new(509, 0)));
+        same_as_sim(
+            &mut w,
+            &mut radars,
+            &format!("shared explored, wrap {wrap}"),
+        );
+        if wrap {
+            assert!(
+                radars[0].rgba(&w, me) != before,
+                "the wrapped candidates read the shared state"
+            );
+        }
+        w.econ.shroud.houses[0].as_mut().unwrap().marks[shared] = first;
+        same_as_sim(&mut w, &mut radars, &format!("shared covered, wrap {wrap}"));
+        assert!(radars[0].rgba(&w, me) == before, "the first picture again");
+    }
+}

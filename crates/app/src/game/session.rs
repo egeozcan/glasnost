@@ -4156,23 +4156,111 @@ async fn read_icons(
 /// the loader started it with (the same start as the game's, checked in a
 /// debug build) is therefore dropped once the game is made, which frees
 /// about the memory of a second world for the whole game.
+///
+/// Every field is named, with no rest pattern, so a field added to the
+/// world does not build here until it is sorted into the emptied or the
+/// kept ones (render batch R13).
 fn hollow(w: &mut glasnost_sim::world::World) {
-    w.houses = Vec::new();
-    w.objects = BTreeMap::new();
-    w.update = Default::default();
-    w.cells = glasnost_sim::cells::Cells::new(glasnost_map::CellGrid::new(
+    let glasnost_sim::world::World {
+        // Kept: one number, flag or seed each, the map's small facts, and the
+        // rules and tile catalogue the drawing's own world goes on holding.
+        tick: _,
+        rng: _,
+        map_rng: _,
+        game_speed: _,
+        next_id: _,
+        orders_blocked_through: _,
+        acquisitions: _,
+        theater: _,
+        map_flags: _,
+        pathfinder: _,
+        rules: _,
+        catalogue: _,
+        census: _,
+        after_turn_pass: _,
+        trace: _,
+        // Emptied: everything the game holds in bulk.
+        houses,
+        objects,
+        update,
+        cells,
+        projectiles,
+        scaled_spawn_delay,
+        flying,
+        spawned,
+        effects,
+        notes,
+        econ,
+        cloak,
+        sw,
+        temporal,
+        mind,
+        crates,
+        strike,
+        radiation,
+        gas,
+        waves,
+        pieces,
+        discs,
+        walkers,
+        mutation,
+        drain,
+        routes,
+        domination,
+        depot_anims,
+        anims,
+        lighting,
+        triggers,
+        start_marks,
+        jump_slots,
+        threat,
+        leftovers,
+        regions,
+        scratch,
+        locomotion_under_way,
+        death_chain,
+    } = w;
+    *houses = Vec::new();
+    *objects = BTreeMap::new();
+    *update = Default::default();
+    *cells = glasnost_sim::cells::Cells::new(glasnost_map::CellGrid::new(
         glasnost_map::Footprint::new(0, 0, [0; 4]),
     ));
-    w.projectiles = BTreeMap::new();
-    w.econ = Default::default();
-    w.sw = Default::default();
-    w.gas = Default::default();
-    w.routes = Default::default();
-    w.anims = Default::default();
-    w.lighting = Default::default();
-    w.triggers = Default::default();
-    w.threat = Default::default();
-    w.regions = Default::default();
+    *projectiles = BTreeMap::new();
+    *scaled_spawn_delay = BTreeMap::new();
+    *flying = Default::default();
+    *spawned = Default::default();
+    *effects = Vec::new();
+    *notes = Vec::new();
+    *econ = Default::default();
+    *cloak = Default::default();
+    *sw = Default::default();
+    *temporal = Default::default();
+    *mind = Default::default();
+    *crates = Default::default();
+    *strike = Default::default();
+    *radiation = Default::default();
+    *gas = Default::default();
+    *waves = BTreeMap::new();
+    *pieces = BTreeMap::new();
+    *discs = Vec::new();
+    *walkers = BTreeMap::new();
+    *mutation = Default::default();
+    *drain = Default::default();
+    *routes = Default::default();
+    *domination = Default::default();
+    *depot_anims = Default::default();
+    *anims = Default::default();
+    *lighting = Default::default();
+    *triggers = Default::default();
+    *start_marks = None;
+    *jump_slots = BTreeMap::new();
+    *threat = Default::default();
+    *leftovers = BTreeMap::new();
+    *regions = Default::default();
+    *scratch = Default::default();
+    *locomotion_under_way = Vec::new();
+    *death_chain = Default::default();
 }
 
 /// The parts of the battlefield rectangle `m`, showing world pixels from

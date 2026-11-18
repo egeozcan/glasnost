@@ -5326,6 +5326,281 @@ fn a_gas_particle_draws_alike_over_a_high_bridge() {
     }
 }
 
+/// #424: spec: S-0102 claim 10 (an animation and a particle sprite read the depth a bridge deck's
+/// overlay wrote in the cell pass), claim 11 (their biases take −L(z) and are anchored to the
+/// ground), claim 13 (an animation's bias v + ZAdjust − L(z) − 2; a particle sprite's −15 − L(z);
+/// a deck overlay's −2 − 15ℓ with ℓ = level + 4), claims 15 and 24 (the deck's draw point), F2
+/// (an upright reader standing on a flat writer), S-0112 claim 1 (the deck at bridge position 24),
+/// S-0613 claim 19 (a gas particle at its own height): on a synthetic high-bridge cell, an
+/// animation at the deck's height is drawn over the deck, all but the last row F2 may take, and a
+/// gas particle 5 above the ground under it is hidden by the deck (render batch R13)
+#[test]
+fn a_deck_covers_the_gas_under_it_but_not_an_animation_on_it() {
+    use glasnost_fmt::image::IndexedImage;
+    use glasnost_fmt::shp::{ShpWriter, WriteFrame};
+    use glasnost_num::F32;
+    use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE};
+    use glasnost_render::scene::{Filter, Group, View};
+    use glasnost_rules::sim::{ParticleSystemType, ParticleType};
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::gas::{Particle, ParticleSystem};
+    use glasnost_sim::world::Pos;
+    // Sprites of one colour index each, unlike the others': `frames` frames of w × h at (x, y).
+    let sprite = |canvas: (u16, u16), frames: usize, (w, h): (u32, u32), (x, y), v: u8| {
+        ShpWriter {
+            width: canvas.0,
+            height: canvas.1,
+            frames: (0..frames)
+                .map(|_| WriteFrame {
+                    x,
+                    y,
+                    image: IndexedImage::new(w, h, vec![v; (w * h) as usize]).unwrap(),
+                    compression: 1,
+                })
+                .collect(),
+        }
+        .write()
+    };
+    // Overlay types 0 … 24 in place of the base list, the deck at bridge position 24 (S-0112
+    // claim 1).
+    let mut list = String::from("[OverlayTypes]\n");
+    for i in 0..25 {
+        list.push_str(&format!("{i}=OV{i}\n"));
+    }
+    let base = RULES.replace("[OverlayTypes]\n0=OREX\n1=CRATEX\n2=FENCEX\n", &list);
+    assert!(base != RULES, "the base overlay list is replaced");
+    let rules = format!("{base}[Animations]\n0=DECKA\n[Particles]\n0=PUFF\n[PUFF]\nX=1\n");
+    let art = format!("{}[DECKA]\nRate=900\n", super::tests::ART);
+    let (mut import, catalogue, mut assets) = super::tests::context_full(&rules, &art);
+    import.arts.insert(
+        (Kind::Overlays, 24),
+        super::tests::art_of("OV24", "deckx.shp"),
+    );
+    // A deck image tall enough to reach from the ground up past the deck's height.
+    assets.insert(b"deckx.shp", sprite((60, 120), 8, (60, 120), (0, 0), 120));
+    import.arts.insert(
+        (Kind::Animations, 0),
+        super::tests::art_of("DECKA", "decka.shp"),
+    );
+    assets.insert(b"decka.shp", sprite((20, 20), 3, (8, 8), (6, 6), 40));
+    let p = import.outcome.registries[&Kind::Particles]
+        .iter()
+        .position(|t| t.name == b"PUFF")
+        .unwrap();
+    import.arts.insert(
+        (Kind::Particles, p),
+        super::tests::art_of("PUFF", "puff.shp"),
+    );
+    assets.insert(b"puff.shp", sprite((20, 20), 4, (8, 8), (6, 6), 80));
+    let map = testkit::map();
+    // One invented 6-bit palette, an unlike colour at each index, for every palette in force.
+    let mut pal = glasnost_fmt::pal::Palette6 {
+        colors: [[0; 3]; 256],
+    };
+    for (i, c) in pal.colors.iter_mut().enumerate() {
+        *c = [(i % 64) as u8, (i * 3 % 64) as u8, (i * 7 % 64) as u8];
+    }
+    let mut palettes =
+        PaletteState::at_program_start(Some(&pal), Some(&pal), PaletteQuirks::default());
+    palettes.start_game(glasnost_vfs::theater::Theater::Temperate, |_| {
+        Some(pal.clone())
+    });
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let mut r = testkit::ruleset();
+    r.registries
+        .entry("particles".into())
+        .or_default()
+        .push("PUFF".into());
+    r.sim.particles.insert(
+        "PUFF".into(),
+        ParticleType {
+            behaves_like: Some("gas".into()),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("particle_systems".into())
+        .or_default()
+        .push("CLOUD".into());
+    r.sim.particle_systems.insert(
+        "CLOUD".into(),
+        ParticleSystemType {
+            holds_what: Some("PUFF".into()),
+            ..Default::default()
+        },
+    );
+    // A level-0 cell of the synthetic map, clear of its plateau; the deck height of a level-0
+    // cell (S-0616 claim 14).
+    let cell = testkit::cell(0, 6);
+    let deck_z = 416;
+    let on_deck = Pos::centre(cell, deck_z);
+    let under = Pos::centre(cell, 5);
+    // The composed picture around the cell, and the anim's and the particle's item rectangles.
+    type Rect = (i32, i32, u32, u32);
+    const VIEW: (i32, i32) = (200, 300);
+    let drawn = |deck: bool, anim: bool, gas: bool| -> (Vec<u8>, Option<Rect>, Option<Rect>) {
+        let sim_rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic"));
+        let world = glasnost_sim::load::new_game(
+            sim_rules.clone(),
+            &map,
+            testkit::catalogue(),
+            &testkit::setup(5),
+        )
+        .unwrap();
+        let (mut built, painter) = build_parts(&inputs, true);
+        let mut live = Live::new(
+            &inputs,
+            &mut built,
+            painter,
+            (world, sim_rules.clone(), testkit::setup(5), Vec::new()),
+        );
+        let mut scene = built.scene;
+        live.set_debug_markers(false);
+        live.step();
+        if deck {
+            let i = live.world.cells.idx(cell).unwrap();
+            live.world.cells.deck[i] = true;
+            let c = live.world.cells.grid.get_mut(cell).unwrap();
+            c.overlay = 24;
+            c.overlay_data = 0;
+        }
+        if anim {
+            live.world.effects.push(Effect::Anim {
+                name: "DECKA".into(),
+                pos: on_deck,
+                delay: None,
+                reverse: false,
+                z_adjust: None,
+                id: None,
+            });
+            live.after_tick();
+        }
+        if gas {
+            let cloud = sim_rules.gas.system("CLOUD").unwrap();
+            let mut system = ParticleSystem::new(
+                cloud,
+                &sim_rules.gas.systems[cloud as usize],
+                under,
+                None,
+                sim_rules.mode,
+            );
+            system.particles = vec![Particle {
+                id: ObjectId(9001),
+                type_index: 0,
+                pos: under,
+                vel: [0; 3],
+                defl: [F32(0); 2],
+                life: 100,
+                countdown: 0,
+                stage: 1,
+                dead: false,
+                speed: F32(0),
+                dir: [F32(0); 3],
+                fvel: [F32(0); 3],
+                step: [0; 3],
+                advance: 0,
+                translucency: 0,
+                colour: Default::default(),
+                origin: under,
+                aim: under,
+            }];
+            live.world.gas.systems.insert(ObjectId(9000), system);
+        }
+        live.redraw(&inputs, &mut scene);
+        if anim {
+            assert_eq!(live.counts.anims_drawn, 1, "the animation is drawn");
+        }
+        if gas {
+            assert_eq!(live.counts.particles_drawn, 1, "the particle is drawn");
+        }
+        let (qx, qy) = project_lifted(on_deck.x, on_deck.y, 0);
+        let view = View {
+            origin: (qx - VIEW.0 / 2, qy - 2 * VIEW.1 / 3),
+            size: (VIEW.0 as u32, VIEW.1 as u32),
+            reference: DEPTH_REFERENCE,
+        };
+        // The one sprite drawn in the effects group: the animation's or the particle's 8 × 8
+        // frame, in view pixels.
+        let sprite: Option<Rect> = scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Effects && !i.provisional)
+            .map(|i| {
+                let img = &scene.images[i.image as usize];
+                (
+                    i.x - view.origin.0,
+                    i.y - view.origin.1,
+                    img.width(),
+                    img.height(),
+                )
+            })
+            .find(|r| r.2 == 8);
+        let px = scene
+            .compose(&view, &Filter::default(), &ComposeQuirks::default())
+            .to_rgba();
+        (px, sprite.filter(|_| anim), sprite.filter(|_| gas))
+    };
+    let at = |px: &[u8], (x, y, w, h): Rect| -> Vec<u8> {
+        assert!(x >= 0 && y >= 0 && x + w as i32 <= VIEW.0 && y + h as i32 <= VIEW.1);
+        let mut out = Vec::new();
+        for yy in y..y + h as i32 {
+            for xx in x..x + w as i32 {
+                let k = ((yy * VIEW.0 + xx) * 4) as usize;
+                out.extend_from_slice(&px[k..k + 4]);
+            }
+        }
+        out
+    };
+    let (alone, anim_rect, _) = drawn(false, true, false);
+    let anim_rect = anim_rect.expect("the animation's item");
+    let (empty, _, _) = drawn(false, false, false);
+    assert!(
+        at(&alone, anim_rect) != at(&empty, anim_rect),
+        "the animation is seen"
+    );
+    let (deck_only, _, _) = drawn(true, false, false);
+    let (deck_anim, _, _) = drawn(true, true, false);
+    assert!(
+        at(&deck_only, anim_rect) != at(&empty, anim_rect),
+        "the deck image lies behind the animation"
+    );
+    // F2 (an upright reader standing on a flat writer): with both biases −62 the animation keeps
+    // every row j ≥ 1 above its last; its last row (j = 0) is kept only when Q removed something
+    // from its anchor, as claim 15 says of a unit on a deck.
+    let above_last = (anim_rect.0, anim_rect.1, anim_rect.2, anim_rect.3 - 1);
+    assert_eq!(
+        at(&deck_anim, above_last),
+        at(&alone, above_last),
+        "the animation on the deck is drawn over it"
+    );
+    let (open_gas, _, gas_rect) = drawn(false, false, true);
+    let gas_rect = gas_rect.expect("the particle's item");
+    let (deck_gas, _, _) = drawn(true, false, true);
+    assert!(
+        at(&deck_only, gas_rect) != at(&empty, gas_rect),
+        "the deck image lies over the particle"
+    );
+    assert!(
+        at(&open_gas, gas_rect) != at(&empty, gas_rect),
+        "the particle is seen"
+    );
+    assert_eq!(
+        at(&deck_gas, gas_rect),
+        at(&deck_only, gas_rect),
+        "the gas under the deck is hidden by it"
+    );
+}
+
 /// The rules of the protection tests: the curtain selector names table
 /// position 1 and the force-shield selector position 2 (invented triples).
 fn protection_rules() -> String {

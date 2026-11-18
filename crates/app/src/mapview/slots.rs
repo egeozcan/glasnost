@@ -353,9 +353,8 @@ pub fn first_frame(t: &AnimType, n: i32) -> i32 {
         Some(v) => v,
     };
     // spec: S-0109 claim 8, F3 (k₀ = λ_e − 1 for a reversed animation: image frame a + λ_e − 1)
-    // design: render (#153) (a frame beyond the 32-bit range is the nearest it holds)
-    let k = i64::from(t.start) + i64::from(loop_end) - 1;
-    k.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+    // spec: S-0205 claim 1 (the sums wrap in the 32-bit range, as the simulation's clock does)
+    t.start.wrapping_add(loop_end.wrapping_sub(1))
 }
 
 /// Whether an animation of type `t` is drawn at the player's detail level
@@ -551,20 +550,26 @@ mod tests {
         assert_eq!(first_frame(&re, 20), 3);
     }
 
-    /// spec: S-0109 claim 8, F3 (reversed: image frame a + λ_e − 1); design: render (#153) (a
-    /// frame beyond the 32-bit range is the nearest one it holds, past every sprite's frames)
+    /// spec: S-0109 claim 8, F3 (reversed: image frame a + λ_e − 1); S-0205 claim 1 (an integer
+    /// result outside the 32-bit range wraps, as the simulation's clock does; render batch R13,
+    /// F4 seam)
     #[test]
     fn a_reversed_first_frame_at_extreme_values() {
         let high = read_anim(
             &doc("[A]\nStart=2147483647\nReverse=yes\nLoopEnd=2\n"),
             b"A",
         );
-        assert_eq!(first_frame(&high, 20), i32::MAX);
+        assert_eq!(first_frame(&high, 20), i32::MIN);
         let low = read_anim(
             &doc("[A]\nStart=-2147483648\nReverse=yes\nLoopEnd=-2147483648\nEnd=0\n"),
             b"A",
         );
-        assert_eq!(first_frame(&low, 20), i32::MIN);
+        assert_eq!(first_frame(&low, 20), -1);
+        let back = read_anim(
+            &doc("[A]\nStart=-2147483648\nReverse=yes\nLoopEnd=-2147483644\n"),
+            b"A",
+        );
+        assert_eq!(first_frame(&back, 20), 3);
     }
 
     /// spec: S-0109 claim 19 (drawn only when the detail field is at most the player's level)

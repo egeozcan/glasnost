@@ -2273,7 +2273,7 @@ Render batches R10 and R12 held the view against rules and art values far outsid
 Seams:
 - In `combat::position`, the garrisoned building's muzzle shift (S-0313 claim 6), claim 1's translation-column adds and the lateral part σ*L* are still plain additions and products. They wrap in release builds but would panic in a debug one; no test reaches them with extreme data yet.
 - The clock's stage advance, its step back and its image frame *a* + *k* saturate where S-0205 claim 1 wraps. They never panic, and they were left as they are.
-- The view's `slots::first_frame` holds a reversed animation's first frame *a* + λₑ − 1 to 32 bits (design: render (#153)). The clock instead wraps *k*₀ = λₑ − 1. So for λₑ = −2³¹ with `quirks.anim_reverse_raw_loop_end` on, the view's first frame and the clock's first frame differ.
+- The view's `slots::first_frame` held a reversed animation's first frame *a* + λₑ − 1 to 32 bits (design: render (#153)). The clock instead wraps *k*₀ = λₑ − 1. So for λₑ = −2³¹ with `quirks.anim_reverse_raw_loop_end` on, the view's first frame and the clock's first frame differed. Render batch R13 closed this: the view's sum now wraps too (S-0205 claim 1).
 
 **Importer warnings for the view's bounds (design: sim (#153)).** The view holds some values to bounds of its own (design: render (#153)). The importer now warns when a value lies past one of them. It keeps every value as read: these are warnings, not bounds.
 
