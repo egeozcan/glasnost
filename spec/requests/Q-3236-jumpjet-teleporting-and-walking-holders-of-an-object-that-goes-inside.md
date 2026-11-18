@@ -1,9 +1,9 @@
 ---
 id: Q-3236
 title: Jumpjet, teleporting and walking holders of an object that goes inside
-status: open
+status: answered
 related: [S-0507, S-0502, S-0207, S-0208]
-answered-by: [S-0208]
+answered-by: [S-0208, S-0507]
 ---
 
 ## Need
