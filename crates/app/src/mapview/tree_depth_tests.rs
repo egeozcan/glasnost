@@ -44,9 +44,12 @@ const BODY_AT: (i32, i32) = (-120, -60);
 const TREE: (u32, u32) = (70, 60);
 const TREE_AT: (i32, i32) = (-35, -55);
 
-/// A shape file of canvas `canvas` whose image frames are `frames`: a
-/// rectangle size, its place on the canvas and one value for every pixel.
-pub(super) fn shape(canvas: (u16, u16), frames: &[((u32, u32), (u16, u16), u8)]) -> Vec<u8> {
+/// One image frame of [`shape`]: a rectangle size, its place on the canvas
+/// and one value for every pixel.
+pub(super) type ShapeFrame = ((u32, u32), (u16, u16), u8);
+
+/// A shape file of canvas `canvas` whose image frames are `frames`.
+pub(super) fn shape(canvas: (u16, u16), frames: &[ShapeFrame]) -> Vec<u8> {
     ShpWriter {
         width: canvas.0,
         height: canvas.1,
@@ -304,9 +307,9 @@ fn trace(c: &Case) -> Vec<Pixel> {
     let o = overlap(c);
     let items = &c.scene.items;
     let before_tree = compose(&c.scene, items[..c.tree].to_vec(), o);
-    let tree = compose(&c.scene, vec![items[c.tree].clone()], o);
+    let tree = compose(&c.scene, vec![items[c.tree]], o);
     let before_body = compose(&c.scene, items[..c.body].to_vec(), o);
-    let body = compose(&c.scene, vec![items[c.body].clone()], o);
+    let body = compose(&c.scene, vec![items[c.body]], o);
     let after_body = compose(&c.scene, items[..=c.body].to_vec(), o);
     let mut out = Vec::new();
     for y in 0..o.3 {

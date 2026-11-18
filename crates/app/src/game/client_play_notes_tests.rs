@@ -144,6 +144,7 @@ fn countdown_rows_show_the_display_name() {
 /// A started game past its opening order block (S-0201 claim 14) with the
 /// local house's radar on and drawn (S-0410 claim 1, set here rather than
 /// built), and the screen pixel of radar map pixel (x, y) at scale 100.
+#[allow(clippy::type_complexity)]
 fn radar_game() -> (Client, impl Fn(i32, i32) -> Point, (i32, i32, i32, i32)) {
     let mut c = client((800, 600), 100);
     start_by_keyboard(&mut c);

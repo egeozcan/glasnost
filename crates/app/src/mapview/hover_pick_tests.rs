@@ -52,13 +52,16 @@ fn rules() -> Arc<SimRules> {
     Arc::new(SimRules::new(&r, "synthetic-test"))
 }
 
+/// A drawn item's image, place and size.
+type Body = (u32, (i32, i32), (u32, u32));
+
 /// What the pick at the still pointer found in one drawn frame.
 #[derive(Debug)]
 struct Seen {
     tick: i32,
     /// The unit's height and its body item (image, place, size).
     z: i32,
-    body: Option<(u32, (i32, i32), (u32, u32))>,
+    body: Option<Body>,
     /// The pick: the unit, a tree, nothing (the ground), or another code.
     pick: &'static str,
     /// The items over the pointer, in draw order: group and object code.
