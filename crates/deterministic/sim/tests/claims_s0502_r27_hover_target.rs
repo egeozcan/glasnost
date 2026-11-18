@@ -82,7 +82,13 @@ fn hoverer(w: &mut World, name: &str, committed: bool) -> (ObjectId, ObjectId) {
 }
 
 fn heading(w: &World, u: ObjectId) -> Facing {
-    w.obj(u).unwrap().jump.as_ref().unwrap().heading.value(w.tick)
+    w.obj(u)
+        .unwrap()
+        .jump
+        .as_ref()
+        .unwrap()
+        .heading
+        .value(w.tick)
 }
 
 fn body(w: &World, u: ObjectId) -> Facing {
@@ -134,17 +140,37 @@ fn a_committed_hovering_vehicle_keeps_its_body_on_the_heading_and_holds_its_fire
     step(&mut w);
     let h = heading(&w, u);
     // spec: S-0310 claim 2 (τ = 2048 for a projectile that does not home)
-    assert!(delta(h, to_target(&w, u, e)).abs() > 2048, "set-up: the target is off the heading");
+    assert!(
+        delta(h, to_target(&w, u, e)).abs() > 2048,
+        "set-up: the target is off the heading"
+    );
     for _ in 0..120 {
         step(&mut w);
         let o = w.obj(u).unwrap();
         assert_eq!(phase(&w, u), Phase::Hovering);
         assert_eq!(heading(&w, u), h, "the heading does not follow the target");
-        assert_eq!(body(&w, u), h, "the body is on the heading at tick {}", w.tick);
-        assert!(!o.body.turning(w.tick), "no body turn towards the target at tick {}", w.tick);
-        assert!(!o.turret.turning(w.tick), "nor the turret that follows the body at tick {}", w.tick);
+        assert_eq!(
+            body(&w, u),
+            h,
+            "the body is on the heading at tick {}",
+            w.tick
+        );
+        assert!(
+            !o.body.turning(w.tick),
+            "no body turn towards the target at tick {}",
+            w.tick
+        );
+        assert!(
+            !o.turret.turning(w.tick),
+            "nor the turret that follows the body at tick {}",
+            w.tick
+        );
     }
-    assert_eq!(last_fired(&w, u), -100, "no shot at a target outside the heading's tolerance");
+    assert_eq!(
+        last_fired(&w, u),
+        -100,
+        "no shot at a target outside the heading's tolerance"
+    );
 }
 
 // spec: S-0502 Edge cases (quirks.hovering_jumpjet_body_on_heading off, fixed behaviour: in hovering the physics steps do not set a vehicle's body facing from the heading, and for the reply to not facing without a turret its locomotor does not count as moving it; with no destination its body turns towards its target at its body turn rate, S-0206 claim 7, and it fires once the target lies within the tolerance; its movement heading is unchanged)
@@ -155,11 +181,17 @@ fn switch_off_a_hovering_vehicle_turns_its_body_and_fires_within_the_tolerance()
     let h = heading(&w, u);
     let start = body(&w, u);
     let d = to_target(&w, u, e);
-    assert!(delta(start, d).abs() > 2048, "set-up: the target is off the body");
+    assert!(
+        delta(start, d).abs() > 2048,
+        "set-up: the target is off the body"
+    );
     step(&mut w);
     // spec: S-0206 claim 7 and F1 (the body turns at the type's turn rate: Θ = ⌊|Δ| / (256 ω)⌋)
     let o = w.obj(u).unwrap();
-    assert_eq!(o.body.target, d, "the body's target facing is the direction of the target");
+    assert_eq!(
+        o.body.target, d,
+        "the body's target facing is the direction of the target"
+    );
     let theta = delta(start, d).abs() / (256 * omega(&w, u));
     assert!(theta > 1, "set-up: a turn of more than one tick");
     assert_eq!(o.body.duration, theta);
@@ -177,7 +209,10 @@ fn switch_off_a_hovering_vehicle_turns_its_body_and_fires_within_the_tolerance()
             break;
         }
     }
-    assert!(first.is_some(), "it fires once the body has turned to the target");
+    assert!(
+        first.is_some(),
+        "it fires once the body has turned to the target"
+    );
     assert!(delta(body(&w, u), d).abs() <= 2048);
 }
 
@@ -187,7 +222,10 @@ fn switch_off_the_body_returns_to_the_heading_at_the_first_step_outside_hovering
     let mut w = game_with_hoverers(false);
     let (u, e) = hoverer(&mut w, "HVGUN", true);
     let d = to_target(&w, u, e);
-    assert!(testkit_until_body(&mut w, u, d, 60), "the body turns to the target first");
+    assert!(
+        testkit_until_body(&mut w, u, d, 60),
+        "the body turns to the target first"
+    );
     // A move order far to the east: claim 13 row 1 turns the heading and the vehicle cruises.
     go(&mut w, u, at(12, 0));
     let mut out = false;
@@ -196,7 +234,11 @@ fn switch_off_the_body_returns_to_the_heading_at_the_first_step_outside_hovering
         step(&mut w);
         if was != Phase::Hovering {
             // spec: S-0502 claim 10 (outside hovering each physics step sets the body facing to the movement heading)
-            assert_eq!(body(&w, u), heading(&w, u), "the body is on the heading again");
+            assert_eq!(
+                body(&w, u),
+                heading(&w, u),
+                "the body is on the heading again"
+            );
             out = true;
             break;
         }
@@ -220,13 +262,27 @@ fn without_a_commitment_the_body_turns_to_the_target_under_either_setting() {
         assert!(!jump::moving(&w, u), "set-up: no movement commitment");
         let h = heading(&w, u);
         let d = to_target(&w, u, e);
-        assert!(delta(body(&w, u), d).abs() > 2048, "set-up: the target is off the body");
+        assert!(
+            delta(body(&w, u), d).abs() > 2048,
+            "set-up: the target is off the body"
+        );
         step(&mut w);
-        assert_eq!(w.obj(u).unwrap().body.target, d, "switch {on}: the body turns to the target");
+        assert_eq!(
+            w.obj(u).unwrap().body.target,
+            d,
+            "switch {on}: the body turns to the target"
+        );
         let fired = shots(&mut w, u, 40);
-        assert!(!fired.is_empty(), "switch {on}: it fires once within the tolerance");
+        assert!(
+            !fired.is_empty(),
+            "switch {on}: it fires once within the tolerance"
+        );
         assert!(delta(body(&w, u), d).abs() <= 2048);
-        assert_eq!(heading(&w, u), h, "switch {on}: no physics step turns the heading");
+        assert_eq!(
+            heading(&w, u),
+            h,
+            "switch {on}: no physics step turns the heading"
+        );
         assert_eq!(phase(&w, u), Phase::Hovering);
     }
 }
@@ -239,15 +295,27 @@ fn a_turreted_hovering_vehicle_aims_its_turret_with_the_body_on_the_heading() {
     step(&mut w);
     let h = heading(&w, u);
     let d = to_target(&w, u, e);
-    assert!(delta(h, d).abs() > 2048, "set-up: the target is off the heading");
+    assert!(
+        delta(h, d).abs() > 2048,
+        "set-up: the target is off the heading"
+    );
     let mut fired = false;
     for _ in 0..60 {
         let before = last_fired(&w, u);
         step(&mut w);
-        assert_eq!(body(&w, u), h, "the body stays on the heading at tick {}", w.tick);
+        assert_eq!(
+            body(&w, u),
+            h,
+            "the body stays on the heading at tick {}",
+            w.tick
+        );
         fired |= last_fired(&w, u) != before;
     }
-    assert_eq!(w.obj(u).unwrap().turret.target, d, "the turret aims at the target");
+    assert_eq!(
+        w.obj(u).unwrap().turret.target,
+        d,
+        "the turret aims at the target"
+    );
     assert!(fired, "it fires once its turret points at the target");
 }
 
@@ -273,7 +341,10 @@ fn an_omni_fire_hovering_vehicle_fires_with_its_body_where_the_setting_puts_it()
                 ticks.push(last_fired(&w, u));
             }
         }
-        assert!(ticks.len() >= 3, "switch {on}: it fires at its rearm rate: {ticks:?}");
+        assert!(
+            ticks.len() >= 3,
+            "switch {on}: it fires at its rearm rate: {ticks:?}"
+        );
         assert_eq!(heading(&w, u), h);
     }
 }
@@ -295,7 +366,11 @@ fn the_switch_leaves_a_jumpjet_turn_infantry_unit_alone() {
             step(&mut w);
             trace.push((heading(&w, u), body(&w, u), w.obj(u).unwrap().pos));
         }
-        assert_eq!(trace.last().unwrap().0, to_target(&w, u, e), "the heading snaps to the target");
+        assert_eq!(
+            trace.last().unwrap().0,
+            to_target(&w, u, e),
+            "the heading snaps to the target"
+        );
         trace
     };
     assert_eq!(run(true), run(false));
