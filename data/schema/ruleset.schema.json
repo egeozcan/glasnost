@@ -9019,6 +9019,11 @@
           "type": "boolean",
           "default": true
         },
+        "cleanup_shifts_start_marks": {
+          "description": "After the unused-house cleanup removes a house, every house after it in house order has a current place one lower, and the start position marks are read by current places; off: current places never change, and the cleanup frees every mark equal to a removed house's number.",
+          "type": "boolean",
+          "default": true
+        },
         "cleanup_skips_next_house": {
           "description": "The unused-house cleanup keeps the house after a removed one.",
           "type": "boolean",

@@ -141,8 +141,8 @@ pub fn free_marks() -> Vec<i32> {
 /// Applies header pairs 9 … min(N_h, 16) that the header holds to `marks`
 /// (S-0009 claim 29): pair i sets positions 2(i − 9) and 2(i − 9) + 1; an
 /// absent pair, or an unread component, leaves the mark as it stands. A
-/// mark at a position numbered `n` or above is not kept (a departure, and
-/// Q-3215's interim rule for References): it is noted and stays free.
+/// mark at a position numbered `n` or above is kept for the References
+/// rule, but no house holds a position by it (a departure, noted).
 pub fn apply_pairs(w: &mut World, header: &Header, marks: &mut [i32], n: usize) {
     for i in FIRST_MARK_PAIR..=header.count.min(LAST_MARK_PAIR) {
         let Some(Some(pair)) = header.pairs.get(i as usize - 1) else {
@@ -152,41 +152,102 @@ pub fn apply_pairs(w: &mut World, header: &Header, marks: &mut [i32], n: usize) 
             // spec: S-0009 claim 29 (pair i marks positions 2(i − 9) and 2(i − 9) + 1)
             let pos = 2 * (i - FIRST_MARK_PAIR) as usize + j;
             let Some(m) = *c else { continue };
-            if pos < n {
-                marks[pos] = m;
-            } else if m != FREE {
-                // spec: S-0009 claim 29 (a mark at a position numbered N or above: unspecified; our engine ignores it, a departure; Q-3215)
-                w.note("S-0009 claim 29: a header pair marks a start position numbered N or above; our engine ignores the mark (a departure)");
+            let Some(slot) = marks.get_mut(pos) else {
+                continue;
+            };
+            // spec: S-0009 claim 29 (References read the mark of each of positions A … H whatever N is; Q-3215's answer)
+            *slot = m;
+            if pos >= n && m != FREE {
+                // spec: S-0009 claim 29 (a house that holds a position numbered N or above: unspecified; our engine ignores the mark for which position the house holds, a departure; the References rule still reads it)
+                w.note("S-0009 claim 29: a header pair marks a start position numbered N or above; no house holds a position by it, and the References rule still reads it (a departure)");
             }
         }
     }
 }
 
-/// The highest-numbered position below `n` whose mark is house `h`'s
-/// number (S-0009 claim 29: a house holds a position whose mark is its
-/// house number, and takes the highest-numbered it holds).
-pub fn highest_held(marks: &[i32], n: usize, h: usize) -> Option<u32> {
+/// House `h`'s current place (S-0009 Terms): none for a house the
+/// unused-house cleanup removed; otherwise its house number less the number
+/// of removed houses before it in house order, or, with
+/// `quirks.cleanup_shifts_start_marks` off, its house number.
+pub fn current_place(w: &World, h: usize) -> Option<i32> {
+    let house = w.houses.get(h)?;
+    // spec: S-0009 claim 29 (After the cleanup: a house that the cleanup removes has no current place from then on)
+    if house.removed {
+        return None;
+    }
+    let shift = if w.rules().quirks.cleanup_shifts_start_marks {
+        // spec: S-0009 Terms (current place: the house number minus the houses before it in house order that the cleanup removed) and claim 29 (After the cleanup, quirks.cleanup_shifts_start_marks)
+        w.houses[..h].iter().filter(|x| x.removed).count()
+    } else {
+        // spec: S-0009 Edge cases (quirks.cleanup_shifts_start_marks off: current places never change)
+        0
+    };
+    i32::try_from(h - shift).ok()
+}
+
+/// The house whose current place is `m` (S-0009 Terms), if any.
+pub fn house_at_place(w: &World, m: i32) -> Option<usize> {
+    (0..w.houses.len()).find(|&h| current_place(w, h) == Some(m))
+}
+
+/// What the cleanup leaves in the marks (S-0009 claim 29, *After the
+/// cleanup*): nothing changes with `quirks.cleanup_shifts_start_marks` on;
+/// off, every mark equal to a removed house's number becomes −1.
+pub fn after_cleanup(w: &World, marks: &mut [i32]) {
+    // spec: S-0009 claim 29 (After the cleanup: the cleanup changes no mark)
+    if w.rules().quirks.cleanup_shifts_start_marks {
+        return;
+    }
+    for (h, house) in w.houses.iter().enumerate() {
+        if house.removed {
+            // spec: S-0009 Edge cases (quirks.cleanup_shifts_start_marks off: at the cleanup every mark equal to a removed house's house number becomes −1)
+            for m in marks.iter_mut().filter(|m| i64::from(**m) == h as i64) {
+                *m = FREE;
+            }
+        }
+    }
+}
+
+/// The highest-numbered position below `n` whose mark is `place` (S-0009
+/// claim 29: a house holds a position whose mark is its current place, and
+/// takes the highest-numbered it holds; positions numbered N or above are
+/// not held, a departure).
+pub fn highest_held(marks: &[i32], n: usize, place: i32) -> Option<u32> {
     (0..n.min(marks.len()))
         .rev()
-        .find(|&p| i64::from(marks[p]) == h as i64)
+        .find(|&p| marks[p] == place)
         .map(|p| p as u32)
 }
 
+/// Sets the start position of each house of `order` to the highest-numbered
+/// position below `n` that it holds by its current place, or none (S-0009
+/// claim 29).
+pub fn take_held(w: &mut World, order: &[usize], marks: &[i32], n: usize) {
+    for &h in order {
+        let place = current_place(w, h);
+        // spec: S-0009 claim 29 (a non-passive house holding positions takes the highest-numbered, by its current place)
+        w.houses[h].start = place.and_then(|c| highest_held(marks, n, c));
+    }
+}
+
+/// Whether "player at position X" reads the marks (S-0009 claims 21 and
+/// 29): on a map whose header count is 9 or more, and on any map once the
+/// cleanup of claim 28 has removed a house.
+pub fn references_read_marks(w: &World, header: &Header) -> bool {
+    // spec: S-0009 claim 21 (on a map whose N_h is 9 or more, and on any map once the cleanup of claim 28 has removed a house, the References rule of claim 29 replaces this one)
+    marks_apply(header) || w.houses.iter().any(|h| h.removed)
+}
+
 /// "Player at position" `k` (S-0009 claims 21 and 29): with the marks in
-/// force (a header count of 9 or more), the house whose house number is
-/// mark `k`, which may be passive, and none when no house has it; a house
-/// the cleanup removed is no house (Q-3213's interim rule). Otherwise the
-/// house that holds start position `k` and is not removed.
+/// force, the house whose current place is mark `k`, which may be passive,
+/// and none when no house has that place (a removed house has none).
+/// Otherwise the house that holds start position `k` and is not removed.
 pub fn player_at(w: &World, k: u32) -> Option<HouseId> {
     match &w.start_marks {
-        // spec: S-0009 claim 29 (References: with N_h ≥ 9, the house whose house number equals mark X; Q-3213's interim rule: a removed house is none)
+        // spec: S-0009 claim 29 (References: the house whose current place equals the mark of position X, which may be a passive house; empty when no house has that place)
         Some(marks) => {
             let m = *marks.get(k as usize)?;
-            let h = usize::try_from(m).ok()?;
-            w.houses
-                .get(h)
-                .filter(|x| !x.removed)
-                .map(|_| HouseId(h as u8))
+            house_at_place(w, m).map(|h| HouseId(h as u8))
         }
         // spec: S-0009 claim 21 (the house holding start position X)
         None => w
@@ -201,8 +262,8 @@ pub fn player_at(w: &World, k: u32) -> Option<HouseId> {
 /// (S-0009 claim 19), against `list`: one ranged draw over 0 … N − 1 when
 /// no position is taken, the farthest-sum rule otherwise. A position is
 /// taken when its mark is not −1 (claim 29), and a position given out
-/// takes the house's number. A house that finds every position below N
-/// taken gets none (claim 29, a departure).
+/// carries the house's current place. A house that finds every position
+/// below N taken gets none (claim 29, a departure).
 pub fn assign(w: &mut World, order: &[usize], list: &[CellXY], marks: &mut [i32]) {
     let n = list.len().min(marks.len());
     let q = w.rules().quirks;
@@ -210,6 +271,10 @@ pub fn assign(w: &mut World, order: &[usize], list: &[CellXY], marks: &mut [i32]
         if w.houses[h].start.is_some() {
             continue;
         }
+        // spec: S-0009 claim 28 (a removed house takes no position)
+        let Some(place) = current_place(w, h) else {
+            continue;
+        };
         // spec: S-0009 claim 29 (every position below N whose mark is not −1 counts as taken)
         let taken: Vec<usize> = (0..n).filter(|&p| marks[p] != FREE).collect();
         let pos = if taken.is_empty() {
@@ -233,7 +298,8 @@ pub fn assign(w: &mut World, order: &[usize], list: &[CellXY], marks: &mut [i32]
             best.map(|b| b.1).or(first_free)
         };
         match pos {
-            Some(p) => marks[p] = h as i32,
+            // spec: S-0009 claim 29 (the position a house is given carries its current place)
+            Some(p) => marks[p] = place,
             // spec: S-0009 claim 29 (every position below N taken: unspecified; our engine gives the house no start position and so no starting units, a departure)
             None => w.note("S-0009 claim 29: every start position below N is taken; a house gets no start position and no starting units (a departure)"),
         }

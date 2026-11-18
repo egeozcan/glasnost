@@ -659,6 +659,10 @@ pub struct Quirks {
     // spec: S-0009 claim 28
     #[serde(default = "on")]
     pub cleanup_skips_next_house: bool,
+    /// After the unused-house cleanup removes a house, every house after it in house order has a current place one lower, and the start position marks are read by current places; off: current places never change, and the cleanup frees every mark equal to a removed house's number.
+    // spec: S-0009 claim 29 (After the cleanup) and Edge cases
+    #[serde(default = "on")]
+    pub cleanup_shifts_start_marks: bool,
     /// A driving vehicle's give-up test at a step check ignores contact.
     // spec: S-0207 claim 15, Edge cases
     #[serde(default = "on")]
@@ -2521,6 +2525,7 @@ impl Default for Quirks {
             stale_fill_tiles: true,
             observer_position_handoff: true,
             cleanup_skips_next_house: true,
+            cleanup_shifts_start_marks: true,
             drive_giveup_ignores_contact: true,
             drive_duplicate_scatter_request: true,
             drive_nearest_from_top_corner: true,
@@ -3283,6 +3288,10 @@ impl Quirks {
             ("stale_fill_tiles", self.stale_fill_tiles),
             ("observer_position_handoff", self.observer_position_handoff),
             ("cleanup_skips_next_house", self.cleanup_skips_next_house),
+            (
+                "cleanup_shifts_start_marks",
+                self.cleanup_shifts_start_marks,
+            ),
             (
                 "drive_giveup_ignores_contact",
                 self.drive_giveup_ignores_contact,

@@ -32,7 +32,7 @@ use crate::brain::Brain;
 /// Format version of a game save (the world's own save inside it carries
 /// the simulation's version).
 // nocite: version number of our own save format
-pub const GAME_FORMAT_VERSION: u32 = 129;
+pub const GAME_FORMAT_VERSION: u32 = 130;
 
 /// Bytes reserved beyond the world's save for the rest of a game save: a
 /// first guess at the brains and the replay, not a limit.
