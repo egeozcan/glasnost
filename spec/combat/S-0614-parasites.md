@@ -2,13 +2,13 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 32
+revision: 35
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-05
+approved-on: 2026-11-18
 measurements: []
-requests: [Q-0620, Q-0621, Q-0622, Q-0623, Q-1032, Q-2671]
+requests: [Q-0620, Q-0621, Q-0622, Q-0623, Q-1032, Q-2671, Q-3240]
 supersedes: []
 ---
 
@@ -22,8 +22,9 @@ scope. Claims 15, 20 and 23 answer Q-0620. Claims 21 and 22 answer Q-0621 and Q-
 answers Q-0622. S-0209 claims 4 and 5 already supply entry outcomes, and S-0208 claim 3 already
 supplies standing-position choice; this spec establishes their placement uses. Claim 24 answers
 Q-1032: a higher selected special hit strands the carried parasite rather than returning it after a
-failed latch. Claim 25 answers Q-2671: the grab animation of a grappling parasite. S-0514 claim 20
-already owns effect precedence.
+failed latch. Claim 25 answers Q-2671: the grab animation of a grappling parasite. With S-0109
+claim 22, it also answers Q-3240 for that animation: no event detaches it during a hold. S-0514
+claim 20 already owns effect precedence.
 
 ## Terms
 
@@ -606,10 +607,15 @@ addition:
       latch, starting a new hold, creates a new one. When no animation type has the fixed name, none
       is created and the cycle runs as claim 10 gives.
     - **Attachment.** In that same turn the parasite attaches it to the host with no displacement
-      (S-0109 claim 22), and it attaches it again in any later turn of the hold that reaches that
-      step and finds it detached. So it follows the host's position, height included, and is in the
-      ground render layer. The host's rocking (S-0113 claim 14) tilts the host's body but not the
-      animation, which is always drawn upright.
+      (S-0109 claim 22). Until an event of S-0109 claim 22's *End with the owner* list ends it,
+      it stays attached, since no event detaches an attached animation that goes on playing
+      (S-0109 claim 22). So it follows the host's position, height included, and is in the ground
+      render layer. When an event of S-0109 claim 22's *End
+      with the owner* list ends it while the hold goes on, it is not attached or drawn again
+      (Edge cases). The original attaches such an ended animation to the host again in a later
+      turn of the hold that reaches this step, so it can be drawn once more before it is deleted.
+      The host's rocking (S-0113 claim 14) tilts the host's body but not the animation, which is
+      always drawn upright.
     - **Stage.** The cycle sets the animation's stage *k* (S-0109 claim 1). Each time the phase
       frame *j* of table G steps to a value from 1 to 9, the parasite sets *k* = *b* + 10 × *d* +
       *j*, leaves the animation's direction of play unchanged, and restarts its stage clock with a
@@ -668,18 +674,21 @@ addition:
       mapping) does not change it.
     - **Translucency and viewers.** Its creator asks for no translucency, so its type's own
       translucency and detail fields apply (S-0109 claim 20 for translucency, claim 19 for the
-      detail field). It is drawn for every viewer by the ordinary animation rules. Neither the cloak
-      or submerged state of the parasite, which is off the map, nor the host's cloak changes whether
-      it is drawn. These states seldom last: a held host is uncloaked (claim 8), and a parasite
-      uncloaks when it fires its latching weapon (S-0516 claim 11).
+      detail field). It is drawn for every viewer by the ordinary animation rules. The cloak or
+      submerged state of the parasite, which is off the map, does not change whether it is drawn.
+      The host's start of cloaking, and its becoming fully cloaked, end it by S-0109 claim 22, and
+      it is then not attached or drawn again (Attachment, above). Neither state is known to arise
+      while the animation plays: a held host is uncloaked and cannot stay cloaked (claim 8), and a
+      parasite uncloaks when it fires its latching weapon (S-0516 claim 11).
     - **Removal.** Apart from an end under S-0109's rules (above), it never ends by itself. It is
       removed at once when the parasite leaves the host by any way of claims 11 to 13 (a cull, any
       way of claim 12, a host cell that is not water), when the strike's own hit destroys the host
       (in that strike's turn), when the host is lost otherwise (claim 15) and when the parasite is
       removed from the game. A culled host therefore sinks without it. At each of these removals it
       stops being drawn from that turn on and leaves play in that turn, as an animation that ends
-      does (S-0203 claim 10). The parasite removes it before the host leaves play, so S-0109 claim
-      22's deletion at the animation's next update after its owner's removal does not apply. Created
+      does (S-0203 claim 10). The parasite removes it in that turn, whether or not an event of S-0109
+      claim 22's *End with the owner* list for the host came first in that turn, so claim 22's
+      deletion at the animation's next update does not apply. Created
       during the host's turn, it stands after the host in the update order (S-0109 claim 29), so its
       leaving during the host's turn costs no object a turn. When it leaves during another object's
       turn, as at a host loss of claim 15 caused by another object, S-0203 claim 10 decides by its
@@ -721,13 +730,17 @@ addition:
       without it leaving the host or the host being lost. The rows of claim 12 that remove the
       parasite silently do so as it exits the host (their last column), so they are ways of
       leaving the host. `unmeasured` for the absent type, which needs an install without that
-      animation type, and the stock-data setup offers none. `unmeasured` for the reattachment of a
-      detached animation: no skirmish event is known to detach it during a hold (S-0109 claim 22
-      rates detachment `unmeasured`). The creation, settings, palette and brightness in turns that
-      do not reach the step follow claim 18's engine-design warp contract and take its backing.
-      `unmeasured` for the cloak and submerged states: a held host is uncloaked (claim 8) and a
-      parasite uncloaks when it fires its latching weapon (S-0516 claim 11), so no run is known to
-      hold either state while the animation is drawn. `unmeasured` for the height: a host held by
+      animation type, and the stock-data setup offers none. `unmeasured` for the original's
+      attaching again of an animation ended while the hold goes on: no skirmish event is known
+      that ends it by S-0109 claim 22 and leaves the hold going on, so no run reaches it. The
+      statement rests on the hold's step in each turn that reaches it, which attaches the
+      animation to the host whenever it is not attached to it. Our engine's rule for that case
+      is a design decision (Edge cases). The creation, settings, palette and brightness in turns
+      that do not reach the step follow claim 18's engine-design warp contract and take its
+      backing. `unmeasured` for the cloak and submerged states and for the host's cloak ending
+      the animation: a held host is uncloaked (claim 8) and a parasite uncloaks when it fires its
+      latching weapon (S-0516 claim 11), so no run is known to hold either state while the
+      animation is drawn. `unmeasured` for the height: a host held by
       a grappling parasite is on water, where no run tells its height from the cell's.
     - Confidence: high (the fixed type, one creation per hold in the grab's first turn on water, the
       position on the map at creation, the stage formula, the type's own reverse flag applying, the
@@ -745,7 +758,8 @@ addition:
       claim 12, the brightness and its following of a light change, as S-0103 claim 8 rates the
       brightness of row 3, the height, the cloak and submerged states, no own advance between
       settings, which rests on the 128-tick value, the 128-tick value of the restart and its being
-      in ticks at every game speed, the reattachment of a detached animation, the creation,
+      in ticks at every game speed, the original's attaching again of an animation ended while
+      the hold goes on, the host's cloak ending the animation, the creation,
       settings, palette and brightness in turns that do not reach the step, which follow claim 18's
       engine-design contract, the turns that set the stage, which rest on the phase stepping of
       claim 10 and S-0113 claim 14's frame count *k*, the first update and any own advance before
@@ -903,6 +917,11 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
   position-choice draw count. This is a gameplay bug, not merely a misplaced drawing.
 - **Re-selection on exit** is presentation; claim 19 fixes the original's display-only glitch
   without a quirk switch.
+- **A grab animation ended during a hold** (departure, claim 25). The original attaches a grab
+  animation that an event of S-0109 claim 22's list has ended to the host again in a later turn
+  of the hold, so it can be drawn once more before its deletion. That is a drawing artefact with
+  no effect on play. Our engine does not attach or draw it again, without a switch, as decided
+  at the delegated sign-off, 2026-11-18.
 - **A drone parasite on an infantry host** kills it at the first delivery whatever its health,
   since the hit ignores defences. The can-carry-a-parasite default for infantry types is yes.
 
