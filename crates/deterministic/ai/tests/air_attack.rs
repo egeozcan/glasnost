@@ -192,6 +192,69 @@ fn a_unit_getting_away_is_not_ordered_at_every_think() {
     assert!(ordered <= 2, "{ordered} of {} thinks: {log:?}", log.len());
 }
 
+/// Where Beta's tank bunker stands, from Beta's home: eight cells west of
+/// [`NEAR_HOME`], away from the disc.
+const BUNKER: (i32, i32) = (-4, -16); // nocite: a synthetic scene
+
+/// [`ruleset`] with BUNK, a 2 × 2 tank bunker (S-0606) nobody can build
+/// (tech level -1), as in `tests/bunker.rs`.
+fn bunker_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
+    let mut r = ruleset();
+    let mut b = glasnost_ai::fixture::building(2, 2, 500, 0);
+    b.bunker = Some(true);
+    b.number_impassable_rows = Some(0);
+    b.tech_level = Some(-1);
+    r.sim.buildings.insert("BUNK".into(), b);
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("BUNK".into());
+    std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
+        &r,
+        glasnost_ai::fixture_m7b::MAP_NAME,
+    ))
+}
+
+/// The job scene: Beta's GUNR near home under the disc, on its way into
+/// Beta's bunker by the enter click (S-0606 claims 1 and 2), the job
+/// another part of the brain gives it.
+fn on_job() -> Scene {
+    let mut w = world_with(bunker_rules());
+    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, NEAR_HOME.0, NEAR_HOME.1);
+    let b = spawn(&mut w, "BUNK", Kind::Building, 1, BUNKER.0, BUNKER.1);
+    let d = disc(&mut w, NEAR_HOME.0 + OVER, NEAR_HOME.1);
+    glasnost_sim::orders::issue(
+        &mut w,
+        BETA,
+        Order::Behaviour {
+            actor: x,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Object(b)),
+        },
+    );
+    glasnost_sim::testkit::run(&mut w, 1);
+    let o = w.obj(x).unwrap();
+    assert!(
+        o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter),
+        "on its way in: {o:?}"
+    );
+    Scene {
+        w,
+        x,
+        d,
+        flak: None,
+    }
+}
+
+// design: own AI (#434, #443): a unit on a job another part gave it (here the enter click into a tank bunker, S-0606) is left to that job: hit by an air unit it cannot hit, it is not ordered away.
+#[test]
+fn a_unit_on_its_way_into_a_bunker_is_not_ordered_away() {
+    let (sent, log) = moves_for_shot(on_job, 60);
+    assert!(sent.is_empty(), "sent to {sent:?}: {log:?}");
+}
+
 // design: own AI (#434): a unit of another house (a person's) is never ordered by the AI house's brain.
 #[test]
 fn a_unit_of_another_house_is_never_ordered() {
