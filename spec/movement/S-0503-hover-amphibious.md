@@ -2,13 +2,13 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 28
+revision: 29
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-18
 measurements: []
-requests: [Q-0679, Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696, Q-1773]
+requests: [Q-0679, Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696, Q-1773, Q-3235]
 supersedes: []
 ---
 
@@ -24,8 +24,6 @@ switch-offs and switch-ons by a repair depot or naval yard (claims 10 and 11). I
 movement model an amphibious type uses, and how land and water affect the speed of hovering and
 amphibious vehicles. Skirmish only; network games and campaigns are out of scope.
 
-Against revision 16, this revision adds claim 19 (Q-1773), the deploy order of a moving hover,
-with scenario H16 and two proposed quirk switches for it. No claim of revision 16 changes.
 
 Pointers, not repeated here:
 - land types, locomotion classes, land multipliers, entering a cell and zones: S-0211 claims 1–3
@@ -94,7 +92,8 @@ New terms:
   Unless held, assignment sets its height to the surface height of its cell, plus 416 leptons on
   a high-bridge cell. Held assignment retains the supplied point without this height adjustment.
   For a cell destination that supplied point is its centre at terrain surface height, without
-  a bridge-deck lift; claim 18 gives its lifetime and order-level consequences.
+  a bridge-deck lift; claim 18 gives its lifetime and order-level consequences. For a destination
+  that names an object, claim 20 gives where the point comes from and when it changes.
 - **Held.** The parasite hold timer of S-0614 claims 7–8 is running. This is the meaning of
   *paralysed* for this spec's hover assignment and choice rules, not electromagnetic-pulse disable.
   Claim 17 gives its consequences.
@@ -796,6 +795,35 @@ New terms:
       whether a landing-first type's landing request ever ends while it hovers, and so for that
       type never deploying once its first step has found it above the ground
 
+20. **A destination that names an object (Q-3235).** When an effective assignment gives a hovering
+    vehicle a destination that names an object (an infantry unit, a vehicle, an aircraft or a
+    building), *D* is that object's movement point at the moment of the assignment, with the height
+    of Terms, or claim 18's point while held. *D* does not follow the object afterwards. However
+    far or fast the object moves, neither *D* nor the stored path changes because of it. The
+    throttle of claim 2, the completion test of claim 7 and the arrival rows of claim 15 use that
+    *D*, and so do the searches of S-0212 claims 20 to 23: a search looks for *D*'s cell, not for
+    the cell the object is in at the time of the search. *D* changes only by what changes it for
+    any destination: a new effective assignment, a stop (claims 16 and 19), completion, or a search
+    that fails and gives up.
+
+    As S-0502 claim 24 states for a jumpjet vehicle, a vehicle ignores an unchanged
+    order-level destination unless its destination-refresh state (S-0502 claim 27) is on, and the
+    ignored assignment leaves *D* as it was. So *D* takes the object's later position when the
+    destination has first changed or become empty and the object is then assigned again, for
+    example by a behaviour that gives it again after the vehicle has arrived (S-0215). This holds
+    whatever kind of object the destination names. It holds too for a vehicle that chases its
+    target with the target as its destination (S-0207 claim 19 (c)): the chase cut of S-0212
+    claim 20 shortens the stored path, and the fresh search that follows looks for *D*'s cell. When
+    the chase's approach step gives a cell instead (S-0215 claim 37), each new cell that it gives is
+    a new destination and gives a new *D* by Terms.
+    - Backing: `measurable` (S-0507 scenario T16, which records *D* and the object's position from
+      the assignment on, with its part (c), in which the object walks away without going inside).
+      `unmeasured` for the ignored repeated assignment and for the chase. No setup here gives a
+      hovering vehicle the object it already holds as its destination again with no other effect of
+      the order that does so, and S-0207 scenario D21 explains why the hovering chase cannot be
+      isolated from the vehicle's other step-point reactions.
+    - Confidence: high for *D* staying at the assignment point; medium for the ignored repeated assignment and for the chase
+
 ## Formulas
 
 Every floating-point operation in this spec runs in the original's program-wide round-toward-zero
@@ -1361,3 +1389,16 @@ One valid run per subcase unless stated. No completed measurement is claimed.
   search of S-0212 for a retained *D* not completed on arrival, claim 18's height case),
   whether the deploy order's clear acts on the changed points, and so whether a suppressed
   assignment and an effective one differ, is not known. No stock setup reaches the case. Open.
+
+## Changes for other specs
+
+- **S-0212 claim 20, chase paragraph.** "When the chased unit moves slowly it stays close to the
+  chased unit's position." should say that the fresh search after a cut looks for the movement
+  point that the last effective assignment fixed (S-0503 claim 20 for hovering movement, S-0207
+  claim 25 for driving and ship movement). The unit stays close to the chased unit only as far as
+  new assignments move that point. Level and backing: those of S-0503 claim 20 for the chase.
+- **S-0207 claim 25.** "This is not an unconditional assignment on every received move order."
+  should also say that a vehicle ignores a repeated assignment of the destination it already holds
+  outside the destination-refresh state of S-0502 claim 27, as S-0502 claim 24 states for a jumpjet
+  vehicle, so that assignment supplies no new point. Level medium, backing `unmeasured`: those of
+  S-0503 claim 20 for the ignored repeated assignment.
