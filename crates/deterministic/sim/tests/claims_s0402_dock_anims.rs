@@ -433,6 +433,92 @@ fn claim_11_r84_only_damaged_names_at_full_health_play_nothing() {
     assert_eq!(run.broken, run.f + 1);
 }
 
+/// One tick of a harvest cycle's unloading, as #444's trace records it:
+/// the harvester's contact, unloading and finishing states, the house's
+/// credits and the refinery's running modelled slots.
+#[derive(Debug)]
+#[allow(dead_code)] // read through Debug in the failure messages
+struct Row {
+    tick: i32,
+    contact: bool,
+    unloading: bool,
+    finishing: bool,
+    credits: i32,
+    slots: Vec<(DepotSlot, String)>,
+}
+
+// spec: S-0402 claim 11 and Terms (from the contact a harvester makes on its own, after driving to the refinery from its field: the start row starts the docking animation, the building's pre-production slot; each payment the payment animation, its special-1 slot; the empty-load row the unloading animation, its production slot; finishing waits while that plays) and S-0108 claim 20 (the depot-role slots are simulation state)
+#[test]
+fn claim_11_issue_444_the_slots_of_a_whole_cycle_from_contact() {
+    let r = rules();
+    let mut ore = Vec::new();
+    for dy in 0..3 {
+        for dx in 0..3 {
+            ore.push((at(4 + dx, -1 + dy), ORE, 5));
+        }
+    }
+    let mut w = game_with_ore(&r, &ore, 7);
+    let b = place_building(&mut w, "REFN", 0, at(-6, -1));
+    let h = place_vehicle(&mut w, "HARV", 0, at(0, 0), 0);
+    w.obj_mut(h).unwrap().beh.queue(None);
+    w.obj_mut(h).unwrap().beh.current = None;
+    // spec: S-0215 claim 15 row 4 (the placement fall-back of a harvester queues harvest)
+    glasnost_sim::process::fall_back(&mut w, h, true);
+    until(&mut w, 3000, |w| w.obj(h).unwrap().contact == Some(b)).expect("contact");
+    let mut log = Vec::new();
+    for _ in 0..600 {
+        let s = harvest::state_of(&w, h);
+        log.push(Row {
+            tick: w.tick,
+            contact: w.obj(h).unwrap().contact == Some(b),
+            unloading: s.unloading,
+            finishing: s.finishing,
+            credits: w.houses[0].credits,
+            slots: depot_anim::draws(&w, b)
+                .into_iter()
+                .map(|d| (d.slot, d.name))
+                .collect(),
+        });
+        if !log.last().unwrap().contact {
+            break;
+        }
+        testkit::run(&mut w, 1);
+    }
+    let has = |row: &Row, s: DepotSlot| row.slots.iter().any(|(x, _)| *x == s);
+    let first = |f: &dyn Fn(&Row) -> bool| log.iter().position(f);
+    let start = first(&|r: &Row| r.unloading).expect("unloading starts");
+    assert!(
+        has(&log[start], DepotSlot::PreProduction),
+        "the docking animation with the start row: {log:#?}"
+    );
+    let c0 = log[start].credits;
+    let paid = first(&|r: &Row| r.credits != c0).expect("a payment");
+    assert!(
+        has(&log[paid], DepotSlot::Special1),
+        "the payment animation with the payment: {log:#?}"
+    );
+    let fin = first(&|r: &Row| r.finishing).expect("finishing");
+    assert!(
+        has(&log[fin], DepotSlot::Production),
+        "the unloading animation with the empty-load row: {log:#?}"
+    );
+    assert!(
+        !has(&log[fin], DepotSlot::Special1),
+        "the payment animation stopped last in that row: {log:#?}"
+    );
+    let gone = log[fin..]
+        .iter()
+        .position(|r| !has(r, DepotSlot::Production))
+        .map(|i| fin + i)
+        .expect("the unloading animation ends");
+    let broken = first(&|r: &Row| !r.contact).expect("contact broken");
+    assert!(gone > fin + 1, "the animation lasts: {log:#?}");
+    assert!(
+        broken >= gone && broken <= gone + 1,
+        "finishing waits for the unloading animation: {log:#?}"
+    );
+}
+
 // spec: S-0402 Terms (each is played in its damaged form when the building's health ratio is at or below the yellow threshold) and S-0108 claim 12
 #[test]
 fn claim_11_damaged_forms() {
