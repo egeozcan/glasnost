@@ -1,9 +1,9 @@
 ---
 id: Q-3252
 title: Whether a hovering jumpjet vehicle with an omni-fire weapon turns to face its target
-status: open
+status: answered
 related: [S-0502, S-0310, S-0206, S-0501]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need
