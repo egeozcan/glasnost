@@ -55,6 +55,8 @@ mod tests;
 #[cfg(test)]
 mod transient_tests;
 #[cfg(test)]
+mod tree_depth_tests;
+#[cfg(test)]
 mod turret_index_tests;
 pub mod unload;
 pub mod walk;
