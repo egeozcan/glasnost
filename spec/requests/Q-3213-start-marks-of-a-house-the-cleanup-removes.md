@@ -1,9 +1,9 @@
 ---
 id: Q-3213
 title: What a house removed by the unused-house cleanup leaves in the start position marks
-status: open
+status: answered
 related: [S-0009, S-0414]
-answered-by: []
+answered-by: [S-0009]
 ---
 
 ## Need

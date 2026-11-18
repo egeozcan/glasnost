@@ -1,9 +1,9 @@
 ---
 id: Q-3214
 title: How header-pair start marks apply with quirks.double_start_resolution off
-status: open
+status: answered
 related: [S-0009]
-answered-by: []
+answered-by: [S-0009]
 ---
 
 ## Need

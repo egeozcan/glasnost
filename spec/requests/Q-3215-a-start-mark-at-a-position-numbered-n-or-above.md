@@ -1,9 +1,9 @@
 ---
 id: Q-3215
 title: Does "player at position X" read a start mark at a position numbered N or above?
-status: open
+status: answered
 related: [S-0009, S-0011]
-answered-by: []
+answered-by: [S-0009]
 ---
 
 ## Need
