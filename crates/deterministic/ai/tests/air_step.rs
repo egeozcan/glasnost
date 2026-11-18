@@ -121,12 +121,10 @@ fn after_step(attack: bool) -> (bool, String) {
             },
         );
     }
-    let mut n = 0;
-    for _ in 0..(3 * EVERY) {
+    for n in 0..(3 * EVERY) {
         if n % EVERY == 0 && in_reach(&w, d, x) {
             shoot(&mut w, d, x);
         }
-        n += 1;
         testkit::run(&mut w, 1);
     }
     let o = w.obj(x).unwrap();
