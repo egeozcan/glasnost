@@ -2,13 +2,13 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 24
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-13
+approved-on: 2026-11-18
 measurements: []
-requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504, Q-3042, Q-3043]
+requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504, Q-3042, Q-3043, Q-3252]
 supersedes: []
 ---
 
@@ -120,8 +120,9 @@ New terms:
     instruction clears it. This is independent of the order-level destination: stop can
     clear that destination while retaining movement through rerouting (claim 24).
   - It is *moving now* in every jumpjet state except *grounded* and *hovering*.
-  - Glossary candidate: this is the jumpjet sense of "the locomotor is moving it" in S-0310
-    claims 7 and 8.
+  - Glossary candidate: in S-0310 claims 7 and 8, "the locomotor is moving it" reads
+    *moving now* for a jumpjet. In the facing replies of S-0310 claim 9 and in the rule without
+    a turret of S-0206 claim 9, it reads *moving*, the movement commitment (claim 10).
 - **Destination-refresh state.** A pending requirement to reapply a vehicle's order-level
   destination even when unchanged (claims 24 and 27). It is runtime state, initially absent,
   not an imported field. It is distinct from a movement commitment.
@@ -415,6 +416,55 @@ New terms:
     - Backing: `measurable` (scenario J6 for ordinary facing and steps; S-0607 scenario L2
       for retained facing while seized).
     - Confidence: high
+
+    **A vehicle with a target (Q-3252).** A jumpjet vehicle that keeps a movement commitment does
+    not turn its body towards its target, whether it hovers or moves, and whatever its weapon.
+    Such a vehicle takes a physics step in every tick (claim 3). Unless it is held by magnetic
+    lift, which keeps its body facing (above), each step sets its body facing to the movement
+    heading. The heading does not follow the target: it turns only towards the movement point
+    (S-0206 claim 14), towards the deploy direction of claim 15, or in the crash spin of claim
+    18. The vehicle keeps the commitment it took off with while it hovers to attack: an
+    effective clear of its destination reroutes it with a commitment (claims 24 and 17), and an
+    ignored repeat of an empty destination leaves the commitment as it was (claim 24). In the
+    original the commitment ends only at touchdown or at a direct no-point instruction (Terms).
+    The off setting of `quirks.jumpjet_no_cell_self_destruct` (Edge cases) also clears it. At
+    arrival a jumpjet with a target enters *hovering*, or takes a neighbour step when its hover
+    slot is held (claim 12). In *hovering* it keeps hovering while it has a target, unless its
+    destination lies elsewhere and it enters *cruising* (claim 13). For the reply to *not facing* without a turret (S-0206 claim 9,
+    S-0310 claim 9), its locomotor is moving it whenever it is *moving* (Terms), so that reply
+    gives it no body turn. Its destination, while it has one, bars that reply as well. So:
+    - **Omni-fire weapon.** It fires whatever the direction of its target (S-0310 claim 2), with
+      its body on its movement heading.
+    - **Another weapon, no turret.** While the direction of its target is more than the aiming
+      tolerance of S-0310 claim 2 from its heading, it does not fire: its firing check answers
+      *not facing*, or an answer that ranks above it (S-0310 claim 6), as while its rearm
+      countdown runs. It fires only while that direction lies within the tolerance of its
+      heading. That happens only when the target comes to lie in that direction, or one of the
+      heading's own turns above brings the heading to it
+      (`quirks.hovering_jumpjet_body_on_heading`; Edge cases).
+    - **With a turret.** The turret aims by S-0206 claim 9 as on any vehicle, and the body stays
+      on the heading.
+    - **The jumpjet-turn flag.** It is a field of infantry types only (S-0310 claim 8). A
+      vehicle has none, and the exception above never applies to it.
+    - **Balloon-hover vehicle.** The same rules apply. Where claim 28 keeps its destination, that
+      destination bars the reply, and its heading turns towards the kept movement point, not
+      towards the target.
+    - **Without a commitment.** A hovering jumpjet vehicle without a movement commitment takes no
+      physics step (claim 3), so nothing sets its body from the heading. The reply without a
+      turret then applies as on the ground: with no destination and a *not facing* answer, it
+      turns the body towards the target at the vehicle's body turn rate (S-0206 claim 7), and
+      the vehicle can fire once the direction of its target lies within the tolerance. An
+      omni-fire weapon never gives *not facing* (S-0310 claim 2), so with one the body does not
+      turn. No ordinary input is known to give a hovering vehicle that state (claim 3).
+    - Backing: `measurable` (scenario J33: parts a and b for the body on the heading while
+      hovering, a for the omni-fire weapon, b and c for the weapon that is not omni-fire, d for
+      the move). `unmeasured` for the turret and balloon-hover cases, which J33 does not vary,
+      for the jumpjet-turn flag, which a vehicle type cannot be given, and for the vehicle
+      without a commitment, a state that no ordinary input reaches (claim 3).
+    - Confidence: high for the body on the heading while the vehicle keeps its commitment, in
+      *hovering* and in the move, and for the omni-fire weapon; medium for the weapon that is
+      not omni-fire, for the turret and balloon-hover cases and for the jumpjet-turn flag; low
+      for the vehicle without a commitment
 
 ### Cruise and arrival
 
@@ -1486,6 +1536,25 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   - Confidence: high for the reference, the height per update, the speed reset and the
     held-up condition; medium that no other
     event ends a held-up crash.
+- **Body on the heading while hovering** (`quirks.hovering_jumpjet_body_on_heading`, default on,
+  YR behaviour).
+  - On: a jumpjet vehicle that hovers with a target and keeps a movement commitment, and is not
+    held by magnetic lift, keeps its body on its movement heading, and with a weapon that is not
+    omni-fire and no turret it does not fire at a target outside the aiming tolerance of that
+    heading (claim 10). A hovering vehicle without a commitment follows claim 10's *Without a
+    commitment* bullet under either setting.
+  - Off (fixed behaviour): in *hovering*, a jumpjet vehicle's physics steps do not set its body
+    facing from the movement heading, and for the reply to *not facing* without a turret its
+    locomotor does not count as moving it. With no destination, its body then turns towards its
+    target at its body turn rate (S-0206 claim 7), and it fires once the target lies within the
+    tolerance, as a vehicle without a turret on the ground does. Its movement heading is
+    unchanged. The first physics step outside *hovering* sets the body facing from the heading
+    again, at once. These two changes hold for an omni-fire weapon too, but its firing check
+    never answers *not facing* (S-0310 claim 2), so the reply never turns its body and it keeps
+    the body facing it had when it entered *hovering*.
+  - Backing: `measurable` (J33 gives the original-behaviour falsifier). The off alternative is a
+    design rule, not a claim about the original.
+  - Confidence: medium (the original behaviour, as claim 10)
 - **Ion storms.** An ion storm makes every flying jumpjet of the affected house crash, and stops a
   grounded one taking off. Ion storms do not occur in skirmish, so this is out of scope.
 
@@ -2199,6 +2268,41 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   - A changed order-level destination, a draw or a stop at an order in (a) or (b) falsifies
     claim 23's no-effect rule.
 
+- **J33 A hovering jumpjet vehicle and its target's direction (claim 10, Q-3252).** Common
+  setup. Named test data *jumpjet-flight-test*: a jumpjet vehicle type, not balloon-hover, with
+  no turret, a primary weapon whose projectile is not homing, and a body turn rate above 0, in
+  two variants: (1) the weapon with the omni-fire flag, (2) the same weapon without it. Recorder:
+  each tick, the vehicle's flight state, body facing, movement heading, order-level destination,
+  target, the tick of each shot, and the target's position. The *hovering window* of a part is
+  the run of ticks, after the attack order, in which the vehicle is *hovering* with the tank as
+  its target.
+  - (a) Variant 1. Place an enemy tank, stationary, beside a straight lane across the open area.
+    Order the vehicle to a far cell along the lane. While it cruises, at the tick in which the
+    tank is within range and about a quarter turn (16384 facing units) to one side of its
+    movement heading, order it to attack the tank. Record from the order until 6 shots are fired.
+    Expected: in every tick from the order on, its body facing equals its movement heading, and
+    in its hovering window it fires at the weapon's rate-of-fire delay. A body facing that turns
+    towards the tank falsifies claim 10. Void unless its hovering window holds at least one tick
+    in which the direction of the tank is more than 2048 facing units from the heading.
+  - (b) Variant 2, the same procedure. Record for 300 ticks after the order. Expected: in every
+    tick from the order on, its body facing equals its movement heading, and in its hovering
+    window there is no shot in any tick in which the direction of the tank is more than 2048
+    facing units from the heading. A body that turns towards the tank, or such a shot,
+    falsifies claim 10 and the switch's on setting. Void unless its hovering window holds at
+    least 150 ticks in which the direction of the tank is more than 2048 facing units from the
+    heading.
+  - (c) A control of part (b): variant 2 with the tank ahead on the lane. Expected: in its
+    hovering window it fires in ticks in which the direction of the tank lies within 2048
+    facing units of the heading. Void unless such a tick occurs in that window. Part (b) is
+    void when part (c) never fires.
+  - (d) Variant 1, as (a). After its second shot, order it to a cell 6 cells away to the side of
+    the tank, and order the attack on the tank again while it cruises there, before it
+    arrives. Expected: in every tick of the move, from the move order until it is *hovering*
+    again, its body facing equals its movement heading, and after the second attack order the
+    same as (a). Void if it lands during the move, or unless the move holds a tick in which the
+    direction of the tank is more than 2048 facing units from the heading.
+  - In every part, a landing after the attack order voids the part.
+
 ## Open questions
 
 - **Registration of a sinking dropped unit.** Claim 29 fixes the registration boundaries and
@@ -2221,4 +2325,13 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   an ordinary dead jumpjet does on water after impact (S-0312's open question), are not settled
   here.
 
+## Changes for other specs
 
+- **S-0206 Terms, *Locomotor moving the vehicle*.** Add the jumpjet locomotor: it moves the
+  vehicle while the jumpjet keeps a movement commitment (S-0502 Terms, *moving*), including while
+  it hovers, not by its flight state. Claim 9's rule without a turret then gives a hovering
+  jumpjet vehicle no body turn (S-0502 claim 10). Level and backing: those of S-0502 claim 10
+  for the weapon that is not omni-fire.
+- **S-0310 claim 9, the two rows for *not facing* without the turret flag.** "Being moved by its
+  locomotor" reads the movement commitment for a jumpjet locomotor (S-0502 Terms, *moving*), not
+  *moving now* as in claim 7. Level and backing: as above.
