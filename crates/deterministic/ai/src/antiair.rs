@@ -163,7 +163,7 @@ pub fn hits_air(w: &World, t: TypeRef, armour: usize) -> bool {
 
 /// Whether weapon `wp` can hit an object of armour class `armour` in the
 /// air ([`hits_air`]).
-fn weapon_hits_air(w: &World, wp: WeaponId, armour: usize) -> bool {
+pub(crate) fn weapon_hits_air(w: &World, wp: WeaponId, armour: usize) -> bool {
     let r = w.rules();
     // spec: S-0306 claim 23 (an airborne target needs an anti-air projectile)
     let aa = r.combat.projectile_of(wp).is_some_and(|p| p.aa);
@@ -382,6 +382,21 @@ fn unanswered(script: &Script, w: &World, threats: &[(ObjectId, usize)]) -> Vec<
         .zip(answers(script, w, threats))
         .filter(|(_, a)| a.is_none())
         .map(|(&t, _)| t)
+        .collect()
+}
+
+/// The seen enemy drainers in the air, each with the object of the house
+/// that answers it ([`answers`]): this part's own, which `air_attack` does
+/// not send at another enemy (design: own AI, #434).
+pub(crate) fn drainer_answers(script: &Script, w: &World) -> Vec<(ObjectId, ObjectId)> {
+    let threats = drainers_in_air(script, w);
+    if threats.is_empty() {
+        return Vec::new();
+    }
+    threats
+        .iter()
+        .zip(answers(script, w, &threats))
+        .filter_map(|(&(d, _), a)| a.map(|a| (d, a)))
         .collect()
 }
 
