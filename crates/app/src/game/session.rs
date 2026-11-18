@@ -903,15 +903,10 @@ impl Session {
         glasnost_sim::superweapons::charge::countdown_rows(w)
             .into_iter()
             .map(|r| hud::CountdownRow {
-                // Seam (countdown display name): claim 18 shows the type's
-                // display name, a string-table label (S-0512 Import mapping);
-                // the row still shows the type's name, as the sidebar's icons
-                // do: routing the superweapon's label through the table
-                // (`strings::resolve`) is not part of the name tip's
-                // intake 109 and stays a seam.
-                name: types
-                    .get(r.sw as usize)
-                    .map_or_else(String::new, |t| t.name.clone()),
+                // spec: S-0512 claim 18 and Import mapping (the row's display name: the type's UIName label as the string table resolves it), S-0004 claim 17 (a type with no label: an empty name)
+                name: types.get(r.sw as usize).map_or_else(String::new, |t| {
+                    String::from_utf16_lossy(&self.display_name(Kind::Superweapons, &t.name))
+                }),
                 // spec: S-0512 claim 18 (the name in its house's colour)
                 colour: self
                     .house_colours
