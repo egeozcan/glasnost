@@ -3,7 +3,7 @@ id: Q-3240
 title: What, other than its owner's removal, detaches an attached animation while it plays
 status: open
 related: [S-0109, S-0611, S-0614, S-0522]
-answered-by: []
+answered-by: [S-0611]
 ---
 
 ## Need
