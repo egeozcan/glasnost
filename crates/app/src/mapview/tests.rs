@@ -1015,6 +1015,15 @@ fn sprite_vehicle_frame_and_shadow() {
 /// Builds `text` in the context `ctx` with typed rules in which HUTX has
 /// strength 100.
 fn build_with_rules_in(ctx: (glasnost_convert::Import, Catalogue, Assets), text: &[u8]) -> Built {
+    build_with_quirks_in(ctx, text, glasnost_rules::quirks::Quirks::default())
+}
+
+/// [`build_with_rules_in`] with the rules' quirk switches `quirks`.
+fn build_with_quirks_in(
+    ctx: (glasnost_convert::Import, Catalogue, Assets),
+    text: &[u8],
+    quirks: glasnost_rules::quirks::Quirks,
+) -> Built {
     use glasnost_rules::sim::BuildingType;
     let (import, catalogue, assets) = ctx;
     let doc = Document::parse(text, Quirks::default(), &mut Vec::new());
@@ -1028,6 +1037,7 @@ fn build_with_rules_in(ctx: (glasnost_convert::Import, Catalogue, Assets), text:
             ..Default::default()
         },
     );
+    r.globals.quirks = quirks;
     let rules = glasnost_sim::rules::SimRules::new(&r, "test");
     let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
     let options = Options::default();
@@ -2441,4 +2451,39 @@ fn game_files_hold_crate_sprites() {
     let files = super::build::game_files(&import);
     assert!(files.contains(&b"CRATEX.SHP"[..]));
     assert!(!files.contains(&b"FENCEX.SHP"[..]));
+}
+
+/// A reversed slot animation in a scene built with typed rules starts where
+/// the rules' `quirks.anim_reverse_raw_loop_end` says, as the simulation's
+/// clock does (render batch R13's seam).
+///
+/// spec: S-0109 claim 8, F3 (on: k₀ = λₑ − 1, first image frame a + λₑ − 1); S-0109 Edge cases
+/// (`quirks.anim_reverse_raw_loop_end` off: k₀ = λₑ − a − 1, so it shows λₑ − 1 first)
+#[test]
+fn a_reversed_slot_animation_starts_where_the_raw_loop_end_switch_says() {
+    let text: &[u8] = b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Structures]\n0=Neutral,HUTX,256,6,10,0\n";
+    // HUTX's one slot animation SLOTA: start field a = 1, loop end λₑ = 4, on a sprite of six
+    // image frames whose frame f has pixel value f + 1.
+    for (on, frame) in [(true, 1 + 4 - 1), (false, 4 - 1)] {
+        let rules = format!("{RULES}[Animations]\n0=SLOTA\n");
+        let art = format!(
+            "{ART}[HUTX]\nActiveAnim=SLOTA\n\
+             [SLOTA]\nLayer=ground\nStart=1\nReverse=yes\nLoopEnd=4\n"
+        );
+        let mut ctx = context_full(&rules, &art);
+        ctx.0
+            .arts
+            .insert((Kind::Animations, 0), art_of("SLOTA", "slota.shp"));
+        ctx.2.insert(b"slota.shp", shp((20, 20), 6, (2, 2), (9, 9)));
+        let quirks = glasnost_rules::quirks::Quirks {
+            anim_reverse_raw_loop_end: on,
+            ..Default::default()
+        };
+        let b = build_with_quirks_in(ctx, text, quirks);
+        let items = &b.scene.items[b.scene.cell_pass_len..];
+        assert_eq!(items.len(), 1, "switch {on}: the slot animation is drawn");
+        let px = b.scene.images[items[0].image as usize].pixels()[0];
+        assert_eq!(px, frame + 1, "switch {on}: first image frame");
+    }
 }

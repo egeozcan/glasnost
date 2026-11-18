@@ -1910,7 +1910,9 @@ impl Live {
     /// the air layer, S-0616 claim 30) entering at the end of their list
     /// when the drawing first sees them and leaving when they are gone.
     /// Newcomers of one tick enter as mobile objects, then animations by
-    /// creation, then particles by object number (our order within a tick).
+    /// creation (their place among the rest is Q-3248), then particles,
+    /// projectiles and debris pieces together in object order, which is the
+    /// order they were made (S-0616 claim 30, #432).
     fn sync_layers(&mut self, tick: bool) {
         let events_only = self.view_quirks.layer_change_on_events_only;
         let moments = std::mem::take(&mut self.layer_moments);
@@ -1955,29 +1957,31 @@ impl Live {
         // design: render (#146) (the listed entrants gathered once; an entrant placed below
         // joins them, so each test reads as the scan of the lists did)
         let mut listed = self.layers.entrants();
+        // design: render (#432) (one tick's new animations enter before its new particles, projectiles and pieces, by creation; where they go among those is open, Q-3248)
         for (serial, layer) in anims {
             if layer != Layer::Ground && listed.insert(Entrant::Anim(serial)) {
                 // spec: S-0102 claims 4 and 7 (an animation placed in a layer other than ground becomes its last)
                 self.layers.place_new(Entrant::Anim(serial), layer);
             }
         }
+        // spec: S-0616 claim 30 and S-0102 claims 3 and 7 (the particles, projectiles and voxel pieces made in one tick enter in the order they were made, interleaved and not grouped by kind; one counter numbers them as they are made, so that order is their object order)
+        let mut made: BTreeMap<ObjectId, (Entrant, Layer)> = BTreeMap::new();
         for id in particles {
-            if listed.insert(Entrant::Particle(id)) {
-                // spec: S-0616 claim 30 and S-0102 claim 3 (a particle enters the air layer when it is made, at its end, and keeps its place until removed)
-                self.layers.place_new(Entrant::Particle(id), Layer::Air);
-            }
+            // spec: S-0616 claim 30 and S-0102 claim 3 (a particle enters the air layer when it is made, at its end, and keeps its place until removed)
+            made.insert(id, (Entrant::Particle(id), Layer::Air));
         }
         for (id, flat) in projectiles {
-            if listed.insert(Entrant::Projectile(id)) {
-                // spec: S-0102 claims 3, 4 and 7 (a projectile is in the air layer, or the surface layer when its image is flat; placed at the layer's end)
-                let layer = if flat { Layer::Surface } else { Layer::Air };
-                self.layers.place_new(Entrant::Projectile(id), layer);
-            }
+            // spec: S-0102 claims 3, 4 and 7 (a projectile is in the air layer, or the surface layer when its image is flat; placed at the layer's end)
+            let layer = if flat { Layer::Surface } else { Layer::Air };
+            made.insert(id, (Entrant::Projectile(id), layer));
         }
         for id in pieces {
-            if listed.insert(Entrant::Piece(id)) {
-                // spec: S-0102 claims 3, 4 and 7 (a voxel animation is in the air layer; placed at the layer's end)
-                self.layers.place_new(Entrant::Piece(id), Layer::Air);
+            // spec: S-0102 claims 3, 4 and 7 (a voxel animation is in the air layer; placed at the layer's end)
+            made.insert(id, (Entrant::Piece(id), Layer::Air));
+        }
+        for (entrant, layer) in made.into_values() {
+            if listed.insert(entrant) {
+                self.layers.place_new(entrant, layer);
             }
         }
     }
@@ -4372,9 +4376,12 @@ impl Live {
         }
     }
 
-    /// The items of every particle with a sprite (S-0613, S-0616; the
-    /// interim rule of Q-1520), by system and then in each system's
-    /// particle order (Q-1520 question 7 is open).
+    /// The items of every particle drawn this frame (S-0616 claims 23 to
+    /// 29), sprite kinds and pixel kinds alike, by object number. A particle
+    /// the detail level hides or whose type has no sprite has no entry; one
+    /// whose frame draws nothing has an empty one. The order they are drawn
+    /// in is the air layer's (S-0616 claim 30), not this map's or a
+    /// system's.
     fn particle_items(
         &mut self,
         inputs: &Inputs,

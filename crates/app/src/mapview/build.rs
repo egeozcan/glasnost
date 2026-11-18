@@ -3561,8 +3561,15 @@ impl<'a> Builder<'a> {
                 // spec: S-0109 claims 1 and 20 (image frame a + k; the code from stage k and end E,
                 // translucency level 0)
                 Some((frame, stage, end)) => (frame, slots::translucency(&t, detail, stage, end)),
+                // spec: S-0109 Edge cases (the rules' quirks.anim_reverse_raw_loop_end; without typed
+                // rules the original's behaviour, as every switch defaults on)
                 None => (
-                    slots::first_frame(&t, n),
+                    slots::first_frame_under(
+                        &t,
+                        n,
+                        self.rules
+                            .is_none_or(|r| r.quirks.anim_reverse_raw_loop_end),
+                    ),
                     slots::first_translucency(&t, detail, n),
                 ),
             };
@@ -3778,9 +3785,6 @@ impl<'a> Builder<'a> {
         Some((t.layer, key, items))
     }
 
-    /// One particle of the live game: a sprite kind's image frame or a
-    /// pixel kind's pixel (S-0616 claims 27 and 28); no items without a
-    /// sprite or for a frame outside the sprite.
     /// One projectile in flight (S-0306 claims 28 to 32): its sprite body
     /// with its shadow first, or its voxel body; no items when nothing is
     /// drawn for it (no art, a frame the sprite does not hold, or no
@@ -4214,6 +4218,9 @@ impl<'a> Builder<'a> {
         out
     }
 
+    /// One particle of the live game: a sprite kind's image frame or a
+    /// pixel kind's pixel (S-0616 claims 27 and 28); no items without a
+    /// sprite or for a frame outside the sprite.
     fn live_particle(&mut self, d: &ParticleDraw) -> Vec<Item> {
         match *d {
             ParticleDraw::Sprite {

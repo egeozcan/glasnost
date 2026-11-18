@@ -491,7 +491,7 @@ pub fn model(
 /// claim 18).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CountdownRow {
-    /// The superweapon's name.
+    /// The superweapon's display name (S-0004 claim 17), as text.
     pub name: String,
     /// Its house's colour.
     pub colour: [u8; 3],

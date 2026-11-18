@@ -18,6 +18,8 @@ pub mod find;
 #[cfg(test)]
 mod ground_order_tests;
 pub mod harvesting;
+#[cfg(test)]
+mod hover_pick_tests;
 pub mod layers;
 pub mod live;
 #[cfg(test)]
@@ -54,6 +56,8 @@ pub mod slots;
 mod tests;
 #[cfg(test)]
 mod transient_tests;
+#[cfg(test)]
+mod tree_depth_tests;
 #[cfg(test)]
 mod turret_index_tests;
 pub mod unload;
