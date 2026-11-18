@@ -173,6 +173,115 @@ fn claim_18_crash_motion() {
     }
 }
 
+/// One tick of #446's crash trace: the jumpjet state, the crash flag,
+/// position and height, current speed, movement heading and body facing.
+#[derive(Debug)]
+#[allow(dead_code)] // read through Debug in the failure messages
+struct Fall {
+    tick: i32,
+    phase: Phase,
+    crashing: bool,
+    pos: Pos,
+    height: i32,
+    vc: i32,
+    vm: i32,
+    ht: i32,
+    dest: Option<Pos>,
+    heading: u16,
+    body: u16,
+}
+
+/// A crashable balloon-hover jumpjet vehicle BALCRASH (BALLOON with the
+/// crash flag), either ordered to a cell 18 cells east and cruising there
+/// at its full speed 14 at 400 or more (`moving`), or hovering at 500 with
+/// no order; killed, then traced from the kill to its impact.
+fn balloon_fall(moving: bool) -> Vec<Fall> {
+    let mut r = ruleset();
+    let mut t = r.sim.vehicles["BALLOON"].clone();
+    t.crashable = Some(true);
+    r.sim.vehicles.insert("BALCRASH".into(), t);
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("BALCRASH".into());
+    let mut w = testkit::game_with(&r, SIZE, 7);
+    testkit::run(&mut w, 4);
+    let u = put(&mut w, "BALCRASH", Kind::Vehicle, 0, -4, 0);
+    if moving {
+        let t = w.tick;
+        w.obj_mut(u).unwrap().beh.force(Behaviour::Move, t, true);
+        go(&mut w, u, at(14, 0));
+        assert!(
+            until(&mut w, 400, |w| phase(w, u) == Phase::Cruising
+                && j(w, u).vc.to_i32_common() == 14
+                && height(w, u) >= 400),
+            "it takes off and cruises at full speed"
+        );
+    } else {
+        jump::start_in_flight(&mut w, u, Phase::Hovering, 500);
+    }
+    kill(&mut w, u);
+    let mut log = Vec::new();
+    for k in 0..80 {
+        if k > 0 {
+            step(&mut w);
+        }
+        let Some(o) = w.obj(u) else { break };
+        let s = o.jump.as_ref().unwrap();
+        log.push(Fall {
+            tick: w.tick,
+            phase: s.phase,
+            crashing: jump::crashing(&w, u),
+            pos: o.pos,
+            height: height(&w, u),
+            vc: s.vc.to_i32_common(),
+            vm: s.vm.to_i32_common(),
+            ht: s.ht,
+            dest: s.dest,
+            heading: s.heading.value(w.tick),
+            body: o.body.value(w.tick),
+        });
+    }
+    assert!(w.obj(u).is_none(), "it leaves play at the impact: {log:#?}");
+    log
+}
+
+// spec: S-0502 claim 18 and F5 (a killed crashable jumpjet, a balloon-hover vehicle too, takes the vehicle crash path: crashing, the heading spun 11520 ahead each tick at its rate, the current speed evolving under F1 and the position stepping along the heading) and claim 10 (the body facing is set to the movement heading in each physics step), traced for #446 killed while moving and while hovering; S-0113 claim 16's roll and pitch are the drawing's (crates/app rocking.rs)
+#[test]
+fn claim_18_issue_446_a_balloon_hover_vehicle_crash_traced() {
+    for moving in [true, false] {
+        let log = balloon_fall(moving);
+        assert!(
+            log.iter().all(|f| f.crashing),
+            "moving {moving}: on the crash path throughout: {log:#?}"
+        );
+        assert!(
+            log.iter().skip(1).all(|f| f.phase == Phase::Crashing),
+            "moving {moving}: {log:#?}"
+        );
+        let first = &log[0];
+        let last = log.last().unwrap();
+        assert_ne!(
+            first.heading, last.heading,
+            "moving {moving}: the heading spins: {log:#?}"
+        );
+        assert!(
+            log[1..].windows(2).all(|p| p[1].body == p[0].heading),
+            "moving {moving}: the body facing follows the heading the step used: {log:#?}"
+        );
+        let drift = (last.pos.x - first.pos.x).abs() + (last.pos.y - first.pos.y).abs();
+        if moving {
+            assert!(
+                drift > 0,
+                "moving: it keeps stepping along the spinning heading (F5): {:#?}",
+                &log[..3]
+            );
+        } else {
+            assert_eq!(drift, 0, "hovering at speed 0: straight down: {log:#?}");
+        }
+    }
+}
+
 // spec: S-0502 claim 18 (crossing a deck: over a high-bridge cell the extra drop ends the fall when its height before it is at or above the deck and after it below, without snapping back to the deck)
 #[test]
 fn claim_18_crash_crossing_a_deck() {
