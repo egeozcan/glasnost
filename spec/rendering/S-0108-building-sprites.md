@@ -2,13 +2,13 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 106
+revision: 111
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
-measurements: [M-0007, M-0014]
-requests: [Q-0540, Q-1550, Q-1610, Q-1620, Q-1772, Q-1890, Q-2001, Q-2186]
+approved-on: 2026-11-18
+measurements: [M-0007, M-0014, M-0027]
+requests: [Q-0540, Q-1550, Q-1610, Q-1620, Q-1772, Q-1890, Q-2001, Q-2186, Q-3243]
 supersedes: []
 ---
 
@@ -53,9 +53,13 @@ Skirmish only; network games and campaigns are out of scope.
 - **Body animation state:** one of six, each with an image-frame range (start *a*, count *c*, delay *d*):
   *construction*, *idle*, *active*, *full*, *aux-1*, *aux-2*. Which behaviour puts a building in
   which state belongs to the production, repair and power specs. Here only the image-frame ranges matter.
-- **Body stage** *k*: the building's stage counter, with the same timer rule as infantry stages
-  (S-0107 claim 4). It grows by one every *d* ticks of the current state's range, and *d* = 0
-  freezes it.
+- **Body stage** *k*: the building's stage counter. In uninterrupted play it follows the timer
+  rule of infantry stages (S-0107 claim 4): it grows by one every *d* ticks of the current
+  state's range, and *d* = 0 freezes it. It advances only in the building's update, and unlike the
+  timings of S-0203 claim 9 its delays do not run on across a missed turn: an advance that falls
+  due on a tick on which the building takes no turn (S-0203 claim 10) is made at its next
+  update, and the next delay counts from there, so every later stage comes one tick later for
+  each such missed turn. Claim 5 rates this rule for each range.
 - **Occupants:** infantry garrisoned inside an occupiable building. **Occupied:** at least one
   occupant.
 - **Held infantry:** infantry taken inside a building that absorbs infantry (claim 17). Held
@@ -128,7 +132,8 @@ Skirmish only; network games and campaigns are out of scope.
      and door images, `unmeasured`)
 
 2. **The body frame.** The image-frame index *f* is an integer. These situations are mutually
-   exclusive: construction takes precedence over type properties. Outside construction the
+   exclusive: construction takes precedence over type properties, and the factory break-off
+   window of claim 5 counts as construction here. Outside construction the
    occupiable property takes precedence over the ordinary gate body-frame rule. A gate whose current
    behaviour is *open* and whose door is opening, closing or at rest open uses claim 4's
    **special gate image** instead. A moving door under any other behaviour does not select that image.
@@ -136,6 +141,7 @@ Skirmish only; network games and campaigns are out of scope.
    | Situation | Image-frame index *f* |
    |---|---|
    | Construction, not selling, not a gate | *k* |
+   | Factory break-off window (claim 5), not a gate | 0 |
    | Construction, selling, not a gate | *a* + *c* − *k* − 1, using the construction range (*a*, *c*); the build-up plays backwards |
    | Gate in construction | Claim 4 |
    | Occupiable type, outside construction, not using the special gate image | 2·[occupied] + [hurt] |
@@ -210,11 +216,23 @@ Skirmish only; network games and campaigns are out of scope.
    hands over one tick after the first construction processing, including the default range of a
    type without a build-up sprite. For the positive-delay multi-stage case, handover occurs on the
    report tick. S-0406 claim 17 gives the first construction processing relative to placement or
-   deploy. In uninterrupted play a placed building with at least 2 stages and positive delay shows
-   its build-up twice: stage 0 appears again one tick after the first completion report, and
-   handover follows the second run (`quirks.placed_buildup_twice`, owned by S-0406). From placement
-   tick *T*, the restart is at *T* + (*n* − 1) × *d_b* + 1 and handover is at
-   *T* + 2(*n* − 1) × *d_b* + 1. Positive-delay ranges with one stage or fewer never report
+   deploy. In uninterrupted play, with at least 2 stages and positive delay, the building a place
+   order names and a deployed building show their build-up once. With a zero-delay idle range and
+   a construction range that does not set the ready mark on *T* + 1 (S-0406 claim 17 gives the
+   other cases), from placement tick *T*, the placed building shows build-up stage 0 on *T*, the window drawing below after *T* + 1, and
+   stage 0 again on *T* + 2, where its one build-up run starts; it hands over at
+   *T* + 2 + (*n* − 1) × *d_b*.
+
+   **The factory break-off window.** In this window of S-0406 claim 17 the building a place order
+   names is out of its *construction* state but not yet construction-completed, so it draws its
+   build-up sprite (claim 1). It draws as in the *construction* state with the stage taken as 0,
+   and with no bib: frame 0, or for a gate claim 4's build-up frame at stage 0. The original draws the build-up sprite there with
+   the frame that claim 2 gives outside construction, for its *idle* stage and its health (for an
+   undamaged gate, frame 0), and draws the bib: a drawing artefact with no effect on play, one
+   tick long with a zero-delay idle range. A filling building of a place order and a restored replacement
+   show it twice: stage 0 appears again one tick after the first completion report, and handover
+   follows the second run (`quirks.buildup_twice_without_break_off`, owned by S-0406; their ticks
+   are S-0406 F7's). Positive-delay ranges with one stage or fewer never report
    completion (S-0406 claim 18, including `quirks.single_stage_buildup_never_completes`).
    Selling uses the same range and delay, backwards including gates (claim 4), but need not play
    the full range: a type naming a vehicle to pack into, without a guard spot, can complete on
@@ -241,12 +259,25 @@ Skirmish only; network games and campaigns are out of scope.
    and the range keeps its earlier value.
    - Backing: `measurable` (B1 for positive-delay ordinary build-up, B13 for gates, B19 for
      theater-flag build-up, with the clamped displayed frame tested against this spec as a
-     departure, not the original; S-0406 PL11 a to f for placement/deploy timing, the two placed
-     build-up runs, zero-delay completion and ranges that never complete; S-0408 S10 for
-     stage-23 sale completion). Failed reload retaining the range
-     is `unmeasured` (B19 supplies the file; a missing sprite hides its range).
-   - Confidence: high (the delay), medium (the exact tick of the switch to the body sprite and the
-     theater-flag rule), medium (a failed reload keeping the range, `unmeasured`)
+     departure, not the original; S-0406 PL11 a to f for placement/deploy timing, the build-up
+     runs by entry, zero-delay completion and ranges that never complete; S-0408 S10 for
+     stage-23 sale completion). The one build-up run of a placed and of a deployed building, the
+     placed handover tick in uninterrupted play, and that a held advance of the construction
+     range makes every later stage one tick later, with the next delay counted from the late
+     advance (Terms, *body stage*), are `measured` (M-0027, one advance held one tick on a tick without a processing-timer restart). That a missed turn is what holds the advance, and the same delay for
+     the other ranges, are `unmeasured`: no stock scenario makes a building miss its turn on
+     demand. The window drawing is our engine's rule. The original's window bib is `measurable` by B1 and B4, and its window frame
+     for a gate by B1. Its window frame for any other building is
+     `unmeasured`: with the default idle range an undamaged building's idle-stage frame is frame
+     0, the same as stage 0's, and no scenario places a damaged building. Failed reload retaining the
+     range is `unmeasured` (B19 supplies the file; a missing sprite hides its range).
+   - Confidence: high (the delay; one build-up run of a placed and of a deployed building; the
+     placed handover tick in uninterrupted play), medium (the exact tick of the switch to the
+     body sprite, the theater-flag rule, the delay after a held advance of the construction range,
+     seen once, and the original's window bib and gate frame), medium (a missed turn as the
+     cause of a held advance, and the original's window frame for other buildings, both
+     `unmeasured`), medium (a failed reload keeping the range, `unmeasured`), low (the same delay
+     for the other ranges)
 
 6. **Body animation ranges and game speed.** A state change is either *immediate* or *deferred*.
    It is immediate when the building has no state yet, when the new state is *construction*, or
@@ -293,7 +324,8 @@ Skirmish only; network games and campaigns are out of scope.
      cancellation, the last-request-wins rule and the turret case)
 
 7. **Bib.** When the type has a bib sprite, the bib is drawn whenever the building is not in the
-   *construction* state, so never during build-up or selling. It is also not drawn with the
+   *construction* state and not in the factory break-off window of claim 5, so never during
+   build-up or selling. It is also not drawn with the
    special gate image (claim 4), including at rest open while *open* is current. It uses the same image-frame index *f* as the body (so image frame 1 when
    damaged, with default art), without the clamp of claim 3. Its depth bias is in S-0102.
    A protected building's bib, under-door, replacement and door images take the protection
@@ -1549,6 +1581,11 @@ charge rows need a granted record):
 - **Body-frame clamp** (departure, claims 3 and 9). The original clamps to ⌊N/2⌋ and can
   display a shadow silhouette as the body with a missing shadow for even *N* or a mismatched shadow
   for odd *N*, a wrong-frame glitch whose correction without a switch is confirmed by the project lead.
+- **Factory break-off window drawing** (departure, claims 2, 5 and 7). In the factory break-off
+  window of S-0406 claim 17, the original draws the build-up sprite with the frame that claim 2
+  gives outside construction, for the *idle* stage and the building's health, and draws the bib. That is a drawing artefact
+  with no effect on play, one tick long with a zero-delay idle range. Our engine draws stage 0 with
+  no bib there, without a switch, as decided at the delegated sign-off, 2026-11-18.
 - **Gate selling direction** (departure, claim 4). The original plays a sold gate's build-up
   forwards, a drawing-only reversal glitch whose correction without a switch is confirmed by
   the project lead.
@@ -1769,25 +1806,32 @@ expected numbers are computed from the type's own fields at measurement time.
 - **B1 (claims 1, 5).**
   - Setup: game speeds 0 and 4. A power plant and a barracks of one side. A test building type,
     marked invisible in game through a test map override section, with at least one slot animation.
-    Choose stock build-ups with at least two body frames and positive F1 delay; record their counts.
+    Choose stock build-ups with at least two body frames and positive F1 delay, of types whose idle
+    range has a zero delay (S-0406 F7), whose range does not reach its last stage on *T* + 1, and that have a bib sprite, plus one gate that meets the same conditions apart from the bib; record
+    their counts.
   - Procedure: place each stock building and let it complete, then sell one. Place the test type.
   - Observable: ticks from placement to the first body-sprite frame, the number of ticks each
     build-up frame is shown, the build-up frame sequence while selling, and whether the invisible
     type shows any body, bib or shadow.
   - Runs: one per building and speed.
-  - Expected: with *d_b* from F1 and placement tick *T*, the last stage first appears at
-    *R* = *T* + (*n* − 1) × *d_b*. Stage 0 reappears on *R* + 1, the first construction
-    processing tick, and the body sprite appears at *T* + 2(*n* − 1) × *d_b* + 1 in
-    uninterrupted play (S-0406 claims 15 and 17). Both speeds give the same tick counts.
-    Each pre-last stage lasts *d_b* ticks in each run; the first run's last stage shows for
-    one tick only. Selling runs backwards at the same delay until completion under S-0408
+  - Expected: with *d_b* from F1 and placement tick *T*, the build-up shows stage 0 on *T*, the
+    original's window frame and the bib of claim 5 after *T* + 1 (our engine draws stage 0 and no
+    bib there, claim 5); for the gate, the original's window frame is claim 2's undamaged gate
+    frame 0, where our engine draws claim 4's stage-0 frame, and stage 0 again on *T* + 2,
+    the first construction processing tick, then runs once, and the body sprite
+    appears at *T* + 2 + (*n* − 1) × *d_b* in uninterrupted play (S-0406 claims 15 and 17, F7).
+    Both speeds give the same tick counts. Each pre-last stage from *T* + 2 on lasts *d_b* ticks,
+    and the last stage is replaced by the body sprite on the tick it is reached. Selling runs backwards at the same delay until completion under S-0408
     claim 17, including its stage-23 exception for a packing-capable type without a guard spot.
     The invisible type shows no body, bib or shadow, but its slot animations appear.
-  - Falsified if: placement shows only one build-up run, the restart or handover differs from
-    those ticks, the pre-last-frame periods depend on game speed or differ from F1, selling
+  - Falsified if: placement shows a second build-up run (a return to stage 0 after the build-up
+    has advanced from it, before the body sprite), the start or handover differs from those ticks,
+    in the frame drawn between the logic of *T* + 1 and that of *T* + 2 the original misses the bib,
+    draws the body sprite or shows the gate's claim 4 stage-0 frame (our engine: a bib, the body
+    sprite, or any gate frame other than claim 4's stage-0 frame), the pre-last-frame periods depend on game speed or differ from F1, selling
     plays forwards or continues beyond its specified completion, or the invisible type shows
-    any body, bib or shadow or hides its named slot. Record placement, the first report and
-    the restart separately. The test does not by itself discriminate arithmetic rounding unless
+    any body, bib or shadow or hides its named slot. Record placement, the start of the build-up
+    and the handover separately. The test does not by itself discriminate arithmetic rounding unless
     the imported *B* and sprite count give different integer delays under the two modes.
 - **B2 (claims 2, 12, 25).**
   - Setup: one building with slot animations that have damaged names, one occupiable building with
@@ -1838,9 +1882,11 @@ expected numbers are computed from the type's own fields at measurement time.
   - Observable: bib visibility and bib frame per tick.
   - Runs: one.
   - Expected: no bib during build-up and selling, the bib from the first body-sprite frame on, bib
-    frame 1 when damaged (with default ranges).
-  - Falsified if: the bib shows during build-up or selling, is missing after completion, or keeps
-    bib frame 0 when damaged.
+    frame 1 when damaged (with default ranges). The one exception is the original's factory
+    break-off window (claim 5) of a building placed by a place order, where the original draws the
+    bib and our engine does not.
+  - Falsified if: the bib shows during build-up or selling outside that window, is missing after
+    completion, or keeps bib frame 0 when damaged.
 - **B5 (claim 8).**
   - Setup: 1×1, 2×2 and 3×3 buildings placed with their top-left cell at a known cell.
   - Procedure: screenshot each after completion, during build-up, and after damage. Include
@@ -2710,8 +2756,9 @@ expected numbers are computed from the type's own fields at measurement time.
     superweapon slots are frozen (A is switched off before its sale), both by design.
 
 Construction timing in claim 5 uses S-0406 scenario PL11 a to f, including its setup,
-read-only per-tick observables and falsification criteria: placed buildings show two runs,
-deployed buildings restart at their first construction processing, zero-delay ranges complete,
+read-only per-tick observables and falsification criteria: the building a place order names
+and a deployed building show one run, deployed buildings restart at their first construction
+processing, zero-delay ranges complete,
 and positive-delay ranges of one stage or fewer never complete. Stage-23 sale completion uses
 S-0408 scenario S10, with its setup, observables and falsification criteria.
 
@@ -2721,6 +2768,12 @@ specified here.
 
 ## Changes for other specs
 
+- S-0102 (Terms *bib* and the bib row of the depth table): the bib is also not drawn in the
+  factory break-off window of S-0406 claim 17, in which the building is out of its construction
+  state (claim 5 here).
+- S-0203 claim 9: add a building's body stage (Terms here) to the exceptions. Its stage advances
+  only in the building's update, and the next stage's delay counts from the update that made the
+  advance, so a missed turn on a due advance delays every later stage by one tick.
 - **S-0314 claims 6 and 22 (Q-1610).** S-0108 claim 20's timing sentence relies on S-0314 claim
   6's per-phase processing spacing and on claim 22's statement that a depot left without any
   contact reacts at the repair processing that claim 6's spacing table had already scheduled, and
@@ -2850,6 +2903,11 @@ specified here.
   be timed after such a change in this spec's scenarios without the original's acceptance rule.
 
 ## Questions for the project lead
+
+Decided (delegated sign-off, 2026-11-18):
+
+- The drawing in the factory break-off window (claim 5, Edge cases): stage 0 with no bib, a
+  departure from the original's idle-stage frame and bib, with no switch.
 
 Decided (delegated sign-off, 2026-10-25):
 
