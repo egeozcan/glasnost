@@ -1299,3 +1299,112 @@ pub fn death_crate_plan(w: &World, id: ObjectId) -> Option<(CellXY, bool)> {
     // spec: S-0312 claims 14 and 20 (a free cell near the vehicle's position; the building's top-left foundation cell)
     Some((o.pos.cell(), money))
 }
+
+/// The fixture of the overlay-writer tests of #284 (S-0520 r17 claims 11
+/// and 29): every name and number is invented; no game data.
+#[cfg(test)]
+pub(crate) mod fixture {
+    use glasnost_map::CellXY;
+    use glasnost_rules::sim::{BuildingType, OverlayType};
+    use glasnost_rules::sim_econ::TiberiumType;
+
+    use super::Place;
+    use crate::world::World;
+
+    /// The side of the test map.
+    pub(crate) const SIZE: i32 = 30;
+    /// The first overlay of the tiberium's image run 4 … 15.
+    pub(crate) const ORE: u8 = 4;
+    /// The wall overlay, built by the building type `WALLB`.
+    pub(crate) const WALL: u8 = 200;
+
+    fn push(r: &mut glasnost_rules::schema::Ruleset, reg: &str, n: &str) {
+        r.registries
+            .entry(reg.into())
+            .or_default()
+            .push(n.into());
+    }
+
+    /// A world whose overlay list is 240 invented types `OV000` … `OV239`,
+    /// each with artwork: the vein overlay has the veins flag, 4 … 15 are a
+    /// tiberium's image run and [`WALL`] is a wall that `WALLB` builds.
+    pub(crate) fn world() -> World {
+        let mut r = crate::testkit::ruleset();
+        for i in 0..240u32 {
+            let n = format!("OV{i:03}");
+            push(&mut r, "overlays", &n);
+            let o = i as u8;
+            r.sim.overlays.insert(
+                n,
+                OverlayType {
+                    has_art: Some(true),
+                    is_veins: Some(o == crate::overlays::VEIN),
+                    tiberium: Some((ORE..ORE + 12).contains(&o)),
+                    wall: Some(o == WALL),
+                    ..Default::default()
+                },
+            );
+        }
+        push(&mut r, "tiberiums", "ORE");
+        r.sim.tiberiums.insert(
+            "ORE".into(),
+            TiberiumType {
+                value: Some(25),
+                image_run: Some([i32::from(ORE), 12, 8]),
+                ..Default::default()
+            },
+        );
+        push(&mut r, "buildings", "WALLB");
+        let mut b = BuildingType {
+            strength: Some(100),
+            foundation: Some([1, 1]),
+            ..Default::default()
+        };
+        b.econ.to_overlay = Some(format!("OV{WALL:03}"));
+        b.cost = Some(100);
+        r.sim.buildings.insert("WALLB".into(), b);
+        crate::testkit::game_with(&r, SIZE, 7)
+    }
+
+    /// The cell `(dx, dy)` from the middle of the map.
+    pub(crate) fn at(dx: i32, dy: i32) -> CellXY {
+        crate::testkit::mid(SIZE, dx, dy)
+    }
+
+    /// Records the crate on `c` as one that a crate placement placed (it
+    /// belongs to the lowest free place) and as a map's own crate: the two
+    /// entries a writer of the cell's overlay has to end.
+    pub(crate) fn crate_entries(w: &mut World, c: CellXY) {
+        let k = (0..256u16)
+            .find(|k| !w.crates.places.contains_key(k))
+            .expect("a free place");
+        w.crates.places.insert(
+            k,
+            Place {
+                cell: c,
+                start: w.tick,
+                life: 1_000_000,
+                trigger: false,
+            },
+        );
+        w.crates.owners.insert(c, k);
+        w.crates.map_crates.insert(c);
+    }
+
+    /// The crate entries of `c` that are left: (belongs to a place, is a
+    /// map's own crate).
+    pub(crate) fn entries(w: &World, c: CellXY) -> (bool, bool) {
+        (
+            w.crates.owners.contains_key(&c),
+            w.crates.map_crates.contains(&c),
+        )
+    }
+
+    /// Sets the overlay type and data value of `c`.
+    pub(crate) fn put(w: &mut World, c: CellXY, overlay: u8, data: u8) {
+        if let Some(cell) = w.cells.grid.get_mut(c) {
+            cell.overlay = overlay;
+            cell.overlay_data = data;
+        }
+    }
+}

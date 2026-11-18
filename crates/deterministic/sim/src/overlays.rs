@@ -486,3 +486,67 @@ pub fn rebuild_veins(w: &mut World, order: &[CellXY]) {
         vein_placement(w, c);
     }
 }
+
+/// The overlay writers of this file end the crate entries of a cell whose
+/// overlay they replace or remove (#284). Synthetic data only.
+#[cfg(test)]
+mod crate_entry_tests {
+    use super::*;
+    use crate::crates::fixture::{at, crate_entries, entries, put, world};
+
+    // spec: S-0520 claims 11 and 29 (revision 17: a crate whose overlay is replaced no longer belongs to its place, nor is it a map's own crate); S-0202 claim 10 (the pieces between a marker and its partner are written whatever the cells held)
+    #[test]
+    fn issue_284_bridge_pieces_end_the_crate_entries_of_the_cells_they_cover() {
+        let mut w = world();
+        let c = at(0, 0);
+        // The partner of marker 122 (search toward −x): its end-row type 94
+        // with data 1, three cells away, so the pieces cover x − 2 and x − 1.
+        put(&mut w, at(-3, 0), 94, 1);
+        let covered = at(-1, 0);
+        crate_entries(&mut w, covered);
+        place_overlay(&mut w, c, 122);
+        let o = w.cells.cell(covered).map(|x| x.overlay);
+        assert!(
+            o.is_some_and(|o| (74..78).contains(&o)),
+            "the scenario: a piece covers the cell ({o:?})"
+        );
+        assert_eq!(entries(&w, covered), (false, false), "(place, map crate)");
+    }
+
+    // spec: S-0520 claims 11 and 29 (revision 17) and Edge cases (a type with the veins flag may carry the crate flag); S-0202 claim 10 (the vein placement writes the placed cell)
+    #[test]
+    fn issue_284_a_vein_placement_ends_the_crate_entries_of_its_cell() {
+        let mut w = world();
+        let c = at(0, 0);
+        put(&mut w, c, VEIN, 0);
+        crate_entries(&mut w, c);
+        assert!(place_in_play(&mut w, c, VEIN), "the scenario: the test passes");
+        assert_eq!(entries(&w, c), (false, false), "(place, map crate)");
+    }
+
+    // spec: S-0520 claims 11 and 29 (revision 17) and Edge cases; S-0202 claim 10 (a flat edge neighbour holding a vein that is not a centre is re-patterned)
+    #[test]
+    fn issue_284_a_vein_placement_ends_the_crate_entries_of_a_neighbour_it_rewrites() {
+        let mut w = world();
+        let c = at(0, 0);
+        let n = at(0, -1);
+        put(&mut w, n, VEIN, 0);
+        crate_entries(&mut w, n);
+        assert!(place_in_play(&mut w, c, VEIN), "the scenario: the test passes");
+        let d = w.cells.cell(n).map(|x| x.overlay_data);
+        assert_ne!(d, Some(0), "the scenario: the neighbour is re-patterned");
+        assert_eq!(entries(&w, n), (false, false), "(place, map crate)");
+    }
+
+    // spec: S-0520 claims 11 and 29 (revision 17) and Edge cases; S-0009 claim 14 (every vein cell loses its overlay)
+    #[test]
+    fn issue_284_the_vein_rebuild_ends_the_crate_entries_of_a_vein_it_removes() {
+        let mut w = world();
+        let c = at(0, 0);
+        put(&mut w, c, VEIN, 0);
+        crate_entries(&mut w, c);
+        rebuild_veins(&mut w, &[c]);
+        assert_eq!(w.cells.cell(c).map(|x| x.overlay), Some(NO_OVERLAY));
+        assert_eq!(entries(&w, c), (false, false), "(place, map crate)");
+    }
+}
