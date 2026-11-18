@@ -269,6 +269,11 @@ fn claim_18_issue_446_a_balloon_hover_vehicle_crash_traced() {
             log[1..].windows(2).all(|p| p[1].body == p[0].heading),
             "moving {moving}: the body facing follows the heading the step used: {log:#?}"
         );
+        assert!(
+            log.windows(2)
+                .all(|p| p[1].vc > 0 || (p[1].pos.x, p[1].pos.y) == (p[0].pos.x, p[0].pos.y)),
+            "moving {moving}: a horizontal step only at a current speed above 0 (F5): {log:#?}"
+        );
         let drift = (last.pos.x - first.pos.x).abs() + (last.pos.y - first.pos.y).abs();
         if moving {
             assert!(
