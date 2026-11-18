@@ -141,8 +141,8 @@ pub fn free_marks() -> Vec<i32> {
 /// Applies header pairs 9 … min(N_h, 16) that the header holds to `marks`
 /// (S-0009 claim 29): pair i sets positions 2(i − 9) and 2(i − 9) + 1; an
 /// absent pair, or an unread component, leaves the mark as it stands. A
-/// mark at a position numbered `n` or above is not kept (a departure, and
-/// Q-3215's interim rule for References): it is noted and stays free.
+/// mark at a position numbered `n` or above is kept for the References
+/// rule, but no house holds a position by it (a departure, noted).
 pub fn apply_pairs(w: &mut World, header: &Header, marks: &mut [i32], n: usize) {
     for i in FIRST_MARK_PAIR..=header.count.min(LAST_MARK_PAIR) {
         let Some(Some(pair)) = header.pairs.get(i as usize - 1) else {
@@ -152,11 +152,14 @@ pub fn apply_pairs(w: &mut World, header: &Header, marks: &mut [i32], n: usize) 
             // spec: S-0009 claim 29 (pair i marks positions 2(i − 9) and 2(i − 9) + 1)
             let pos = 2 * (i - FIRST_MARK_PAIR) as usize + j;
             let Some(m) = *c else { continue };
-            if pos < n {
-                marks[pos] = m;
-            } else if m != FREE {
-                // spec: S-0009 claim 29 (a mark at a position numbered N or above: unspecified; our engine ignores it, a departure; Q-3215)
-                w.note("S-0009 claim 29: a header pair marks a start position numbered N or above; our engine ignores the mark (a departure)");
+            let Some(slot) = marks.get_mut(pos) else {
+                continue;
+            };
+            // spec: S-0009 claim 29 (References read the mark of each of positions A … H whatever N is; Q-3215's answer)
+            *slot = m;
+            if pos >= n && m != FREE {
+                // spec: S-0009 claim 29 (a house that holds a position numbered N or above: unspecified; our engine ignores the mark for which position the house holds, a departure; the References rule still reads it)
+                w.note("S-0009 claim 29: a header pair marks a start position numbered N or above; no house holds a position by it, and the References rule still reads it (a departure)");
             }
         }
     }
