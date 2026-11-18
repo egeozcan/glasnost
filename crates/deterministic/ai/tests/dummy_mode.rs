@@ -39,9 +39,13 @@ fn aims_at_person(w: &World, o: &Order) -> bool {
 /// over its objects, and the tick the game stopped at.
 fn play(seed: u32, dummy: bool, ticks: i32) -> (bool, bool, i32, i32) {
     let map = fixture::map();
-    let mut w =
-        glasnost_sim::load::new_game(fixture::rules(), &map, fixture::catalogue(), &setup(seed, dummy))
-            .expect("the fixture loads");
+    let mut w = glasnost_sim::load::new_game(
+        fixture::rules(),
+        &map,
+        fixture::catalogue(),
+        &setup(seed, dummy),
+    )
+    .expect("the fixture loads");
     assert_eq!(w.houses[0].econ.setup.dummy, dummy);
     let mut brain = Brain::new(&w, &map, HouseId(1));
     let health = |w: &World| -> i32 {
@@ -87,10 +91,16 @@ fn the_ai_leaves_the_person_alone_early() {
 fn the_ai_leaves_the_person_alone_all_game() {
     let limit = 40_000; // nocite: a test budget, not a behaviour
     let (ordered, aimed, lost, end) = play(5, false, limit);
-    assert!(ordered || aimed, "off: the AI goes for the person (to tick {end})");
+    assert!(
+        ordered || aimed,
+        "off: the AI goes for the person (to tick {end})"
+    );
     assert!(lost > 0, "off: the person is hurt");
     let (ordered, aimed, lost, end) = play(5, true, limit);
-    assert!(!ordered, "on: an AI order named a person's object (to tick {end})");
+    assert!(
+        !ordered,
+        "on: an AI order named a person's object (to tick {end})"
+    );
     assert!(!aimed, "on: an AI object took a person's object as target");
     assert_eq!(lost, 0, "on: the person's objects were hurt");
     assert_eq!(end, limit, "on: the game goes on");

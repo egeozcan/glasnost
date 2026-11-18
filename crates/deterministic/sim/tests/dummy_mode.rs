@@ -64,7 +64,13 @@ fn owner(w: &World, t: Option<Target>) -> Option<HouseId> {
 fn fight(dummy: bool, ticks: i32) -> (bool, bool, i32, World) {
     let mut w = game(7, dummy);
     let (person, ai) = squads(&mut w);
-    let health = |w: &World| -> i32 { person.iter().filter_map(|&p| w.obj(p)).map(|o| o.health).sum() };
+    let health = |w: &World| -> i32 {
+        person
+            .iter()
+            .filter_map(|&p| w.obj(p))
+            .map(|o| o.health)
+            .sum()
+    };
     let before = health(&w);
     let (mut ai_aimed, mut person_aimed) = (false, false);
     for _ in 0..ticks {
@@ -113,7 +119,10 @@ fn ai_objects_never_target_the_person() {
     assert!(w.houses[1].combat.anger.iter().all(|&a| a == 0));
     assert_eq!(w.houses[1].combat.enemy, None);
     let (ai_aimed, person_aimed, lost, _) = fight(false, 400);
-    assert!(ai_aimed && person_aimed && lost > 0, "with the mode off they fight");
+    assert!(
+        ai_aimed && person_aimed && lost > 0,
+        "with the mode off they fight"
+    );
 }
 
 /// The person's house has every cell explored and seen at tick 0, no point
@@ -131,11 +140,20 @@ fn the_person_sees_every_cell_at_tick_0() {
         assert!(shroud::explored(&w, h, c), "{c:?} unexplored");
         assert!(shroud::seen(&w, h, c), "{c:?} unseen");
         assert!(!shroud::pending(&w, h, c), "{c:?} pending");
-        assert!(!shroud::point_shrouded(&w, h, Pos::centre(c, 0)), "{c:?} shrouded");
+        assert!(
+            !shroud::point_shrouded(&w, h, Pos::centre(c, 0)),
+            "{c:?} shrouded"
+        );
     }
-    assert!(cells.iter().any(|&c| !shroud::explored(&w, HouseId(1), c)), "the AI house keeps its shroud");
+    assert!(
+        cells.iter().any(|&c| !shroud::explored(&w, HouseId(1), c)),
+        "the AI house keeps its shroud"
+    );
     let off = game(7, false);
-    assert!(cells.iter().any(|&c| !shroud::explored(&off, h, c)), "off: the person has a shroud");
+    assert!(
+        cells.iter().any(|&c| !shroud::explored(&off, h, c)),
+        "off: the person has a shroud"
+    );
 }
 
 /// The shroud stays removed: after a fight, every cell is still explored
@@ -144,7 +162,12 @@ fn the_person_sees_every_cell_at_tick_0() {
 #[test]
 fn the_shroud_stays_removed() {
     let (_, _, _, w) = fight(true, 120);
-    assert!(w.cells.grid.iter().all(|(c, _)| shroud::explored(&w, HouseId(0), c)));
+    assert!(
+        w.cells
+            .grid
+            .iter()
+            .all(|(c, _)| shroud::explored(&w, HouseId(0), c))
+    );
 }
 
 /// A save round trip keeps the mark and the state hash, and the game goes
@@ -220,7 +243,10 @@ fn off_the_house_setup_bytes_are_unchanged() {
         ..Default::default()
     };
     let bytes = postcard::to_allocvec(&marked).unwrap();
-    assert_eq!(postcard::from_bytes::<HouseSetupState>(&bytes).unwrap(), marked);
+    assert_eq!(
+        postcard::from_bytes::<HouseSetupState>(&bytes).unwrap(),
+        marked
+    );
     let mut bad = bytes.clone();
     // The person-played byte follows the three absent options and the observer byte.
     assert_eq!(bad[4], 3);

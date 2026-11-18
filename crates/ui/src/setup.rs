@@ -1544,7 +1544,12 @@ mod tests {
         let rect = t.rect_of(&SetupHit::Dummy).expect("the box");
         assert_eq!(t.hit(rect.centre()), Some(SetupHit::Dummy));
         // The plain view (a room's frame without one) has no box.
-        assert!(s.view((800, 600), &r, &m, None).1.rect_of(&SetupHit::Dummy).is_none());
+        assert!(
+            s.view((800, 600), &r, &m, None)
+                .1
+                .rect_of(&SetupHit::Dummy)
+                .is_none()
+        );
         assert_eq!(shell.setup(SetupHit::Dummy, &r, &m), None);
         assert!(shell.dummy);
         let Some(crate::shell::Event::StartGame(l)) = shell.setup(SetupHit::Start_, &r, &m) else {

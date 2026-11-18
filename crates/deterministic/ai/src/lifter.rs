@@ -332,15 +332,13 @@ fn drop_here(w: &World, house: HouseId, x: ObjectId) -> bool {
             !glasnost_sim::passability::enterable_by_class(w.rules(), w, c, u.class, u.zone, false)
         });
     let occupants = w.cells.list(c, glasnost_sim::world::Layer::Ground);
-    let own_there = occupants
-        .iter()
-        .any(|&o| {
-            o != x
-                && w.obj(o).is_some_and(|p| {
-                    // design: #439 (dummy mode: a held vehicle is never dropped on a dummy-mode house's object)
-                    w.allied(Some(house), p.owner) || w.dummy_spares(Some(house), p.owner)
-                })
-        });
+    let own_there = occupants.iter().any(|&o| {
+        o != x
+            && w.obj(o).is_some_and(|p| {
+                // design: #439 (dummy mode: a held vehicle is never dropped on a dummy-mode house's object)
+                w.allied(Some(house), p.owner) || w.dummy_spares(Some(house), p.owner)
+            })
+    });
     if own_there {
         return false;
     }

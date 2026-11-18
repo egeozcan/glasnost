@@ -278,7 +278,10 @@ fn worth(
             // spec: S-0612 claim 13 (allied objects are taken over)
             loss += value(w, o);
             ally_taken.insert(id);
-        } else if o.owner.is_some_and(|x| w.dummy_spares(Some(house), Some(x))) {
+        } else if o
+            .owner
+            .is_some_and(|x| w.dummy_spares(Some(house), Some(x)))
+        {
             // design: #439 (dummy mode: a dummy-mode house's object the sweep takes is a loss, as an ally's is)
             loss += value(w, o);
             ally_taken.insert(id);

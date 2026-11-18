@@ -111,7 +111,10 @@ fn scene(tank: &str, dx: i32, player_scatter: bool) -> (World, ObjectId, ObjectI
     trace::switch_on(&mut w);
     testkit::run(&mut w, 2);
     let o = w.obj(v).unwrap();
-    assert_eq!((o.target, o.dest, o.beh.seen()), (None, None, Some(Behaviour::Guard)));
+    assert_eq!(
+        (o.target, o.dest, o.beh.seen()),
+        (None, None, Some(Behaviour::Guard))
+    );
     assert!(weapon::airborne(&w, j), "the jumpjet is airborne");
     (w, v, j)
 }
@@ -186,7 +189,11 @@ fn issue_434_a_ground_only_tank_stands_under_a_hovering_jumpjet() {
             assert!(a.scatters.is_empty(), "{dx} cells, hit {n}: {a:?}");
             testkit::run(&mut w, 30);
             let o = w.obj(v).unwrap();
-            assert_eq!(o.pos.cell(), mid(SIZE, 0, 0), "{dx} cells, hit {n}: it stays");
+            assert_eq!(
+                o.pos.cell(),
+                mid(SIZE, 0, 0),
+                "{dx} cells, hit {n}: it stays"
+            );
         }
     }
 }
@@ -207,7 +214,10 @@ fn issue_434_a_ground_only_tank_scatters_with_the_player_scatter_setting() {
         assert_eq!(a.target, None);
         testkit::run(&mut w, 30);
         let a = hit(&mut w, v, j);
-        assert!(a.dest.is_some() && a.scatters.is_empty(), "{dx} cells, still driving: {a:?}");
+        assert!(
+            a.dest.is_some() && a.scatters.is_empty(),
+            "{dx} cells, still driving: {a:?}"
+        );
     }
 }
 
@@ -223,11 +233,18 @@ fn issue_434_an_anti_air_tank_retaliates_within_f7() {
         let (mut w, v, j) = scene("TANKA", 4, ps);
         let (slot, answer) = choice(&w, v, j);
         assert_eq!(slot, 1);
-        assert!(!matches!(answer, check::Answer::Illegal | check::Answer::Impossible), "{answer:?}");
+        assert!(
+            !matches!(answer, check::Answer::Illegal | check::Answer::Impossible),
+            "{answer:?}"
+        );
         let f7 = i64::from((2 * SIGHT + 1) * 128); // spec: S-0215 F7 ((S + 0.5) × 256 leptons)
         assert!(acquire::rho3(&w, v, j) <= f7);
         let a = hit(&mut w, v, j);
-        assert_eq!(a.behaviour, Some(Behaviour::Attack), "player-scatter {ps}: {a:?}");
+        assert_eq!(
+            a.behaviour,
+            Some(Behaviour::Attack),
+            "player-scatter {ps}: {a:?}"
+        );
         assert_eq!(a.target, Some(Target::Object(j)));
         assert!(a.scatters.is_empty(), "{a:?}");
     }
@@ -246,7 +263,11 @@ fn issue_434_an_anti_air_tank_beyond_f7_is_held() {
         let f7 = i64::from((2 * SIGHT + 1) * 128); // spec: S-0215 F7 ((S + 0.5) × 256 leptons)
         assert!(acquire::rho3(&w, v, j) > f7);
         let a = hit(&mut w, v, j);
-        assert_eq!(a.behaviour, Some(Behaviour::Guard), "player-scatter {ps}: {a:?}");
+        assert_eq!(
+            a.behaviour,
+            Some(Behaviour::Guard),
+            "player-scatter {ps}: {a:?}"
+        );
         assert_eq!(a.target, None);
         if ps {
             assert_eq!(a.scatters, vec![true], "{a:?}");
