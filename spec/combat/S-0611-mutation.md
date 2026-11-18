@@ -2,13 +2,13 @@
 id: S-0611
 title: Mutation
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-15
+approved-on: 2026-11-18
 measurements: []
-requests: [Q-1461, Q-1460, Q-1530, Q-3121]
+requests: [Q-1461, Q-1460, Q-1530, Q-3121, Q-3240]
 supersedes: []
 ---
 
@@ -428,7 +428,7 @@ Skirmish only; network games and campaigns are out of scope.
       claim 11); what the original's unit placed there does next is not established (Open
       questions). In our engine these rules hold whether or not the animation is also attached to
       an owner (the attached departure below). In the original they hold from the second update
-      after an attachment or a detachment.
+      after an attachment.
     - **Landing.** A landing (S-0319 claims 7 and 8) is not an end attempt. The animation leaves
       play in its landing turn with S-0319 claim 8's effects, tries no creation and makes no
       infantry, whether or not an earlier end attempt was refused.
@@ -438,19 +438,15 @@ Skirmish only; network games and campaigns are out of scope.
       the record it was made in, as claim 8's end does, whatever the switch below. Its end attempts
       follow the End attempts bullet below at this point, under either setting of the switch, so
       at a point outside the legal map the switch decides whether its last mark on the legal map is
-      freed. Once detached, its point is the position it had when it
-      was detached and does not change again; the free of an earlier mark still applies, so its
-      first update after detachment frees the mark of its last attached update when the two
-      standing positions differ. In the original, while it is attached, its marks, its free at the
-      end and its placement are all made at the world point whose coordinates equal its
-      displacement from the owner, which does not move while it stays attached and lies off the
-      legal map unless the displacement is large. Once detached, the original marks at its
-      position, and the marks made at the displacement point stay. What the original's placement
-      gives at that point is not established (Open questions). This is a documented departure with
-      no switch: our engine uses the position. In the original, the first update after a bouncing
-      animation is attached or detached also marks once at another point (the displacement, or the
-      owner's position plus the flight position); our engine does not, as part of the same
-      departure.
+      freed. No event detaches an attached animation while it stays in play (S-0109 claim 22),
+      so this point applies until it leaves play. In the original its marks, its free at the end
+      and its placement are all made at the world point whose coordinates equal its displacement
+      from the owner, which does not move while it stays attached and lies off the legal map
+      unless the displacement is large. What the original's placement gives at that point is not
+      established (Open questions). This is a documented departure with no switch: our engine
+      uses the position. In the original, the first update after a bouncing animation is attached
+      also marks once at another point, its displacement; our engine does not, as part of the
+      same departure.
     - **Earlier marks.** With `quirks.infantry_animation_stale_marks` on (the original), a mark
       made at an earlier point is not freed when the point moves on, so a bouncing animation leaves
       taken each standing position (on the legal map, as above) it has marked, with the cell's
@@ -470,11 +466,11 @@ Skirmish only; network games and campaigns are out of scope.
       standing (not the one of its point after a motion step), and still places at its point.
     - **Removal by another rule.** A removal of the animation that is not a successful end attempt
       makes no infantry; this covers a removal before any end attempt and one after a refused
-      attempt. Among such removals are a landing and the owner's removal (S-0109 claim 22, which
-      also makes no infantry). For an animation that is not bouncing they also include a drain
+      attempt. Among such removals are a landing and the end of an attachment at any event of
+      S-0109 claim 22's *End with the owner* list (which also makes no infantry). For an animation that is not bouncing they also include a drain
       link's end (S-0608), a new teleport source pick and the end of loading for a first-pass tile
-      animation. A bouncing animation in flight ends only by its stage or its owner's removal
-      (S-0319 claim 11), or by landing. With the switch on, such a removal frees nothing,
+      animation. A bouncing animation in flight ends only by its stage or the end of its
+      attachment (S-0109 claim 22, S-0319 claim 11), or by landing. With the switch on, such a removal frees nothing,
       so each standing position the animation has marked stays taken unless an end attempt freed
       it (the standing position of the point at that attempt) and no later update marked it again.
       After a refused attempt this includes the marks made before that attempt, apart from the
@@ -499,10 +495,9 @@ Skirmish only; network games and campaigns are out of scope.
         between the mark and the motion step does not show in it.
       - the point and free of an end attempt in flight: no scenario here ends a last pass in
         flight.
-      - the original's point for an attached animation, before and after a detachment, and after
-        an attachment or detachment of a bouncing animation: no scenario here gives an attached
-        animation type a make-infantry index.
-      - the lack of a free at an owner's removal or a removal by another rule: no scenario here
+      - the original's point for an attached animation, and after an attachment of a bouncing
+        animation: no scenario here gives an attached animation type a make-infantry index.
+      - the lack of a free at the end of an attachment or a removal by another rule: no scenario here
         removes an infantry-making animation that way.
       - our engine's rule for a point outside the legal map: no scenario here observes a mark
         outside the legal map (MU10 part b plays its flight far from the map's edge and does not
@@ -514,7 +509,7 @@ Skirmish only; network games and campaigns are out of scope.
         matters only when two marks, or a mark and a free, fall at the same standing position of
         the same cell in different records (a point crossing 416 leptons above the surface in a
         cell that a high bridge marks, or the mismatch above), which no scenario here plays.
-      - our engine's rules for an attached animation (detached or not) and for a bouncing
+      - our engine's rules for an attached animation and for a bouncing
         animation that is also attached, and the switch's off form: the original has no such
         form (design rule, decided at the delegated sign-off, 2026-11-15)
     - Confidence: high for the lack of infantry at a landing of an animation that has made no end
@@ -582,7 +577,7 @@ Skirmish only; network games and campaigns are out of scope.
 | bouncing infantry-making animation flying | each update | standing position of its position in play before the motion step marked; earlier marks kept with `quirks.infantry_animation_stale_marks` on (claim 15) |
 | bouncing infantry-making animation flying | last pass ends in flight, no follow-up type | end attempt at its position in play after the motion step; with the switch on that position is freed, with it off the last marked one (claim 15) |
 | bouncing infantry-making animation flying | landing | leaves play with S-0319 claim 8's effects; no creation attempt, no infantry; no position freed with the switch on (claim 15) |
-| attached infantry-making animation, not bouncing | each update | in our engine, standing position of its position marked, the earlier one freed when it differs; also after it is detached (claim 15) |
+| attached infantry-making animation, not bouncing | each update | in our engine, standing position of its position marked, the earlier one freed when it differs (claim 15) |
 | infantry-making animation | end attempt, placement refused | before the placement, the standing position of its point freed with the switch on (its other marks stay), the one it marked last with it off; marked again at its next update (claim 15) |
 | infantry-making animation | removed other than by a successful end attempt (before any attempt or after a refused one) | no infantry; no position freed with the switch on, its last mark freed with it off if still standing (claim 15) |
 
@@ -616,7 +611,7 @@ Skirmish only; network games and campaigns are out of scope.
   infantry-making animation frees a standing position only at an end attempt, and only the one of
   its point then, which after a bouncing animation's last motion step can be one it did not mark. So
   a bouncing animation leaves each position on the legal map that it marked in flight taken, a
-  removal other than a successful end attempt (a landing, the owner's removal or, for an animation
+  removal other than a successful end attempt (a landing, the end of an attachment (S-0109 claim 22) or, for an animation
   that is not bouncing, a drain link's end; before any attempt or after a refused one) leaves each
   mark not yet freed taken, marks made before a refused attempt included, and at a point at least
   416 leptons above the terrain surface in a cell that no high bridge marks the free misses the
@@ -630,10 +625,9 @@ Skirmish only; network games and campaigns are out of scope.
   position (for one that is not bouncing, the owner's position plus its displacement while
   attached; for a bouncing one, its position in play), and its marks, frees and placement follow
   claim 15's rules at that point. The original marks, frees and places at the world point equal
-  to its displacement from the owner, and once more at another point in the first update after a
-  bouncing animation is attached or detached. Once an attached animation that is not bouncing is detached,
-  the original marks at its position and the marks made at the displacement point stay; our engine
-  frees its earlier mark as while attached.
+  to its displacement from the owner, and once more at its displacement in the first update after
+  a bouncing animation is attached. No event detaches an attached animation while it stays in play
+  (S-0109 claim 22).
 - **Off-map marks.** Claim 15's departure: in our engine an infantry-making animation's update at
   a point outside the legal map marks nothing, and a free of such a point's standing position
   frees nothing. In the original the mark and the free are made at the shared stand-in cell
@@ -979,7 +973,7 @@ in flight. They do not override the defined safe results.
   and its Import mapping row for the make-infantry key.** Where they point to S-0611 claims 9 to
   11, they should point to S-0611 claims 9 to 11 and 15: claim 15 says where an animation that
   moves makes its end attempt. No rule change.
-- **S-0109 claim 22.** Its "no infantry" at an owner's removal agrees with S-0611 claim 15,
+- **S-0109 claim 22.** Its "no infantry" at the end of an attachment agrees with S-0611 claim 15,
   which also says what becomes of the standing position the animation marked. A
   pointer to add: for a bouncing animation that is also attached, S-0611 claim 15
   marks, frees and places at its position in play (S-0319 claim 4) in our engine, not at the
