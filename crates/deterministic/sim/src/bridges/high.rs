@@ -593,3 +593,24 @@ pub fn name_cell(w: &mut World, c: CellXY, enable: bool) {
     // spec: S-0212 claim 5 (connectivity brought up to date after a bridge destroyed or repaired, whether or not a link changed)
     w.regions.dirty = true;
 }
+
+/// A lost section ends the crate entries of its cell (#284). Synthetic
+/// data only.
+#[cfg(test)]
+mod crate_entry_tests {
+    use super::*;
+    use crate::crates::fixture::{at, crate_entries, entries, put, world};
+
+    // spec: S-0520 claims 11 and 29 (revision 17) and Edge cases (an overlay type of another kind may carry the crate flag: the crate whose overlay is removed no longer belongs to its place, nor is it a map's own crate); S-0511 claim 5 (a lost section's overlay is removed from its cell)
+    #[test]
+    fn issue_284_a_lost_section_ends_the_crate_entries_of_its_cell() {
+        let mut w = world();
+        let c = at(0, 0);
+        put(&mut w, c, pieces::high_overlay(Family::Bridge, Line::X), 0);
+        crate_entries(&mut w, c);
+        let s = pieces::section_in(&w, c).expect("the scenario: a section");
+        lose(&mut w, &s);
+        assert_eq!(w.cells.cell(c).map(|x| x.overlay), Some(NO_OVERLAY));
+        assert_eq!(entries(&w, c), (false, false), "(place, map crate)");
+    }
+}

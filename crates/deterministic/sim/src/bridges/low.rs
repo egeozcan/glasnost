@@ -256,3 +256,22 @@ pub fn reevaluate(w: &mut World, n: CellXY, line: Line) {
         _ => {}
     }
 }
+
+/// A strip written over a cell ends its crate entries (#284). Synthetic
+/// data only.
+#[cfg(test)]
+mod crate_entry_tests {
+    use super::*;
+    use crate::crates::fixture::{at, crate_entries, entries, world};
+
+    // spec: S-0520 claims 11 and 29 (revision 17: a crate whose overlay is replaced no longer belongs to its place, nor is it a map's own crate); S-0511 claim 13 (the three cells are written whatever they held before)
+    #[test]
+    fn issue_284_a_low_strip_ends_the_crate_entries_of_its_cells() {
+        let mut w = world();
+        let c = at(0, 0);
+        crate_entries(&mut w, c);
+        let cells = write_strip(&mut w, c, Family::Bridge, Line::X, Role::X);
+        assert!(cells.contains(&c), "the scenario: the strip covers the cell");
+        assert_eq!(entries(&w, c), (false, false), "(place, map crate)");
+    }
+}
