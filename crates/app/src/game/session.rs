@@ -494,6 +494,8 @@ impl Session {
             glasnost_sim::save::state_hash(&live.world),
             "the drawn copy and the game start alike"
         );
+        // design: render (#149): the drawing's own start world is not read again
+        hollow(&mut live.world);
         // The same choice the loader made for the walls' colour (#94).
         let local = live::local_of(
             &setup,
@@ -4142,6 +4144,35 @@ async fn read_icons(
         }
     }
     (out, alt)
+}
+
+/// Empties the live drawing's own world of what a game's world holds in
+/// bulk (objects, houses, cells, economy, regions and the rest of the
+/// play), keeping its rules and tile catalogue.
+///
+/// design: render (#149): the session's live drawing reads its world only
+/// inside [`Session::with_live`], with the game's world swapped in; outside
+/// that call its own world is a placeholder that nothing reads. The copy
+/// the loader started it with (the same start as the game's, checked in a
+/// debug build) is therefore dropped once the game is made, which frees
+/// about the memory of a second world for the whole game.
+fn hollow(w: &mut glasnost_sim::world::World) {
+    w.houses = Vec::new();
+    w.objects = BTreeMap::new();
+    w.update = Default::default();
+    w.cells = glasnost_sim::cells::Cells::new(glasnost_map::CellGrid::new(
+        glasnost_map::Footprint::new(0, 0, [0; 4]),
+    ));
+    w.projectiles = BTreeMap::new();
+    w.econ = Default::default();
+    w.sw = Default::default();
+    w.gas = Default::default();
+    w.routes = Default::default();
+    w.anims = Default::default();
+    w.lighting = Default::default();
+    w.triggers = Default::default();
+    w.threat = Default::default();
+    w.regions = Default::default();
 }
 
 /// The parts of the battlefield rectangle `m`, showing world pixels from

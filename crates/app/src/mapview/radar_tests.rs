@@ -1,13 +1,21 @@
 //! The radar's kept pixel cells give the simulation's pixels (S-0410 claims
 //! 6 to 10; M8 step C4 part 3) on synthetic data: the simulation's
-//! synthetic ruleset with an invented sight tower and gap generator.
+//! synthetic ruleset with an invented sight tower and gap generator. A
+//! radar kept over a game follows its changes as a radar made afresh does
+//! (render perf batch RP11, #137).
 
+use std::collections::BTreeMap;
+
+use glasnost_map::{CellXY, Theater};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::BuildingType;
-use glasnost_sim::econ::minimap::{self, Arrivals, Bits, View};
+use glasnost_sim::econ::minimap::{self, Arrivals, Bits, Rgb, View};
+use glasnost_sim::econ::shroud;
 use glasnost_sim::rules::Kind;
 use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, World};
+
+use super::radar::Radar;
 
 const SIZE: i32 = 40;
 
@@ -110,5 +118,233 @@ fn radar_compose_matches_the_sim() {
             testkit::mid(SIZE, 8, 1)
         ));
         assert_same(&w, &format!("gap fields, shift {shift}"));
+    }
+}
+
+/// Each cell's own tile colour, unlike its neighbours'.
+fn tiles(w: &World) -> BTreeMap<CellXY, Rgb> {
+    w.cells
+        .grid
+        .iter()
+        .map(|(c, _)| {
+            let (x, y) = (c.x.rem_euclid(256), c.y.rem_euclid(256));
+            let colour = [
+                (x * 37 % 256) as u8,
+                (y * 53 % 256) as u8,
+                ((x + y) * 11 % 256) as u8,
+            ];
+            (c, colour)
+        })
+        .collect()
+}
+
+fn radar_of(w: &World) -> Radar {
+    let colours = vec![[200, 40, 40], [40, 200, 40], [40, 40, 200], [200, 200, 40]];
+    Radar::new(w, Theater::Temperate, &tiles(w), colours, [250, 250, 250]).expect("usable cells")
+}
+
+/// The picture a radar made afresh for the world shows `h`.
+fn fresh(w: &World, h: HouseId) -> Vec<u8> {
+    let mut r = radar_of(w);
+    r.observe(w, Some(h));
+    r.rgba(w, Some(h))
+}
+
+/// Every house has radar (S-0410 claim 1), so that its picture is drawn.
+fn with_radar(w: &mut World) {
+    for h in &mut w.houses {
+        h.econ.radar.available = true;
+    }
+}
+
+/// Radars kept over the whole game: one for each house, and one asked for
+/// both houses in turn.
+struct KeptRadars {
+    by_house: [Radar; 2],
+    both: Radar,
+}
+
+/// Asks every kept radar for its picture and checks it against a radar made
+/// afresh; gives the pictures of houses 0 and 1.
+fn follows(w: &mut World, kept: &mut KeptRadars, label: &str) -> [Vec<u8>; 2] {
+    with_radar(w);
+    let w = &*w;
+    assert_eq!(
+        radar_of(w).image_rect(),
+        kept.both.image_rect(),
+        "{label}: the radar image stays"
+    );
+    [0u8, 1].map(|h| {
+        let house = HouseId(h);
+        let want = fresh(w, house);
+        let r = &mut kept.by_house[usize::from(h)];
+        r.observe(w, Some(house));
+        assert_eq!(r.rgba(w, Some(house)), want, "{label}, house {h}");
+        kept.both.observe(w, Some(house));
+        assert_eq!(
+            kept.both.rgba(w, Some(house)),
+            want,
+            "{label}, house {h}, the radar asked for both houses"
+        );
+        want
+    })
+}
+
+// spec: S-0410 claims 6, 7 and 8 (render perf batch RP11, #137: a kept radar shows what a radar made afresh shows after one cell's shroud changes either way, after one object changes its house, after a friendly gap field starts and turns hostile, and after one cell's height changes which cell its point test reads, quirks.radar_pixel_cell_shift on and off)
+#[test]
+fn a_kept_radar_follows_shroud_houses_gaps_and_heights() {
+    for shift in [true, false] {
+        let mut w = testkit::game_with(&rules(shift), SIZE, 3);
+        spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
+        spawn(&mut w, Kind::Building, "TOWER", 1, 9, 2);
+        let cart = spawn(&mut w, Kind::Vehicle, "CART", 0, -3, 0);
+        spawn(&mut w, Kind::Vehicle, "CART", 1, 0, 3);
+        testkit::run(&mut w, 3);
+        with_radar(&mut w);
+        let mut kept = KeptRadars {
+            by_house: [radar_of(&w), radar_of(&w)],
+            both: radar_of(&w),
+        };
+        let start = follows(&mut w, &mut kept, &format!("start, shift {shift}"));
+        assert!(
+            follows(&mut w, &mut kept, &format!("again, shift {shift}")) == start,
+            "nothing changed, nothing moves"
+        );
+
+        // One cell's shroud: an explored cell is covered again.
+        let me = HouseId(0);
+        let covered = testkit::mid(SIZE, 2, -2);
+        assert!(shroud::explored(&w, me, covered));
+        let i = w.cells.idx(covered).expect("a legal cell");
+        let marks = &mut w.econ.shroud.houses[0].as_mut().expect("a player").marks;
+        let explored_marks = marks[w.cells.idx(testkit::mid(SIZE, 0, 1)).unwrap()];
+        marks[i] = 0;
+        assert!(!shroud::explored(&w, me, covered));
+        let once = follows(&mut w, &mut kept, &format!("a cell covered, shift {shift}"));
+        assert!(once[0] != start[0], "the covered cell shows black");
+
+        // One cell's shroud: a far cell is explored.
+        let far = testkit::mid(SIZE, -12, 12);
+        assert!(!shroud::explored(&w, me, far));
+        let j = w.cells.idx(far).expect("a legal cell");
+        w.econ.shroud.houses[0].as_mut().unwrap().marks[j] = explored_marks;
+        assert!(shroud::explored(&w, me, far));
+        let twice = follows(
+            &mut w,
+            &mut kept,
+            &format!("a cell explored, shift {shift}"),
+        );
+        assert!(twice[0] != once[0], "the explored cell shows its terrain");
+
+        // One cell's houses: house 0's cart goes over to house 1.
+        w.obj_mut(cart).expect("the cart").owner = Some(HouseId(1));
+        let owner = follows(
+            &mut w,
+            &mut kept,
+            &format!("an owner changed, shift {shift}"),
+        );
+        assert!(owner[0] != twice[0], "the cart shows house 1's colour");
+
+        // A friendly gap field starts, then turns hostile.
+        let gap = spawn(&mut w, Kind::Building, "GAP", 0, 2, 2);
+        testkit::run(&mut w, 3);
+        let field = testkit::mid(SIZE, 2, 1);
+        assert!(minimap::cell_in_friendly_gap(&w, me, field));
+        let started = follows(&mut w, &mut kept, &format!("a gap field, shift {shift}"));
+        let o = w.obj_mut(gap).expect("the generator");
+        o.econ.sight.gap.as_mut().expect("a running field").owner = Some(HouseId(1));
+        assert!(!minimap::cell_in_friendly_gap(&w, me, field));
+        let hostile = follows(
+            &mut w,
+            &mut kept,
+            &format!("a hostile field, shift {shift}"),
+        );
+        assert!(
+            hostile[0] != started[0],
+            "the field's cells are no longer halved"
+        );
+
+        // One cell's height: raised two levels, its point test reads the
+        // cell up the slope of the grid, whose shroud differs.
+        let raised = (-7..=7)
+            .flat_map(|dx| (-7..=7).map(move |dy| testkit::mid(SIZE, dx, dy)))
+            .find(|&c| {
+                let before = minimap::cell_shrouded(&w, me, c);
+                let Some(cell) = w.cells.grid.get_mut(c) else {
+                    return false;
+                };
+                cell.level += 2;
+                if w.cells.usable(c) && minimap::cell_shrouded(&w, me, c) != before {
+                    return true;
+                }
+                w.cells.grid.get_mut(c).unwrap().level -= 2;
+                false
+            });
+        assert!(raised.is_some(), "a cell whose height changes its shroud");
+        let height = follows(&mut w, &mut kept, &format!("a cell raised, shift {shift}"));
+        assert!(height[0] != hostile[0], "the raised cell's pixel follows");
+    }
+}
+
+/// Each kept radar's picture is the one the simulation's composition gives.
+fn same_as_sim(w: &mut World, radars: &mut [Radar; 2], label: &str) {
+    with_radar(w);
+    let w = &*w;
+    for (h, r) in radars.iter_mut().enumerate() {
+        let house = HouseId(h as u8);
+        r.observe(w, Some(house));
+        assert_eq!(
+            r.rgba(w, Some(house)),
+            r.rgba_composed(w, Some(house)),
+            "{label}, house {h}"
+        );
+    }
+}
+
+/// The first candidate cell of the radar's point test for cell `c`
+/// (S-0410 claim 6, S-0110 claim 8).
+fn first_candidate(w: &World, c: CellXY) -> CellXY {
+    let p = glasnost_sim::world::Pos::centre(c, 0);
+    let p = glasnost_sim::world::Pos::new(p.x, p.y, w.surface_at(p.x, p.y));
+    shroud::point_candidates_on(p, w.rules().quirks.shroud_negative_odd_pair, true).0
+}
+
+// spec: S-0410 claims 6, 7 and 8 (render perf batch RP11, #137: the kept layers give the simulation's composition tick after tick, with towers, carts and gap fields friendly and hostile, and after odd, even and negative levels, quirks.radar_pixel_cell_shift on and off)
+#[test]
+fn a_kept_radar_shows_the_sims_composition() {
+    for shift in [true, false] {
+        let mut w = testkit::game_with(&rules(shift), SIZE, 3);
+        spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
+        spawn(&mut w, Kind::Building, "TOWER", 1, 9, 2);
+        spawn(&mut w, Kind::Vehicle, "CART", 0, 1, 1);
+        spawn(&mut w, Kind::Vehicle, "CART", 1, 2, 0);
+        spawn(&mut w, Kind::Vehicle, "CART", 1, 8, 3);
+        let mut radars = [radar_of(&w), radar_of(&w)];
+        for t in 0..3 {
+            testkit::run(&mut w, 1);
+            same_as_sim(&mut w, &mut radars, &format!("tick {t}, shift {shift}"));
+        }
+        spawn(&mut w, Kind::Building, "GAP", 1, 3, 0);
+        spawn(&mut w, Kind::Building, "GAP", 0, 8, 1);
+        for t in 0..3 {
+            testkit::run(&mut w, 1);
+            same_as_sim(&mut w, &mut radars, &format!("gap tick {t}, shift {shift}"));
+        }
+        for (dx, level) in [(-1, 1), (0, 3), (1, -1), (2, -3), (3, 2)] {
+            if let Some(cell) = w.cells.grid.get_mut(testkit::mid(SIZE, dx, -1)) {
+                cell.level = level;
+            }
+        }
+        same_as_sim(&mut w, &mut radars, &format!("levels, shift {shift}"));
+        // A raised cell whose point test reads the cell up the grid.
+        let up = testkit::mid(SIZE, 4, -1);
+        w.cells.grid.get_mut(up).unwrap().level = 4;
+        assert!(
+            first_candidate(&w, up) != up,
+            "the raised cell reads another"
+        );
+        same_as_sim(&mut w, &mut radars, &format!("raised, shift {shift}"));
+        testkit::run(&mut w, 2);
+        same_as_sim(&mut w, &mut radars, &format!("after, shift {shift}"));
     }
 }

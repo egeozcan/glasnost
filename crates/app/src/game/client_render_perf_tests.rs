@@ -382,3 +382,48 @@ fn render_perf_138_a_frame_after_put_off_ticks_shows_them() {
     let _ = s.under(p);
     assert!(!s.frame_owed(), "the pick drew the owed frame");
 }
+
+/// design: render (#149) (the session's live drawing keeps no copy of the
+/// start world: the game's world is lent to it while it draws, and in
+/// between it holds an empty world in its place): after the start and after
+/// ticks the live drawing's own world holds no object, no cell and no
+/// shroud; while it draws it sees the game's world, which comes back whole.
+#[test]
+fn render_perf_149_the_live_drawing_keeps_no_start_world() {
+    use glasnost_sim::save::state_hash;
+    let mut c = client((800, 600), 100);
+    start_by_keyboard_with(&mut c, fixture::rules());
+    let held = |c: &Client| {
+        let live = session(c).loaded.live.as_ref().expect("a live drawing");
+        let w = &live.world;
+        (
+            w.objects.len(),
+            w.cells.grid.len(),
+            w.econ.shroud.houses.len(),
+        )
+    };
+    assert_eq!(held(&c), (0, 0, 0), "no copy of the start world is kept");
+    for _ in 0..4 {
+        session_mut(&mut c).step();
+        let _ = c.frame();
+    }
+    assert_eq!(held(&c), (0, 0, 0), "nor after ticks and frames");
+    let s = session_mut(&mut c);
+    let game = state_hash(&s.play.game.world);
+    let objects = s.play.game.world.objects.len();
+    let seen = s
+        .with_live(|live, _, _| (live.world.objects.len(), state_hash(&live.world)))
+        .expect("a live drawing");
+    assert!(objects > 0, "the game has objects");
+    assert_eq!(
+        seen,
+        (objects, game.clone()),
+        "the drawing sees the game's world"
+    );
+    assert_eq!(
+        state_hash(&session(&c).play.game.world),
+        game,
+        "the game's world comes back"
+    );
+    assert_eq!(held(&c), (0, 0, 0), "and the drawing keeps none");
+}
