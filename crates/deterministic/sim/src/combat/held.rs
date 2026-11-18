@@ -26,6 +26,10 @@ pub enum Leaving {
     Destroyed,
     /// It goes off the map (a transport, a building entered, a master).
     OffMap,
+    /// It goes inside (S-0507 claim 6a): it boards a transport of either
+    /// kind or goes into a building that takes it off the map. Otherwise as
+    /// [`Leaving::OffMap`].
+    Inside,
     /// It is removed (a crush included).
     Removed,
 }
@@ -121,17 +125,19 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
     }
     // spec: S-0501 claim 53 (r183, Q-3041: an aircraft loses the object as its destination at the moments claim 32 gives for the loss of a target, the killing hit, going off the map and removal; a revert comes first, in the same moment, before the loss clears the object as destination)
     crate::air::destination_lost(w, gone);
-    // spec: S-0309 claim 27a (r140, Q-3061, Order within the action: a put-aside destination that is the object, which the revert of claim 27's drop gave back, is lost from the destination later in the same action, so the holder is left with no destination; an aircraft's was cleared by claim 53's loss just above)
-    for x in reverted_holders {
+    let inside = how == Leaving::Inside;
+    // spec: S-0309 claim 27a (r140, Q-3061, Order within the action: a put-aside destination that is the object, which the revert of claim 27's drop gave back, is lost from the destination later in the same action, so the holder is left with no destination; an aircraft's was cleared by claim 53's loss just above). S-0507 claim 6a: for an object that goes inside, the loss in the pass below clears it instead, without the destination assignment, so the locomotion keeps the object's movement point at the moment of the loss
+    for x in reverted_holders.into_iter().filter(|_| !inside) {
         if w.obj(x)
             .is_some_and(|o| o.dest == Some(Target::Object(gone)))
         {
             crate::econ::assign_destination(w, x, None);
         }
     }
-    // One pass makes both changes that follow (#402): each changes only the
-    // object it visits and reads nothing the other writes, so the result is
-    // that of the two walks one after the other.
+    // One pass makes the changes that follow (#402), and for an object that
+    // goes inside the loss of S-0507 claim 6a too: each changes only the
+    // object it visits and reads nothing another writes, so the result is
+    // that of separate walks one after the other.
     let it = Some(Target::Object(gone));
     // spec: S-0309 claim 23 (d) and claim 27a (r140, Q-3061: the loss of a remembered target, at the killing hit, going off the map or removal, turns the memory in the same action into a remembered destination at the cell of the target's position then; the engaged mark is kept)
     let memory = w.obj(gone).map(|o| {
@@ -151,6 +157,10 @@ pub(crate) fn holders_drop(w: &mut World, gone: ObjectId, how: Leaving) {
             && ob.attack_move == Some(remembered)
         {
             ob.attack_move = Some(at);
+        }
+        if inside {
+            // spec: S-0507 claim 6a (r11, Q-3207: at the moment it goes inside, after a revert in the same moment, every vehicle and infantry holder loses it as its destination and from its queued and approach destinations; its locomotion is not told)
+            crate::transport::destination_went_inside(ob, gone);
         }
     }
     for x in holders {

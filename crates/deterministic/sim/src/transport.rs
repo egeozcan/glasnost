@@ -570,8 +570,8 @@ pub fn board(w: &mut World, p: ObjectId, t: ObjectId) {
         .filter(|o| o.on_map)
         .map(|o| o.pos)
         .or_else(|| w.obj(t).map(|o| o.pos));
-    // spec: S-0507 claim 6 and S-0203 claim 3 (it leaves the map; it leaves play)
-    crate::objects::take_inside(w, p);
+    // spec: S-0507 claim 6 and S-0203 claim 3 (it leaves the map; it leaves play); claim 6a (it goes inside: its holders lose it as their destination)
+    crate::objects::go_inside(w, p);
     let pos = w.obj(t).map(|o| o.pos);
     let only = count(w, t) == 0;
     if let Some(ob) = w.obj_mut(p) {
@@ -604,6 +604,39 @@ pub fn board(w: &mut World, p: ObjectId, t: ObjectId) {
         // spec: S-0308 claim 6 and S-0514 claim 4 (a first passenger with a temporal beam hands it to the vehicle, attached or not)
         crate::temporal::hand_over(w, t, p);
     }
+}
+
+/// Claim 6a (r11, Q-3207): object `gone` goes inside (it boards a transport
+/// of either kind or goes into a building that takes it off the map), and
+/// `ob` is visited by [`crate::combat::held::holders_drop`]'s pass, after
+/// any revert. A vehicle or infantry unit that holds `gone` as its
+/// order-level destination loses it now, with no destination assignment:
+/// its locomotion is not told, so a driving point and a hover's point stay.
+/// `gone` also leaves its queued destinations, the others keeping their
+/// order. Aircraft follow S-0501 claim 53 instead (`air::destination_lost`).
+pub(crate) fn destination_went_inside(ob: &mut crate::world::Object, gone: ObjectId) {
+    // spec: S-0507 claim 6a (every vehicle and infantry unit that holds the object, transport or not, whatever its locomotor; aircraft holders follow S-0501 claim 53)
+    if !matches!(ob.kind, Kind::Vehicle | Kind::Infantry) {
+        return;
+    }
+    let lost = Target::Object(gone);
+    if ob.queued_dests.contains(&lost) {
+        // spec: S-0507 claim 6a (it leaves the holder's queued and approach destinations, S-0215 Terms, wherever it stands in them; the other entries keep their order)
+        ob.queued_dests.retain(|t| *t != lost);
+    }
+    if ob.dest != Some(lost) {
+        return;
+    }
+    // spec: S-0507 claim 6a (it loses the object as its destination at that moment, in the same tick; no point stands for the object while it is inside)
+    ob.dest = None;
+    if let Some(d) = ob.drive.as_mut() {
+        // spec: S-0507 claim 6a and S-0207 claims 25 and 26 (r11's Changes for other specs: the locomotor destination point stays as it was; the vehicle finishes a begun track, S-0207 claim 11, and begins none with no order-level destination)
+        d.for_dest = None;
+    }
+    if let Some(h) = ob.hover.as_mut() {
+        crate::hover::destination_went_inside(h, lost);
+    }
+    // spec: S-0507 claim 6a and Q-3236 (walking, jumpjet and teleporting locomotors are not told either: a walker with no destination ends its walk at its next arrival tick, S-0208 claims 6 and 16; jumpjet and teleporting points were fixed when taken)
 }
 
 fn gunner(w: &World, t: ObjectId) -> bool {

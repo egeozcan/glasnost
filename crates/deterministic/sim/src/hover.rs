@@ -131,6 +131,11 @@ pub struct HoverState {
     /// (`quirks.hover_landing_request_stands`).
     #[serde(default)]
     pub landing_request: bool,
+    /// The movement point an object destination supplied when the locomotor
+    /// last took it (S-0507 claim 6a): kept as *D* when that object goes
+    /// inside. Before that our *D* follows the object (Q-3235).
+    #[serde(default)]
+    pub taken_point: Option<Pos>,
 }
 
 impl HoverState {
@@ -161,6 +166,7 @@ impl HoverState {
             off: false,
             stopped: None,
             landing_request: false,
+            taken_point: None,
         }
     }
 }
@@ -372,6 +378,7 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
                 h.retained = None;
             }
         });
+        record_taken_point(w, id, dest);
         return;
     }
     // spec: S-0503 claim 4 (ρ = 1 when it is given a move while powered and not moving now)
@@ -395,6 +402,7 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
             h.throttle = F64::from_i64(1, Rounding::TowardZero);
         }
     });
+    record_taken_point(w, id, dest);
     if dest.is_none() || !no_point || !powered {
         // spec: S-0503 claim 5 (a vehicle moving now keeps an existing heading point; giving a destination while unpowered does not itself start the choice)
         return;
@@ -402,6 +410,37 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
     // spec: S-0503 claim 5 (not moving now: the first search and heading-point choice at once, so S-0417's ρ = ½ set right after it persists; moving now without a heading point: the path-update rules at once, with destination-cell completion and the retry-delay gate, and a heading-point choice there too)
     let old = path_update(w, id, None);
     let _ = choose_next(w, id, old);
+}
+
+/// Records, as the locomotor takes `dest`, the movement point an object
+/// destination supplies now (S-0507 claim 6a): the point it keeps should that
+/// object go inside. Other destinations record none.
+fn record_taken_point(w: &mut World, id: ObjectId, dest: Option<Target>) {
+    // spec: S-0507 claim 6a (the point the locomotion received at the assignment is the object's movement point at that moment, unless that destination was given to it again later); Q-3235 (our D follows the object until then)
+    let point = match dest {
+        Some(Target::Object(_)) => destination_point(w, id),
+        _ => None,
+    };
+    with(w, id, |h| h.taken_point = point);
+}
+
+/// The object `lost` names went inside and the vehicle, which held it as
+/// its order-level destination, has just lost it (S-0507 claim 6a). Its
+/// locomotion is not told: the point it last received for that destination
+/// stays as its *D*, now with no order-level destination (claim 16's kept
+/// *D*), unless claim 10's stop request had cleared *D*.
+pub(crate) fn destination_went_inside(h: &mut HoverState, lost: Target) {
+    if h.for_dest == Some(lost) {
+        // spec: S-0507 claim 6a (hovering movement goes on by S-0503 claims 5, 7 and 15 with that point as its D; the loss does not change it to where the object went inside) and S-0503 claims 17 and 18 (a held assignment's remembered point)
+        h.retained = if h.stopped == Some(lost) {
+            None
+        } else {
+            h.held.or(h.taken_point)
+        };
+    }
+    h.for_dest = None;
+    h.held = None;
+    h.stopped = None;
 }
 
 /// The fraction set after a factory exit instruction (S-0417 claim 5): it

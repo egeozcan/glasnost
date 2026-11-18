@@ -247,8 +247,8 @@ fn go_inside(w: &mut World, unit: ObjectId, b: ObjectId) {
         return;
     };
     let first = count(w, b) == 0;
-    // spec: S-0508 claim 5 (it leaves the map in the same tick; it keeps its owner, health and experience)
-    crate::objects::take_inside(w, unit);
+    // spec: S-0508 claim 5 (it leaves the map in the same tick; it keeps its owner, health and experience); S-0507 claim 6a (going into a building as an occupant is going inside: its holders lose it as their destination)
+    crate::objects::go_inside(w, unit);
     if let Some(ob) = w.obj_mut(unit) {
         ob.contact = None;
         ob.structure.inside = Some(b);

@@ -628,14 +628,27 @@ pub fn place_in_play(w: &mut World, id: ObjectId, cell: CellXY, v: u8) -> bool {
 /// cleared; the object stays in the world, off the map, with no
 /// destination, target or walk.
 pub fn take_inside(w: &mut World, id: ObjectId) {
+    off_the_map(w, id, crate::combat::held::Leaving::OffMap);
+}
+
+/// [`take_inside`] for an object that goes inside in the sense of S-0507
+/// claim 6a: it boards a transport of either kind or goes into a building
+/// that takes it off the map, as a garrison occupant does. Its vehicle and
+/// infantry holders also lose it as their destination, their locomotion
+/// keeping its point.
+pub fn go_inside(w: &mut World, id: ObjectId) {
+    off_the_map(w, id, crate::combat::held::Leaving::Inside);
+}
+
+fn off_the_map(w: &mut World, id: ObjectId, how: crate::combat::held::Leaving) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
     if !o.on_map {
         return;
     }
-    // spec: S-0309 claim 27 and S-0501 claim 32 (every holder drops as its target an object that goes off the map, a transport or a building entered, at that moment)
-    crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::OffMap);
+    // spec: S-0309 claim 27 and S-0501 claim 32 (every holder drops as its target an object that goes off the map, a transport or a building entered, at that moment); S-0507 claim 6a (going inside: the destination loss)
+    crate::combat::held::holders_drop(w, id, how);
     // spec: S-0306 claim 17 (a projectile whose target goes inside: the cell it stood in when not airborne, else nothing)
     crate::combat::projectile::target_leaves(w, id);
     // spec: S-0506 claim 14 (r34: going inside a building or a transport is leaving play: claim 11's reset of a controller whose target it is, unless a pending target waits; claim 25's clear of a pending target)

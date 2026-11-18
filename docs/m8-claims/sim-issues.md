@@ -1483,3 +1483,54 @@ Seams left:
 - *After the cleanup* is `unmeasured` (claim 29), so no lane checks it.
 
 The P3 census rule: start position marks are not back-references, so no fix calls a census forget.
+
+## Batch S31: a destination that goes inside (S-0507 r11, Q-3207)
+
+Base main f24a642, not rebased. The batch builds S-0507 revision 11's claim 6a, which answers S26's Q-3207: an object that goes inside, by boarding a transport of either kind or by going into a building that takes it off the map, is lost at once as the destination of every vehicle and infantry holder, the transport it boards included, and the holder's locomotion keeps the point it last received. The design is the section *Simulation (sim issues S31: a destination that goes inside, S-0507 r11)* of `docs/dev/simulation.md` (9225cf6). Requests Q-3235 to Q-3237 are filed (4141a7b), and their interims are built. The failing tests are 4df3c10: all six fail on their own tree, checked out in the base worktree (`local-lane/sim-issues/s31/t-r11-at-4df3c10.txt`). The fix is f86cb98, rustfmt c0577e2, the goldens b5d62cc and the two guards d4d0052. The absorber test is 5ecfaf0; it was committed after the fix that it checks. r11 names no quirk switch, so none is added.
+
+| Claim part | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| claim 6a, T16 (a) | A hovering transport that holds an infantry unit by claim 5's reply on water kept it as its destination after the unit boarded another transport, so its *D* followed the unit inside (S26's trace) | fixed (f86cb98) | `objects::go_inside` (new, with `Leaving::Inside`) for `transport::board`. `held::holders_drop` makes the loss in its existing pass over all objects (`transport::destination_went_inside`): the destination is cleared without the destination assignment, so the locomotion is not told | `claims_s0507_r11.rs` (`t16a_the_unit_boards_another_transport`) |
+| claim 6a, T16 (b) | The same when the unit goes into a building as an occupant (S-0508) | fixed (f86cb98) | `structures::garrison::go_inside` calls `objects::go_inside` | `t16b_the_unit_goes_into_a_building` |
+| claim 6a, the transport it boards | The transport the unit boards, holding it by claim 5, kept it as its destination with the unit inside | fixed (f86cb98) | The same loss, at `transport::board` | `the_transport_it_boards_loses_it` |
+| claim 6a, other holders | Any vehicle or infantry holder, transport or not: driving, walking and hovering holders lose the object in the same tick. The driving locomotor keeps its goal (S-0207 claims 25 and 26 as r11's *Changes for other specs* amend claim 26) | fixed (f86cb98) | `destination_went_inside` clears `DriveState::for_dest` with the destination, so the next locomotion update does not take it again, and leaves `goal` | `other_holders_lose_it_and_a_driver_keeps_its_point` |
+| claim 6a, queued and approach destinations | The object leaves `queued_dests`, which are also the approach destinations (S-0215 Terms), wherever it stands. The other entries keep their order, and a destination that is another target stays | fixed (f86cb98) | `destination_went_inside` | `it_leaves_queued_destinations` |
+| claim 6a, a revert in the same moment | The revert of S-0309 claims 27 and 27a comes first. A given-back destination that is the object is then lost by claim 6a's loss, not by claim 27a's `assign_destination(None)`, so the locomotion keeps the object's movement point at the loss | fixed (f86cb98) | For `Leaving::Inside` the claim 27a loop is not run; the pass's loss clears it | `a_revert_in_the_same_moment` |
+| claim 6a, the hovering point | The hover read *D* from the destination object's live position, so with no destination it had no point (claim 16 keeps the retained point). At the loss *D* is now the point recorded when the destination was taken | interim Q-3235 (f86cb98) | `HoverState::taken_point` (new, saved and hashed), recorded by `hover::take`. `hover::destination_went_inside` sets `retained` to the held point or the recorded one (none when the hover had stopped for it) | T16 (a) and (b) check that the point is unchanged and that A moves on toward it |
+| claim 6a, walking, jumpjet and teleporting holders | The walker has no stored locomotor point, and jumpjet and teleport fix theirs when taken. They are not told | interim Q-3236 | none | `other_holders_lose_it_and_a_driver_keeps_its_point` (walker) |
+| claim 6a, which ways out are going inside | Boarding (`transport::board`), the garrison (`garrison::go_inside`) and the absorber (`absorb::go_in`) are going inside. Slave miners, the parasite, the spawner and the lift's pick-up keep `Leaving::OffMap` | interim Q-3237 | `absorb::go_in` calls `objects::go_inside` | T16 (b); `going_into_an_absorber_is_going_inside` (5ecfaf0, committed after its fix) |
+| claim 6a, aircraft holders | Aircraft follow S-0501 claim 53, already built in `air::destination_lost`. It runs for `Leaving::Inside` as it did for `OffMap`, and `destination_went_inside` returns for every kind but vehicles and infantry | guard (d4d0052) | none | `an_aircraft_holder_follows_s0501_claim_53` |
+| claim 6a, the tank bunker | A vehicle that enters a tank bunker stays on the map (S-0606 claim 7). The bunker's entry calls no leaving-play hook, so its holders keep it | guard (d4d0052) | none | `a_tank_bunker_is_not_going_inside` |
+| r11 *Changes for other specs* (S-0207 claim 26) | A spec text change: the driving locomotor's point stays at claim 6a's loss | built with claim 6a | as above | as above |
+| T16 local lane | A recorder run against the original | not built | T16 is a recorded scenario with no measurement record yet, so there is nothing to compare | — |
+
+Formats: `HoverState::taken_point` is saved and hashed, so save goes from 152 to 175 and AI game from 129 to 151, the numbers the brief gives; renumbered to 154 and 131 at the merge. The AI game bump in `crates/deterministic/ai/src/game.rs` is forced by the sim change. Wire stays 12.
+
+Goldens (b5d62cc): `duel-m6c.txt` moves from line 1137 (tick 11359) to its end, and `duel-naval.txt` from line 1450 (tick 14489), both from f86cb98. In `duel-naval.txt` the hash returns to its old value between hunks, through line 1632 (lines 1569, 1571, 1572 and others). So the first moves are the recorded `taken_point` in the hashed state, not a change of play.
+
+Whether play changes later in either duel is not shown:
+- duel-naval's last hunk, from line 1633 to its end, never returns to the old value;
+- duel-m6c never returns from line 1137 to its end. The M6c sweep's seed 3 lines are identical, which suggests but does not prove that its play is unchanged.
+
+b5d62cc's message says that the naval moves are not a change of play; that holds only through line 1632. Both files' line counts are unchanged, and the other goldens do not move.
+
+Lanes compare base f24a642 with the batch at b5d62cc. Logs are in `local-lane/sim-issues/s31/`.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). `diff -rq` of `arena-base/` and `arena-after/` is empty. M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 and M-0021 10 of 50 failing, the same as at base.
+
+**Sweeps** (`m6c-base.txt`/`m6c-after.txt`, and likewise for m7a and m7b). M6c, M7a and M7b over seeds 1–16 pass. Apart from build lines their seed and summary lines are identical to base: smallest minimum 0, 2, and drain 3.
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-after-7.txt` to `quick-after-10.txt`). 34 games end on the same tick with the same winner as base. Two games move, both on map 0 with sides 1 and 2, and keep their winner:
+- seed 7, game 3, S25's game: from 47257 to 46376 ticks, house 1 still wins. It does not go back to 46922, its length before S25. It makes 11 loads onto a hovering transport, against 10 at base.
+- seed 9, game 3: from 43203 to 43485 ticks, house 0 still wins. It makes 7 loads onto a hovering transport, against 5 at base.
+
+Both use hovering transports, which fits claim 6a's path, but neither is traced. No winner changes, so no trace is needed.
+
+**Suites.** The AI suite with its ignored tests passes 364 on base and on the batch (`ai-base.txt`, `ai-after.txt`). The sim gate with its ignored tests passes 17 on both (`gate-base.txt`, `gate-after.txt`), after the goldens were regenerated.
+
+Seams left:
+- Retry delay: the loss skips `path::destination_changed`, as claim 6a's "the locomotion is not told" reads, so a running retry delay (S-0212 claim 21) runs on. With no destination, driving and walking make no search, and the hovering locomotor is not in claim 21's list for a changed destination, so this makes no difference.
+- Q-3235: before the loss our hover's *D* for an object destination is still the object's live position. T16's "the same just before and just after" therefore holds only while the object stands still from the assignment to the loss, as it does in T16.
+- Q-3238 is not used.
+
+The P3 census rule: the loss rides on `holders_drop`'s existing pass over all objects and reads no census back-reference, so the batch makes or moves no back-reference of `World::census`.
