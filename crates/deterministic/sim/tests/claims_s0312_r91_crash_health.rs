@@ -427,6 +427,19 @@ fn q3239_a_turned_down_air_death_end_keeps_the_unit_for_good() {
     assert_eq!(corpses(&w), 0);
 }
 
+// spec: S-0312 claim 16 (r91, A turned-down air-death-end request: it stays in play) and S-0107 claim 17a (a living unit for every rule: it can be targeted, so it is listed in its cell, on the ground layer since its on-deck state is unset, S-0502 claim 4)
+#[test]
+fn q3239_a_unit_kept_for_good_is_listed_in_its_cell() {
+    let (mut w, u) = left_in_play(|_| {});
+    testkit::run(&mut w, 30);
+    let cell = pos(&w, u).cell();
+    assert!(
+        w.cells.list(cell, Layer::Ground).contains(&u),
+        "listed on the ground layer"
+    );
+    assert!(!w.cells.list(cell, Layer::Deck).contains(&u));
+}
+
 // spec: S-0312 claim 16 (A turned-down air-death-end request: a later killing hit removes it at once, with no corpse, when its height above the surface is below 1 lepton at the hit, since a crash starts only from a positive height above the surface)
 #[test]
 fn q3239_a_later_killing_hit_on_the_ground_removes_it_at_once() {
