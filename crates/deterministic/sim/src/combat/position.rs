@@ -294,19 +294,23 @@ mod aim_difference_tests {
     use crate::testkit;
     use crate::world::Target;
 
+    /// The building's x, near the top of the range.
+    const TOWER_X: i32 = i32::MAX - 1000;
+
     /// A world with a building without the turret flag aiming at a vehicle
-    /// whose x is `target_x`, the building at x = −1000 on the same row.
+    /// whose x is `target_x`, the building at [`TOWER_X`] on the same row.
     fn fire_point(target_x: i32) -> Pos {
         let mut r = testkit::combat_ruleset();
         if let Some(b) = r.sim.buildings.get_mut("TOWER") {
             b.turret = Some(false);
         }
         let mut w = testkit::game_with(&r, 30, 7);
-        let tower = testkit::spawn(&mut w, Kind::Building, "TOWER", 0, testkit::mid(30, 0, 0), 0);
-        let cart = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, testkit::mid(30, 2, 0), 0);
+        let at = |dx| testkit::mid(30, dx, 0);
+        let tower = testkit::spawn(&mut w, Kind::Building, "TOWER", 0, at(0), 0);
+        let cart = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, at(2), 0);
         let y = w.obj(tower).map_or(0, |o| o.pos.y);
         if let Some(o) = w.obj_mut(tower) {
-            o.pos.x = -1000;
+            o.pos.x = TOWER_X;
             o.target = Some(Target::Object(cart));
         }
         if let Some(o) = w.obj_mut(cart) {
@@ -319,10 +323,13 @@ mod aim_difference_tests {
     // spec: S-0205 claim 1 (an integer result outside the range wraps; no clamp is stated by S-0313 or S-0204); S-0313 claim 3 (a building without the turret flag aims in the direction of its target from its reference point); S-0204 F3 (X = x_Q − x_P)
     #[test]
     fn f4_the_aim_difference_wraps() {
-        // i32::MAX − 100 − (−1000) wraps to a large negative X: west, as a
-        // near target to the west.
-        let far = fire_point(i32::MAX - 100);
-        let near = fire_point(-6000);
-        assert_eq!(far, near, "the wrapped difference aims west");
+        // (i32::MIN + 1000) − (i32::MAX − 1000) wraps to X = 2001: east, as
+        // a near target 500 leptons to the east. Both |X| stay far below
+        // S-0204 F3's open range (2²⁴ and above).
+        let wrapped = fire_point(i32::MIN + 1000);
+        let east = fire_point(TOWER_X + 500);
+        assert_eq!(wrapped, east, "the wrapped difference aims east");
+        // And not as a target to the west.
+        assert_ne!(wrapped, fire_point(TOWER_X - 500), "the scenario: the aim matters");
     }
 }
