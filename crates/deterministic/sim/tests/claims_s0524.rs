@@ -17,7 +17,7 @@ use glasnost_sim::mp_triggers::{self, Coverage};
 use glasnost_sim::rules::{Kind, SimRules};
 use glasnost_sim::superweapons::StormState;
 use glasnost_sim::testkit;
-use glasnost_sim::world::{ObjectId, World};
+use glasnost_sim::world::{ObjectId, Target, World};
 use sw_common::{ALPHA, BETA, DEFER, SIZE, at, run, step};
 
 /// The demolition warhead's verses: one tenth against every armour.
@@ -1108,6 +1108,28 @@ fn claim13_displaced_occupants_are_placed_by_the_nearby_search() {
     assert_eq!(
         (w.obj(outside).unwrap().pos, facing_of(&w, outside)),
         outside_before
+    );
+}
+
+// spec: S-0507 claim 6a (r12: the claim covers going inside only, in the ways it lists; the lift of a unit displaced from a replacement's foundation, re-placed by S-0524 claim 13's search, is none of them, so a holder keeps the unit as its destination)
+#[test]
+fn s0507_claim_6a_a_displaced_unit_is_not_lost_as_a_destination() {
+    let r = ruleset();
+    let mut w = game(&r, triggers(vec![], 0), &[], &[("Alpha", "WIDE", at(0, 0))]);
+    for id in wide(&w) {
+        glasnost_sim::objects::remove(&mut w, id);
+    }
+    let man = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at(1, 0), 64);
+    let h = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, at(6, 6), 0);
+    glasnost_sim::econ::assign_destination(&mut w, h, Some(Target::Object(man)));
+    let a = country(&w, "Alphaland");
+    mp_triggers::restore_starting_buildings(&mut w, a, None);
+    assert_eq!(wide(&w).len(), 1, "void: not replaced");
+    assert!(w.obj(man).unwrap().on_map, "void: not re-placed");
+    assert_eq!(
+        w.obj(h).unwrap().dest,
+        Some(Target::Object(man)),
+        "the holder keeps it"
     );
 }
 

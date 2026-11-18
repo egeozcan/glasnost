@@ -983,3 +983,46 @@ fn claim_20_crusher_landing_crushes() {
         }
     )));
 }
+
+// spec: S-0507 claim 6a (r12, Q-3236: teleporting movement: the loss is not an assignment of an empty destination, so it does not cancel a pending jump as claim 20 (h) does; the jump goes on to its fixed landing point)
+#[test]
+fn claim_20_a_destination_that_goes_inside_keeps_the_pending_jump() {
+    let mut s = scene(false);
+    s.vehicle("CARGO", unit_type(WHEEL, 6, 5));
+    s.place_unit(0, "CARGO", cell(0, -12), 0);
+    let mut w = s.build();
+    open_orders(&mut w);
+    let jumper = w.rules().index_of(Kind::Vehicle, "JUMPER").unwrap();
+    let all = objects_of(&w, Kind::Vehicle);
+    let id = *all
+        .iter()
+        .find(|&&x| w.obj(x).unwrap().type_index == jumper)
+        .unwrap();
+    let cargo = *all.iter().find(|&&x| x != id).unwrap();
+    glasnost_sim::econ::assign_destination(&mut w, id, Some(Target::Object(cargo)));
+    let l = w
+        .obj(id)
+        .unwrap()
+        .teleport
+        .as_ref()
+        .and_then(|t| t.landing)
+        .expect("void: no landing point fixed");
+    glasnost_sim::objects::go_inside(&mut w, cargo);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.dest, None, "the holder lost it");
+    assert_eq!(
+        o.teleport.as_ref().and_then(|t| t.landing),
+        Some(l),
+        "the landing point stays"
+    );
+    let mut landed = false;
+    for _ in 0..3 {
+        run(&mut w, 1);
+        let p = w.obj(id).unwrap().pos;
+        if (p.x, p.y) == (l.x, l.y) {
+            landed = true;
+            break;
+        }
+    }
+    assert!(landed, "the jump goes on to its landing point");
+}

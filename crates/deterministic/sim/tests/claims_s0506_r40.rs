@@ -654,3 +654,34 @@ fn seams7b_a_released_flagged_non_rocket_objects_removal_changes_no_slot() {
     assert_eq!(after.state, SlotState::Empty, "control: emptied");
     assert_ne!(after, before, "control: the slot changed");
 }
+
+// spec: S-0507 claim 6a (r12, Q-3237: a spawned aircraft returning into its spawner, vehicle or building, S-0506, is going inside: every vehicle and infantry unit that holds it as its destination loses it at that moment) and S-0506 Slot table (returning, docking: taken off the map, reloading)
+#[test]
+fn s0507_claim_6a_a_docking_spawned_aircraft_is_lost_as_a_destination() {
+    let r = rules();
+    let (mut w, car, x, _, _) = carrier_with_pending(&r, "CARF");
+    // Returning, as in the_preparing_rows_move_a_flagged_non_rocket_object.
+    spawn::pass(&mut w, car);
+    w.obj_mut(car).unwrap().spawn.as_mut().unwrap().target = None;
+    spawn::pass(&mut w, car);
+    assert_eq!(
+        controller(&w, car).slots[0].state,
+        SlotState::Returning,
+        "void: returning"
+    );
+    let h = put(&mut w, Kind::Vehicle, "VICTIM", 0, -8, 6);
+    glasnost_sim::econ::assign_destination(&mut w, h, Some(Target::Object(x)));
+    // No flight runs between the passes: it is still in the spawner's cell;
+    // brought down to the spawner's height it docks.
+    let c = w.obj(car).unwrap().pos;
+    assert_eq!(w.obj(x).unwrap().pos.cell(), c.cell(), "void: elsewhere");
+    w.obj_mut(x).unwrap().pos.z = c.z;
+    spawn::pass(&mut w, car);
+    assert_eq!(
+        controller(&w, car).slots[0].state,
+        SlotState::Reloading,
+        "void: not docked"
+    );
+    assert!(!w.obj(x).unwrap().on_map, "void: still on the map");
+    assert_eq!(w.obj(h).unwrap().dest, None, "the holder lost it");
+}
