@@ -3,7 +3,7 @@ id: Q-3235
 title: A hovering vehicle's point for a unit it is sent to, before that unit goes inside
 status: open
 related: [S-0503, S-0507, S-0212]
-answered-by: []
+answered-by: [S-0503]
 ---
 
 ## Need
