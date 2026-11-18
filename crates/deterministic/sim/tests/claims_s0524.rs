@@ -1614,7 +1614,7 @@ fn restored_construction(mut r: Ruleset, frames: Option<i32>) -> Restored {
     out
 }
 
-// spec: S-0524 claim 15 (a restored replacement enters with its ready mark clear; a positive-delay range of at least 2 stages sets the mark when an eligible building turn first lands on the last stage; construction becomes current at that turn's second per-tick start, its first processing is on the next tick, and the handover follows F6; the build-up runs twice, as for a placed building) and S-0406 claim 17 (restored replacement, positive delay: C = R + 1, H follows F6)
+// spec: S-0524 claim 15 (a restored replacement enters with its ready mark clear; a positive-delay range of at least 2 stages sets the mark when an eligible building turn first lands on the last stage; construction becomes current at that turn's second per-tick start, its first processing is on the next tick, and the handover follows F6; r10: the build-up runs twice, as for a filling building, since a replacement gets no factory break-off) and S-0406 claim 17 (restored replacement, positive delay: C = R + 1, H follows F6)
 #[test]
 fn claim15_restored_multi_stage_range_runs_twice_and_hands_over_by_f6() {
     // 10 image frames: n = 5 stages, d_b = 9 ticks (S-0108 claim 5), the range of 36 ticks.
@@ -1644,16 +1644,19 @@ fn claim15_restored_zero_delay_range_sets_the_mark_at_its_first_eligible_turn() 
     assert_eq!(k.handover, Some(u + 2), "H = U + 2");
 }
 
-// spec: S-0524 claim 15 (the shared quirks.placed_buildup_twice applies to restored replacements too: off sets the mark at entry and uses the deployed-style start) and S-0406 claim 17 and Edge cases (off: C = U + 1 and the handover follows F6; U the first eligible building turn)
+// spec: S-0524 claim 15 (r10: the shared quirks.buildup_twice_without_break_off off gives restored replacements S-0406 claim 17's factory break-off: with a zero-delay idle range, construction is first processed one tick after the first eligible building turn and the build-up runs once) and S-0406 claim 17 and Edge cases (r19, off: the mark clear at entry, C = U + 1, H by F6; the restoration runs between ticks here, so U is the entry tick)
 #[test]
-fn claim15_restored_replacement_follows_the_placed_buildup_twice_switch() {
+fn claim15_restored_replacement_gets_the_break_off_with_the_switch_off() {
     let mut r = ruleset();
     r.globals.quirks.buildup_twice_without_break_off = false;
     let k = restored_construction(r, Some(10));
-    assert!(k.mark_at_entry, "off: the mark is set at entry");
-    let u = k
-        .current
-        .expect("construction becomes current at the first turn");
+    assert!(!k.mark_at_entry, "off: the mark is still clear at entry");
+    let u = k.entry;
+    assert_eq!(
+        k.current,
+        Some(u + 1),
+        "current from the first start after the break-off: {k:?}"
+    );
     assert_eq!(k.first, Some(u + 1), "C = U + 1");
     assert_eq!(k.handover, Some(u + 1 + 36), "H follows F6");
 }

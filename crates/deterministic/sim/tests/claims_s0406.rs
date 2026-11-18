@@ -245,10 +245,10 @@ fn claim_1_placement_point_and_construction() {
 
 /// A building of type `name` put on the map at the middle in its
 /// construction state, with no other object in play (no other draws), as a
-/// place order would put it; returns it and the entry tick *T*. It enters
-/// before the turn pass of tick *T* rather than after it, so its first turn
-/// is on *T*, not *T* + 1; the ready-mark rule of S-0406 claim 17 counts
-/// ticks from entry, so the ticks of F7 are unchanged.
+/// place order would put it; returns it and the entry tick *E*. It enters
+/// before the turn pass of tick *E* rather than in the orders part of the
+/// tick before, so its first turn is on *E*: *E* plays the part of F7's
+/// *T* + 1, and F7's *C* = *T* + 2 is *E* + 1 here.
 fn lone_placed(w: &mut World, name: &str) -> (ObjectId, i32) {
     let t = ty(w, name);
     let id = glasnost_sim::objects::create(w, Kind::Building, t, Some(A));
@@ -318,7 +318,7 @@ fn construction_ticks(w: &mut World, id: ObjectId) -> Ticks {
 
 // spec: S-0108 claim 5 (d_b = trunc(B × 900 / n): n = 5, B = 0.05 give 9, finished 36 ticks after)
 // spec: S-0406 claims 14 and 15 and F6 (delay 1 and no draw whatever the rate; H = C + (n − 1) × d_b; guard current by the end of the handover tick)
-// spec: S-0406 claim 17 and F7 (placed: R = T + (n − 1) × d_b, C = R + 1, H = T + 2(n − 1) × d_b + 1; the build-up runs twice)
+// spec: S-0406 claim 17 and F7 (r19, Q-3243, M-0027: the building a place order names gets the factory break-off at the end of its first turn; a zero-delay idle range makes construction current at the first start of its next turn, processed then: C = T + 2, here E + 1; the build-up runs once, H = C + (n − 1) × d_b)
 #[test]
 fn claims_14_15_construction_handover() {
     for rate in ["0.016", "2"] {
@@ -335,14 +335,14 @@ fn claims_14_15_construction_handover() {
             glasnost_sim::econ::sell::buildup_ticks(&w, ty(&w, "HUT")),
             36
         );
-        let (id, t) = lone_placed(&mut w, "HUT");
+        let (id, e) = lone_placed(&mut w, "HUT");
         let k = construction_ticks(&mut w, id);
         assert_eq!(
             k,
             Ticks {
-                r: t + 36,
-                c: t + 37,
-                h: t + 73
+                r: e + 1,
+                c: e + 1,
+                h: e + 37
             },
             "rate {rate}"
         );
@@ -350,40 +350,39 @@ fn claims_14_15_construction_handover() {
 }
 
 // spec: S-0406 claim 15 and F6 (a type with no build-up sprite: a zero-delay range, H = C + 1)
-// spec: S-0406 claim 17 and F7 (placed, zero-delay range: the mark at the first turn after entry, C = T + 2, H = T + 3)
+// spec: S-0406 claim 17 and F7 (r19: placed, zero-delay construction range: the mark on the first turn T + 1, construction current from its second start, C = T + 2 whatever the idle range, H = T + 3; here E, E + 1 and E + 2)
 #[test]
 fn claim_15_no_buildup_sprite() {
     let mut r = rules();
     r.sim.buildings.get_mut("HUT").unwrap().econ.buildup = None;
     let mut w = game(&r);
-    let (id, t) = lone_placed(&mut w, "HUT");
+    let (id, e) = lone_placed(&mut w, "HUT");
     let k = construction_ticks(&mut w, id);
     assert_eq!(
         k,
         Ticks {
-            r: t + 1,
-            c: t + 2,
-            h: t + 3
+            r: e,
+            c: e + 1,
+            h: e + 2
         }
     );
 }
 
-// spec: S-0406 Edge cases (quirks.placed_buildup_twice off: the place order sets the ready mark at entry; construction current at the first turn, the build-up seen once, H by F6)
+// spec: S-0406 Edge cases (r19: quirks.buildup_twice_without_break_off off changes only filling buildings and restored replacements; the building a place order names keeps its ready mark clear at entry and its factory break-off, C = T + 2 and H by F6, here E + 1 and E + 37)
 #[test]
-fn claim_17_placed_buildup_twice_off() {
+fn claim_17_switch_off_leaves_the_named_building_alone() {
     let mut r = rules();
     r.globals.quirks.buildup_twice_without_break_off = false;
     let mut w = game(&r);
-    let (id, t) = lone_placed(&mut w, "HUT");
-    assert!(w.obj(id).unwrap().beh.ready_mark);
+    let (id, e) = lone_placed(&mut w, "HUT");
+    assert!(!w.obj(id).unwrap().beh.ready_mark);
     let k = construction_ticks(&mut w, id);
-    // The first turn is on T here (see lone_placed): C = T + 1, H = C + 36.
     assert_eq!(
         k,
         Ticks {
-            r: t,
-            c: t + 1,
-            h: t + 37
+            r: e + 1,
+            c: e + 1,
+            h: e + 37
         }
     );
 }
@@ -396,37 +395,41 @@ fn single_stage() -> Ruleset {
     r
 }
 
-// spec: S-0406 claim 18 (quirks.single_stage_buildup_never_completes: a placed building with a positive-delay one-stage range keeps construction queued for good; never constructed, never guard, no sell)
+// spec: S-0406 claim 18 (r19: quirks.single_stage_buildup_never_completes: the building a place order names, with a positive-delay range of one stage or fewer, makes construction current as claim 17 gives, after its factory break-off, at C = T + 2, here E + 1, and never hands over; never constructed, never guard, no sell)
 #[test]
 fn claim_18_single_stage_never_completes() {
     for frames in [3, 1, 0] {
         let mut r = single_stage();
         r.sim.buildings.get_mut("HUT").unwrap().econ.buildup_frames = Some(frames);
         let mut w = game(&r);
-        let (id, _) = lone_placed(&mut w, "HUT");
+        let (id, e) = lone_placed(&mut w, "HUT");
         testkit::run(&mut w, 400);
         let o = w.obj(id).unwrap();
-        assert_eq!(o.beh.current, None, "frames {frames}");
-        assert_eq!(o.beh.queued, Some(Behaviour::Construction));
+        assert_eq!(
+            o.beh.current,
+            Some(Behaviour::Construction),
+            "frames {frames}"
+        );
+        assert_eq!(o.econ.construction.first, Some(e + 1), "frames {frames}");
         assert!(o.econ.construction.building_up);
         assert!(!glasnost_sim::econ::sell::sellable(&w, id));
     }
 }
 
-// spec: S-0406 Edge cases (quirks.single_stage_buildup_never_completes off: the report d_b ticks after the range starts; a placed building reaches construction at T + d_b and hands over d_b ticks after C)
+// spec: S-0406 Edge cases (quirks.single_stage_buildup_never_completes off: the range reports d_b ticks after it starts; r19: the building a place order names starts construction after its factory break-off, C = T + 2, here E + 1, and hands over d_b ticks after C)
 #[test]
 fn claim_18_switch_off() {
     let mut r = single_stage();
     r.globals.quirks.single_stage_buildup_never_completes = false;
     let mut w = game(&r);
-    let (id, t) = lone_placed(&mut w, "HUT");
+    let (id, e) = lone_placed(&mut w, "HUT");
     let k = construction_ticks(&mut w, id);
     assert_eq!(
         k,
         Ticks {
-            r: t + 45,
-            c: t + 46,
-            h: t + 91
+            r: e + 1,
+            c: e + 1,
+            h: e + 46
         }
     );
 }
@@ -457,7 +460,8 @@ fn claim_15_target_kept() {
     // The weaponless HUT answers *impossible* (S-0301 claim 9) and drops a
     // held target at a check tick (S-0309 claim 29 r94), so the short
     // construction of a type with no build-up sprite (H = T + 3, F6 and
-    // F7) is placed just after a check tick, with none before the handover.
+    // F7, here E + 2) is placed just after a check tick, with none before
+    // the handover.
     let mut r = rules();
     r.sim.buildings.get_mut("HUT").unwrap().econ.buildup = None;
     let mut w = game(&r);
@@ -468,7 +472,8 @@ fn claim_15_target_kept() {
     let aim = glasnost_sim::world::Target::Cell(c(4, 4));
     w.obj_mut(id).unwrap().target = Some(aim);
     let k = construction_ticks(&mut w, id);
-    assert_eq!(k.h, t + 3);
+    // spec: S-0406 claim 17 and F7 (r19: H = T + 3 for the building a place order names with a zero-delay construction range, here E + 2)
+    assert_eq!(k.h, t + 2);
     assert!((t..=k.h).all(|n| n % 16 != 0), "no check tick");
     assert_eq!(w.obj(id).unwrap().target, Some(aim));
 }
@@ -882,18 +887,53 @@ fn claim_11_non_wall_fill_enters_as_placed() {
     }
 }
 
-// spec: S-0406 Edge cases (quirks.placed_buildup_twice off: a place order sets the ready mark at entry on the building it names and on each of its filling buildings) (#310)
+/// The tick at the end of which a building first has *construction*
+/// current, its first construction processing, and its handover.
+type FillTicks = (Option<i32>, Option<i32>, Option<i32>);
+
+/// The [`FillTicks`] of each of `fill`.
+fn fill_ticks(w: &mut World, fill: &[ObjectId]) -> Vec<FillTicks> {
+    let mut seen: Vec<FillTicks> = vec![(None, None, None); fill.len()];
+    for _ in 0..300 {
+        let now = w.tick;
+        glasnost_sim::tick::step(w);
+        for (k, &id) in fill.iter().enumerate() {
+            let o = w.obj(id).unwrap();
+            let s = &mut seen[k];
+            if s.0.is_none() && o.beh.current == Some(Behaviour::Construction) {
+                s.0 = Some(now);
+            }
+            if s.1.is_none() {
+                s.1 = o.econ.construction.first;
+            }
+            if s.2.is_none() && !o.econ.construction.building_up {
+                assert_eq!(o.beh.current, Some(Behaviour::Guard));
+                s.2 = Some(now);
+            }
+        }
+        if seen.iter().all(|s| s.2.is_some()) {
+            break;
+        }
+    }
+    seen
+}
+
+// spec: S-0406 Edge cases (r19, quirks.buildup_twice_without_break_off off: a filling building keeps its ready mark clear at entry and gets the factory break-off of claim 17 at the end of its first turn; with a zero-delay idle range its first processing is one tick after that turn, C = T + 2, and the build-up is seen once, H by F6; its first turn is on E here, so C = E + 1 and H = E + 37) (#310, #440)
 #[test]
 fn claim_11_non_wall_fill_buildup_twice_off() {
     let mut r = rules();
     r.globals.quirks.buildup_twice_without_break_off = false;
-    let (w, fill) = non_wall_fill(&mut r);
-    for id in fill {
-        assert!(w.obj(id).unwrap().beh.ready_mark);
+    let (mut w, fill) = non_wall_fill(&mut r);
+    let e = w.tick;
+    for &id in &fill {
+        assert!(!w.obj(id).unwrap().beh.ready_mark, "clear at entry");
+    }
+    for s in fill_ticks(&mut w, &fill) {
+        assert_eq!(s, (Some(e + 1), Some(e + 1), Some(e + 37)));
     }
 }
 
-// spec: S-0406 claim 17 and F7 (a filling building takes the placed building's results: R = T + (n − 1) × d_b, C = R + 1, H = T + 2(n − 1) × d_b + 1, with T the place order's tick) (#310)
+// spec: S-0406 claim 17, F7 and Edge cases (quirks.buildup_twice_without_break_off on: a filling building gets no factory break-off and runs its build-up twice: R = T + (n − 1) × d_b, C = R + 1, H = C + (n − 1) × d_b, with T its entry tick) (#310)
 #[test]
 fn claim_11_non_wall_fill_timings() {
     let mut r = rules();
