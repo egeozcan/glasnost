@@ -1962,6 +1962,10 @@ pub struct Quirks {
     // spec: S-0502 claim 11, F6 and Edge cases
     #[serde(default = "on")]
     pub jumpjet_turn_slowdown_one_sided: bool,
+    /// A jumpjet vehicle that hovers with a target and keeps a movement commitment, not held by magnetic lift, keeps its body on its movement heading, and with a weapon that is not omni-fire and no turret it does not fire at a target outside the aiming tolerance of that heading; off: in *hovering* a jumpjet vehicle's physics steps do not set its body facing from the heading, and for the reply to *not facing* without a turret its locomotor does not count as moving it, so with no destination its body turns towards its target at its body turn rate and it fires once the target lies within the tolerance. A hovering vehicle without a commitment turns its body under either setting.
+    // spec: S-0502 claim 10 and Edge cases (r27, Q-3252, *Body on the heading while hovering*)
+    #[serde(default = "on")]
+    pub hovering_jumpjet_body_on_heading: bool,
     /// Garrison entry is refused only when the occupant count equals the capacity, so a negative capacity admits occupants indefinitely; off: entry requires an occupant count below the capacity, so a non-positive capacity admits none.
     // spec: S-0508 claim 1 and Edge cases
     #[serde(default = "on")]
@@ -2847,6 +2851,8 @@ impl Default for Quirks {
             jumpjet_no_cell_self_destruct: true,
             jumpjet_step_truncation: true,
             jumpjet_turn_slowdown_one_sided: true,
+            // spec: S-0502 claim 10 and Edge cases (r27: default on = original)
+            hovering_jumpjet_body_on_heading: true,
             garrison_capacity_equality: true,
             deploy_sound_repeats: true,
             deploy_stall_zero_delay: true,
@@ -4161,6 +4167,10 @@ impl Quirks {
             (
                 "jumpjet_turn_slowdown_one_sided",
                 self.jumpjet_turn_slowdown_one_sided,
+            ),
+            (
+                "hovering_jumpjet_body_on_heading",
+                self.hovering_jumpjet_body_on_heading,
             ),
             (
                 "garrison_capacity_equality",
