@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 91
+revision: 93
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -10,7 +10,7 @@ approved-on: 2026-11-18
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132,
 Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000, Q-3042, Q-3086, Q-3112, Q-3158,
-Q-3239]
+Q-3239, Q-3255]
 supersedes: []
 ---
 
@@ -523,10 +523,12 @@ Claim 34 (e) gives which of claims 9 to 15 a vehicle passenger killed inside its
     the net descent, because ordinary altitude adjustment can still apply. That claim also owns
     its sinking branch. A crashable vehicle using jumpjet movement uses the crash motion of
     S-0502 claim 18, with its magnetic-lift qualifications, and so does a crashing infantry unit
-    using jumpjet movement. For any object using jumpjet
-    movement, the crash start also makes S-0502 claim 18's empty destination assignment at
-    once, inside the hit. A committed jumpjet infantry unit then reroutes with its eligible
-    standing-position draw over 0 to 3; a jumpjet vehicle's reroute takes no draw. S-0502 claim 3's safety
+    using jumpjet movement. For any object using jumpjet movement, the crash start also stops
+    its orders at once, inside the hit, by S-0502 claim 18's destination clear: it leaves the
+    object with an empty order-level destination and does not stop its fall's horizontal
+    motion. A committed jumpjet infantry unit is rerouted three times by it, each time with its
+    standing-position draw over 0 to 3 when the cell is eligible, so it takes three such draws
+    or none; a jumpjet vehicle's reroutes take no draw. S-0502 claim 3's safety
     departure guarantees the next movement update for a pending crash above the surface,
     even without a move order: a dead hovering unit cannot remain suspended merely because
     its order ended. This guarantee is an engine design rule, not established original
@@ -699,7 +701,7 @@ Claim 34 (e) gives which of claims 9 to 15 a vehicle passenger killed inside its
       claim 20's confidence; jumpjet motion is high for its fall, spin and the held-up crash's
       reference, height per update, speed reset and held-up condition, and medium that nothing else ends a
       held-up crash, as S-0502 claim 18 rates them; high for the jumpjet crash start's
-      destination clear at the hit, with the infantry reroute draw (S-0502 claim 18),
+      destination clear at the hit, with the infantry's three reroute draws (S-0502 claim 18),
       medium for the non-rocket impact rules; low for the double death weapon, that is, the
       original's two firings of an exploding non-rocket aircraft (the Edge cases rate the
       switch's off form medium); medium for the
