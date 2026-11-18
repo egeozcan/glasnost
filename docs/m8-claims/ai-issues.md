@@ -259,3 +259,62 @@ and the install bench's state hash every 500 ticks are those of the #27 tree; th
 | #27 (rest) waves to a start seen empty | yes: with every start explored and no enemy building seen there, the rotation sent waves (and the ferry, rally and landing goals) to those starts in turn | a start explored (S-0409 claims 9 and 19) with no enemy building seen by it is no goal. With none left a wave searches unseen cells, and waits when there are none. The ferry, rally and landing goal takes a seen enemy building, then a start not yet cleared, then any seen enemy (an enemy base vehicle not yet deployed). The rotation counter is gone | `scripted.rs`: `start_tests::a_start_seen_empty_is_no_goal`; `tests/ai.rs`: `no_wave_goes_to_a_start_seen_empty` |
 | AP1 seam: `rebuild_yard` between thinks | yes: between thinks it was the first part to ask `Script::own`, so it paid each house's scan of every object, 452.8 ms of the bench | `Game::step` lists every house's living objects on the map in one pass when the first brain thinks, and hands each brain its list. Issuing an order only adds it to the pending list, so each list is the house's own scan. `Brain::think` and the other drivers still scan | `scripted.rs`: `the_lists_of_one_pass_are_each_houses_own_scan`; the goldens and the bench's hashes |
 | #54, #64 (rest) | looked at: AP1's leftovers are small rows of the bench (7bde6d0, think ticks, of about 11.2 s of think-tick AI: special:bunkers 83.9 ms, special:jumpjets 65.9, special:grinders 36.0, build_anti_air 6.4, special:crates 5.0; together 1.8 %), and #54's "no target" cache would hold an answer across ticks | left untouched by choice: the AP1 seam (rebuild_yard, 452 ms between thinks) was the larger saving | — |
+
+## Batch 8
+
+Issues #434 and #443 (units under air attack, own-AI design) and #445 (an AI airship bomber idle over
+a base, traced). AI game format 159 (the air-attack part's state and three use counters join the
+brain), save 154, wire 12. Base 96ca8d8. The part is `air_attack.rs`, owned by the default script's
+special part (`Special::think_with`); notes in [own-ai.md](../dev/own-ai.md). Each fix came after
+tests committed before it that failed there (c41edc9 and ff434a7 for the escape, e190e5b and 34228a2
+for the step, d889fce for the job test).
+
+**Goldens.** All six AI duel goldens moved (the new state is hashed from the first tick): duel,
+duel-diagonal, duel-m6c, duel-m7a, duel-m7b, duel-naval (dd7054b; duel-m6c again in e45724f after
+the job test). duel runs longer (2588 hash lines for 2135), duel-diagonal (2081 for 2131) and
+duel-naval (1855 for 1929) end sooner, so play changes there; the goldens hash the brain, so they do
+not show where, and those three were not traced.
+
+**Sweeps** (seeds 1 to 16, after the job test). M6c passes, its smallest minimum 0 as before; per seed
+lines move (it has jumpjets and aircraft): seed 2 11758 → 8100, seed 7 8092 → 9032, seed 10 → 11393,
+seed 13 → 8069, seed 16 8088 → 12000; seeds 1, 4, 10 and 16 are no longer below 3; garrison median
+15 → 12; crate orders 72 → 97. M7a: every line as before. M7b passes: drain orders median 5 → 4 (min
+3), credits drained median 1680 → 1880, takeovers median 1 → 2; seed 6's hostile-intent counter (no
+gate) 0, base 202. No gate margin changed.
+
+**Quick lane** (seeds 7 to 14, maps 0, 2 and 8, sides 0,2 and 1,2, 48 games; every game ends in
+both): 10 winners change. Allied 10 (base 11), Soviet 9 (base 8), Yuri 29 (29). Each was traced to
+its first differing tick (world hash without the AI's state, then the objects); in each the first
+difference is one escape order of this part to a unit of the house a seen airborne enemy shoots:
+
+| game | tick | unit (house, kind, behaviour before) | attacker | goal |
+|---|---|---|---|---|
+| 0,2 map 0 seed 8 | 7613 | 1407 (1, infantry, area guard) | aircraft 1469 | away |
+| 0,2 map 0 seed 9 | 18218 | 5053 (1, infantry, move) | aircraft 1478 | away, replacing the move |
+| 0,2 map 0 seed 12 | 11813 | 1573 (1, infantry, guard) | jumpjet infantry 1477 | away |
+| 0,2 map 0 seed 13 | 8873 | 1391 (1, infantry, move) | air vehicle 1500 | cover (closer to the attacker) |
+| 0,2 map 8 seed 11 | 8258 | 802 (1, vehicle, attack) | jumpjet infantry 939 | away |
+| 1,2 map 0 seed 8 | 11483 | 1374 (1, infantry, attack) | air vehicle 1975 | cover or home |
+| 1,2 map 2 seed 9 | 18631 | 881 (0, vehicle, guard) | air vehicle 2445 | away |
+| 1,2 map 8 seed 11 | 23603 | 6199 (1, infantry, attack) | air vehicle 5854 | home |
+| 1,2 map 2 seed 12 | 27203 | 4250 (1, vehicle taken by the dominator, attack) | air vehicle 4516 | cover (closer to the attacker) |
+| 1,2 map 2 seed 14 | 13223 | 839 (1, vehicle, guard) | air vehicle 1754 | home |
+
+In 0,2 map 0 seed 13 a second unit (1293, guard, not shot) got in the same think the move the
+escaping unit had in the base; no other part reads this part's state, so that is another part's
+choice once the first unit was busy. Twice the cover goal is nearer the attacker than the unit was
+(the cover unit stands under it). Air steps: 3 orders in 96 house-games; slow attackers over a unit
+that can hit them are rare in stock games. A first run of the lane (before the job test) changed 9
+winners; the trace of one showed an engineer on a capture sent home, which the job test fixed.
+
+**Bench** (map 9, 8 houses, seed 7, 9 000 ticks), base then after, back to back on a shared machine:
+`tick::step` 2651.3 / 2787.3 µs, AI time a tick 1465.7 / 1570.8 µs, AI share 35.6 / 36.0 %; the
+games differ (1634 / 1610 objects at the end), and the growth lies in parts not touched
+(army_types 3049 → 3386 ms, build_superweapon 1682 → 1965 ms); `special:air_attack` costs 18.3 ms
+(0.15 % of think-tick AI). The base alone ranged 2239 to 2807 µs this session.
+
+| issue | confirmed | change | test |
+|---|---|---|---|
+| #434 units under air attack they cannot answer | yes: a unit shot by an air unit it cannot hit stood under it (no retaliation, S-0306 claim 23, S-0215 claim 18), and the base's rally move sent a moved unit straight back | `Special::air_attack`: each army unit a seen airborne enemy shot within `RECENT` ticks, that cannot hit it and that it reaches, moves to cover (a house unit or defence that can hit the attacker within `COVER` cells), else home from the field, else out of reach plus `MARGIN` (S-0307 claim 13); up to `HELPERS` idle units within `HELP_REACH` that can hit it are sent at it; a unit sent away keeps its order for up to `HOLD` ticks (`Watch::keeps_order` in `Brain::think_from`); a unit on another part's job (current or queued behaviour not a fighting one) is left alone (`free_of_job`) | `tests/air_attack.rs`: `a_ground_unit_hit_from_the_air_goes_to_anti_air_cover`, `an_anti_air_unit_nearby_is_sent_at_the_attacker`, `a_ground_unit_hit_from_the_air_in_the_field_goes_home`, `a_ground_unit_hit_from_the_air_at_home_moves_out_of_reach`, `a_unit_getting_away_is_not_ordered_at_every_think`, `a_unit_on_its_way_into_a_bunker_is_not_ordered_away`, `a_unit_of_another_house_is_never_ordered` |
+| #443 a unit under a slow air attacker it can hit | yes: it fired from under a hovering attacker that kept over it | `Special::air_step`: when the attacker is still within `OVERHEAD` cells one think later and the unit fired at it within `RECENT` ticks, it steps `STEP` cells away, at most once in `STEP_GAP` ticks; no attack order follows, since retaliation brings it back to firing | `tests/air_step.rs`: `an_anti_air_unit_under_a_slow_bomber_steps_aside_and_keeps_firing`, `after_a_step_retaliation_alone_brings_the_unit_back_to_firing`, `a_unit_under_a_slow_bomber_is_not_ordered_at_every_think`, `a_unit_of_another_house_under_a_slow_bomber_is_never_ordered` |
+| #445 an AI bomber idle over a base | traced: the brain gives one valid attack order (the lasting check neither illegal nor impossible) and nothing more; a bomber reaching half a cell hovers over the building's top-left cell with no re-aim (S-0307 claim 18, S-0310 claim 9); one without the mobile-fire flag never fires (S-0310 claim 7) | none: the AI's order is valid and the simulation follows its claims; the open questions are spec request Q-3257 | `tests/air_bomber.rs`: `an_ai_bomber_at_an_enemy_base_is_sent_at_it_once`, `a_bomber_that_reaches_from_afar_bombs_the_plant_from_some_sides`, `a_bomber_that_reaches_half_a_cell_stalls_over_the_plant`, `a_bomber_without_mobile_fire_never_bombs_the_plant` |
