@@ -334,6 +334,110 @@ fn two_strikes_share_a_mark() {
     assert!(!strike::marked(&w, a));
 }
 
+/// One tick of #448's trace of an ordered designation: the line effects
+/// the designator's shots reported (weapon index, end point), its
+/// projectiles in flight and whether the building is marked.
+#[derive(Debug)]
+#[allow(dead_code)] // read through Debug in the failure messages
+struct Shot {
+    tick: i32,
+    beh: Option<Behaviour>,
+    target: Option<Target>,
+    lines: Vec<(
+        glasnost_sim::combat::data::WeaponId,
+        glasnost_sim::world::Pos,
+    )>,
+    flying: usize,
+    marked: bool,
+}
+
+// spec: S-0519 claim 16 (the designation shot is fired like any other shot; S-0308 table P row 6 chooses the airstrike secondary against a building that accepts charges) and S-0518 claims 18 and 20 (each shot of a laser-flag weapon reports its line, ending at the target's target point), traced for #448 with an infantry designator ordered to attack a building
+#[test]
+fn issue_448_an_ordered_infantry_designation_reports_its_laser_line() {
+    let mut w = world(|r| {
+        let mut laser = r.sim.weapons["Laser"].clone();
+        // spec: S-0518 Import mapping (IsLaser: the laser flag; LaserDuration: D)
+        laser.is_laser = Some(true);
+        laser.laser_duration = Some(15);
+        r.sim.weapons.insert("Beam".into(), laser);
+        register(r, "weapons", "Beam");
+        infantry(r, "BORIS", |t| {
+            t.primary = Some("JetGun".into());
+            t.secondary = Some("Beam".into());
+            t.combat.airstrike_team = Some(2);
+            t.combat.airstrike_team_type = Some("JET".into());
+            t.combat.airstrike_recharge_time = Some(100);
+        });
+    });
+    let a = quiet(&mut w, Kind::Building, "BLDG", 1, at(0, 0));
+    let d = spawn(&mut w, Kind::Infantry, "BORIS", 0, at(-5, 0));
+    let beam = w
+        .rules()
+        .combat
+        .weapons
+        .iter()
+        .position(|x| x.name == "Beam")
+        .expect("the beam") as glasnost_sim::combat::data::WeaponId;
+    // spec: S-0213 claim 1 (the start's order block refuses input until its last blocked tick)
+    let open = w.orders_blocked_through + 1;
+    run_to(&mut w, open);
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        HouseId(0),
+        glasnost_sim::orders::Order::Behaviour {
+            actor: d,
+            behaviour: Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(a)),
+            dest: None,
+        },
+    ));
+    let mut log = Vec::new();
+    for _ in 0..200 {
+        testkit::run(&mut w, 1);
+        let lines: Vec<_> = w
+            .effects
+            .iter()
+            .filter_map(|e| match *e {
+                glasnost_sim::combat::effects::Effect::Line {
+                    firer, weapon, to, ..
+                } if firer == d => Some((weapon, to)),
+                _ => None,
+            })
+            .collect();
+        log.push(Shot {
+            tick: w.tick,
+            beh: w.obj(d).and_then(|o| o.beh.current),
+            target: w.obj(d).and_then(|o| o.target),
+            lines,
+            flying: w
+                .projectiles
+                .values()
+                .filter(|p| p.attacker == Some(d))
+                .count(),
+            marked: strike::marked(&w, a),
+        });
+        if strike::marked(&w, a) {
+            break;
+        }
+    }
+    let shot = log
+        .iter()
+        .find(|s| !s.lines.is_empty())
+        .unwrap_or_else(|| panic!("a line from the designator: {log:#?}"));
+    let to = glasnost_sim::combat::range::target_point(&w, Target::Object(a));
+    assert_eq!(shot.lines, vec![(beam, to)], "{log:#?}");
+    assert!(
+        w.rules().combat.weapon(beam).laser,
+        "the laser flag reaches the simulation's weapon"
+    );
+    assert_eq!(w.rules().combat.weapon(beam).laser_duration, 15);
+    assert!(
+        log.last().is_some_and(|s| s.marked),
+        "the strike is called: {log:#?}"
+    );
+}
+
 // spec: S-0519 Determinism: the state hash survives a save and load with a planted bomb, a charge planter and a strike in progress, and the loaded game goes on alike
 #[test]
 fn terror_state_survives_a_save_and_load() {
