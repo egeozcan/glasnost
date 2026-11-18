@@ -11,7 +11,7 @@ use glasnost_render::compose::Paint;
 use glasnost_render::palette::{PaletteQuirks, PaletteState};
 use glasnost_render::scene::{Group, Scene};
 use glasnost_rules::sim::BuildingType;
-use glasnost_sim::econ::placement::begin_construction;
+use glasnost_sim::econ::placement::{begin_construction, break_off};
 use glasnost_sim::econ::sell::{Stage, buildup_range};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Kind as SimKind, SimRules};
@@ -151,8 +151,9 @@ fn trace(hut: Hut, sell: bool) -> ((i32, i32), i32, Vec<Seen>) {
         testkit::mid(SIZE, 0, 0),
         0,
     );
-    // spec: S-0406 claim 17 (a building placed in play enters under construction)
+    // spec: S-0406 claim 17 (a building placed in play by a place order enters under construction, and its factory break-off is requested as it enters play)
     begin_construction(&mut world, b, false);
+    break_off(&mut world, b);
     let placed = world.tick;
     let o = world.obj(b).expect("the building");
     let range = buildup_range(&world, o.type_index);
@@ -219,17 +220,20 @@ fn trace(hut: Hut, sell: bool) -> ((i32, i32), i32, Vec<Seen>) {
     ((range.n, range.delay), placed, seen)
 }
 
-/// The build-up stage *k* a placed building shows at tick `t`, placed at
-/// tick `placed` with range (`n`, `d`) of at least 2 stages and a positive
-/// delay; none from its handover on (S-0406 claim 17 and F7: the first run
-/// from *T* to *R* = *T* + (*n* − 1)*d*, the restart at *C* = *R* + 1, the
-/// handover at *H* = *C* + (*n* − 1)*d*).
+/// The build-up stage *k* a placed building shows at tick `t`, with range
+/// (`n`, `d`) of at least 2 stages and a positive delay; none from its
+/// handover on. `placed` is the tick of its first turn, *T* + 1: the
+/// building is put on the map between ticks, as a place order applied in
+/// the orders part of *T* puts it (S-0203 claim 7). S-0406 claim 17 and F6,
+/// with the zero-delay idle range of a type with no idle range: the factory
+/// break-off window from the end of its update in *T* + 1, drawn at stage 0
+/// (S-0108 claim 5); the one build-up run from *C* = *T* + 2; the handover
+/// at *H* = *C* + (*n* − 1)*d*.
 fn placed_stage(t: i32, placed: i32, (n, d): (i32, i32)) -> Option<i32> {
-    let r = placed + (n - 1) * d;
-    let c = r + 1;
+    let c = placed + 1;
     let h = c + (n - 1) * d;
-    if t <= r {
-        Some((t - placed) / d)
+    if t < c {
+        Some(0)
     } else if t < h {
         Some((t - c) / d)
     } else {
@@ -249,13 +253,13 @@ fn buildup_look(f: i32) -> Look {
     }
 }
 
-/// #423. spec: S-0108 claims 1, 2, 5, 7 and 9 (in the construction state the build-up sprite is
-/// drawn at frame k, its shadow from the same sprite, no bib) and S-0406 claim 17, F7
-/// (`quirks.placed_buildup_twice`: the build-up runs from the placement tick T to R = T + (n − 1)d,
-/// shows stage 0 again at C = R + 1 and hands over at H = T + 2(n − 1)d + 1, where the body sprite
-/// takes over with its bib)
+/// #423, #440. spec: S-0108 claims 1, 2, 5, 7 and 9 (in the construction state the build-up
+/// sprite is drawn at frame k, its shadow from the same sprite, no bib; in the factory break-off
+/// window stage 0 with no bib) and S-0406 claim 17 and F6 (r19: the building a place order names
+/// shows its build-up once: from its first turn T + 1 the factory break-off window, the one run
+/// from C = T + 2, the handover at H = C + (n − 1)d, where the body sprite takes over with its bib)
 #[test]
-fn a_placed_building_shows_its_build_up_twice_then_its_body() {
+fn a_placed_building_shows_its_build_up_once_then_its_body() {
     let hut = Hut {
         sprite: true,
         gate: false,
@@ -264,7 +268,7 @@ fn a_placed_building_shows_its_build_up_twice_then_its_body() {
     let (n, d) = range;
     assert_eq!(n, 4, "n = ⌊N_b / 2⌋");
     assert!(d >= 2, "a delay of several ticks a stage: {d}");
-    let handover = placed + 2 * (n - 1) * d + 1;
+    let handover = placed + 1 + (n - 1) * d;
     assert!(
         seen.iter().any(|s| s.tick >= handover),
         "followed to the handover at {handover}"
@@ -339,7 +343,8 @@ fn a_sold_building_plays_its_build_up_backwards() {
 }
 
 /// #423. spec: S-0108 claim 4 (a gate's build-up runs backwards, f = a + c − k − 1 with
-/// n = G + 1) and claim 5 (the gate range), S-0406 claim 17 (the same two runs)
+/// n = G + 1) and claim 5 (the gate range; in the factory break-off window claim 4's build-up
+/// frame at stage 0), S-0406 claim 17 (the same one run)
 #[test]
 fn a_placed_gate_builds_up_backwards() {
     let hut = Hut {
@@ -365,8 +370,8 @@ fn a_placed_gate_builds_up_backwards() {
 }
 
 /// #423. spec: S-0108 claim 1 (a building in the construction state whose type has no build-up
-/// sprite draws nothing of its body: no body, bib or shadow) and S-0406 claim 17 (its zero-delay
-/// range hands over at T + 3)
+/// sprite draws nothing of its body: no body, bib or shadow) and S-0406 claim 17 and F7 (r19: its
+/// zero-delay range is current from its second start on T + 1, C = T + 2, and hands over at T + 3)
 #[test]
 fn a_type_without_a_build_up_sprite_draws_no_body_while_building() {
     let hut = Hut {
