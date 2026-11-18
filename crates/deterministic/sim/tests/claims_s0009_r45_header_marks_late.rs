@@ -157,10 +157,11 @@ fn a_house_passive_early_holds_its_mark_late() {
     assert_eq!(base(&w, 2), Some(wp(0)));
 }
 
-/// spec: S-0009 claims 28 and 29 (Q-3213's interim rule: the cleanup frees a removed house's marks, so the position it held is free in the late phase)
+/// spec: S-0009 claims 28 and 29 and Edge cases (quirks.cleanup_shifts_start_marks off, the fixed behaviour that Q-3213's answer makes of S27's interim rule: the cleanup frees a removed house's marks, so the position it held is free in the late phase; the switch's on position is in claims_s0009_r47_cleanup_marks.rs)
 #[test]
 fn a_removed_house_frees_its_position() {
     let mut s = scene();
+    s.ruleset.globals.quirks.cleanup_shifts_start_marks = false;
     with_neutral(&mut s, false, false);
     // No computer player: the cleanup removes the neutral house (claim 28).
     // Pair 9 = (−1, −1) over chosen positions 0 and 1 frees both late; the
