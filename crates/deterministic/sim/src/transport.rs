@@ -606,12 +606,14 @@ pub fn board(w: &mut World, p: ObjectId, t: ObjectId) {
     }
 }
 
-/// Claim 6a (r11, Q-3207): object `gone` goes inside (it boards a transport
-/// of either kind or goes into a building that takes it off the map), and
-/// `ob` is visited by [`crate::combat::held::holders_drop`]'s pass, after
-/// any revert. A vehicle or infantry unit that holds `gone` as its
-/// order-level destination loses it now, with no destination assignment:
-/// its locomotion is not told, so a driving point and a hover's point stay.
+/// Claim 6a (r12, Q-3207, Q-3236, Q-3237): object `gone` goes inside, in
+/// one of the ways [`crate::objects::go_inside`] lists, and `ob` is visited
+/// by [`crate::combat::held::holders_drop`]'s pass, after any revert. A
+/// vehicle or infantry unit that holds `gone` as its order-level
+/// destination loses it now, with no destination assignment: its
+/// locomotion is not told, so a driving point, a hover's point, a jumpjet's
+/// point and commitment, a pending teleport jump and a walker's locomotor
+/// destination stay.
 /// `gone` also leaves its queued destinations, the others keeping their
 /// order. Aircraft follow S-0501 claim 53 instead (`air::destination_lost`).
 pub(crate) fn destination_went_inside(ob: &mut crate::world::Object, gone: ObjectId) {
@@ -636,7 +638,25 @@ pub(crate) fn destination_went_inside(ob: &mut crate::world::Object, gone: Objec
     if let Some(h) = ob.hover.as_mut() {
         crate::hover::destination_went_inside(h, lost);
     }
-    // spec: S-0507 claim 6a and Q-3236 (walking, jumpjet and teleporting locomotors are not told either: a walker with no destination ends its walk at its next arrival tick, S-0208 claims 6 and 16; jumpjet and teleporting points were fixed when taken)
+    if let Some(j) = ob.jump.as_mut()
+        && j.order == Some(lost)
+    {
+        // spec: S-0507 claim 6a (r12, Q-3236: jumpjet movement goes on with the movement point S-0502 claim 16 gave it; the loss is not an effective clear of S-0502 claim 24 and runs no reroute of S-0502 claim 17: like the factory ascent report's direct discard, S-0417 claim 15, it leaves the movement point and commitment, so the locomotor's record of the order follows the order-level destination without a new order)
+        j.order = None;
+    }
+    if let Some(s) = ob.teleport.as_mut()
+        && s.for_dest == Some(lost)
+    {
+        // spec: S-0507 claim 6a (r12, Q-3236: the loss is not an assignment of an empty destination, so it does not cancel a pending jump as S-0207 claim 20 (h) does; the jump goes on to its fixed landing point)
+        s.for_dest = None;
+    }
+    if let Some(s) = ob.walk.as_mut() {
+        // spec: S-0507 claim 6a (r12, Q-3236: walking, S-0208 claim 16 with that point as its locomotor destination; the walker goes on along its stored path, and its fresh searches look for that point's cell, S-0208 claim 6) and S-0208 Terms (r67: the locomotor destination stays when the destination is lost without the locomotor being told)
+        s.kept = match s.object_point {
+            Some((t, p)) if Target::Object(t) == lost => Some(p),
+            _ => None,
+        };
+    }
 }
 
 fn gunner(w: &World, t: ObjectId) -> bool {

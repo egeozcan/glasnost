@@ -132,8 +132,9 @@ pub struct HoverState {
     #[serde(default)]
     pub landing_request: bool,
     /// The movement point an object destination supplied when the locomotor
-    /// last took it (S-0507 claim 6a): kept as *D* when that object goes
-    /// inside. Before that our *D* follows the object (Q-3235).
+    /// last took it (S-0503 claim 20): *D* for that destination, which does
+    /// not follow the object, and kept as *D* when that object goes inside
+    /// (S-0507 claim 6a).
     #[serde(default)]
     pub taken_point: Option<Pos>,
 }
@@ -262,8 +263,9 @@ pub fn heading_cell(w: &World, id: ObjectId) -> Option<CellXY> {
 }
 
 /// The destination point *D* (Terms): a cell's centre at its surface height,
-/// plus 416 on a high-bridge cell; an object's position; with no order-level
-/// destination, the point kept by a stop order (claim 16).
+/// plus 416 on a high-bridge cell; for an object, its movement point when
+/// the locomotor took it (claim 20); with no order-level destination, the
+/// point kept by a stop order (claim 16).
 pub fn destination_point(w: &World, id: ObjectId) -> Option<Pos> {
     let o = w.obj(id)?;
     let Some(dest) = o.dest else {
@@ -289,14 +291,66 @@ pub fn destination_point(w: &World, id: ObjectId) -> Option<Pos> {
             // spec: S-0503 Terms (D's height: the surface height of its cell, plus 416 leptons on a high-bridge cell)
             Some(Pos::new(x, y, w.surface_at(x, y) + deck))
         }
-        // spec: S-0314 claim 18 (a vehicle in depot contact: the supplied docking point is the destination position, not the building's)
         Target::Object(t) => {
-            // spec: S-0606 claim 4 (a vehicle approaching a bunker heads for the docking point)
-            crate::depot::heading_point(w, id, t)
-                .or_else(|| crate::structures::bunker::heading_point(w, id, t))
-                .or_else(|| w.obj(t).map(|x| x.pos))
+            w.obj(t)?;
+            if let Some(p) = taken_object_point(w, id, t) {
+                // spec: S-0503 claim 20 (r29, Q-3235: D is the object's movement point at the effective assignment; it does not follow the object afterwards)
+                return Some(p);
+            }
+            // A destination the locomotor has not taken yet (set without the assignment hook) is taken at the vehicle's tick.
+            object_point(w, id, t, false)
         }
     }
+}
+
+/// *D* for object destination `t` as the locomotor took it (claim 20),
+/// while that is the destination it last took; otherwise none.
+pub fn taken_object_point(w: &World, id: ObjectId, t: ObjectId) -> Option<Pos> {
+    let h = w.obj(id)?.hover.as_ref()?;
+    if h.for_dest != Some(Target::Object(t)) {
+        return None;
+    }
+    h.held.or(h.taken_point)
+}
+
+/// The point an object destination `t` supplies now (claim 20): its
+/// movement point (S-0314 claim 18 and S-0606 claim 4: the docking point of
+/// a depot or tank bunker in contact, otherwise its position), with the
+/// height of Terms unless `held` (claim 18: the supplied point unadjusted).
+fn object_point(w: &World, id: ObjectId, t: ObjectId, held: bool) -> Option<Pos> {
+    // spec: S-0314 claim 18 (a vehicle in depot contact: the supplied docking point is the destination position, not the building's) and S-0606 claim 4 (a vehicle approaching a bunker heads for the docking point)
+    let p = crate::depot::heading_point(w, id, t)
+        .or_else(|| crate::structures::bunker::heading_point(w, id, t))
+        .or_else(|| w.obj(t).map(|x| x.pos))?;
+    if held {
+        // spec: S-0503 claims 18 and 20 (while held: the supplied point, without the height adjustment)
+        return Some(p);
+    }
+    let deck = if w.high_bridge(p.cell()) { DECK } else { 0 };
+    // spec: S-0503 Terms and claim 20 (unless held, D's height is the surface height of its cell, plus 416 leptons on a high-bridge cell); Q-3263 (interim: the surface height at the movement point itself)
+    Some(Pos::new(p.x, p.y, w.surface_at(p.x, p.y) + deck))
+}
+
+/// Depot or tank bunker contact taken in the same order as the assignment
+/// of that building as the destination (S-0314 claim 18, S-0606 claim 4):
+/// *D* becomes the docking point, as the driving locomotor's point does.
+pub fn contact_taken(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let (Some(h), Some(Target::Object(t))) = (o.hover.as_ref(), o.dest) else {
+        return;
+    };
+    if h.for_dest != o.dest {
+        return;
+    }
+    let held = h.held.is_some();
+    let p = object_point(w, id, t, held);
+    // spec: S-0314 claim 18 and S-0606 claim 4 (the docking point once contact holds); Q-3263 (interim: contact taken in the same order sets D to the docking point)
+    with(w, id, |h| {
+        h.taken_point = p;
+        if held {
+            h.held = p;
+        }
+    });
 }
 
 /// The heading point for the next cell `c` (Terms): its centre at the cell's
@@ -341,21 +395,32 @@ fn heading_rate(w: &World, u: &UnitRules) -> i32 {
 /// The locomotor takes a destination (claim 4): ρ = 1 when it is given a
 /// move while powered and not moving now. Called when a destination is
 /// assigned, and at the start of the vehicle's tick for any destination
-/// set without that call.
-pub fn take_destination(w: &mut World, id: ObjectId) {
-    take(w, id, true);
+/// set without that call. `effective`: the assignment changed the
+/// order-level destination or a destination-refresh state was on (S-0207
+/// claim 27).
+pub fn take_destination(w: &mut World, id: ObjectId, effective: bool) {
+    take(w, id, true, effective);
 }
 
 /// `given`: a destination was assigned now (a move is given even when it
 /// equals the last one); otherwise only a destination the locomotor has
 /// not yet taken counts.
-fn take(w: &mut World, id: ObjectId, given: bool) {
+fn take(w: &mut World, id: ObjectId, given: bool, effective: bool) {
     let Some(o) = w.obj(id) else { return };
     let Some(h) = o.hover.as_ref() else { return };
     if !given && o.dest == h.for_dest {
         return;
     }
     let dest = o.dest;
+    if given
+        && !effective
+        && matches!(dest, Some(Target::Object(_)))
+        && h.for_dest == dest
+        && h.stopped != dest
+    {
+        // spec: S-0503 claim 20 (r29, Q-3235: a vehicle ignores an unchanged order-level destination unless its destination-refresh state is on, S-0502 claims 24 and 27; the ignored assignment leaves D as it was; equality is the same object, S-0502 claim 24); Q-3263 (interim: only an object destination is ignored, and not after claim 10's stop request)
+        return;
+    }
     let no_point = h.point.is_none();
     let powered = powered(w, id);
     let now = moving_now(w, id);
@@ -366,7 +431,9 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
                 let (x, y) = (256 * c.x + 128, 256 * c.y + 128);
                 Some(Pos::new(x, y, w.surface_at(x, y)))
             }
-            _ => None,
+            // spec: S-0503 claim 20 (r29: for an object, claim 18's point while held: its movement point, unadjusted)
+            Some(Target::Object(t)) => object_point(w, id, t, true),
+            None => None,
         };
         // spec: S-0503 claims 5, 17 and 18 (a held vehicle, its parasite hold timer running, merely remembers the supplied point as D: no immediate choice and no destination-height adjustment; the order-level destination changes as usual)
         with(w, id, |h| {
@@ -378,7 +445,7 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
                 h.retained = None;
             }
         });
-        record_taken_point(w, id, dest);
+        record_taken_point(w, id, dest, true);
         return;
     }
     // spec: S-0503 claim 4 (ρ = 1 when it is given a move while powered and not moving now)
@@ -402,7 +469,7 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
             h.throttle = F64::from_i64(1, Rounding::TowardZero);
         }
     });
-    record_taken_point(w, id, dest);
+    record_taken_point(w, id, dest, false);
     if dest.is_none() || !no_point || !powered {
         // spec: S-0503 claim 5 (a vehicle moving now keeps an existing heading point; giving a destination while unpowered does not itself start the choice)
         return;
@@ -413,12 +480,13 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
 }
 
 /// Records, as the locomotor takes `dest`, the movement point an object
-/// destination supplies now (S-0507 claim 6a): the point it keeps should that
-/// object go inside. Other destinations record none.
-fn record_taken_point(w: &mut World, id: ObjectId, dest: Option<Target>) {
-    // spec: S-0507 claim 6a (the point the locomotion received at the assignment is the object's movement point at that moment, unless that destination was given to it again later); Q-3235 (our D follows the object until then)
+/// destination supplies now (S-0503 claim 20): its *D* from then on, and
+/// the point it keeps should that object go inside (S-0507 claim 6a).
+/// Other destinations record none.
+fn record_taken_point(w: &mut World, id: ObjectId, dest: Option<Target>, held: bool) {
+    // spec: S-0503 claim 20 (r29, Q-3235: D is the object's movement point at the effective assignment, with the height of Terms, or claim 18's point while held) and S-0507 claim 6a (the point the locomotion received at the assignment, unless that destination was given to it again later)
     let point = match dest {
-        Some(Target::Object(_)) => destination_point(w, id),
+        Some(Target::Object(t)) => object_point(w, id, t, held),
         _ => None,
     };
     with(w, id, |h| h.taken_point = point);
@@ -465,7 +533,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
         return false;
     };
-    take(w, id, false);
+    // A destination set without the assignment hook changed it: effective.
+    take(w, id, false, true);
     let before = (o.pos.x, o.pos.y);
     // spec: S-0503 State and ordering (not moving: no travel; height and spin still update); S-0314 Terms and claim 22 (a settled hovering vehicle that is down on the ground cannot move while it stays settled, `quirks.depot_loss_strands_hover`)
     let stuck = crate::depot::settled(w, id) && hover_height(w, id) <= 0;

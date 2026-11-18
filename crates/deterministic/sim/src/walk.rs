@@ -40,6 +40,16 @@ pub struct WalkState {
     /// is fixed when the destination is assigned).
     #[serde(default)]
     pub dest_deck: Option<(CellXY, bool)>,
+    /// The locomotor destination an object destination gave at its last
+    /// assignment (S-0208 Terms, r67): the object's movement point then,
+    /// which does not follow the object.
+    #[serde(default)]
+    pub object_point: Option<(ObjectId, Pos)>,
+    /// The locomotor destination kept after the destination was lost
+    /// without the locomotor being told (S-0507 claim 6a, S-0208 Terms):
+    /// the walk goes on towards it with no destination.
+    #[serde(default)]
+    pub kept: Option<Pos>,
 }
 
 /// The point of a standing position within a cell (S-0208 table P).
@@ -217,9 +227,69 @@ const DECK_DROP: i32 = 4;
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let depth = w.locomotion_under_way.len();
     w.locomotion_under_way.push(id);
+    let kept = kept_in(w, id);
     let moved = own_locomotion(w, id);
+    kept_out(w, id, kept);
     w.locomotion_under_way.truncate(depth);
     moved
+}
+
+/// A walker whose destination was lost without its locomotor being told
+/// walks on towards the kept locomotor destination (S-0208 claims 6 and
+/// 16, S-0507 claim 6a). For its own locomotion only, the kept point's
+/// cell stands as its destination, so its stored path, its fresh searches
+/// and claim 16's test (with the kept point's height,
+/// [`cell_destination_height`]) all read that point; outside it the unit
+/// has no destination. Returns the kept point it lent.
+fn kept_in(w: &mut World, id: ObjectId) -> Option<Pos> {
+    let ob = w.obj_mut(id)?;
+    let k = ob.walk.as_ref()?.kept?;
+    if ob.dest.is_some() {
+        // A destination given without the assignment hook replaces the kept point.
+        if let Some(s) = ob.walk.as_mut() {
+            s.kept = None;
+        }
+        return None;
+    }
+    // spec: S-0208 claim 6 (r67: the walker goes on along its stored path, and its fresh searches look for the kept point's cell)
+    ob.dest = Some(Target::Cell(k.cell()));
+    Some(k)
+}
+
+/// Ends the loan of [`kept_in`]: the walk ended (claim 16, a failed search
+/// or claim 17's stop) or goes on towards the kept point. A destination
+/// assigned meanwhile replaced the kept point and stays.
+fn kept_out(w: &mut World, id: ObjectId, lent: Option<Pos>) {
+    let Some(k) = lent else { return };
+    let Some(o) = w.obj(id) else { return };
+    if o.walk.as_ref().and_then(|s| s.kept) != Some(k) {
+        return;
+    }
+    let dest = o.dest;
+    let moved_to = match dest {
+        Some(Target::Cell(c)) if c != k.cell() => Some(Pos::centre(c, cell_destination_height(w, id, c))),
+        _ => None,
+    };
+    let Some(ob) = w.obj_mut(id) else { return };
+    let kept = match dest {
+        // spec: S-0208 claim 16 (the walk goes on: the destination stays none, the locomotor destination the kept point)
+        Some(Target::Cell(c)) if c == k.cell() => Some(k),
+        // Q-3264 (interim: S-0212 claim 24's substitute replaced the cell searched for, so the walk goes on to the substitute's centre at claim 18's height)
+        Some(Target::Cell(_)) => moved_to,
+        // spec: S-0208 claim 16 (the walk ended, or a failed search gave it up: no locomotor destination is left)
+        None => None,
+        // A destination written without the assignment hook replaces the kept point.
+        Some(Target::Object(_)) => {
+            if let Some(s) = ob.walk.as_mut() {
+                s.kept = None;
+            }
+            return;
+        }
+    };
+    ob.dest = None;
+    if let Some(s) = ob.walk.as_mut() {
+        s.kept = kept;
+    }
 }
 
 fn own_locomotion(w: &mut World, id: ObjectId) -> bool {
@@ -595,10 +665,15 @@ fn end_of_walk(w: &mut World, id: ObjectId) {
         Some(d) => {
             let (cell, z) = match d {
                 Target::Cell(c) => (c, cell_destination_height(w, id, c)),
-                Target::Object(t) => match w.obj(t) {
-                    Some(t) => (t.pos.cell(), t.pos.z),
-                    None => return,
-                },
+                Target::Object(t) => {
+                    let Some(x) = w.obj(t) else { return };
+                    match o.walk.as_ref().and_then(|s| s.object_point) {
+                        // spec: S-0208 claim 16 and Terms (r67, Q-3236: the locomotor destination is the object's movement point at the assignment; it does not follow the object); Q-3264 (interim: its height unadjusted)
+                        Some((r, p)) if r == t => (p.cell(), p.z),
+                        // A destination written without the assignment hook: the object's position now.
+                        _ => (x.pos.cell(), x.pos.z),
+                    }
+                }
             };
             // spec: S-0208 claim 16 and Constants (in the destination's cell, |Δz| < 208 leptons, strict)
             cell == o.pos.cell() && (z - o.pos.z).abs() < 208
@@ -634,8 +709,16 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
         Some(Target::Cell(c)) => Some((c, w.high_bridge(c))),
         _ => None,
     };
+    // spec: S-0208 Terms (r67, Q-3236: a destination that names an object gives the object's movement point at that assignment; only a new assignment gives a new point)
+    let point = match o.dest {
+        Some(Target::Object(t)) => path::heading_point(w, id).map(|p| (t, p)),
+        _ => None,
+    };
     if let Some(s) = w.obj_mut(id).and_then(|o| o.walk.as_mut()) {
         s.dest_deck = rec;
+        s.object_point = point;
+        // spec: S-0208 Terms (r67: a new assignment gives a new locomotor destination, ending a kept one)
+        s.kept = None;
     }
 }
 
@@ -646,6 +729,14 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
 /// read from the record `take_destination` made; a destination cell with no
 /// record (set without an assignment) is read as it is now.
 pub fn cell_destination_height(w: &World, id: ObjectId, c: CellXY) -> i32 {
+    if let Some(o) = w.obj(id)
+        && o.dest == Some(Target::Cell(c))
+        && let Some(k) = o.walk.as_ref().and_then(|s| s.kept)
+        && k.cell() == c
+    {
+        // spec: S-0208 claim 16 (r67: the kept locomotor destination's own height; S-0507 claim 6a) — the cell is lent by `kept_in`
+        return k.z;
+    }
     // spec: S-0208 F9 (the cell centre (256cx + 128, 256cy + 128) and its terrain height H)
     let h = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
     if w.rules().quirks.walker_bridge_destination_deck {

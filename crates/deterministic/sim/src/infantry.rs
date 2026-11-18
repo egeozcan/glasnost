@@ -311,8 +311,8 @@ pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>)
     crate::teleport::take_destination(w, id);
     // spec: S-0314 Terms and claim 22 (a destination that takes effect while a depot or tank bunker occupies the cell ends being settled)
     crate::depot::destination_given(w, id, effective);
-    // spec: S-0503 claim 4 (the hovering locomotor takes a move: ρ = 1 when powered and not moving now)
-    crate::hover::take_destination(w, id);
+    // spec: S-0503 claim 4 (the hovering locomotor takes a move: ρ = 1 when powered and not moving now) and claim 20 (r29: an unchanged object destination is ignored unless effective)
+    crate::hover::take_destination(w, id, effective);
     // spec: S-0502 claim 16 (the jumpjet locomotor takes a destination point: the nearby-cell search, the move state and the re-ascent of a descending one)
     crate::jump::take_destination(w, id);
     // spec: S-0207 claim 25 (a driving or ship locomotor installs the supplied point at the assignment, before any path search)

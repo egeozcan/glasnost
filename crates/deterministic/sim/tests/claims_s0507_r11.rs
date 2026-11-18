@@ -282,7 +282,7 @@ fn t16_after(mut w: World, a: ObjectId, i: ObjectId, d: Pos) {
     assert!(gone_in, "I went inside");
     // spec: S-0507 claim 6a and T16 (no destination at the end of the tick in which I goes inside)
     assert_eq!(dest(&w, a), None, "A loses I as its destination");
-    // spec: S-0507 claim 6a (the point A's locomotion last received, at the claim 5 assignment, stays: not where I went inside). Q-3235: our hover reads D from I's current position before the loss, so T16's "the same just before" holds only while I has not moved
+    // spec: S-0507 claim 6a (the point A's locomotion last received, at the claim 5 assignment, stays: not where I went inside) and S-0503 claim 20 (r29, Q-3235: D does not follow I before it goes inside either)
     assert_eq!(
         hover::destination_point(&w, a),
         Some(d),
@@ -459,7 +459,7 @@ fn an_aircraft_holder_follows_s0501_claim_53() {
     assert_eq!(dest(&w, p), None, "the aircraft lost it");
 }
 
-// spec: S-0507 claim 6a (going into a building that takes it off the map) and Q-3237 interim (going into an infantry absorber, S-0605 claims 6 and 7, is going inside: a holder loses it as its destination)
+// spec: S-0507 claim 6a (r12, Q-3237: going into an absorber, as an infantry unit or as a vehicle, S-0605 claims 7 and 8, is going inside: a holder loses it as its destination)
 #[test]
 fn going_into_an_absorber_is_going_inside() {
     let mut w = world();

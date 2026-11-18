@@ -238,8 +238,8 @@ pub fn fired(w: &mut World, firer: ObjectId, carrier: ObjectId, target: Target) 
         s.fired_layer = o.layer;
         s.kept = o.attack_move.is_some().then_some((o.target, o.dest));
     }
-    // spec: S-0614 claim 1 (it leaves the map at once and travels inside the projectile)
-    crate::objects::take_inside(w, firer);
+    // spec: S-0614 claim 1 (it leaves the map at once and travels inside the projectile) and S-0507 claim 6a (r12, Q-3237: a parasite going inside its host when it fires its latching weapon is going inside: its vehicle and infantry holders lose it as their destination)
+    crate::objects::go_inside(w, firer);
 }
 
 /// A projectile ends (claim 1): `detonated` when it detonated; the

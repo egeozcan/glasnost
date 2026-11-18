@@ -717,8 +717,8 @@ fn deliver(w: &mut World, master: ObjectId, s: ObjectId) {
         // spec: S-0402 claim 14 and S-0616 claim 1 (one smoke event on the master per delivery, after all of its payments, only when at least one paid a positive amount; an undeployed master is a vehicle and makes nothing)
         crate::emitters::refinery_smoke(w, master);
     }
-    // spec: S-0402 claim 14 (it goes inside the miner)
-    crate::objects::take_inside(w, s);
+    // spec: S-0402 claim 14 (it goes inside the miner) and S-0507 claim 6a (r12, Q-3237: a slave going inside its master, vehicle or deployed building, is going inside: its vehicle and infantry holders lose it as their destination)
+    crate::objects::go_inside(w, s);
     set_slave(w, s, |x| {
         x.load.iter_mut().for_each(|a| *a = 0);
         x.phase = SlavePhase::Seeking;

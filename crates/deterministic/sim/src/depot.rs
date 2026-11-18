@@ -317,6 +317,8 @@ fn take(w: &mut World, id: ObjectId, k: ObjectId, place: u32) {
     if fresh && to_depot {
         // spec: S-0314 claim 18 and S-0207 claim 25 (the depot assigned as destination supplies its docking point, not its position, to driving or ship locomotion; our contact follows the destination's assignment within the same order)
         crate::drive::take_destination(w, id);
+        // spec: S-0314 claim 18 and S-0503 claim 20 (a hovering vehicle's D is the docking point); Q-3263 (interim: contact taken in the same order sets it)
+        crate::hover::contact_taken(w, id);
     }
 }
 
