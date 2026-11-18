@@ -37,6 +37,8 @@ fn set_state(w: &mut World, s: &Section, st: State) {
 /// Loses a section (claim 5): its overlay is removed and its four cells
 /// lose their high-bridge marking and gain the bridge-body mark.
 fn lose(w: &mut World, s: &Section) {
+    // spec: S-0520 claims 11 and 29 (revision 17) and Edge cases (a crate-flagged section overlay that is removed no longer belongs to its place, nor is it a map's own crate) (#284)
+    crate::crates::overlay_changed(w, s.cell);
     if let Some(cell) = w.cells.grid.get_mut(s.cell) {
         // spec: S-0511 claim 5 (its overlay is removed from its cell)
         cell.overlay = NO_OVERLAY;

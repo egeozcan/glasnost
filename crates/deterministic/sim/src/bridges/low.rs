@@ -22,6 +22,8 @@ pub fn write_strip(
     let o = pieces::low_overlay(family, line, role);
     let mut cells = Vec::new();
     for (place, c) in pieces::strip(line, centre).into_iter().enumerate() {
+        // spec: S-0520 claims 11 and 29 (revision 17: a crate whose overlay the strip replaces no longer belongs to its place, nor is it a map's own crate) (#284)
+        crate::crates::overlay_changed(w, c);
         if let Some(cell) = w.cells.grid.get_mut(c) {
             // spec: S-0511 claim 13 (the three cells are written whatever they held before); S-0202 claim 10 (data: the place across)
             cell.overlay = o;

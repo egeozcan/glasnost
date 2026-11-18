@@ -501,6 +501,8 @@ fn place_section(w: &mut World, c: CellXY, line: Line, family: Family) {
         return;
     }
     let o = pieces::high_overlay(family, line);
+    // spec: S-0520 claims 11 and 29 (revision 17: a crate whose overlay the section replaces no longer belongs to its place, nor is it a map's own crate) (#284)
+    crate::crates::overlay_changed(w, c);
     if let Some(cell) = w.cells.grid.get_mut(c) {
         cell.overlay = o;
         // spec: S-0511 claim 19 (data 0 along x, 9 along y)
