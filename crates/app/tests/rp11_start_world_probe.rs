@@ -4,8 +4,8 @@
 //! 9, seed 7, 8 AI houses) without drawing and measures, by the resident
 //! set before and after a copy is made, the memory a copy of the kept start
 //! world takes, of its largest parts, and of the game's world beside it
-//! (every copy is kept until the end, so none reuses another's pages). It
-//! prints sizes only.
+//! (every copy is kept until the end, so none reuses another's pages), and
+//! the length of each world's saved form. It prints sizes only.
 //!
 //! Run with `cargo test --release -p glasnost-app --test rp11_start_world_probe
 //! -- --ignored --nocapture`.
@@ -55,6 +55,13 @@ fn start_world_probe() {
     let econ = grows(&mut kept, || start.econ.clone());
     let regions = grows(&mut kept, || start.regions.clone());
     let game_whole = grows(&mut kept, || game.clone());
+    // The saved form counts every saved field to the byte, where the
+    // resident set counts whole pages (render batch R13).
+    let start_saved = glasnost_sim::save::save(start).len();
+    let game_saved = glasnost_sim::save::save(game).len();
+    println!(
+        "start world probe: saved form: the kept start world {start_saved} bytes, the game's world {game_saved} bytes"
+    );
     println!(
         "start world probe: resident set after the start {started} kB, peak {} kB",
         status_kb("VmHWM:")
