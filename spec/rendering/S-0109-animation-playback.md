@@ -2,13 +2,13 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 42
+revision: 45
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-18
 measurements: []
-requests: [Q-0046, Q-0418, Q-0770, Q-0771, Q-1425, Q-1716, Q-1717]
+requests: [Q-0046, Q-0418, Q-0770, Q-0771, Q-1425, Q-1716, Q-1717, Q-3240]
 supersedes: []
 ---
 
@@ -612,19 +612,59 @@ pass* and *update order* as in S-0203.
     - Confidence: medium for the original's erasure transitions (the combat specs own weapon
       lock-on and release); high for the departure
 
-22. **Attached animations.** An animation can be attached to an owner object. While attached, its
-    position is the owner's position plus the displacement it had from the owner when it was
-    attached, in leptons and including height, so it follows the owner. It is in the ground render
-    layer (S-0102). When it is detached it stays where it is. When the owner is removed from the
-    game, the animation disappears at once and is deleted at its next update, whatever its stage.
-    That update does nothing else of this spec's: no advance, no damage, no start or middle event,
-    no loop-delay count, no follow-up switch and no infantry (claim 16).
-    - Backing: `measurable` (scenario AN15) for the position, the removal and the absence of an
-      advance; the absence of damage, events and infantry at that last update is `unmeasured` (it
-      would need an attached animation due to deliver or end on the very tick its owner is removed,
-      which cannot be timed from outside). Detachment is `unmeasured` here: AN15 provides no
-      action that detaches without removing the owner. The render layer uses S-0102's backing
-    - Confidence: high
+22. **Attached animations (Q-3240).** An animation can be attached to an owner object. While
+    attached, its position is the owner's position plus the displacement it had from the owner
+    when it was attached, in leptons and including height, so it follows the owner, also through
+    a teleporting locomotor's jump (S-0207 claim 20). It is in the ground render layer (S-0102).
+    - **No detachment.** It stays attached until it ends with its owner (below): no event
+      detaches it from its owner and leaves it playing. The follow-up switch of claim 15 keeps it
+      attached to the same owner, and so does an owner change that is not one of the takeovers
+      below, such as mind control. A member of a superweapon warp group (S-0513 claim 39) keeps
+      its attached animations through the warp: while it is off the map before it appears, its
+      position, and so each animation's, stays at its old position, and from its appearance they
+      follow it at its landing point. Whether such an animation is drawn while the member is off
+      the map is not established (Open questions).
+    - **End with the owner.** The animation disappears at once, and is deleted at its next
+      update whatever its stage, when its owner:
+      - is destroyed: at the killing hit, also when the owner stays in play after it (a sinking
+        or crashing object, an infantry unit playing its death sequence; glossary, *in play …
+        destroyed, removed*), not later when the owner is removed,
+      - starts to sink or starts to crash,
+      - goes off the map other than at a superweapon warp's departure (for example it enters a
+        transport or a building, or deploys into another object), or is removed,
+      - starts to cloak, or becomes fully cloaked unless it is a building (S-0516 claim 14),
+        whatever house owns it and whatever senses its cell,
+      - being of an underground type, goes underground,
+      - is a vehicle taken over by a vehicle thief (glossary), or a vehicle-like building taken
+        over by an infantry unit (S-0509 claim 17).
+
+      It disappears inside the action that causes it, so it is not drawn after that action. Its
+      next update, which deletes it, does nothing else of this spec's: no advance, no damage, no
+      start or middle event, no loop-delay count, no follow-up switch and no infantry (claim 16).
+      That update comes at the animation's next turn (S-0203): in the tick of the event or in the
+      next one, as the update order places that turn against the action, unless a removal makes
+      the animation miss a turn (S-0203 claim 10), which puts it later.
+    - Backing: `measurable` (scenario AN15 for the position and for the end at a vehicle's
+      destruction with no advance at the deleting update, AN30 part a for the start of
+      cloaking, part b for going off the map into a transport, part c for the teleporting jump,
+      part d for the follow-up switch, and part e for the end at the killing hit of an owner that
+      stays in play after it). `unmeasured` for the superweapon warp, which AN30 does not play.
+      `unmeasured` for the absence of damage, events and infantry at the deleting update: it
+      would need an attached animation due to deliver or end on the very tick its owner's event
+      happens, which cannot be timed from outside. `unmeasured` for the sinking, crashing,
+      underground and takeover rows, which AN15 and AN30 do not play. `unmeasured` for the
+      absence of any detachment and of any other ending event: a run can show only the events it
+      plays, not that no other event exists. The render layer uses S-0102's backing.
+    - Confidence: high for the position, the render layer, the follow-up switch, the end at the
+      destruction of a vehicle and of an infantry unit that plays its death sequence, on boarding
+      a transport, at removal and at the start of cloaking, the animation not being drawn after
+      the action, and no advance at the deleting update; medium for the other ways off the map
+      (entering a building, deploying into another object), the absence of a detachment, the rest
+      of the deleting update doing nothing, the sinking, crashing, full-cloak, underground and
+      vehicle-thief rows, the
+      teleporting jump, an owner change by mind control, the superweapon warp, and there being no
+      other event that ends the attachment; low for the takeover of a vehicle-like building, as
+      S-0509 claim 17 rates that takeover
 
 23. **Held animations.** A building's slot animation is held while it is frozen by S-0108, claim 13
     (which covers both a building without power and a disabled building), and while its building is
@@ -1014,7 +1054,7 @@ accumulator restarts at 0.0 instead of 1.0. With `quirks.anim_damage_starts_at_o
 | *playing* | pass ends with *r* ≤ 1, follow-up type named | follow-up switch of claim 15, start event, *playing* |
 | *playing* | pass ends with *r* ≤ 1, no follow-up type | removed, except that a refused infantry placement keeps the animation for a retry under S-0611 claims 9 to 11 |
 | burning walker | running or expiring | playback and removal follow S-0615 claims 4 to 11, not the ordinary transitions above |
-| any | owner removed | not drawn from then on; removed at the next update, which has no advance, damage, event, follow-up switch or infantry (claim 22) |
+| attached | an event of claim 22's *End with the owner* list for its owner (destroyed, sinking or crashing, off the map or removed, cloaking or cloaked, underground, taken over) | not drawn from then on; removed at its next update, which has no advance, damage, event, follow-up switch or infantry (claim 22) |
 
 **Observable order within one update.** Damage, the middle event and the end test all follow the
 advance of the same update, in this order (Q-1716):
@@ -1895,6 +1935,67 @@ layering allows.
   separate base-delay completion clock of S-0517 claim 7. A creation-tick advance or
   completion timing that instead tracks the selected playback delay falsifies that contract.
 
+- **AN30 (claim 22; Q-3240: what ends an attachment).** Common tiny skirmish setup, speed 4,
+  800 × 600. Named test data *anim-attach-test*:
+  - a mind-control firer type, and an enemy vehicle type with a weapon, the cloak flag and the
+    cloak-stop flag (S-0516 claims 2 and 3),
+  - an own infantry type whose weapon's shot animation (S-0301) is a test animation type that
+    loops for at least 400 ticks, and an own transport that carries infantry,
+  - a second own infantry type whose weapon's shot animation is a test animation type with one
+    pass of at most 20 ticks that names, as its follow-up type (claim 15), a test type that loops
+    for at least 400 ticks,
+  - an enemy vehicle type with a teleporting locomotor (S-0207), and an enemy armed vehicle
+    placed out of range of the infantry.
+
+  The mind-control firer takes over the vehicles, which attaches the control ring (S-0601 claim
+  18) to each. A target object of a third house stands within range of each weapon.
+  - (a) The cloaking vehicle is taken over while it moves, then stands still until it starts to
+    cloak, and stays still for 300 more ticks. Then it is ordered to attack the target, which
+    makes it uncloak to fire (S-0516 claim 11 (a)), and it is recorded for 300 more ticks.
+  - (b) The infantry unit, next to the transport, fires once at the target and is then ordered
+    into the transport. It is unloaded 100 ticks after it goes inside.
+  - (c) The teleporting vehicle is taken over and ordered to a cell 8 cells away.
+  - (d) The second infantry unit fires once at the target, and once its shot animation has
+    switched to the follow-up type it is ordered to a cell 4 cells away.
+  - (e) The first infantry unit fires once at the target. Then the enemy armed vehicle is ordered
+    to attack it, and the run is recorded until 50 ticks after the infantry unit leaves play.
+  - Observable: per tick, after that tick's logic, each animation attached to the vehicles and the
+    infantry units, its type, its position and its owner's position, each vehicle's owner and
+    cloak state, each infantry unit's health, current sequence and whether it is in play or
+    inside the transport (recorder), and whether the ring and the shot animations are drawn
+    (screen capture). *T* is the tick of the part's event: the start of cloaking in (a), going
+    inside in (b), the killing hit in (e).
+  - Runs: one per part. A part (a) or (c) run in which the vehicle's owner changes back before
+    its last recorded tick is void. A part (e) run is void unless the infantry unit is still in
+    play after the logic of *T* + 2, playing its death sequence. A removal can make the
+    animation miss its turn and so put its deletion later (claim 22, S-0203 claim 10): when the
+    recorder still shows the animation after the logic of *T* + 1 and some object, a projectile
+    that detonates included, left play in tick *T* or *T* + 1, the run's recorder result is void,
+    and its drawing result still counts.
+  - Expected:
+    - (a) the ring is drawn in every frame up to tick *T* − 1 and in no frame from tick *T* on.
+      The recorder may show it after the logic of *T*, not drawn, and shows it no more after the
+      logic of *T* + 1. After the uncloak the original shows no ring while the vehicle stays
+      controlled (the original's behaviour that the hand-off for S-0601 claim 18 records).
+    - (b) the shot animation is drawn from the shot up to tick *T* − 1 and not from tick *T* on.
+      The recorder shows it no more after the logic of *T* + 1, and not after the unloading.
+    - (c) the ring exists throughout, and the difference between its position and the vehicle's
+      is the same before and after the jump.
+    - (d) one attached animation, whose type changes from the first test type to its follow-up
+      type, has the same difference from the infantry unit's position before and after the
+      switch, and keeps it while the unit walks.
+    - (e) the shot animation is drawn up to tick *T* − 1 and not from tick *T* on, and the
+      recorder shows it no more after the logic of *T* + 1, while the infantry unit stays in play
+      playing its death sequence until a later tick.
+  - Falsified if: in (a) the ring is drawn in a frame of tick *T* or later, the recorder shows it
+    after the logic of *T* + 1, or a ring is shown on the vehicle after the uncloak while it
+    stays controlled; in (b) the shot animation is drawn in a frame of tick *T* or later, or the
+    recorder shows it after the logic of *T* + 1; in (c) the ring ends at the jump or stays at the
+    old point; in (d) the follow-up type's animation stops following the unit, keeps a different
+    difference from it, or is a second animation with no owner; in (e) the shot animation is
+    drawn in a frame of tick *T* or later, the recorder shows it after the logic of *T* + 1, or it
+    lasts until the infantry unit leaves play.
+
 - **Companion scenarios (claims 5 and 13 to 17).** S-0611 scenario MU10 tests generic
   infantry-making animations, terminal-only creation and position-choice draws; its MU9
   tests refused placement and retries. Use those scenarios for claim 16's delegated contract.
@@ -1904,7 +2005,44 @@ layering allows.
 
 ## Changes for other specs
 
-None. These statements in other specs already agree with this spec:
+- **S-0301, the shot animation attached to a firer that is not a building.** "It disappears when
+  the firer is removed from the game" should read that it disappears at each event of claim 22's
+  *End with the owner* list here, for example when the firer is destroyed, goes off the map,
+  starts to cloak or goes underground. Level and backing: those of claim 22's rows, high for the
+  destruction, transport-boarding, removal and start-of-cloak rows, low for the takeover of a
+  vehicle-like building, medium for the others.
+- **S-0601 claim 18.** "When the object leaves the game the ring goes with it" should name S-0109
+  claim 22's list: the ring ends at each event of its *End with the owner* list. In the original
+  a controlled or permanently controlled object whose ring ended that way shows no ring again
+  while it stays so controlled, even after it is back on the map or uncloaks. Our engine fixes
+  this display bug with no switch, in a form that changes no game state and takes no draw from
+  the scenario random stream, so a game plays out as in the original: while an object is
+  controlled or permanently controlled, it shows the ring of claim 18 for that kind of control
+  whenever it is on the map, not destroyed, not sinking or crashing, neither cloaking nor
+  cloaked, and not underground. The ring shown again is a new animation, created and attached
+  as at the start of that control, at the moment the last of those conditions holds again. It
+  is a display-only animation: the draws S-0109 claims 3 and 13 give an animation created with
+  no loop delay, and every later draw of its playback, come from the unsynchronised random
+  stream (glossary), and they affect only its stage timing and drawing. Its start and middle
+  events make no sound, damage, crater, resource chain reaction or object, its end makes no
+  follow-up switch or infantry, and it is not an object that any rule of the game counts or
+  finds. It is drawn, advances and ends as S-0109 gives for the ring's type otherwise.
+  Level and backing: medium, `unmeasured` for the fixed form (design rule); `measurable`
+  (S-0109 scenario AN30 part a) for the original's missing ring after an uncloak.
+- **S-0202 claim 11.** Its uses of the unsynchronised random stream during play should add the
+  draws of the control ring that our engine shows again (the S-0601 claim 18 entry above): its
+  creation and playback draws, which affect only that ring's stage timing and drawing. This is
+  our engine's use, not one of the original's. Level and backing: those of that entry.
+- **S-0319 claim 11.** "Apart from its owner's removal (S-0109 claim 22)" should read: apart from
+  the end of an attachment at any event of S-0109 claim 22's *End with the owner* list. Level and
+  backing: those of claim 22's rows, high for the destruction, transport-boarding, removal and
+  start-of-cloak rows, low for the takeover of a vehicle-like building, medium for the others.
+- **S-0319 claim 12.** "An attached animation whose owner has been removed makes none at the
+  update that deletes it" should name claim 22's list: an attached animation makes no trailer at
+  the update that deletes it after any event of that list. Level: medium, as claim 22 rates the
+  rest of the deleting update; backing `unmeasured`, for claim 22's reason for that update.
+
+These statements in other specs already agree with this spec:
 - S-0011 claim 36 points to claims 13, 14 and 25 here for the creation-time and later middle
   events, and to S-0202 claims 10 and 15 for the creation draws and the middle-event draw
   composition during map loading and during play; its table *Load-time draw order* places the
@@ -1928,12 +2066,16 @@ None. These statements in other specs already agree with this spec:
 - An attached animation whose own damage detonation removes its owner, such as a damaging fire on a
   building it destroys, which leaves play at once (S-0203 claim 6 (b)). Unlike an animation that
   leaves play in its own detonation (State and ordering), it goes on with the rest of that update
-  after the detonation, since the owner's removal only marks the animation for deletion at its next
-  update (claim 22); `unmeasured`, confidence medium, since no scenario here has an animation's own
+  after the detonation, since the end of claim 22 at the owner's destruction only marks the
+  animation for deletion at its next update; `unmeasured`, confidence medium, since no scenario here has an animation's own
   damage destroy its owner on an advance that reaches μ. Not settled: which position the rest of
   that update's effects use (a middle event's height test, its particles and its scorch mark or
   crater). Our engine uses the owner's last position as the owner's position of claim 22 (design).
   Backing `unmeasured`, confidence low, for the same reason.
+- A member of a superweapon warp group that has departed and not yet appeared (claim 22, S-0513
+  claim 39): whether its attached animations are drawn at its old position while it is off the
+  map is not established. `unmeasured`, confidence low: no scenario here warps an object that
+  carries an attached animation.
 - Q-1425 is answered by claim 17 and AN27. The existing approved S-0303 claim 17 already
   permits resource reduction for damaging-animation detonations, and S-0302 claim 1
   already specifies no attacker or attacking house, even for an owned animation.

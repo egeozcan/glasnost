@@ -2,13 +2,13 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 52
+revision: 55
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-13
+approved-on: 2026-11-18
 measurements: [M-0008]
-requests: [Q-0087, Q-0212, Q-1525, Q-1715, Q-2566, Q-2616, Q-3059]
+requests: [Q-0087, Q-0212, Q-1525, Q-1715, Q-2566, Q-2616, Q-3059, Q-3239]
 supersedes: []
 ---
 
@@ -725,8 +725,7 @@ used by this spec only:
     when the requested entry has *C* = 0 (claim 6, row 1) and while the unit is a falling
     parachutist (claim 6, row 2). A turned-down death request shows no death sequence. The
     death handling then does not remove the unit either (except in the cyborg case below): it keeps its current sequence (for a
-    falling parachutist, *parachute*). What becomes of such a unit afterwards is not established
-    (Open questions). Consequences: a type marked "not human" that rows 1 to 3 do not catch shows
+    falling parachutist, *parachute*). Afterwards it regains health by claim 17a. Consequences: a type marked "not human" that rows 1 to 3 do not catch shows
     *die-1* when it dies on the ground, also to a laser fence, but no death sequence while it falls
     under a parachute. A unit of any other type that rows 1 to 3 do not catch, killed while parachuting, has death
     kind 3 (below), so row 8 applies and it is removed at once.
@@ -735,8 +734,8 @@ used by this spec only:
     (`quirks.refused_death_keeps_unit`, default: on). For a type whose *die-1* or *die-2* entry has
     *C* = 0, a death request for that kind is turned down by row 1 of claim 6, which is judged
     before row 2. By default the death handling then leaves the unit in play with its current
-    sequence and shows no death sequence, exactly as in the falling-parachutist case above. What
-    becomes of it afterwards is the same open question (scenario M10(b) records it). Off: when row
+    sequence and shows no death sequence, exactly as in the falling-parachutist case above, and
+    it regains health by claim 17a, as in that case (scenario M10(b)). Off: when row
     1 turns the death request down, whatever the unit's other state, and the cyborg case below does
     not apply, the unit is treated as if the kind that would have resulted (after the
     substitutions of claim 7, so *wet-die-1* or *wet-die-2* on a wet cell) had completed on the
@@ -840,6 +839,47 @@ used by this spec only:
       creation of a type by an unknown name), low (the
       water case and its unidentified condition)
 
+17a. **Health of a killed unit left in play (Q-3239).** In each of its updates, an infantry unit
+    whose health is 0 and whose current sequence is none of *die-1* to *die-5*, *wet-die-1*,
+    *wet-die-2*, *air-death-start*, *air-death-fall* and *air-death-end* gets a health of 1. The
+    test comes early in the update, before the unit's behaviour and its movement for that
+    update. An update that ends early because the unit is travelling through a tunnel or is
+    being chronoshifted does not reach it. A unit with no current sequence also gets a health of
+    1. A unit that plays one of the listed kinds keeps its health of 0, and the State and
+    ordering table gives what follows when that kind completes.
+    - **A turned-down death request.** A unit that claim 17 leaves in play with its current
+      sequence (a falling parachutist of a type marked "not human", or a type whose death entry
+      has no image frames, `quirks.refused_death_keeps_unit`) gets a health of 1 at its first
+      update after the killing hit. From then on it is a living unit with that health for every
+      rule that looks at health: it can be selected, ordered, targeted and killed again. It stays
+      *killed* in S-0302's sense from that hit on, so a projectile it fired before the hit
+      carries no attacker (S-0302 claim 1), while a shot it fires after it has regained health
+      carries it (S-0312 claim 16, *Killed and alive again*). It goes on with its sequence: a
+      parachutist lands and then stands by the State and ordering table. A further killing hit
+      runs claim 17 again: with the same turned-down request it is left in play once more and
+      regains a health of 1 at its next update. A parachutist killed again after it has landed
+      is not falling, so claim 6's row 2 no longer turns its request down.
+    - **A crashing jumpjet infantry unit.** Claim 17's crash start shows no sequence, and the
+      jumpjet movement asks for *air-death-start* only later in the unit's next update (claim
+      21), after this test. So a unit killed in another object's turn has a health of 1 from that
+      next update on, through its fall (S-0312 claim 16, *Health while it falls*, and
+      `quirks.falling_infantry_regains_health`). A unit killed in its own update after the test
+      can start *air-death-start* first, and then keeps a health of 0 while the air-death kinds
+      play. Once the general follow-up ends *air-death-fall* (claim 21), it gets a health of 1 in
+      its next update, even while it still falls. A crashed unit that S-0312 claim 16 leaves in
+      play keeps a health of 1 in the same way.
+    - Backing: `measurable` (scenario M10(a) for the health of 0 while *die-1*, *die-2* and
+      *wet-die* play, S-0312 scenario D26 parts (a), (b) and (e) for a crashing jumpjet infantry
+      unit, scenario M10(b) here for a turned-down death request). *die-3* to *die-5* are
+      `unmeasured`: no rule shows them (claim 17). The air-death kinds in the list, the early
+      exits for a tunnel and a chronoshift, and the death in the unit's own update after the
+      test are `unmeasured`: no scenario here kills an infantry unit inside such an update, or
+      in its own update with a fall following.
+    - Confidence: high for the test, for *die-1*, *die-2* and *wet-die* keeping a health of 0,
+      and for the health of 1 of a unit outside the listed kinds; medium for *die-3* to *die-5*
+      and the air-death kinds in the list, for the consequences for a unit left in play, for
+      the early exits and for the own-update case
+
 18. **Sound cues.** A cue can play only on a tick on which the unit's stage advanced. On such a
     tick, each cue of the sequence then current plays at the unit's position when
     *k mod max(C, 1)*, with *k* the stage of that sequence, equals the cue frame. The cues that
@@ -930,15 +970,20 @@ used by this spec only:
     *cheer* (the celebration order and successful slave-release transfers under S-0312 claims 30
     and 31), *parachute* (paradrops, forced), *shovel* (harvesting; claim 21a gives when),
     *air-death-start* (the jumpjet locomotor) and *air-death-end* (the end of an air death, forced).
+    The jumpjet locomotor's request for *air-death-start* is not forced, so claim 6 turns it down
+    when its entry has no image frames (row 1) or a sequence that is not interruptible plays (row
+    5). The unit then keeps its current sequence while it falls (S-0312 claim 16).
     *idle-a* and *idle-b* can also be started by scripted idle orders. Their timing (claims 4 and 5)
     and their completion (State and ordering) are given here. *air-death-fall* is started only by
     the completion of *air-death-start*. It has no completion rule of its own, so when it completes
     the general follow-up rows apply (`quirks.air_death_fall_generic_follow_up`).
     - Backing: `measurable` for deploy/undeploy starts (M7(b)), parachute starts (M7(c)), and
       harvesting starts of shovel (M21), and slave-release cheer requests (M19).
-      `unmeasured` for the air-death starts and
-      follow-up: no controlled scenario is known that starts these kinds through the jumpjet
-      locomotor. Celebration-order cheer starts, scripted idle orders and the deployment sounds are
+      `measurable` for the starts of *air-death-start* and *air-death-end* through S-0312
+      scenario D26 (parts (b) and (e), which log the drawn sequence kind of a crashable jumpjet
+      infantry unit killed in the air). `unmeasured` for the *air-death-fall* follow-up and for
+      the turned-down *air-death-start* request: D26 neither varies the *air-death-fall* entry
+      nor starts a crash while a sequence that is not interruptible plays. Celebration-order cheer starts, scripted idle orders and the deployment sounds are
       also `unmeasured` here: no controlled legal skirmish trigger for celebration or scripted idle
       orders is specified here, and the deployment-sound start boundary has no isolated observation
       in the proposed deployment runs.
@@ -1393,10 +1438,27 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   to them.
 - **`quirks.refused_death_keeps_unit`** (default: on, claim 17). A killed unit whose *die-1* or
   *die-2* entry has *C* = 0 gets its death request turned down (claim 6, row 1) and is left in
-  play by the death handling; what becomes of it is not established (Open questions). Off: the
+  play by the death handling. It regains a health of 1 at its next update and stays in play as a
+  living unit, and a further killing hit that gives the same turned-down request leaves it in
+  play again (claim 17a). Off: the
   death counts as completed on the tick of the death, with the corpse or removal that gives
   (claim 17 gives the scope and the cyborg exception). The importer warns about the entry either
   way.
+- **`quirks.falling_infantry_regains_health`** (default: on, the original, claim 17a). A crashing
+  jumpjet infantry unit killed in another object's turn regains a health of 1 at its update
+  after its killing hit. One killed in its own update after claim 17a's test keeps a health of
+  0 while the air-death kinds play and regains 1 once they end (claim 17a). Either way it can
+  then be hit and killed again while it falls, with every death effect again: the attacker's
+  credit, and an exploding unit's death weapon (S-0312 claim 16, *Health while it falls*). Off:
+  claim 17a's test does not apply to a jumpjet infantry unit whose crash has started and not yet
+  ended: from its killing hit, which starts the crash (S-0312 claim 16), through its first update
+  after that hit, in which it enters *crashing* only after the test, and through *crashing*, up
+  to its crash end. It keeps a health of 0 through its fall, so S-0302 claim 8's no-health row
+  stops every hit on it that would change its health, while a hit whose warhead makes targets go
+  berserk still has the berserk row's effect there, and it is not killed again. From its crash
+  end on, claim 17a applies as usual. Backing: the on form is claim 17a's; the off form is
+  `unmeasured`, since the original has no such form. Confidence: medium for the off form's
+  health rule; low for the outcomes of hits on it, as S-0302 claim 8 rates its no-health row.
 - **Departure: a general corpse list left over from an earlier game** (no switch, no importer
   warning). The original's pick from it is *unspecified*. Our engine shows no corpse and takes the
   pick's draw as usual (Import mapping). It gives no importer warning, because the cause lies in
@@ -1956,26 +2018,33 @@ whose …") means any stock type with that property; the property is a precondit
   test map whose trigger paradrops them, and a weapon or other damage that reaches them in the air): first of an
   ordinary soldier type, then of the "not human" type above. Expected: the ordinary paratrooper
   disappears at once with no death sequence (death kind 3, row 8); the "not human" one shows no
-  *die-1* image frame while it falls and goes on showing *parachute* image frames. What becomes of
-  the "not human" unit afterwards (whether it lands, stays or is removed, and when) is recorded,
-  with no expected value (Open questions). Falsified by any other result, in particular by *die-1*
+  *die-1* image frame while it falls and goes on showing *parachute* image frames. The "not human"
+  unit regains a health of 1 at its first update after the kill (claim 17a), lands and shows
+  *stand*, and stays in play. Falsified by any other result, in particular by *die-1*
   or any sequence other than *die-2* for kind 9, by *die-2* or no sequence for the not-human type on
   land, by a *die-1* image frame from the falling not-human paratrooper, or if *die-3* to *die-5*
   image frames ever appear. Also kill an amphibious-destroyer soldier with a warhead of kind 1, 2 or
   9, once on a beach cell and once on a water cell. Expected on the beach: *wet-die*. The water-cell
   result is only recorded: it has no expected value, because it is meant to settle the open
-  condition of claim 17 (low confidence). Runs: three kills per case. Account separately for
-  corpse-pick draws, animation and particle creation draws, and unrelated behaviour draws.
+  condition of claim 17 (low confidence). For every soldier killed on land or on the beach, log
+  its health each tick from the kill until it leaves play. Expected: a health of 0 in every tick
+  while *die-1*, *die-2* or *wet-die* plays (claim 17a). A health above 0 in such a tick
+  falsifies claim 17a's list. Runs: three kills per case. Account separately for corpse-pick
+  draws, animation and particle creation draws, and unrelated behaviour draws.
   - (b) The default of `quirks.refused_death_keeps_unit` (claim 17). Test art empties the *die-1* entry of
     one infantry type (*C* = 0). Kill a unit of it on a land cell with a warhead of infantry-death
     kind 1. In a second run, empty the *die-1* entry of the "not human" type used above and kill
-    one of its units while it falls under a parachute. Log the drawn image frames and whether the
-    unit is still in play (selectable or attackable) for 3000 ticks after the death, and whether the
-    game keeps ticking and answering input. Expected: no death image frame, and the unit still in
-    play after the death tick. What it does afterwards, whether it is ever removed and whether
-    the game stays responsive are recorded with no expected value, since they decide the
-    aftermath (Open questions). Falsified if the unit is removed on the
-    tick of its death or a death image frame appears. Runs: three kills per case.
+    one of its units while it falls under a parachute. Log, each tick for 3000 ticks after the
+    death, the drawn image frames, the unit's health and whether the unit is still in play, and
+    whether the game keeps ticking and answering input. 100 ticks after the death (after the
+    landing, in the second run), select the unit and give it a move order to a cell 3 cells away.
+    300 ticks after the death, kill it again the same way. Expected: no death image frame; the
+    unit still in play after the death tick; its health 1 from the end of the first tick in which
+    its own update follows the kill (the death tick or the next), and the same after the second
+    kill; the move order carried out; the falling unit landing and then showing *stand*; the game
+    responsive throughout. Falsified if the unit is removed at either kill, a death image frame
+    appears, its health stays 0 after that update, or it does not move. Runs: three kills per
+    case.
   - (c) A cyborg killed by damage that ignores defences (claim 17, cyborg paragraph). On a land cell,
     a standing (not prone) soldier of a cyborg type without the crash flag carries a tag whose
     trigger fires the action that destroys attached objects (S-0011 claim 27, scenario T9). Test
@@ -2265,6 +2334,13 @@ generator or F4's constant.
 **Cross-spec changes to confirm before hand-off.** These are required companion changes.
 This draft resolves cases that the current companion specs still exclude or leave open.
 
+- **S-0502 claims 18, 29 and 31.** Their statements that a crashing unit has no health ("A killed
+  unit has no health left, so a failed search does not destroy it again", "the unit has no
+  health ... so S-0303 claim 6 never takes it as a candidate", "where it has no health and is no
+  candidate") should allow for a crashing infantry unit that claim 17a gives a health of 1, as
+  S-0312's Changes for other specs give in full: such a unit is a detonation candidate, and a
+  failed search other than at the crash start's clear destroys it. Level and backing: as there.
+
 - **S-0102 claims 11, 13 and 20:** replace the unresolved above-high-bridge generic-shadow
   case with claim 19(b–d)'s shadow height and placement. The generic shadow's final depth bias
   is −5 − *L*(*z* − *h*ₛ), in integer depth units, with *z* the unit's world height in leptons
@@ -2300,11 +2376,5 @@ This draft resolves cases that the current companion specs still exclude or leav
   11), so a standing unit would never fire. Stock data may never do this; not measured.
 - The per-object condition of the water death case and of the cyborg case (claim 17) is not
   identified.
-- A killed unit whose death request claim 6 turns down while it falls under a parachute (a type
-  marked "not human", claim 17), or because its entry has no image frames
-  (`quirks.refused_death_keeps_unit`), is not removed by the death handling and keeps its current
-  sequence (for a falling parachutist, *parachute*). What becomes of it afterwards (whether it
-  lands and stands with no health, and whether or when it is removed) is not established.
-  Scenario M10(b) records it.
 - Whether a unit whose type has a strength of 0 can take damage and survive, so that F5's
   strength-0 rule is ever reached, is not established. Stock data may never do this.

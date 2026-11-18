@@ -2,14 +2,15 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 88
+revision: 91
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-16
+approved-on: 2026-11-18
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707, Q-2131, Q-2132,
-Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000, Q-3042, Q-3086, Q-3112, Q-3158]
+Q-2133, Q-2135, Q-2716, Q-2793, Q-2973, Q-3000, Q-3042, Q-3086, Q-3112, Q-3158,
+Q-3239]
 supersedes: []
 ---
 
@@ -572,8 +573,11 @@ Claim 34 (e) gives which of claims 9 to 15 a vehicle passenger killed inside its
 
     *Vehicle crash end.* A vehicle whose type can crash and whose crash ends in jumpjet movement's
     *crashed* state (S-0502 claim 18), including a dropped vehicle of such a type (S-0607
-    claim 18), is put at ground height and leaves play; in a high-bridge cell, the height it is
-    put at is an Open question. A balloon-hover type (S-0310 Terms) first
+    claim 18), is put at height 0 above the terrain and leaves play. In a high-bridge cell that
+    is the terrain beneath the deck, whether its fall ended by crossing the deck or beneath it
+    (S-0502 claim 18), so its impact effects below come beneath the deck
+    (`quirks.crash_end_bridge_height`). This is for an ordinary crash: where a dropped seized
+    vehicle is put in a high-bridge cell is an Open question. A balloon-hover type (S-0310 Terms) first
     sets off its death weapon at its position, chosen and computed as in claim 6, whether or not it
     has the explodes flag, and shows none of claim 9's animations at its crash end and takes none
     of their list picks. A type of any other kind sets off no death weapon at this impact: it
@@ -585,12 +589,75 @@ Claim 34 (e) gives which of claims 9 to 15 a vehicle passenger killed inside its
     hit, as for any removal without one (claims 7 and 31).
 
     *Infantry crash end.* An infantry unit whose type can crash and whose crash ends in jumpjet
-    movement's *crashed* state is put at ground height (in a high-bridge cell, the height is an
-    Open question) and makes the forced request for *air-death-end* (S-0107 claims 6 and 21).
-    When that sequence starts, its completion removes the unit with no corpse (S-0107 State and
-    ordering); what removes a unit whose request is turned down is an Open question. It sets off
-    no death weapon at its crash end, so an exploding one fires its death weapon only at death
-    (claim 6).
+    movement's *crashed* state is put at height 0 above the terrain, except in a high-bridge cell.
+    There it is put at the deck's height above the terrain without standing on the deck: its
+    on-deck state (S-0502 claim 4) stays unset. This holds whether its fall ended by crossing
+    the deck or beneath it, so a unit whose fall ended beneath the deck is raised to the deck's
+    height (`quirks.crash_end_bridge_height`). At that height with the on-deck state unset, its
+    height above the surface is the deck's height above the terrain, and S-0502 claim 4 lists it
+    on the ground layer. It then makes the forced request for *air-death-end* (S-0107 claims 6
+    and 21). When that sequence starts, its completion removes the unit with no corpse (S-0107
+    State and ordering). It sets off no death weapon at its crash end, so an exploding one fires
+    its death weapon only at death (claim 6).
+
+    *Health while it falls (Q-3239).* A crashing infantry unit killed in another object's turn
+    regains a health of 1 at its first update after its killing hit (S-0107 claim 17a, which also
+    gives a death in the unit's own update): its current sequence is then still the one it had at
+    the hit, since the jumpjet movement asks for *air-death-start* only later in that update
+    (S-0502 claim 18). That request is not forced, so S-0107 claim 6 can turn it down; the unit
+    then keeps its current sequence while it falls. So it falls with 1 health, alive and on the
+    map, and can be targeted and hit (`quirks.falling_infantry_regains_health`, S-0107 Edge
+    cases). It is then also a candidate of every detonation by S-0303's filter on health, through
+    the flying-object search while it is registered (S-0502 claim 29) and through its cell's
+    layer while it is listed there (S-0502 claim 31). A crashing vehicle or aircraft regains no
+    health and stays no candidate. A further killing hit while it falls is a killing hit like the
+    first, with every death effect of claims 1 to 7 and S-0107 claim 17 again, an exploding unit's
+    death weapon and the attacker's credit included. Its crash start then takes this claim's
+    crash-start effects again, with S-0502 claim 18's destination clear, but the unit stays in
+    *crashing*: its fall is not started again. That clear comes after the further hit has taken
+    its health to 0, so a failed search there does not destroy it (S-0502 claim 17). A failed
+    search of S-0502 claim 17 at another time while it has a health of 1, as after an effective
+    clear of its destination (S-0502 claim 24), destroys it by that claim like any unit with
+    health.
+
+    *Killed and alive again.* The unit stays *killed* in S-0302's sense from its killing hit on.
+    A projectile that it fired before that hit carries no attacker (S-0302 claim 1). A shot that
+    it fires after it has regained health was fired after the kill, so it carries the unit and
+    its house, as a new shot of a building in a delayed-kill countdown does (S-0302 claim 1).
+
+    *A turned-down air-death-end request (Q-3239).* When S-0107 claim 6 turns the forced request
+    down, as it does when the type's *air-death-end* entry has no image frames (its row 1),
+    nothing removes the unit at its crash end. Afterwards a later killing hit can (below), the
+    one of a failed search included (*Health while it falls*). This spec knows no other way: a
+    removal that is not a health-damage hit, such as a temporal erasure (S-0302), takes it as it
+    takes any unit, and whether a vehicle can crush it is open (Open questions). Without such an
+    event it stays in play for good, with no corpse (`quirks.refused_air_death_end_keeps_unit`).
+    Its current sequence goes on by S-0107's rules: *air-death-start* or *air-death-fall*, the general follow-up that ends
+    *air-death-fall* (S-0107 claim 21), or the sequence it had at its death when
+    *air-death-start* was turned down too. It never leaves *crashed* (S-0502 claim 18), whose
+    maximum speed is 0 and which no order changes. Its current speed therefore brakes to 0 under
+    S-0502's F1 while it steps along its movement heading, and once that speed is 0 it stays
+    where it is for good: no order moves it. It has a health of 1 by S-0107 claim 17a,
+    and every other rule treats it as a living infantry unit with that health: it can be
+    selected and targeted, and whether it can fire is S-0502 claim 20's rule for *crashed*. A
+    later killing hit removes it at once, with no corpse and with that hit's death effects, when
+    its height above the surface is below 1 lepton at the hit: its type is a jumpjet type, so
+    S-0107 claim 17 shows no sequence, and a crash starts only from a positive height above the
+    surface, as claim 15 gives for a vehicle. That is the case on open ground while it stays at
+    height 0 (below). At a greater height, such as at a high-bridge deck's height with the
+    on-deck state unset, the hit starts a crash instead, which never runs, since the unit stays
+    in *crashed*. Its health comes back to 1 at its next update, so no killing hit removes it
+    while it stays at such a height.
+
+    *Its height afterwards.* While it stays in *crashed*, its height follows that state's physics
+    steps, with target height 0 (S-0502 claim 3, F3 and F4). While its movement point lies in its
+    own cell, F3's direct reference is the terrain, or the deck in a high-bridge cell at the
+    deck's height, so it keeps the height it was put at. While its movement point lies in another
+    cell, F3's look-ahead reference applies instead, from the clearances of its own cell and of
+    the neighbouring cell in its heading's direction. That reference can lower it to the terrain,
+    so that a later killing hit removes it, or raise it, for instance beside a high bridge or
+    with another object listed in its cell, so that no killing hit removes it. The crash start's
+    reroute (S-0502 claim 18) and its drift while it falls decide where its movement point lies.
     - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0507 scenario T14 for uncredited ground-aircraft passenger cleanup, S-0522 scenario P9 for the attacker credit of the passengers lost at the crash start of an aircraft that was shot down (P9 observes only that case), S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9. The original jumpjet idle-crash aftermath remains `unmeasured` under S-0502 claim 3 (diagnostic J15): the crash start's destination clear of S-0502 claim 18 can reroute a committed unit, so the otherwise idle case has not been isolated. The destination clear and the held-up crash have S-0502 claim 18's backing (S-0502 scenarios J12 and J31). The pending-crash update guarantee is design, not an oracle observation.
       The fall-back crash of S-0501 claim 46 is `measurable` through S-0501 scenario AC29 part f
       (its health, fall and impact, the score screen's counts, and the absence of debris and of
@@ -608,10 +675,22 @@ Claim 34 (e) gives which of claims 9 to 15 a vehicle passenger killed inside its
       `unmeasured`: D11 records the animations, not the draws. The living case is `unmeasured`: D11 variants c, i and j kill the
       vehicle first, and S-0607 scenario L4 variant (c) records neither a demolition detonation
       nor a health value at the crash end, so it does not tell a removal without a hit from the
-      aircraft's living-crash damage. The infantry crash end is `unmeasured`: it rests on
-      S-0107's start and completion of *air-death-end*, which S-0107 claim 21 rates `unmeasured`
-      (no controlled scenario starts the air-death kinds), and no scenario here kills a crashable
-      jumpjet infantry unit in the air.
+      aircraft's living-crash damage. The infantry crash end, its height in a high-bridge cell,
+      the health of 1 while it falls, a further killing hit while it falls, the turned-down
+      *air-death-end* request and the later killing hits on a unit left in play are `measurable`
+      through scenario D26 parts (a) to (e′), and the vehicle crash end's height in a high-bridge
+      cell through D26 parts (g) and (h). D26 tests the height afterwards only where the unit's
+      crash ends in the cell it hovered over, with its own and the neighbouring cells clear, and
+      away from any bridge except for part (e)'s deck cell. Which cell holds its movement point
+      is not observable, so the look-ahead cases are `unmeasured`. They rest on S-0502's F3
+      and its backing. The beneath-deck parts (e′) and (h) back the beneath-deck cases only when
+      their unit hovers beneath the deck at the kill: they are void otherwise. D26 part (a) also
+      backs the crashed unit's braking to rest. That a falling infantry unit with a health of 1
+      is a detonation candidate rests on S-0303's filter and S-0502 claims 29 and 31, with their
+      backing. The failed search at a further crash start and at another time, and the
+      attribution of its shots before and after its health comes back, are `unmeasured`: a
+      failed search needs a unit with no free cell near it while it falls, and no scenario here
+      has the unit fire.
     - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
       empty list, their independence from height, uncredited passenger cleanup at removal, and
       the attacker credit of the passengers lost at the crash start of an aircraft that was shot
@@ -631,7 +710,22 @@ Claim 34 (e) gives which of claims 9 to 15 a vehicle passenger killed inside its
       medium for the vehicle crash end of a dead vehicle; medium for a balloon-hover type's
       firing whatever its explodes flag; medium for the absence of list picks at a balloon-hover
       crash end; medium for the living case; medium for the infantry
-      crash end
+      crash end; high for the crash-end heights in a high-bridge cell, of a vehicle beneath the
+      deck and of an infantry unit at the deck's height without the on-deck state, whichever way
+      its fall ended; high that a crashing infantry unit regains a health of 1 at its first
+      update after its killing hit, and medium that a further killing hit while it falls repeats
+      the death effects; high that a crashed unit whose *air-death-end* request is turned down
+      is not removed at its crash end, nor afterwards without an event that removes it, with its
+      health of 1 and its *crashed* state for good; medium that the only such events are a later
+      killing hit and a removal that is not a hit, with a crush open; medium that it can
+      be selected and targeted like any living infantry unit, and for the removal by a later
+      killing hit below 1 lepton and its absence at a greater height; medium that it keeps the
+      height it was put at while its movement point lies in its own cell; low for its height
+      when that point lies in another cell, which S-0502's F3 decides, and so for whether a
+      later killing hit removes it then; high that it brakes to rest and no order moves it,
+      and medium that a falling infantry unit with a health of 1 is a detonation candidate, for the
+      failed search at a further crash start and at another time, and for the attribution of its
+      shots before and after its health comes back
 
 ### Buildings
 
@@ -1445,7 +1539,7 @@ otherwise. No measurement has been completed for this revision.
 | 6 | `unmeasured` for multi-turret selection and the unplaced projectile's land-type, height and water tests: D6 tests ordinary/elite primary selection and debris position, not these tests, and no setup isolating them is supplied. |
 | 12 | `unmeasured` for bridge-deck escape placement: D9 variant h tests only which row applies on a deck, and the placement point remains for the bridge specs to establish. The bomb-mark row is `measurable` on land by D8's marked-deck variant, part b; on a bridge deck and more than 10 leptons above water it is `unmeasured`, since no setup kills a marked transport on a deck or holds a marked vehicle more than 10 leptons above water at its death. |
 | 13 | `unmeasured` for crew trigger-tag inheritance: the kinds of tag that pass on are not established here, so D10 cannot predict a tag outcome. |
-| 16 | `unmeasured` for a crash begun while still alive and the absence of tumbling draws for crashing infantry: no setup is established that starts either case. D11 b is conditional, not measurable backing. Also `unmeasured`: the fall-back crash's lost passengers and their credit to nobody, since no set-up is known that loads passengers into a pad-bound armed aircraft before its run; the vehicle crash end of a living vehicle, since D11 variants c, i and j kill the vehicle first and S-0607 scenario L4 variant (c) records neither a demolition detonation nor a health value at the crash end; the absence of list picks at a balloon-hover crash end, since D11 records the animations, not the draws; and the infantry crash end, since it rests on S-0107 claim 21, which is `unmeasured`, and no scenario here kills a crashable jumpjet infantry unit in the air. |
+| 16 | `unmeasured` for a crash begun while still alive, since no setup is established that starts one, and for the absence of tumbling draws for crashing infantry, since D26, which starts such crashes, records no draws. D11 b is conditional, not measurable backing. Also `unmeasured`: the fall-back crash's lost passengers and their credit to nobody, since no set-up is known that loads passengers into a pad-bound armed aircraft before its run; the vehicle crash end of a living vehicle, since D11 variants c, i and j kill the vehicle first and S-0607 scenario L4 variant (c) records neither a demolition detonation nor a health value at the crash end; the absence of list picks at a balloon-hover crash end, since D11 records the animations, not the draws; and, for the infantry crash end, the look-ahead cases of its height afterwards, since which cell holds its movement point is not observable, and its *air-death-start* request not being forced, since no scenario starts a crash while a sequence that is not interruptible plays. The rest of the infantry crash end is `measurable` through scenario D26 (claim 16's backing). |
 | 17 | `unmeasured` for the exact ten-times-strength amount and no-escape marker: D12's contacts die, which alone cannot distinguish that amount from another lethal amount or test crew escape. Release of a non-helipad contact at or beyond 256 leptons is also unmeasured: D12 does not establish those contacts. Garrison eviction instead uses S-0508 G7 and G8's backing. |
 | 18, F4 | `unmeasured` for countries without a side and side numbers beyond 2: D10 and D13 do not construct those owners. The eight-cell 3 × 3 foundation is also unmeasured here: D13 uses a full nine-cell foundation. |
 | 18 | `unmeasured`, low confidence, for equating the owner's survivor-suppression state with defeat: no setup separates the two possible moments in Open questions. Ordinary undefeated-owner runs test the rest. |
@@ -1606,8 +1700,12 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | alive vehicle or aircraft | killing hit, can crash, positive height above the surface for a vehicle (claim 15), above the terrain for an aircraft (claim 16) | crashing, in play; rocket-missile outcomes follow S-0506 claim 20 |
 | ordinary non-rocket crashing aircraft (claim 16) | reaches the ground, was shot down | death weapon, leaves play |
 | ordinary non-rocket crashing aircraft (claim 16) | reaches the ground, was alive | destroyed by its remaining health, detonation |
-| crashing vehicle whose type can crash (claim 16, vehicle crash end) | enters jumpjet movement's *crashed* state, alive or not | at ground height (high-bridge cell: Open questions); a balloon-hover type sets off its death weapon and shows none of claim 9's animations and takes none of their picks, any other shows claim 9's animations with their picks (again, for a vehicle killed before its crash ended); leaves play |
-| crashing infantry unit whose type can crash (claim 16, infantry crash end) | enters jumpjet movement's *crashed* state | at ground height (high-bridge cell: Open questions); forced *air-death-end* request; no death weapon; leaves play when that sequence completes (S-0107) |
+| crashing vehicle whose type can crash (claim 16, vehicle crash end) | enters jumpjet movement's *crashed* state, alive or not | at height 0 above the terrain, beneath the deck in a high-bridge cell (a dropped seized vehicle there: Open questions); a balloon-hover type sets off its death weapon and shows none of claim 9's animations and takes none of their picks, any other shows claim 9's animations with their picks (again, for a vehicle killed before its crash ended); leaves play |
+| crashing infantry unit whose type can crash (claim 16, infantry crash end) | enters jumpjet movement's *crashed* state | at height 0 above the terrain, or at the deck's height with the on-deck state unset in a high-bridge cell; forced *air-death-end* request; no death weapon; leaves play when that sequence completes (S-0107) |
+| crashed infantry unit (claim 16) | its *air-death-end* request is turned down | stays in play for good in *crashed*, with no corpse and a health of 1 from S-0107 claim 17a |
+| crashed infantry unit left in play (claim 16) | killing hit, height above the surface below 1 lepton | removed at once, no corpse |
+| crashed infantry unit left in play (claim 16) | killing hit, positive height above the surface | a crash start that leaves it in *crashed*; in play, health 1 again at its next update |
+| falling crashing infantry unit with 1 health (claim 16) | killing hit | the death effects again; goes on falling |
 | dropped seized unit | fall ends | S-0607 claims 16 to 19 own the outcome; a crashable vehicle ends its fall with claim 16's *Vehicle crash end*, an aircraft does not |
 | alive cyborg infantry, not prone | lethal hit that does not ignore defences | crippled; health becomes the greater of 1 health point and one quarter of its type's strength, truncated toward zero |
 | prone cyborg | lethal hit | dies (S-0107 claim 17) |
@@ -1645,6 +1743,27 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
   firings are claims 6 and 16's; the off form is `unmeasured`, since the original has no such
   form. Confidence: medium for the off form (design rule, decided at the delegated sign-off,
   2026-11-15).
+- **`quirks.refused_air_death_end_keeps_unit`** (default: on, the original). A crashed infantry
+  unit whose forced *air-death-end* request is turned down stays in play for good, unable to
+  move, with a health of 1 and no corpse. While it is above the surface, as in a high-bridge
+  cell at the deck's height, no killing hit removes it (claim 16, *A turned-down air-death-end
+  request*). Off: when the request is turned down, the
+  unit is removed at its crash end with no corpse, as if *air-death-end* had completed on that
+  tick. The switch does not change a request that succeeds, or anything before the crash end.
+  The importer warns about any crashable infantry type whose *air-death-end* entry has no image
+  frames, whichever way the switch is set. Backing: the on form is claim 16's; the off form is
+  `unmeasured`, since the original has no such form. Confidence: medium for the off form.
+- **`quirks.crash_end_bridge_height`** (default: on, the original). In a high-bridge cell, an
+  ordinary crash end puts a vehicle on the terrain beneath the deck and an infantry unit at the
+  deck's height without the on-deck state, whichever way the fall ended (claim 16). Off: the
+  crash end puts the vehicle or infantry unit at height 0 above the surface its fall ended
+  over: when its fall ended by crossing the deck (S-0502 claim 18), on the deck, with its
+  on-deck state set; when it ended beneath the deck, on the terrain. A balloon-hover type's
+  death weapon and another type's claim 9 animations then come where the vehicle is put, and an
+  infantry unit left in play by `quirks.refused_air_death_end_keeps_unit` is put at height 0
+  above the surface, so a later killing hit removes it while it stays there (claim 16). Backing: the on form is claim
+  16's; the off form is `unmeasured`, since the original has no such form. Confidence: medium
+  for the off form.
 - **`quirks.building_smudge_discarded_draws`** (default: on). Claim 19 (a) takes up to two ranged
   draws whose results are not used (none for a 2 × 2 foundation). Off: those draws are not taken. Turning it off changes every
   later draw, so it is a switch only for mods that do not need the original's random sequence.
@@ -2722,6 +2841,96 @@ inconclusive for the order at that depth. In control (c) nothing clears variable
 reveal its area within the 30 ticks. If it does not, the trigger setup does not work as
 described, and parts (a) and (b) are inconclusive. On our engine all three end as expected.
 
+**D26. Crash ends of jumpjets on open ground and in a high-bridge cell (claim 16; Q-3239).** Use
+the common setup on a purpose-made test map with flat land and an intact high bridge over it,
+as in D11 variant h. The observed area is the cells within 10 of the test units and of the
+bridge. Test types, from named test files:
+- *I0*: a copy of a stock jumpjet infantry type with the crash flag on, whose named test art
+  gives its *air-death-end* entry no image frames, its other entries as the stock type has them.
+- *I1*: the same with the stock *air-death-end* entry.
+- *I2*: *I1* with the explodes flag on and a test death weapon whose warhead animation is
+  distinct.
+- *V0*: a crashable jumpjet vehicle type, balloon-hover flag and explodes flag off, with two
+  distinct entries in its explosion list. *V1*: the same with the balloon-hover flag on and a
+  test death weapon.
+- *I0′* and *V0′*: *I0* and *V0* with a cruise height that the test rules set at least 100
+  leptons below the deck's height, so that they can hover beneath the deck.
+
+Each test unit belongs to the human player's house. It is killed by one hit of a test weapon
+with no inaccuracy that can hit units in the air and whose damage exceeds the test type's
+strength, fired by a unit of a second house, an enemy of the human player's house, that stands
+at least 4 cells away. Give every test type a crash rate above 0, and keep its own cell and the
+neighbouring cells free of other objects, so that the crash is not held up (D11 variant c). Kill
+each unit while it hovers at the end of a move order, and outside parts (e) to (h) at least 2
+cells from any bridge cell. A run whose crash ends in another cell than the one the unit hovered
+over is inconclusive for the heights after the crash end (claim 16, *Its height afterwards*),
+and its record is kept. The crash start's reroute (S-0502 claim 18) could also move the movement
+point to another cell without moving the crash end, which the recorder cannot show. With the clear
+cells of this setup its search keeps the unit's own cell, so this is not expected, and claim 16
+rates the heights afterwards medium in part for this reason.
+Each tick, from the tick before the kill until 3000 ticks after the crash end, the recorder logs
+the unit's health, its height above the terrain and above the surface, its position, its drawn
+sequence kind and whether it is in play; the run logs each detonation's position and height and
+each animation created, and whether a corpse appears.
+- Part (a): *I0* hovering over open ground. 100 ticks after the crash end, select it and give it
+  a move order to a cell 3 cells away. Expected: from the end of the first tick in which its own
+  update follows the kill (the kill tick or the next), its health is 1, through the fall and to
+  the end of the run. At the crash end its height above the terrain is 0. It stays in play with
+  no corpse for the 3000 ticks, and it can be selected. From the crash end its position changes
+  only by steps along its movement heading that do not grow from one tick to the next, it is
+  constant from the first tick without a step to the end of the run, and the move order moves
+  it by no lepton. Falsified by a removal, a corpse, a health of 0 after that first update, a
+  step longer than the step before it, or any movement after a tick without a step.
+- Part (b): the control, *I1* in part (a)'s place. Expected: health 1 from the same tick until
+  the crash end, *air-death-end* image frames from the crash end, then removal with no corpse
+  when that sequence completes. A unit still in play after that completion, a corpse, or a
+  health of 0 during the fall falsifies the expectation. If *air-death-end* image frames do
+  not appear, the control fails and part (a) is inconclusive.
+- Part (c): part (a) again; 300 ticks after the crash end, the second-house unit attacks *I0*
+  with the killing weapon. Expected: the attack order is carried out, its shot hits, and *I0*
+  is removed at once on that hit's tick, with no corpse. Falsified if the unit cannot be
+  attacked, or stays in play after that hit.
+- Part (d): *I2* hovering over open ground; a second second-house unit with the same weapon
+  hits it again while it falls, at least 5 ticks after the kill and before its crash end. Record
+  the death-weapon detonations and the score screen's kill counts. Expected: two death-weapon
+  detonations, one at each hit; two kills of the type for the second house; the unit goes on
+  falling and ends its crash as in part (b). One detonation, or a crash end at the second hit,
+  falsifies the expectation.
+- Part (e): *I0* hovering above the deck of a high-bridge cell, killed so that its fall ends by
+  crossing the deck. Then, at 300, 600 and 900 ticks after the crash end, the attack of part (c).
+  Expected: at its crash end its height above the terrain is the deck's height, 416 leptons, and
+  it keeps that height for the rest of the run. A later hit counts only when the recorder logs
+  the unit's health going to 0 in its tick, which shows that the hit reached the unit. At each
+  such hit it stays in play, and its health is 1 again from the end of the first tick in which
+  its own update follows that hit. A height at the crash end other than the deck's height, a
+  removal, or a health that stays 0 falsifies the expectation. If no later hit reaches the unit,
+  the later-hit part of the run is void. Run *I1* the same way as its control: it shows
+  *air-death-end* at the deck's height and is removed when that sequence completes.
+- Part (e′): *I0′* hovering beneath the deck in a high-bridge cell, killed there. Bring it there
+  from a start on the terrain beneath the deck, with a move order to a point in that cell. The
+  part is void unless it hovers beneath the deck at the kill. Expected: at
+  its crash end its height above the terrain jumps from below 1 lepton to the deck's height,
+  and the rest as in part (e). A height at the crash end below the deck's height falsifies the
+  expectation.
+- Part (f): part (a) again, with a hostile test infantry unit placed at the end of the crash
+  within *I0*'s weapon range, and, 500 ticks after the crash end, a second-house vehicle with
+  the crusher flag ordered to drive through *I0*'s cell. Record whether *I0* fires and whether
+  it is crushed. Both are recorded with no expected value: the crushing is an Open question,
+  and the firing corroborates S-0502 claim 20, which this spec does not rate.
+- Part (g): *V0* and then *V1*, each hovering above the deck of a high-bridge cell and killed so
+  that its fall ends by crossing the deck. Expected: on the tick it leaves play its height above
+  the terrain is 0, beneath the deck; *V0*'s claim 9 animations and *V1*'s death-weapon
+  detonation on that tick come at height 0 above the terrain. Animations or a detonation at the
+  deck's height falsify the expectation.
+- Part (h): *V0′* hovering beneath the deck in a high-bridge cell, brought and killed as in
+  part (e′), with the same void rule. Expected: as part (g) for *V0*.
+
+On our engine the default settings give the expected results. With
+`quirks.refused_air_death_end_keeps_unit` off, parts (a), (c), (e) and (e′) instead end with
+*I0*'s removal at its crash end, with no corpse. With `quirks.crash_end_bridge_height` off,
+parts (e) and (g) put the unit on the deck at height 0 above it, part (e′) and part (h) on the
+terrain, and part (e)'s first later hit removes *I0*.
+
 ## Open questions
 
 - Q-3158: what the original shows by claims 9, 10 and 12 to 15 for a vehicle passenger killed
@@ -2781,12 +2990,13 @@ described, and parts (a) and (b) are inconclusive. On our engine all three end a
   infantry unit using ordinary flying movement. Which of them sets off a death weapon, tests
   whether the object is alive, or removes it is open. `quirks.crash_death_weapon_twice` does
   not reach them (Edge cases).
-- The height at which the vehicle crash end and the infantry crash end of claim 16 put the
-  object in a high-bridge cell, on the deck or on the ground beneath it, and so where a
-  balloon-hover type's death weapon goes off there.
-- What removes a crashed infantry unit whose forced *air-death-end* request is turned down
-  (claim 16, *Infantry crash end*; S-0107 claim 6), for a type whose sequence data leaves that
-  kind out. It sets off no death weapon at its crash end either way.
+- Q-3239: where the crash end of a dropped seized vehicle of a crashable type (S-0607 claim 18)
+  puts it in a high-bridge cell, on the deck or on the terrain beneath it, is not traced here.
+  Claim 16's heights are for an ordinary crash.
+- Q-3239: whether a vehicle can crush a crashed infantry unit left in play by a turned-down
+  *air-death-end* request (claim 16) is not established. Our engine applies the ordinary
+  crushing rules to it, as to any living infantry unit that does not move; scenario D26 part (f)
+  records it.
 - Whether the state that suppresses survivors (claim 18, "the owner's game is not over") is set by
   the defeat of S-0414 itself or only by the destruction of all the defeated house's objects that
   follows it. The project lead's decision of 2026-10-11 (the game runs on until one alliance
@@ -2831,8 +3041,14 @@ new mark stays `unmeasured` as it is.
 S-0203 claim 13 (g): its *Sinking* bullet's "within 10 leptons above a water cell" can point to
 claim 11's water test here (height above the surface, no lower bound). Its *Crashing* bullet's
 "above the terrain" is a height above the surface in claim 15 here, for a killing hit on a vehicle
-that stands on a deck. Its Edge case on a vehicle whose crash ended on a bridge deck is not settled
-here and stays as it is.
+that stands on a deck. Its Edge case "A vehicle whose crash ends on a bridge deck" is settled by
+claim 16 here, *Vehicle crash end*: an ordinary crash end puts the vehicle at height 0 above the
+terrain, beneath the deck, whether its fall ended by crossing the deck or beneath it. So the
+sweep's hit finds it not above the surface and starts no crash, as for any vehicle whose crash
+has ended; the same holds with `quirks.crash_end_bridge_height` off, which puts it on the deck
+with the on-deck state set. The Edge case can be dropped, with claim 13 (g)'s "except on a
+bridge deck (Open questions)" in its Confidence. Level: high, as claim 16 rates the crash-end
+heights; backing: `measurable` (scenario D26 parts (g) and (h)).
 
 S-0203 claim 6 (a): "a vehicle whose type can crash and which is above the terrain when it is
 destroyed starts to crash" reads, for a vehicle, its height above the surface (claim 15 here). A
@@ -2847,8 +3063,12 @@ claim 18 says when the crash ends, and a held-up crash can keep it in play indef
 original (`quirks.jumpjet_crash_lookahead` on). Those passages can add that cross-reference.
 The passage "An infantry unit whose type has the crash flag and which starts to crash instead
 (S-0107 claim 17, S-0312 claim 16) stays in play until it hits the ground" can also point to
-S-0312 revision 81, claim 16, *Infantry crash end*: the unit stays in play through its crash
-end and leaves play when its *air-death-end* sequence completes.
+S-0312 claim 16, *Infantry crash end*: the unit stays in play through its crash end and
+leaves play when its *air-death-end* sequence completes. When that request is turned down, it
+stays in play for good (claim 16, *A turned-down air-death-end request*), so "until it hits the
+ground" should not be read as its removal. Level and backing: high that it stays in play,
+medium for its removal by a later killing hit below 1 lepton, both `measurable` (S-0312
+scenario D26 parts (a), (c) and (e)).
 
 S-0203 claim 13 (g), *Crashing* bullet, "A vehicle whose crash has ended leaves play on the
 ground with no health (S-0312 claims 15 and 16)": this holds for a vehicle that was killed. A
@@ -2906,6 +3126,48 @@ transport whose claim 17 choice starts a crash, or turns the death request down 
 `quirks.refused_death_keeps_unit` on, is also removed at the end of its death effects (claim 34
 (c)), and that removal is a removal for claim 10. (a) and (c) can point to claim 34 (c) to (e).
 Level and backing: medium, `unmeasured`, as claim 34 rates it.
+
+S-0302 claim 8, *No-health targets*: a crashing infantry unit using jumpjet movement is not an
+object with no health after its first update following the killing hit. It regains a health of
+1 then (S-0107 claim 17a), and so does a killed infantry unit that a turned-down death request
+left in play, so each takes hits by the other rows, like a sinking vehicle with health left. A
+further killing hit is a killing hit like the first (S-0312 claim 16, *Health while it falls*).
+The list "an infantry unit playing its death sequence, a vehicle or aircraft that is crashing"
+can add that exception and point to S-0107 claim 17a. With
+`quirks.falling_infantry_regains_health` off (S-0107 Edge cases), a crashing infantry unit stays
+an object with no health through its fall. Level and backing: high for the health of
+1, `measurable` (S-0312 scenario D26 parts (a) and (b)); medium for the further killing hit,
+`measurable` (D26 part (d)).
+
+S-0502 claim 18, crash entry: "An infantry jumpjet switches to its *air-death-start* sequence
+(S-0107)" can say that the request is not forced, so S-0107 claim 6 turns it down when the
+type's *air-death-start* entry has no image frames or a sequence that is not interruptible is
+playing, and the unit then keeps its current sequence while it falls. *Ordinary crash end*: no
+rule makes a jumpjet leave *crashed*, so a unit that S-0312 claim 16's impact does not remove
+stays in that state for good, taking that state's physics steps with target height 0 (claim 3).
+S-0312 claim 16 gives the case, a crashed infantry unit whose *air-death-end* request is turned
+down. S-0502's Open question *The crashed state* can then point to S-0312 claim 16 for what a
+crashed jumpjet does until its impact removes it. Level and backing: high that nothing leaves
+*crashed*, `measurable` (S-0312 scenario D26 parts (a) and (e)); medium for the request not
+being forced, `unmeasured`, since no scenario starts a crash while a sequence that is not
+interruptible plays.
+
+S-0502 claims 18, 29 and 31, the crash fall of an infantry unit that has regained health. Claim
+18's "A killed unit has no health left, so a failed search does not destroy it again (claim 17)"
+should be scoped to the crash start's clear: the killing hit has just taken the unit's health to
+0, so a failed search there does not destroy it. A crashing infantry unit that has regained a
+health of 1 (S-0107 claim 17a) is destroyed by a failed search of claim 17 at any other time, as
+after an effective clear of claim 24 while it falls. Claim 29's "For an ordinary crash fall
+(claim 18) this is moot: the unit has no health (S-0312 claim 16), so S-0303 claim 6 never takes
+it as a candidate" should hold for a vehicle only. A crashing infantry unit with a health of 1
+is a candidate, found through the sector of its last registration or sector update, which its
+crash updates do not move. Claim 31's "a crash fall below 208 leptons, where it has no health
+and is no candidate" should likewise exclude an infantry unit that has regained a health of 1:
+while it is both registered and listed, a detonation above the terrain finds it twice. With
+`quirks.falling_infantry_regains_health` off (S-0107 Edge cases), the three sentences hold as
+they stand for infantry too. Level and backing: high for the health of 1 (S-0312 scenario D26
+parts (a) and (b)); medium for the candidate status and the failed searches, `unmeasured`, as
+S-0312 claim 16 gives.
 
 ## Questions for the project lead
 

@@ -1,9 +1,9 @@
 ---
 id: Q-3239
 title: A crashed infantry unit whose air-death-end request is turned down, and the crash end's height on a high bridge
-status: open
+status: answered
 related: [S-0312, S-0107, S-0502]
-answered-by: []
+answered-by: [S-0107, S-0312]
 ---
 
 ## Need
