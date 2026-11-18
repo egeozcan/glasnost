@@ -2,13 +2,13 @@
 id: S-0507
 title: Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers)
 topic: combat
-revision: 9
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-11-18
 measurements: []
-requests: [Q-0700, Q-0701, Q-0702, Q-0703, Q-0704, Q-0705, Q-0706, Q-0672, Q-0673]
+requests: [Q-0700, Q-0701, Q-0702, Q-0703, Q-0704, Q-0705, Q-0706, Q-0672, Q-0673, Q-3207]
 supersedes: []
 ---
 
@@ -230,6 +230,63 @@ This spec does not repeat what other specs own:
      Drain-link preservation on failed boarding is `unmeasured`: no scenario here isolates
      a refused arrival while the link is still live from its independent position check.
    - Confidence: high for acceptance; medium for the refused infantry's reaction
+
+6a. **A destination that goes inside (Q-3207).** An object goes inside when it leaves the map
+   by boarding a transport of either kind (claim 6) or by going into a building that takes it
+   off the map, as a garrison occupant does (S-0508). At that moment every vehicle and infantry
+   unit that holds the object as its destination loses it as its destination, in the same tick.
+   This holds for the transport it boards, which may hold it by claim 5's reply on water or
+   across reach regions, and for any other unit, transport or not. It holds whether the
+   transport or the holder is hovering, a ship or a driving vehicle. From then on the holder has
+   no destination, unless a revert in the same moment gives it one (below). No point stands for
+   the object while it is inside, and its position while inside (S-0312 claim 34 (b)) is not a
+   destination point. Aircraft holders follow S-0501 claim 53 instead. This claim covers going
+   inside only. A vehicle that enters a tank bunker stays on the map (S-0606 claim 7), so this
+   claim does not apply to it.
+
+   In the same moment the object leaves the holder's queued destinations and its approach
+   destinations (S-0215 Terms), wherever it stands in them. The other entries keep their order.
+
+   **A revert in the same moment.** When the object is also the holder's target and its going
+   inside ends an override in effect (S-0215 claim 10, S-0309 claims 27 and 27a), the revert
+   comes first in that moment, before the losses of this claim. The revert, and what it gives
+   back, are those claims'. The destination it gives back is a new destination for the holder's
+   locomotion like any other assignment: a nonempty one supplies its movement point (S-0207
+   claim 25), and an empty one removes the destination by the normal rule, with the stop that
+   the movement specs give for that removal (S-0207 claim 25, S-0503 claim 19). The holder keeps
+   a destination given back that way unless it is the very object that went inside. If it is,
+   the loss then clears it at once (S-0309 claim 27a), so the holder has no destination, and its
+   locomotion keeps the object's movement point at the moment of the loss. The rest of this claim
+   is about a holder without such a revert.
+
+   The holder's locomotion is not told of the loss. The movement point it last received stays as
+   it was. For the transport of claim 5, when its locomotion received a point at that assignment
+   (S-0207 claim 25; S-0503 claims 17 and 18 for a held hovering vehicle), the point is the
+   object's movement point at that moment, unless that destination was given to it again later.
+   The loss does not change it to where the object went inside. The locomotion then goes on with
+   that point as with any point held with no order-level destination:
+   - driving and ship movement: S-0207 claims 25 and 26 and S-0212 claims 20 to 23.
+   - hovering movement: S-0503 claims 5, 7 and 15, with that point as its *D*.
+   - walking: S-0208 claim 16, with that point as its locomotor destination.
+
+   So a holder that was moving can move on toward that point after the loss and stop where those
+   rules end the move. Its behaviour decides next as it does with no destination (S-0215).
+   - Backing: `measurable` (T16) for the loss and the unchanged point, with a hovering transport
+     with no override in effect, holding an infantry unit that boards another transport (a) or
+     goes into a building as an occupant (b). T16 also records the movement after the loss.
+     `unmeasured` for the transport that the object boards: no ordinary-input run is established
+     here in which the transport still holds that unit as its destination when the unit boards
+     it. `unmeasured` for ship, driving and infantry holders, for objects that are vehicles and
+     for objects that board an air transport: no isolating ordinary-input run in which such a
+     holder still holds the object when it goes inside is established here. `unmeasured` for the
+     queued and approach destinations: no ordinary input known here puts an object that can go
+     inside in either list. `unmeasured` for the revert in the same moment: its order against the
+     loss matters only when the destination given back is the object itself, and no fixture here
+     gives a ground holder an override with that object put aside as its destination.
+   - Confidence: high for the loss and the unchanged point in T16's variants (a) and (b); medium
+     for the transport that the object boards; medium for the other holders, objects and
+     transports; medium for the queued and approach destinations; medium for the revert in the
+     same moment and its effect on locomotion; medium for the movement that follows the loss
 
 ### Unloading a vehicle transport
 
@@ -962,6 +1019,30 @@ old destination on failure, or skipped draws for unusable radii falsifies the re
 part. One run per map variant suffices with recorded random state; initial-loading draw
 suppression requires a separate ordinary map-loading witness if reachable.
 
+**T16. A destination that goes inside (claim 6a; Q-3207).** Start as T5: a hovering test
+transport A of the human house on water next to shore, in *guard* with no target and no
+destination, and an infantry unit I of the same house, of a type that can go into buildings as
+an occupant, on open shore ground three cells from A. A test file gives A a speed low enough that
+it cannot reach I's cell within 300 ticks. Next to I stand a stationary driving test transport C
+of the same house with free seats, and a garrisonable building B of the neutral house with room
+for I. Order I to enter A. As in T5, A takes I as its destination and I falls back to rest; void
+the run if A does not. Record A's destination and its locomotor point then. Then, one variant per run:
+- (a) order I to enter C, which it boards.
+- (b) order I to go into B as an occupant.
+
+Void a run in which I has not gone inside within 300 ticks, in which A no longer holds I as
+its destination at the end of the tick before I goes inside, or in which A has reached the cell
+of its recorded point by then. Record, at the end of every tick from 5 ticks before I goes
+inside to 150 ticks after: A's destination, its locomotor point, its
+behaviour, its position and whether it moves. Give A no order in that time.
+- *Expected:* A holds I as its destination at the end of the tick before, and holds no
+  destination at the end of the tick in which I goes inside and at every later recorded tick.
+  Its locomotor point is the same just before and just after I goes inside. While A still
+  moves after that, it heads along its path toward the recorded point.
+- *Falsified by:* A still holding I, or any destination, at the end of the tick in which I goes
+  inside, or a locomotor point that changes at that moment, for example to the cell where I went
+  inside.
+
 ## Open questions
 
 - The infantry type flag that makes an air transport forget its target and destination and leave
@@ -976,3 +1057,11 @@ suppression requires a separate ordinary map-loading witness if reachable.
 - Q-0707's destruction-entry exemption belongs to S-0312 claim 12 and S-0209, not ordinary
   unloading. Those owners must explicitly exclude the dying vehicle itself while retaining
   other occupants' ordinary effects.
+
+## Changes for other specs
+
+- **S-0207 claim 26, closing paragraph.** "S-0507 claims 5 and 6 own transport exchanges and
+  arrival-time boarding, which are separate from cell-equality cleanup." should also name S-0507
+  claim 6a: a vehicle loses as its order-level destination an object that goes inside, at that
+  moment, while its locomotor destination point stays as it was, apart from a revert in the same
+  moment that claim 6a describes. Level and backing: those of S-0507 claim 6a.
