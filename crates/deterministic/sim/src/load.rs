@@ -696,27 +696,49 @@ pub fn new_game(
     // Late phase: list 3 and the late assignments (S-0009 claims 20, 28 and 29).
     let mut bases: Vec<Option<CellXY>> = vec![None; w.houses.len()];
     if !setup.sandbox {
-        // spec: S-0202 claim 14 and S-0009 claim 28 (the unused-house cleanup follows the second pass and precedes the late phase; its removals recalculate the occupied cells)
-        cleanup(&mut w, setup);
-        // spec: S-0009 claim 29 (After the cleanup, quirks.cleanup_shifts_start_marks: what the cleanup leaves in the marks)
-        starts::after_cleanup(&w, &mut marks);
-        let list3 = starts::build_list(&mut w, map, players)?;
-        let n = list3.len();
-        // spec: S-0009 claim 28 (a removed house takes no position in the late phase)
-        let order: Vec<usize> = (0..setup.houses.len())
-            .filter(|&h| !late_passive(&w, h) && !w.houses[h].removed)
-            .collect();
-        // spec: S-0009 claim 29 (late phase: the pairs again, over the early-phase marks; an unread component keeps the early mark)
-        starts::apply_pairs(&mut w, &map.header, &mut marks, n);
-        if !q.double_start_resolution {
-            // spec: S-0009 Edge cases (quirks.double_start_resolution off: one list, after the terrain is loaded); claim 29 with the switch off, Q-3214's interim rule: the early-phase rule, choosers over the pairs
+        // With `quirks.double_start_resolution` off, the one resolution
+        // (S-0009 Edge cases), before the cleanup.
+        let one = if q.double_start_resolution {
+            None
+        } else {
+            // spec: S-0009 Edge cases (quirks.double_start_resolution off: one list, after the terrain is loaded; the one resolution comes before the unused-house cleanup of claim 28)
+            let list = starts::build_list(&mut w, map, players)?;
+            let n = list.len();
+            let order: Vec<usize> = (0..setup.houses.len())
+                .filter(|&h| !late_passive(&w, h))
+                .collect();
+            // spec: S-0009 Edge cases (quirks.double_start_resolution off: the pairs applied once, by the early phase's precedence; an unread component keeps −1, the mark at the start of the resolution)
+            starts::apply_pairs(&mut w, &map.header, &mut marks, n);
+            // spec: S-0009 Edge cases (quirks.double_start_resolution off: a chosen position's mark is its chooser's house number whatever a pair says)
             for &h in &order {
                 if let Some(s) = setup.houses[h].start.filter(|&s| (s as usize) < n) {
                     marks[s as usize] = h as i32;
                 }
             }
+            // spec: S-0009 Edge cases (quirks.double_start_resolution off: a non-passive house holding positions has the highest-numbered; one holding none is assigned by claim 19 against the one list)
+            starts::take_held(&mut w, &order, &marks, n);
+            starts::assign(&mut w, &order, &list, &mut marks);
+            Some(list)
+        };
+        // spec: S-0202 claim 14 and S-0009 claim 28 (the unused-house cleanup follows the second pass and precedes the late phase; its removals recalculate the occupied cells)
+        cleanup(&mut w, setup);
+        // spec: S-0009 claim 29 (After the cleanup, quirks.cleanup_shifts_start_marks: what the cleanup leaves in the marks)
+        starts::after_cleanup(&w, &mut marks);
+        let list3 = match one {
+            // spec: S-0009 Edge cases (quirks.double_start_resolution off: after the cleanup a house is assigned against the same list)
+            Some(list) => list,
+            None => starts::build_list(&mut w, map, players)?,
+        };
+        let n = list3.len();
+        // spec: S-0009 claim 28 (a removed house takes no position in the late phase)
+        let order: Vec<usize> = (0..setup.houses.len())
+            .filter(|&h| !late_passive(&w, h) && !w.houses[h].removed)
+            .collect();
+        if q.double_start_resolution {
+            // spec: S-0009 claim 29 (late phase: the pairs again, over the early-phase marks; an unread component keeps the early mark)
+            starts::apply_pairs(&mut w, &map.header, &mut marks, n);
         }
-        // spec: S-0009 claim 29 (a non-passive house holding positions takes the highest-numbered, by its current place)
+        // spec: S-0009 claim 29 (a non-passive house holding positions takes the highest-numbered, by its current place; with quirks.double_start_resolution off, After the cleanup applied to the one resolution's marks, Edge cases)
         starts::take_held(&mut w, &order, &marks, n);
         // spec: S-0009 claims 28 and 29 (a non-passive house without a position is assigned against list 3, in house order)
         starts::assign(&mut w, &order, &list3, &mut marks);
