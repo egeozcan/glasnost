@@ -43,6 +43,12 @@
 //! (`tests/air_step.rs`). A unit that answers another seen drainer in the
 //! air is left to `antiair`.
 //!
+//! Neither the escape nor the step takes a unit off a job another part
+//! gave it: only a unit on a fighting unit's behaviour is moved
+//! ([`free_of_job`]); one on its way into a bunker, or an engineer on a
+//! capture at the door, keeps its job (the quick lane's trace showed a
+//! capture given up for the way home).
+//!
 //! What "can hit" means: the weapon the unit would use against the
 //! attacker (S-0308 claim 3) has an anti-air projectile and a warhead
 //! whose versus value for the attacker's armour is not zero (`antiair`'s
@@ -276,6 +282,32 @@ fn movable(w: &World, id: ObjectId) -> bool {
         && !crate::drain::is_drainer(w, id)
 }
 
+/// Whether unit `id` is on no job another part gave it: its behaviour,
+/// and the one queued after it, are none or one of a fighting unit's (guard,
+/// area guard, attack, attack-move, move, hunt, patrol, stop; S-0215 Terms).
+/// Any other (enter, capture, sabotage and the like) is a job this module
+/// leaves to its part; a new kind of job is left alone too.
+fn free_of_job(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // design: own AI (#434, #443): only a unit on a fighting unit's behaviour is moved; one on another part's job (a capture at the door, an enter click) keeps it
+    let fighting = |b: Option<Behaviour>| {
+        matches!(
+            b,
+            None | Some(
+                Behaviour::Guard
+                    | Behaviour::AreaGuard
+                    | Behaviour::Attack
+                    | Behaviour::AttackMove
+                    | Behaviour::Move
+                    | Behaviour::Hunt
+                    | Behaviour::Patrol
+                    | Behaviour::Stop
+            )
+        )
+    };
+    fighting(o.beh.current) && fighting(o.beh.queued)
+}
+
 /// The seen enemies in the air shooting a unit of the house: each with
 /// its victim, in the order of the seen enemies. The enemy is airborne
 /// (S-0308 Terms), aims at the unit and fired within [`RECENT`] ticks
@@ -442,8 +474,8 @@ impl Special {
             if ordered.contains(&x) || !own.contains(&x) || !army.contains(&x) {
                 continue;
             }
-            // design: own AI (#434): one on its way already is not clicked again
-            if !movable(w, x) || self.air.sent(w, x) {
+            // design: own AI (#434): one on its way already is not clicked again; (#434, #443) one on another part's job keeps it
+            if !movable(w, x) || !free_of_job(w, x) || self.air.sent(w, x) {
                 continue;
             }
             // design: own AI (#434, #443): a unit that can hit its attacker fights, and steps aside from a slow one
