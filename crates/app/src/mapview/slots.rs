@@ -372,6 +372,27 @@ pub fn first_translucency(t: &AnimType, detail: i32, n: i32) -> u8 {
     translucency(t, detail, 0, end_in_play(t, n))
 }
 
+/// The image frame an animation of type `t` shows when it is created, its
+/// sprite holding `n` image frames, under the rules' switch
+/// `quirks.anim_reverse_raw_loop_end` (`raw_loop_end`): with it on, as
+/// [`first_frame`]; with it off, a reversed type's first frame is λₑ − 1,
+/// as the simulation's clock gives it.
+pub fn first_frame_under(t: &AnimType, n: i32, raw_loop_end: bool) -> i32 {
+    if !t.reverse || raw_loop_end {
+        return first_frame(t, n);
+    }
+    // spec: S-0109 F2 (LoopEnd: absent E_s, not End; −1 E; 0 kept except for a new-theater type)
+    let loop_end = match t.loop_end {
+        None => sprite_end(t, n),
+        Some(-1) => end_in_play(t, n),
+        Some(0) if t.new_theater => end_in_play(t, n),
+        Some(v) => v,
+    };
+    // spec: S-0109 Edge cases (quirks.anim_reverse_raw_loop_end off: k₀ = λₑ − a − 1, so the first
+    // image frame a + k₀ is λₑ − 1); S-0205 claim 1 (wraps, as the clock's sum does)
+    loop_end.wrapping_sub(1)
+}
+
 /// The fade code of a translucent-flag type at stage `k` with end field
 /// `e` in play (S-0109 claim 20, F4's integer reduction).
 pub fn fade_code(k: i32, e: i32) -> u8 {
