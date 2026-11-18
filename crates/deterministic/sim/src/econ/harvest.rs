@@ -897,11 +897,10 @@ fn accepts(w: &World, refinery: ObjectId, harvester: ObjectId, waiting: bool) ->
         return false;
     };
     // spec: S-0402 claim 10 (not in its construction state, not being sold, not switched off)
-    // spec: S-0406 claim 17 (the queued construction is seen while none is current)
-    if matches!(
-        super::placement::seen_behaviour(b),
-        Some(Behaviour::Construction | Behaviour::Selling)
-    ) || b.econ.sale.is_some()
+    // spec: S-0406 claim 17 and Changes for other specs (the queued construction is seen while none is current; in the factory break-off window only a current construction refuses)
+    if super::placement::refused_as_in_construction(b)
+        || super::placement::seen_behaviour(b) == Some(Behaviour::Selling)
+        || b.econ.sale.is_some()
         || b.econ.building.switched_off
     {
         return false;

@@ -72,7 +72,7 @@ fn hut(idle: Option<[i32; 3]>) -> BuildingType {
 /// CART).
 fn work_rules() -> Ruleset {
     let mut r = testkit::ruleset();
-    let names = ["HUT", "HUT3", "HUT1", "FREE"];
+    let names = ["HUT", "HUT3", "HUT1", "FREE", "FREE0"];
     r.registries.insert(
         "buildings".into(),
         names.iter().map(|s| s.to_string()).collect(),
@@ -83,7 +83,9 @@ fn work_rules() -> Ruleset {
     s.buildings.insert("HUT1".into(), hut(Some([0, 1, 4])));
     let mut free = hut(None);
     free.econ.free_unit = Some("CART".into());
-    s.buildings.insert("FREE".into(), free);
+    s.buildings.insert("FREE".into(), free.clone());
+    free.econ.buildup = Some(false);
+    s.buildings.insert("FREE0".into(), free);
     r
 }
 
@@ -262,7 +264,12 @@ fn quirk_interrupts_building_work_off_keeps_the_builddown() {
 /// A FREE building of Alpha's placed in play (by order) at the middle of
 /// the map: it enters with *construction* queued (S-0406 claim 17).
 fn placed(w: &mut World) -> ObjectId {
-    let t = w.rules().index_of(Kind::Building, "FREE").unwrap();
+    placed_named(w, "FREE")
+}
+
+/// [`placed`] for a building type `name`.
+fn placed_named(w: &mut World, name: &str) -> ObjectId {
+    let t = w.rules().index_of(Kind::Building, name).unwrap();
     let id = objects::create(w, Kind::Building, t, Some(A));
     placement::put_on_map(w, id, mid(0, 0), true);
     id
@@ -307,7 +314,8 @@ fn control_an_ordinary_build_up_gives_the_free_unit() {
 fn construction_queued_is_replaced_by_guard() {
     let mut w = work_game(&work_rules());
     let b = placed(&mut w);
-    testkit::run(&mut w, 3);
+    // spec: S-0406 claim 17 (r19: placed in the orders part of T, the building has construction queued through its first turn T + 1, in the factory break-off window; with FREE's zero-delay idle range construction is current and processed from C = T + 2)
+    testkit::run(&mut w, 1);
     assert_eq!(beh(&w, b), (None, Some(Behaviour::Construction)));
     ownership::change(&mut w, b, Some(B), Cause::Trigger);
     assert_ne!(beh(&w, b).1, Some(Behaviour::Construction), "replaced");
@@ -346,7 +354,8 @@ fn construction_processed_completes_at_once() {
 #[test]
 fn construction_not_yet_processed_restarts_then_guard() {
     let mut w = work_game(&work_rules());
-    let b = placed(&mut w);
+    // spec: S-0406 claim 17 (r19: construction is current and not yet processed only when the construction range set the mark on the first turn T + 1, current from its second start, C = T + 2: FREE0's zero-delay construction range, no build-up sprite)
+    let b = placed_named(&mut w, "FREE0");
     for _ in 0..100 {
         if beh(&w, b).0 == Some(Behaviour::Construction) {
             break;
@@ -355,6 +364,9 @@ fn construction_not_yet_processed_restarts_then_guard() {
     }
     assert_eq!(beh(&w, b).0, Some(Behaviour::Construction));
     assert_eq!(w.obj(b).unwrap().econ.construction.first, None);
+    // That state is in the factory break-off window, where the first start is not withheld; what an owner change does there is open (Q-3261). The row is tested in the construction state: the window ended by hand.
+    assert!(placement::in_break_off_window(w.obj(b).unwrap()));
+    w.obj_mut(b).unwrap().econ.construction.break_off = placement::BreakOff::None;
     ownership::change(&mut w, b, Some(B), Cause::Trigger);
     assert_opened(&w, b);
     step(&mut w);

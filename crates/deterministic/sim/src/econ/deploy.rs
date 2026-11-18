@@ -624,25 +624,23 @@ pub fn process_construction(w: &mut World, id: ObjectId) -> i32 {
     };
     let tick = w.tick;
     let opened = o.econ.construction.opened;
-    let Some(c) = o.econ.construction.first else {
-        // spec: S-0406 claim 14 (the first processing starts the construction range again at stage 0: C is this tick)
+    if o.econ.construction.first.is_none() {
+        // spec: S-0406 claim 14 (the first processing starts the construction range again at stage 0: C is this tick) and claim 17 (r19: C ends the factory break-off window and the construction state resumes)
         if let Some(ob) = w.obj_mut(id) {
-            ob.econ.construction.first = Some(tick);
+            let k = &mut ob.econ.construction;
+            k.first = Some(tick);
+            k.stage = 0;
+            k.since = tick;
+            k.reported = false;
+            k.break_off = crate::econ::placement::BreakOff::None;
         }
-        // spec: S-0309 claim 31 (a building opened at an owner change while construction was current and not yet processed: the restart at the first stage is an immediate change that cancels the change's idle-body request, S-0108 claim 6)
+        // spec: S-0309 claim 31 (a building opened at an owner change while construction was current and not yet processed: the restart at the first stage is an immediate change that cancels the change's idle-body request, S-0108 claim 6); S-0406 claim 17 (the restart leaves the break-off's idle body)
         crate::econ::body::leave_idle(w, id);
         return CONSTRUCTION_DELAY;
-    };
-    if !opened {
-        let never = w.rules().quirks.single_stage_buildup_never_completes;
-        // spec: S-0406 claim 15 and F6 (H = C + (n − 1) × d_b; a zero-delay range reports at the next processing, H = C + 1); claim 18 (a positive-delay range of one stage or fewer never hands over)
-        let Some(after) = crate::econ::sell::buildup_range(w, o.type_index).report_after(never)
-        else {
-            return CONSTRUCTION_DELAY;
-        };
-        if tick.wrapping_sub(c) < after {
-            return CONSTRUCTION_DELAY;
-        }
+    }
+    // spec: S-0406 claim 15 and F6 (the handover at the processing that finds the construction range's completion report: H = C + (n − 1) × d_b in uninterrupted play, H = C + 1 for a zero-delay range); claim 18 (a positive-delay range of one stage or fewer never reports); claim 17 (a held stage advance delays the report)
+    if !opened && !o.econ.construction.reported {
+        return CONSTRUCTION_DELAY;
     }
     // spec: S-0309 claim 31 (with construction current and processed at least once at an owner change, its next processing finds the ready mark that the change's grand opening set and completes the construction at once)
     let idle = w.obj(id).is_some_and(|o| o.econ.idle_body.is_some());

@@ -578,12 +578,10 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 }
             }
             if w.obj(actor).is_some_and(|ob| {
-                matches!(
-                    crate::econ::placement::seen_behaviour(ob),
-                    Some(Behaviour::Construction | Behaviour::Selling)
-                )
+                crate::econ::placement::refused_as_in_construction(ob)
+                    || crate::econ::placement::seen_behaviour(ob) == Some(Behaviour::Selling)
             }) {
-                // spec: S-0215 claim 12 (the stop order does nothing in construction or selling)
+                // spec: S-0215 claim 12 (the stop order does nothing in construction or selling); S-0406 claim 17 and Changes for other specs (r19: in the factory break-off window only while construction is current)
                 return;
             }
             // spec: S-0213 claim 8 and S-0502 claim 28 (stop requests the destination clear while the target is still present, so a balloon-hover vehicle can reject it; the target is cleared after)
@@ -662,13 +660,11 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 return;
             }
             if w.obj(actor).is_some_and(|ob| {
-                ob.econ.construction.building_up
-                    || matches!(
-                        crate::econ::placement::seen_behaviour(ob),
-                        Some(Behaviour::Construction | Behaviour::Selling)
-                    )
+                crate::econ::placement::in_construction_state(ob)
+                    || crate::econ::placement::refused_as_in_construction(ob)
+                    || crate::econ::placement::seen_behaviour(ob) == Some(Behaviour::Selling)
             }) {
-                // spec: S-0213 claim 10 (not under construction or being sold) and S-0406 claim 17 (the construction state: construction queued or current until the build-up's handover)
+                // spec: S-0213 claim 10 (not under construction or being sold: outside its construction state, for a building) and S-0406 claim 17 (the construction state: construction queued or current until the build-up's handover; r19 and Changes for other specs: in the factory break-off window the order is refused only while construction is current)
                 return;
             }
             if on_vehicle_factory(w, actor) {

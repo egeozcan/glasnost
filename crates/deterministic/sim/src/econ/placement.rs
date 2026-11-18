@@ -80,6 +80,39 @@ pub struct Construction {
     /// next processing with no second opening.
     #[serde(default)]
     pub opened: bool,
+    /// Where the building stands with its factory break-off (S-0406 claim
+    /// 17).
+    #[serde(default)]
+    pub break_off: BreakOff,
+    /// The construction range's stage *k* (S-0108 claim 5), counted from
+    /// 0 at entry and again from the first processing *C*.
+    #[serde(default)]
+    pub stage: i32,
+    /// The tick of the stage's last change: entry, *C* or an advance made
+    /// in an update (S-0108 Terms, *body stage*).
+    #[serde(default)]
+    pub since: i32,
+    /// Since *C*, the construction range has made its completion report
+    /// (S-0406 claim 15): it has landed on its last stage, or a turn of a
+    /// zero-delay range has come.
+    #[serde(default)]
+    pub reported: bool,
+}
+
+/// The factory break-off of the building a place order names (S-0406
+/// claim 17): requested by the place order, it takes effect at the end of
+/// the building's update on its first turn, and the factory break-off
+/// window it opens lasts until the first construction processing *C*.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BreakOff {
+    /// No break-off: none was requested, or its window has ended at *C*.
+    #[default]
+    None,
+    /// Requested at entry; takes effect at the end of the first turn.
+    Pending,
+    /// In the factory break-off window: the idle body, out of the
+    /// construction state, still not construction-completed.
+    Window,
 }
 
 /// The placement fields of a building type (S-0406 Import mapping), with
@@ -1001,6 +1034,10 @@ fn put_with(
         let z = w.surface_at(256 * cell.x + 128, 256 * cell.y + 128);
         // spec: S-0406 claim 17 and S-0415 claim 6 (in its construction state; the ready mark set at entry only for a deploy)
         begin_construction(w, id, deployed);
+        if by_order {
+            // spec: S-0406 claim 17 (r19: in the order that puts the building it names on the map, the factory that made it breaks off its contact with it)
+            break_off(w, id);
+        }
         crate::objects::place_with(w, id, Pos::centre(cell, z), facing, by_order);
     }
     if by_order
@@ -1014,26 +1051,78 @@ fn put_with(
 
 /// Starts a building's construction state at entry (S-0108 claim 5,
 /// S-0406 claims 1 and 17, S-0415 claim 6): no current behaviour and
-/// *construction* queued; a deploy (`deployed`) also sets the ready mark.
+/// *construction* queued, the construction range at stage 0; a deploy
+/// (`deployed`) also sets the ready mark. Any other entry here (a filling
+/// building, a restored replacement) gets no factory break-off, unless
+/// `quirks.buildup_twice_without_break_off` is off; the building a place
+/// order names gets one through [`break_off`].
 pub fn begin_construction(w: &mut World, id: ObjectId, deployed: bool) {
     let t = w.tick;
-    // spec: S-0406 Edge cases (quirks.buildup_twice_without_break_off; the switch's old reading is kept until its revision-19 behaviour is built: off sets the ready mark at entry, as a deploy does)
-    let mark = deployed || !w.rules().quirks.buildup_twice_without_break_off;
+    // spec: S-0406 Edge cases (quirks.buildup_twice_without_break_off off: a filling building and a restored replacement get the factory break-off of the building a place order names); claim 17 (a deployed building gets none)
+    let break_off = if !deployed && !w.rules().quirks.buildup_twice_without_break_off {
+        BreakOff::Pending
+    } else {
+        BreakOff::None
+    };
     // spec: S-0108 claim 6 (entering construction leaves the idle body)
     crate::econ::body::leave_idle(w, id);
     if let Some(o) = w.obj_mut(id) {
-        // spec: S-0406 claim 17 (at entry: no current behaviour and construction queued; stage 0, timed from the entry tick)
+        // spec: S-0406 claim 17 (at entry: no current behaviour and construction queued; the construction range at stage 0, timed from the entry tick)
         o.beh.current = None;
         o.beh.queued = Some(Behaviour::Construction);
-        o.econ.construction.building_up = true;
-        o.econ.construction.first = None;
-        o.econ.construction.entry = Some(t);
-        o.econ.construction.opened = false;
-        if mark {
-            // spec: S-0406 claim 17 (a deploy sets the ready mark when the building enters play)
+        o.econ.construction = Construction {
+            building_up: true,
+            first: None,
+            entry: Some(t),
+            opened: false,
+            break_off,
+            stage: 0,
+            since: t,
+            reported: false,
+        };
+        if deployed {
+            // spec: S-0406 claim 17 (a deploy sets the ready mark when the building enters play; a place order, its filling buildings and a restored replacement leave it clear)
             o.beh.ready_mark = true;
         }
     }
+}
+
+/// The factory break-off of the building a place order names (S-0406
+/// claim 17): requested as the building enters play, it takes effect at
+/// the end of its update on its first turn ([`break_off_turn_end`]).
+pub fn break_off(w: &mut World, id: ObjectId) {
+    if let Some(o) = w.obj_mut(id)
+        && o.econ.construction.building_up
+    {
+        // spec: S-0406 claim 17 (r19: the break-off requests the idle body as a deferred change)
+        o.econ.construction.break_off = BreakOff::Pending;
+    }
+}
+
+/// Whether a building is in its factory break-off window (S-0406 claim
+/// 17): out of its construction state, still not construction-completed.
+pub fn in_break_off_window(o: &crate::world::Object) -> bool {
+    o.econ.construction.building_up && o.econ.construction.break_off == BreakOff::Window
+}
+
+/// Whether a rule that refuses a building in its construction state
+/// refuses it (S-0402 claim 10, S-0213 claims 8 and 10): its seen
+/// behaviour is *construction*; in the factory break-off window only while
+/// *construction* is current there (S-0406 Changes for other specs).
+pub fn refused_as_in_construction(o: &crate::world::Object) -> bool {
+    if in_break_off_window(o) {
+        // spec: S-0406 claim 17 and Changes for other specs (r19: in the factory break-off window with construction current the building refuses as in its construction state; with it queued the claims apply as they read, the building outside its construction state)
+        o.beh.current == Some(Behaviour::Construction)
+    } else {
+        // spec: S-0406 claim 17 (the queued construction is seen while none is current)
+        seen_behaviour(o) == Some(Behaviour::Construction)
+    }
+}
+
+/// Whether a building is in its construction state (S-0406 claim 17):
+/// not construction-completed, and not in its factory break-off window.
+pub fn in_construction_state(o: &crate::world::Object) -> bool {
+    o.econ.construction.building_up && !in_break_off_window(o)
 }
 
 /// The behaviour a rule sees when it asks for a building's behaviour
@@ -1047,30 +1136,81 @@ pub fn seen_behaviour(o: &crate::world::Object) -> Option<Behaviour> {
 /// Whether the first per-tick start of a building's turn is withheld
 /// (S-0406 claim 17): while its construction state lasts.
 pub fn first_start_withheld(w: &World, id: ObjectId) -> bool {
-    // spec: S-0406 claim 17 (the first start of a tick does not apply while the construction state lasts)
+    // spec: S-0406 claim 17 (the first start of a tick does not apply while the construction state lasts; in the factory break-off window the building is out of it)
     w.obj(id)
-        .is_some_and(|o| o.kind == Kind::Building && o.econ.construction.building_up)
+        .is_some_and(|o| o.kind == Kind::Building && in_construction_state(o))
 }
 
-/// The construction state's part of a building turn before its first
-/// per-tick start (S-0406 claims 17 and 18): until *construction* is
-/// current, the ready mark is set on the turn the build-up run from entry
-/// reports its last stage, or on any turn of a zero-delay range.
+/// The construction range's part of a building's body update, before its
+/// first per-tick start, while its construction state lasts (S-0406
+/// claims 15, 17 and 18, S-0108 claim 5 and Terms *body stage*): the stage
+/// advances in this update once its delay has passed since its last
+/// change, and the next delay counts from this update, so an advance that
+/// fell due on a tick without a turn is made here; a stage that runs past
+/// the end wraps to 0. Landing on the last stage, or any turn of a
+/// zero-delay range, is the range's report: before *C* it sets the ready
+/// mark while *construction* is not current, and from *C* on it is the
+/// completion report the next processing finds.
 pub fn construction_turn(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
-    let c = &o.econ.construction;
-    if !c.building_up || c.first.is_some() || o.beh.current == Some(Behaviour::Construction) {
+    let current = o.beh.current == Some(Behaviour::Construction);
+    // spec: S-0406 claims 14 and 15 (from its first processing the current construction runs its range, whatever started it, and the processing that finds the range's report hands over)
+    let processing = current && o.econ.construction.first.is_some();
+    if !processing && (!in_construction_state(o) || o.econ.construction.entry.is_none()) {
         return;
     }
-    let Some(entry) = c.entry else { return };
+    let c = o.econ.construction.clone();
     let never = w.rules().quirks.single_stage_buildup_never_completes;
     let range = crate::econ::sell::buildup_range(w, o.type_index);
-    // spec: S-0406 claim 17 (a) and (b) (the mark on the turn the stage lands on the last stage, R = T + (n − 1) × d_b, or on any turn of a zero-delay range); claim 18 (never for a positive-delay range of one stage or fewer)
-    let due = range
-        .report_after(never)
-        .is_some_and(|a| w.tick.wrapping_sub(entry) >= a);
-    if due && let Some(ob) = w.obj_mut(id) {
-        ob.beh.ready_mark = true;
+    let t = w.tick;
+    let (mut stage, mut since) = (c.stage, c.since);
+    let report = if range.delay <= 0 {
+        // spec: S-0406 claim 17 (b) and S-0215 claim 11 (a zero-delay range does not advance: every turn sets the mark); claim 15 and F6 (a zero-delay range reports at the next processing, H = C + 1)
+        true
+    } else if t.wrapping_sub(since) >= range.delay {
+        // spec: S-0108 Terms (body stage, r111: stages advance only in an update; an advance due on a tick without one is made at the next update, and the next stage's delay counts from that update) and S-0406 claim 17 (a missed turn holds a due advance)
+        stage = stage.wrapping_add(1);
+        since = t;
+        if stage >= range.n {
+            // spec: S-0406 claim 18 and S-0108 claim 6 (past the end of the range the stage wraps to 0 in the same turn and is never on its last stage after an advance)
+            stage = 0;
+            // spec: S-0406 Edge cases (quirks.single_stage_buildup_never_completes off: a range of one stage or fewer reports on the turn its stage first wraps)
+            range.n < crate::econ::sell::MULTI_STAGE && !never
+        } else {
+            // spec: S-0406 claim 17 (a) (the mark on the turn the stage advances onto the last stage)
+            stage == range.n.wrapping_sub(1)
+        }
+    } else {
+        false
+    };
+    if let Some(ob) = w.obj_mut(id) {
+        let k = &mut ob.econ.construction;
+        k.stage = stage;
+        k.since = since;
+        if k.first.is_some() {
+            // spec: S-0406 claim 15 (the processing on the tick the last stage is reached already sees its completion report)
+            k.reported |= report;
+        } else if report && !current {
+            // spec: S-0406 claim 17 (until construction is current the range's report sets the ready mark)
+            ob.beh.ready_mark = true;
+        }
+    }
+}
+
+/// The end of the update of the building a place order names on its first
+/// turn (S-0406 claim 17): the factory break-off's deferred *idle* body
+/// takes effect and the factory break-off window begins.
+pub fn break_off_turn_end(w: &mut World, id: ObjectId) {
+    let pending = w.obj(id).is_some_and(|o| {
+        o.econ.construction.building_up && o.econ.construction.break_off == BreakOff::Pending
+    });
+    if !pending {
+        return;
+    }
+    // spec: S-0406 claim 17 (r19: the deferred change into idle takes effect at the end of the building's update on its first turn, T + 1, whether or not construction became current at that turn's second start; its stage and delay are S-0108 claim 6's for a deferred change into idle)
+    crate::econ::body::enter_idle(w, id, false);
+    if let Some(o) = w.obj_mut(id) {
+        o.econ.construction.break_off = BreakOff::Window;
     }
 }
 
@@ -1195,7 +1335,7 @@ fn wall_fill(w: &mut World, t: u32, p: &PlaceType, house: HouseId, cell: CellXY,
             // spec: S-0406 claim 11 (each filling wall is a building created under S-0202 claim 10: one creation draw)
             let id = crate::objects::create(w, Kind::Building, t, Some(house));
             // spec: S-0406 claim 11 (a filling building passes no further test; it does not fill further)
-            // spec: S-0406 claims 11 and 17 (a filling building of a type that is not a wall type enters in its construction state exactly as the building the place order names: the ready mark clear at entry; quirks.buildup_twice_without_break_off, Edge cases); S-0406 claim 16 (facing 0)
+            // spec: S-0406 claims 11 and 17 (a filling building of a type that is not a wall type enters in its construction state with the ready mark clear at entry, as the building the place order names, but gets no factory break-off; quirks.buildup_twice_without_break_off off gives it one, Edge cases); S-0406 claim 16 (facing 0)
             put_with(w, id, c, false, false, 0);
         }
     }
