@@ -2359,3 +2359,45 @@ The twenty-sixth batch of the game-logic audit builds S-0607 r52's answers to Q-
 **The kept position of a closed transport's passenger (S25's seam of #383, Q-3207).** S25 stopped a closed transport from carrying its passengers along (S-0312 claim 34 (b)), and one AI lane game (seed 7, map 0, sides 1 and 2) then ended 335 ticks later with the same winner. The first difference between the two builds in an on-map object is at tick 41271. A hover transport at rest in *guard* holds as its destination the infantry unit it took as destination by S-0507 claim 5, which has just boarded it. The destination's point is read from that passenger's position. Before S25 that was the transport's own point, so S-0207 claim 26's guard row removed the destination at once and the AI gave the transport a new order two ticks later. Now it is the cell where the unit boarded, one cell off, so the transport holds the destination without moving until the AI replaces it, between ticks 41300 and 41350. The read is right under the approved claims: the passenger's position is its kept position, and no claim clears a transport's destination that names a unit which boarded it. No claim says whether that destination should stay or which point it stands for, so the code is unchanged and Q-3207 asks.
 
 **Census (P3).** None of these changes makes or moves a back-reference that `World::census` notes.
+
+## Simulation (sim issues S31: a destination that goes inside, S-0507 r11)
+
+The thirty-first batch builds S-0507 r11's claim 6a, the answer to Q-3207. Each change of behaviour has a test on synthetic data committed before it. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S31*.
+
+**Going inside.** S-0507 claim 6a names two ways an object goes inside:
+
+- boarding a transport of either kind (`transport::board`);
+- going into a building that takes it off the map, as a garrison occupant does (`structures::garrison` `go_inside`). Going into an absorbing building (`structures::absorb::go_in`, S-0605 claims 7 and 8) is the same kind of entry.
+
+Those three call `objects::go_inside`. This does what `objects::take_inside` does, but it tells `combat::held::holders_drop` that the object leaves by the new `Leaving::Inside`. For every other rule in `holders_drop`, `Inside` is `OffMap`.
+
+The other callers of `take_inside` keep `OffMap` and what they did before, until Q-3237 says whether claim 6a covers them:
+
+- a slave into its master;
+- a parasite into its host;
+- a spawned aircraft into its spawner;
+- a trigger's lift of a building's occupants.
+
+A vehicle bunker's entry never comes here (S-0606 claim 7).
+
+**The loss (claim 6a).** For `Inside`, `holders_drop` makes the loss in its existing one pass over the objects, after the reverts and after S-0501 claim 53's aircraft loss, in place of claim 27a's clear. It walks the objects in key order. Each visit changes only the visited object, so the result does not depend on that order.
+
+Every vehicle and infantry unit whose order-level destination names the object:
+
+- **Loses that destination at once.** This is not the destination assignment (`econ::assign_destination`): no locomotor is told, no grip ends and no get-up is asked for.
+- **Keeps its locomotion's point.**
+  - *Driving and ship.* The drive keeps its locomotor destination point (`DriveState::goal`, fixed when the destination was taken, S-0207 claim 25). Its `for_dest` becomes none, so the tick-start take does not clear the point as for a removed destination. The vehicle finishes a track it has begun. With no order-level destination it begins no other track, and the point stays until a later assignment, as the factory-exit lifetime of claim 25 has it. This is the closing paragraph of S-0207 claim 26 as r11's *Changes for other specs* amends it.
+  - *Hovering.* The new `HoverState::taken_point` records the point an object destination supplied when the locomotor last took it: at every take, given or not, the object's position then, or the docking point the depot or bunker gives. At the loss the hover keeps that point as its *D* with no order-level destination, as `retained`, which S-0503 claim 16's rules then move toward and complete. Its `for_dest`, `held` and `stopped` become none. A *D* already cleared by claim 10's stop request (`stopped` naming the object) keeps none. If the locomotor never took the destination, there is no point of it, and `retained` is left as it was.
+  - *Walking, jumpjet and teleporting.* No state is added or changed (Q-3236). A walker with no destination ends its walk at its next arrival tick (S-0208 claim 16), with no stored path left (claim 6). A jumpjet's and a teleporting unit's locomotors fixed their points when they took the destination, so nothing reads the inside object's position for them, and no reroute or cancel runs.
+
+The object also leaves every vehicle's and infantry unit's queued destinations, which are also its approach destinations (S-0215 Terms). The other entries keep their order.
+
+**The retry delay.** The loss does not call `path::destination_changed`, so a running retry delay (S-0212 claim 21) runs on. This makes no difference: with no destination, driving and walking make no search, and the hovering locomotor is not in claim 21's list for a changed destination.
+
+**A revert in the same moment.** The revert of S-0309 claims 27 and 27a comes first, as before, and assigns what it gives back through `infantry::destination_assigned`. So a holder given back the very object takes it as a new destination, and its locomotion's point is the object's movement point at the moment of the loss. Our hover records it in `taken_point`. The loss then clears the destination and keeps that point. For `Inside`, claim 27a's `assign_destination(None)` loop is not run, because the loss does the clear. For a killing hit, a removal or the other ways off the map it is unchanged.
+
+**A hovering vehicle's point before the loss (Q-3235).** T16 expects the point just before and just after the loss to be the one recorded at claim 5's assignment, so it takes *D* for a unit destination to be fixed at the assignment. Our hover reads *D* from the unit's current position at every update (`hover::destination_point`). We keep that until Q-3235 is answered, and we do not change hover pursuit. So T16's "the same just before and just after" holds only when the unit has not moved since the assignment.
+
+**Formats.** `HoverState::taken_point` is saved and hashed. The save format goes to 175 and the AI game format to 151 (wire 12 unchanged). The main session renumbers both at merge.
+
+**Census (P3).** The loss changes destinations, queued destinations and locomotor state. `World::census` notes none of these, so nothing new is forgotten. The census `holders_drop` builds is forgotten at its end, as before.
