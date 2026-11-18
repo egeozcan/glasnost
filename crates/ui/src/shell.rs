@@ -48,6 +48,11 @@ pub struct Shell {
     /// The skirmish setup's map picker (design: map picker (lead's request
     /// 2026-11-13)).
     pub picker: MapPicker,
+    /// Our own skirmish *Dummy mode* (#439), a testing tool that is not the
+    /// original's: no computer attacks the person, who has no shroud
+    /// (`GameSetup::dummy`). The skirmish screen's only, kept out of the
+    /// setup that a network room carries, so a room's game never has it.
+    pub dummy: bool,
 }
 
 impl Default for Shell {
@@ -63,6 +68,8 @@ impl Shell {
             screen: Screen::Menu,
             setup: None,
             picker: MapPicker::default(),
+            // design: #439 (dummy mode is off unless asked for)
+            dummy: false,
         }
     }
 
@@ -146,7 +153,9 @@ impl Shell {
             SetupHit::Start_ if shown.is_empty() => return None,
             SetupHit::Start_ => {
                 return match s.lobby(rules, maps) {
-                    Ok(l) => {
+                    Ok(mut l) => {
+                        // design: #439 (the skirmish screen's dummy mode goes with its lobby)
+                        l.dummy = self.dummy;
                         p.open = false;
                         p.typing = false;
                         self.screen = Screen::Game;
@@ -175,6 +184,8 @@ impl Shell {
                 p.typing = false;
             }
             SetupHit::PickMap(i) => s.choose_map(i, maps),
+            // design: #439 (the box turns dummy mode on and off)
+            SetupHit::Dummy => self.dummy ^= true,
             SetupHit::SearchField => p.typing = true,
             SetupHit::ClearSearch => {
                 p.query.search.clear();

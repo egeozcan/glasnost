@@ -87,6 +87,8 @@ mod web {
                 bench,
                 // `?probe=1`: the browser check of touch scrolling reads the view.
                 probe: param("probe") == "1",
+                // design: #439 (dummy mode from the setup screen only on the web)
+                dummy: false,
             })
         } else if mode == "viewer" {
             glasnost_app::run_viewer(ViewerOptions {

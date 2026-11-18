@@ -123,8 +123,10 @@ pub struct Settings {
 }
 
 /// A house's setup values in play (S-0412 claims 4, 5 and 8; S-0414
-/// Terms).
+/// Terms). Saved through [`HouseSetupBytes`], so that the dummy-mode mark
+/// (#439) adds no byte.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "HouseSetupBytes", into = "HouseSetupBytes")]
 pub struct HouseSetupState {
     /// The lobby team (claim 8).
     pub team: Option<u8>,
@@ -141,8 +143,69 @@ pub struct HouseSetupState {
     pub difficulty: i32,
     /// An AI house (glossary *AI house*): counted as computer-controlled
     /// in a rebuild of threat records (S-0212 claim 16a).
-    #[serde(default)]
     pub ai: bool,
+    /// A person-played house of a dummy-mode game (#439, our testing tool,
+    /// [`GameSetup::dummy`]): the objects of every other house never take
+    /// its objects as a target, the AI never aims at it, and it has no
+    /// shroud. Set at game start, never changed.
+    pub dummy: bool,
+}
+
+/// [`HouseSetupState`] as saved and hashed: its fields in their order, with
+/// the dummy-mode mark (#439) in the person-played byte, so that a game
+/// without dummy mode keeps the bytes and the state hash it had before the
+/// mark existed. The byte holds 1 for a person-played house and adds 2 for
+/// the mark; any other value is refused, as a boolean byte above 1 is.
+#[derive(Clone, Serialize, Deserialize)]
+struct HouseSetupBytes {
+    team: Option<u8>,
+    handicap: Option<Row>,
+    colour: Option<u8>,
+    observer: bool,
+    person_played: u8,
+    difficulty: i32,
+    #[serde(default)]
+    ai: bool,
+}
+
+// nocite: the byte layout of our own save format (#439: the dummy mark rides in the person-played byte)
+const PERSON_PLAYED: u8 = 1;
+// nocite: the byte layout of our own save format (#439: the dummy mark rides in the person-played byte)
+const DUMMY: u8 = 2;
+
+impl From<HouseSetupState> for HouseSetupBytes {
+    fn from(s: HouseSetupState) -> Self {
+        Self {
+            team: s.team,
+            handicap: s.handicap,
+            colour: s.colour,
+            observer: s.observer,
+            person_played: if s.person_played { PERSON_PLAYED } else { 0 }
+                | if s.dummy { DUMMY } else { 0 },
+            difficulty: s.difficulty,
+            ai: s.ai,
+        }
+    }
+}
+
+impl TryFrom<HouseSetupBytes> for HouseSetupState {
+    type Error = String;
+
+    fn try_from(b: HouseSetupBytes) -> Result<Self, String> {
+        if b.person_played & !(PERSON_PLAYED | DUMMY) != 0 {
+            return Err(format!("a person-played byte of {}", b.person_played));
+        }
+        Ok(Self {
+            team: b.team,
+            handicap: b.handicap,
+            colour: b.colour,
+            observer: b.observer,
+            person_played: b.person_played & PERSON_PLAYED != 0,
+            difficulty: b.difficulty,
+            ai: b.ai,
+            dummy: b.person_played & DUMMY != 0,
+        })
+    }
 }
 
 /// Game-start values that change country data for one game (S-0413 claims
@@ -453,6 +516,7 @@ pub fn skirmish(
         houses,
         alliances: Vec::new(),
         sandbox: false,
+        dummy: false,
         unit_count,
         bases: rules.econ.setup.bases,
         skirmish: settings,
@@ -623,16 +687,19 @@ pub fn house_values(setup: &GameSetup, i: usize, rules: &SimRules) -> (HouseSetu
     let h = &setup.houses[i];
     let v = setup.skirmish.houses.get(i).cloned().unwrap_or_default();
     let player = h.role == HouseRole::Player;
+    // spec: S-0414 Terms (a person-played house: a player house of a human participant who is not an observer; an AI house never is)
+    let person_played = player && h.human && !h.ai && !v.observer;
     let state = HouseSetupState {
         team: v.team,
         handicap: v.handicap,
         colour: v.colour,
         observer: player && v.observer,
-        // spec: S-0414 Terms (a person-played house: a player house of a human participant who is not an observer; an AI house never is)
-        person_played: player && h.human && !h.ai && !v.observer,
+        person_played,
         // spec: S-0412 claims 4 and 5 (index 1 for a human-controlled house, which an AI house counts as, and for the neutral and special houses)
         difficulty: 1,
         ai: h.ai,
+        // design: #439 (dummy mode marks every person-played house, and no other)
+        dummy: setup.dummy && person_played,
     };
     let credits = if setup.sandbox || !player {
         // spec: S-0412 claim 2 (the neutral and special houses start with 0 credits)

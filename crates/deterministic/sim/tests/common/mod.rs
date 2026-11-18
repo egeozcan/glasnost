@@ -173,6 +173,7 @@ impl Scene {
             ],
             alliances: Vec::new(),
             sandbox: true,
+            dummy: false,
             unit_count: 0,
             bases: false,
             skirmish: Default::default(),

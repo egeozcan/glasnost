@@ -90,6 +90,9 @@ pub struct GameOptions {
     /// scrolling: `data-glasnost-view` holds `x,y` and
     /// `data-glasnost-selected` the count, in a game.
     pub probe: bool,
+    /// Start the skirmish setup with our own *Dummy mode* on (`--dummy`,
+    /// #439).
+    pub dummy: bool,
 }
 
 /// Events delivered to the game's loop.
@@ -133,6 +136,8 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
     if let Some(p) = options.test {
         client.set_test(p);
     }
+    // design: #439 (`--dummy`: the skirmish setup starts with dummy mode on)
+    client.shell.dummy = options.dummy;
     if cfg!(not(target_arch = "wasm32")) && options.game_dir.is_none() {
         client.status = "Start with --game-dir DIR to read an install.".into();
     }

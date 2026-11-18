@@ -1573,7 +1573,12 @@ impl Brain {
             .values()
             .filter(|o| o.on_map && o.health > 0)
             // design: own AI (#32): the allies' objects too, which the house sees wherever they stand (`crate::in_view`)
-            .filter(|o| o.owner.is_some_and(|h| h == house || me.allied_with(h)))
+            // design: #439 (dummy mode: a dummy-mode house's objects are kept out of a strike as the house's own are)
+            .filter(|o| {
+                o.owner.is_some_and(|h| {
+                    h == house || me.allied_with(h) || w.dummy_spares(Some(house), Some(h))
+                })
+            })
             // design: own AI (#30): every cell a building stands on
             .flat_map(|o| crate::cells_of(w, o))
             .collect();

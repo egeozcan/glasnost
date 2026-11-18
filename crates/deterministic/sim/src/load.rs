@@ -973,6 +973,7 @@ pub fn sandbox_setup(map: &Map, rules: &SimRules, seed: u32) -> (GameSetup, Vec<
             houses,
             alliances: Vec::new(),
             sandbox: true,
+            dummy: false,
             unit_count: 0,
             bases: false,
             skirmish: Default::default(),

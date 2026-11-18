@@ -729,6 +729,8 @@ impl Special {
         w.objects
             .values()
             .filter(|o| o.kind == Kind::Building && o.on_map && o.health > 0)
+            // design: #439 (dummy mode: an engineer never enters a dummy-mode house's building)
+            .filter(|o| !w.dummy_spares(Some(house), o.owner))
             .map(|o| o.id)
             .filter(|&b| Self::seen(w, house, b))
             .collect()
@@ -897,6 +899,8 @@ impl Special {
                 && o.owner != Some(house)
                 && o.owner.is_some_and(|h| {
                     !me.allied_with(h)
+                        // design: #439 (dummy mode: a dummy-mode house's building is none to capture)
+                        && !w.dummy_spares(Some(house), Some(h))
                         && w.houses
                             .get(usize::from(h.0))
                             .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
@@ -1043,6 +1047,8 @@ impl Special {
         owner.is_some_and(|h| {
             h != house
                 && !me.allied_with(h)
+                // design: #439 (dummy mode: a dummy-mode house is no enemy player)
+                && !w.dummy_spares(Some(house), Some(h))
                 && w.houses
                     .get(usize::from(h.0))
                     .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)

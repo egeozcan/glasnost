@@ -367,6 +367,7 @@ pub fn skirmish_setup(map: &glasnost_map::Map, rules: &SimRules, seed: u32) -> G
         houses,
         alliances: Vec::new(),
         sandbox: false,
+        dummy: false,
         unit_count: SMOKE_UNIT_COUNT,
         bases: true,
         skirmish: Default::default(),

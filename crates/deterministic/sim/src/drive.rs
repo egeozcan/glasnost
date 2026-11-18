@@ -1378,7 +1378,9 @@ pub(crate) fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
         Some(f) => {
             let fo = w.obj(f);
             let allied = fo.is_some_and(|x| x.kind != Kind::Terrain && w.allied(o.owner, x.owner));
-            (!allied).then_some(Target::Object(f))
+            // design: #439 (dummy mode: another house's vehicle never attacks a dummy-mode house's object in its way)
+            let spared = fo.is_some_and(|x| w.dummy_spares(o.owner, x.owner));
+            (!allied && !spared).then_some(Target::Object(f))
         }
         // spec: S-0207 table T4 (no object listed: the cell's wall, whatever its owner)
         // spec: S-0009 claim 12 (the value 255 means no overlay: walls::is_wall tests it first)

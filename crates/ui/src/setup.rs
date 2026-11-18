@@ -172,6 +172,10 @@ pub struct Setup {
     pub fixes: bool,
 }
 
+/// The label of the setup screen's *Dummy mode* box (#439).
+// nocite: our own setup screen's label (#439)
+pub const DUMMY_NAME: &str = "Dummy mode";
+
 /// Whether a new setup starts with *Pathing and other fixes* on: the main
 /// session's decision of 2026-10-25 (docs/m8-plan.md). The measurement
 /// tools build their setups with it off.
@@ -232,6 +236,8 @@ pub struct Lobby {
     /// Our own rules patch layers the game's rules are resolved with (M8
     /// step C7).
     pub layers: Layers,
+    /// Our own skirmish dummy mode (#439, [`GameSetup::dummy`]).
+    pub dummy: bool,
 }
 
 /// The name of the house of the person (the client renames it as it
@@ -495,6 +501,8 @@ impl Setup {
             layers: Layers {
                 play_fixes: self.fixes,
             },
+            // design: #439 (the skirmish screen's shell sets dummy mode; a room's setup never has it)
+            dummy: false,
         })
     }
 
@@ -814,11 +822,13 @@ impl Setup {
         );
         y += 24;
         // The original's yes/no settings, then our own fixes layer in the
-        // grid's last place.
+        // grid's last place, and on the skirmish screen our own dummy mode
+        // (#439) on a row of its own.
         let boxes = FLAGS
             .iter()
             .map(|(f, name)| (self.flags[*f as usize], *name, SetupHit::Toggle(*f)))
-            .chain([(self.fixes, PLAY_FIXES_NAME, SetupHit::Fixes)]);
+            .chain([(self.fixes, PLAY_FIXES_NAME, SetupHit::Fixes)])
+            .chain(list.map(|l| (l.dummy, DUMMY_NAME, SetupHit::Dummy)));
         for (k, (on, name, hit)) in boxes.enumerate() {
             let r = Rect::new(x0 + (k as i32 % 3) * 200, y + (k as i32 / 3) * 20, 190, 16);
             let box_r = Rect::new(r.x, r.y + 2, 12, 12);
@@ -918,6 +928,9 @@ pub struct Listed<'a> {
     pub any: bool,
     /// The chosen map's preview.
     pub shown: Shown<'a>,
+    /// Whether our own *Dummy mode* (#439) is on: the shell's
+    /// ([`crate::shell::Shell::dummy`]), shown in the settings' grid.
+    pub dummy: bool,
 }
 
 /// A column of a player row: offset, width, value and target maker.
@@ -946,6 +959,8 @@ pub enum SetupHit {
     Toggle(Flag),
     /// Our own *Pathing and other fixes* (M8 step C7).
     Fixes,
+    /// Our own *Dummy mode* (#439; skirmish only).
+    Dummy,
     /// The speed control.
     Speed(i32),
     /// Back to the main menu.
@@ -993,6 +1008,8 @@ pub fn game_setup(
     // spec: S-0412 claims 6 and 7 (random country and colour, from the lobby's own stream)
     setup::resolve_lobby(&mut g, rules, &lobby.choices, offered, lobby_seed)?;
     setup::check(&g, rules)?;
+    // design: #439 (the lobby's dummy mode is the setup's; a network game's lobby never has it)
+    g.dummy = lobby.dummy;
     Ok(g)
 }
 
@@ -1499,5 +1516,54 @@ mod tests {
         let (d, t) = s.view_framed((800, 600), &r, &maps(), None, Some(&f));
         assert!(d.texts().contains(&"the map hash differs from the room's"));
         assert!(t.rect_of(&SetupHit::Start_).is_none());
+        // design: #439 (a room never offers dummy mode, the host included)
+        assert!(t.rect_of(&SetupHit::Dummy).is_none());
+    }
+
+    /// The skirmish screen's *Dummy mode* box (#439): off at first, shown
+    /// in the settings' grid, and its game's setup has dummy mode as the
+    /// box has it; the lobby of a setup alone (a room's) never has it.
+    // design: #439 (the dummy-mode box of the skirmish screen)
+    #[test]
+    fn the_dummy_box_sets_the_game_setup() {
+        let sim = glasnost_ai::fixture::rules();
+        let r = rules();
+        let m = maps();
+        let mut shell = crate::shell::Shell::new();
+        assert!(!shell.dummy, "off at first");
+        shell.setup = Some(Setup::new(&r));
+        shell.screen = crate::shell::Screen::Setup;
+        let listed = |on: bool| Listed {
+            any: true,
+            shown: Shown::NONE,
+            dummy: on,
+        };
+        let s = shell.setup.clone().unwrap();
+        let (d, t) = s.view_listed((800, 600), &r, &m, None, &listed(false));
+        assert!(d.texts().contains(&DUMMY_NAME), "{:?}", d.texts());
+        let rect = t.rect_of(&SetupHit::Dummy).expect("the box");
+        assert_eq!(t.hit(rect.centre()), Some(SetupHit::Dummy));
+        // The plain view (a room's frame without one) has no box.
+        assert!(
+            s.view((800, 600), &r, &m, None)
+                .1
+                .rect_of(&SetupHit::Dummy)
+                .is_none()
+        );
+        assert_eq!(shell.setup(SetupHit::Dummy, &r, &m), None);
+        assert!(shell.dummy);
+        let Some(crate::shell::Event::StartGame(l)) = shell.setup(SetupHit::Start_, &r, &m) else {
+            panic!("the game starts");
+        };
+        assert!(l.dummy);
+        assert!(game_setup(&l, &sim, &r.countries, 7, 99).unwrap().dummy);
+        // Off again: the setup's dummy mode is off, and a setup's own lobby never has it.
+        shell.dummy = false;
+        shell.screen = crate::shell::Screen::Setup;
+        let Some(crate::shell::Event::StartGame(l)) = shell.setup(SetupHit::Start_, &r, &m) else {
+            panic!("the game starts");
+        };
+        assert!(!game_setup(&l, &sim, &r.countries, 7, 99).unwrap().dummy);
+        assert!(!s.lobby(&r, &m).unwrap().dummy);
     }
 }
