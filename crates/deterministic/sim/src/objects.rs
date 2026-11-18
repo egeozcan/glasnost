@@ -175,7 +175,7 @@ pub(crate) fn creation_set_limits(
             return 1;
         }
         path.push(t);
-        let mut n = 1usize;
+        let mut n: usize = 1;
         for (k, count) in children(t) {
             if n >= over {
                 break;
