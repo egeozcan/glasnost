@@ -2,13 +2,13 @@
 id: S-0519
 title: Terror and attack animals
 topic: combat
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-16
+approved-on: 2026-11-18
 measurements: []
-requests: [Q-0986, Q-1524, Q-1621, Q-3159]
+requests: [Q-0986, Q-1524, Q-1621, Q-3159, Q-3256]
 supersedes: []
 ---
 
@@ -20,8 +20,8 @@ The special attacks of infantry and vehicles that do not work like an ordinary s
 attack animals, planted bombs (planting, legality, countdown, detonation, disarming, the detonate
 order and credit to the planter), suicide weapons, demolition charges planted on buildings, and
 the air-strike designation: a shot that calls a group of aircraft onto a building (claims 16 to 21),
-and how a planted bomb's icon, a charged building's flash and a marked building are drawn
-(claims 24 to 26).
+and how a planted bomb's icon, a charged building's flash, a marked building and a designator's
+strike line are drawn (claims 24 to 27).
 S-0214 row I18 owns the air-strike cursor and its attack order, S-0308 row 6 the choice of the
 designating weapon, and S-0501 the aircraft's flight and attack runs. Drone and grappling parasites belong to S-0614. Garrisons are S-0508, building capture is S-0509
 and deployable units are S-0517.
@@ -80,6 +80,8 @@ ignores defences*, *quirk switch*. Also used:
   marks the building (claim 26). It only bounds the mark's phase sequence.
 - **Charge countdown.** The building countdown that S-0302 claim 16 calls the delayed-kill
   countdown when a charge starts it. A building has at most one, whichever started it.
+- **Strike line.** The flickering red line drawn from a designator to its strike target while
+  that target is a building (claim 27). It is presentation only, and it is not a beam of S-0518.
 
 ## Behaviour
 
@@ -558,7 +560,8 @@ ignores defences*, *quirk switch*. Also used:
     nearby-cell search, a cancel and a redirect take no draw of their own. A start or redirect
     that marks a building leads to one later draw in that building's turn, about 10 ticks
     later, from the mark's phase sequence (claim 26). The draws of the designation shot's
-    own detonation are S-0303's.
+    own detonation are S-0303's. The strike line's colour draws are on the unsynchronised
+    stream (claim 27).
     - Backing: `measurable` (scenarios T17, T21 and T27 with the random-state recorder)
     - Confidence: high
 
@@ -586,9 +589,9 @@ ignores defences*, *quirk switch*. Also used:
       The safe completion rule is `design` and tested on our engine by T23
     - Confidence: high for the self-hit and the unsafe infantry death case
 
-### Presentation of bombs, charges and marks
+### Presentation of bombs, charges, marks and strike lines
 
-Claims 24 to 26 describe drawing. They are presentation, not simulation, except the mark's phase
+Claims 24 to 27 describe drawing. They are presentation, not simulation, except the mark's phase
 sequence and its draw in claim 26, which are game state.
 
 24. **Bomb icon drawing (presentation; Q-1524 question 1).** When claim 10 lets a bomb icon show,
@@ -775,6 +778,88 @@ sequence and its draw in claim 26, which are game state.
       a departure by decision: backing `unmeasured` on the original, checked on our engine by
       T27 part e's engine fixture; confidence high
 
+27. **Strike line (presentation; Q-3256).** Each designator whose strike holds a building as its
+    strike target has a strike line, drawn in every drawn frame except in route mode (below).
+    Whether the designating weapon has the laser flag plays no part: the strike line takes nothing
+    from the weapon or the warhead, neither the laser flag, laser colours, laser duration nor
+    house-colour flag. A weapon with the laser flag draws its own beam for each shot as well (S-0518
+    claim 18).
+    - **When it is drawn.** The strike line belongs to the strike, not to a shot. It is drawn
+      exactly while the strike target is a building, so:
+      - from the tick of a start that placed at least one aircraft (claim 17), or of a redirect
+        (claim 19), at a building,
+      - through the strike's end (claim 20 keeps the strike target) and its recharge. So it is
+        drawn while a designation shot at that building is not ready (claim 18), and whether
+        or not the designator still fires,
+      - until a cancel forgets the strike target (claim 19) or the strike ends with the
+        designator (claim 20).
+
+      It is not drawn before the first start, nor for a strike target that is not a building.
+      Under `quirks.airstrike_empty_strike_stuck` a redirect with no aircraft marks a building
+      (Edge cases), and that strike has a strike line too. Two designators holding one building
+      draw two lines. The line is drawn for every owner and every viewer: no test of house,
+      visibility or the designator's place is made. It is not drawn while the local player is in
+      route mode (S-0213 claim 16).
+    - **Start.** The fire point that a shot from the designator's primary weapon slot would have
+      in that drawn frame (S-0313), burst-counter parity included. It is the primary slot's even
+      when the designating weapon is the secondary (S-0308 row 6).
+    - **End.** The strike target's reference point (S-0204 claim 4) moved by a jitter of at most
+      15 leptons along world X and in height, never along world Y (Formulas F8). In the original the
+      jitter takes a new value every 128 ms of real time, whatever the game speed. **Our engine
+      (host or real time; a departure, no switch)** takes a new value every 4 ticks (F8).
+    - **Colour.** One inclusive ranged draw on the unsynchronised stream (S-0202 claim 11) in
+      each drawn frame, per line, gives the colour of F8: dark to full red, or red shading to
+      orange. The draw does not depend on where the line lies, so a line wholly outside the
+      battlefield view still takes it. No scenario-stream draw is made and no game state changes.
+    - **Shape.** The line from the start's screen point to the end's (S-0101 projection, height
+      lift included) is cut into 4 equal parts. Each part has a centre line and two side lines one
+      pixel away, blended over the picture with an intensity that falls from the designator to the
+      target (F8). The side lines lie one pixel above and below the centre line when the whole
+      line is wider than it is tall on screen, and one pixel to its left and right otherwise.
+    - **Shading by light-alpha.** Each pixel is multiplied by the pixel's light-alpha value
+      (S-0104 claim 15) over 128 (F8). The line is therefore hidden over cells under full shroud
+      and darkened at shroud edges. The original does not cap the result, so a light-alpha value
+      above 128 can carry a channel into its neighbour. **Our engine** caps each channel at its
+      largest value (display fix, no switch).
+    - **Depth.** The line reads depth and never writes it. A pixel is drawn only where the line's
+      depth is strictly less than the stored depth. Its depth references at the two ends are
+      S-0102 F1's screen-row depths plus the biases of F8. Exact interior sampling is open (Open
+      questions).
+    - **End marker.** When the end's screen point is higher on screen than the start's, a small
+      plus sign in opaque pure red (255, 0, 0) is drawn at the end before the line (F8). It has
+      no depth test and no light-alpha shading, so it shows even over full shroud and can show
+      where a strike falls in shroud. Quirk `quirks.airstrike_line_marker_over_shroud` (default
+      on, the original). Off: the marker is not drawn at pixels whose light-alpha value is 0.
+    - **Order and clipping.** Strike lines are drawn after all the effects of S-0102 claim 2,
+      map beacons included. The line and the marker are clipped to the battlefield view. The order
+      between two strike lines is not asserted (Open questions).
+    - Backing: `measurable` (scenario T28) for the line at a start, its keeping through the end
+      and the recharge, its loss at a cancel by a move order, its absence before the start and
+      for a target that is not a building, its independence of the weapon, route mode, the
+      start, the end anchor, the jitter, the colour, the shape, the shading and the end marker,
+      and for the draw count with the recorder logging the unsynchronised stream. `measurable`
+      by T19 (g) for the line after a redirect and for two designators, by T17 for the redirect
+      with no aircraft, and by T20 (b) for the loss at the designator's death. Burst-counter
+      parity of the start is `unmeasured`: T28 gives the muzzle positions no lateral part, so
+      that parity cannot move the start. The marker over full shroud is `unmeasured`: no
+      ordinary-input run puts the end under full shroud for the local player at a chosen time,
+      so T28 checks only that the marker is unshaded. Every owner and viewer is `unmeasured`:
+      T28 uses the local player's designator only, since a computer player's designations
+      cannot be timed. The depth biases are `unmeasured`: no fixture places a depth writer
+      across the line at a known depth. The order after map beacons is `unmeasured`: no fixture
+      makes the line overlap each later group predictably. Our engine's jitter clock, its
+      channel cap and the marker switch's off setting are design, tested on our engine by T28's
+      engine fixture.
+    - Confidence: high for the line at a start, its keeping through the end and the recharge,
+      its loss at a cancel by a move order, its absence before the start and for a target that
+      is not a building, its independence of the weapon, the start for a fire point of claim 1
+      with no lateral part, and the end anchor. Medium for the line after a redirect, under the
+      empty-strike quirk, for two designators and at the designator's death, for burst-counter
+      parity of the start and for a start that S-0313 claims 5 to 8 replace, for route mode,
+      every owner and viewer, the jitter, the colour, the shape, the shading, the depth biases,
+      the end marker and its size, and the order after map beacons. High for our engine's
+      jitter clock, channel cap and switch setting, which are design
+
 ## Formulas
 
 **F1. Timed-bomb detonation tick** (claim 4). *t*: the plant tick; *D*: the timed delay
@@ -857,6 +942,50 @@ way. The two phases without a factor are not clamped. The same *b*₃ is the sto
 building's animations of S-0104 claim 13 row 3, refreshed as claims 25 and 26 say.
 The normal-light override still forces their drawn brightness to 1000 ‰.
 
+**F8. Strike line** (claim 27). (*X*, *Y*, *Z*): the strike target's reference point, leptons.
+*t*: an integer step count. In the original *t* = ⌊τ / 128⌋, where τ is a host clock in
+milliseconds with an arbitrary origin. In our engine *t* = ⌊*n* / 4⌋, where *n* is the tick number.
+
+> End point *E* = (trunc(*X* + 15 cos(0.37 *t*)), *Y*, trunc(*Z* + 15 sin *t*)) leptons.
+
+The angles are in radians. The sums are formed in floating point and truncated toward zero. The
+original reads sine and cosine from a table of 8192 values per turn. Our engine uses sine and
+cosine evaluated in binary64 (design).
+
+Colour, one inclusive ranged draw *r* = R(190, 270) on the unsynchronised stream, 8-bit channels:
+
+> *C* = (*r*, 0, 0) when *r* ≤ 255.
+> *C* = (255, trunc(110 *k* / 14), trunc(30 *k* / 14)) with *k* = *r* − 256 when *r* ≥ 256.
+
+Shape. *s*₀ and *s*₄ are the screen points of the start and of *E*, and Δ = *s*₄ − *s*₀ in
+pixels. For *k* = 0 to 4, *s*ₖ = *s*₀ + (trunc(*k* Δ*x* / 4), trunc(*k* Δ*y* / 4)). Part *k*,
+for *k* = 1 to 4, runs from *s*ₖ₋₁ to *s*ₖ.
+
+| Part *k* | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| Centre-line intensity α | 255 | 192 | 128 | 64 |
+| Side-line intensity α | 100 | 75 | 50 | 25 |
+
+The side lines are the centre line moved by (0, −1) and (0, 1) when |Δ*x*| > |Δ*y*|, otherwise by
+(−1, 0) and (1, 0).
+
+Depth. With *L* the height lift (S-0101 claim 3) and *z*₀, *z*₁ the heights of the start and of
+*E*, the biases are *b*₀ = −*L*(*z*₀) − 32 and *b*₁ = −*L*(*z*₁) − 32. Point *s*ₖ has the bias
+*b*₀ + trunc(*k* (*b*₁ − *b*₀) / 4).
+
+Pixel. For a line pixel that passes the depth test and whose light-alpha value *v* is not 0, with
+*d* a destination channel widened to 8 bits by appending zero bits, and *c* the matching channel
+of *C*:
+
+> *p* = ⌊(⌊*d* (256 − α) / 256⌋ + ⌊*c* α / 256⌋) × *v* / 128⌋.
+
+*p* is narrowed back to the surface's channel width by dropping its low bits. Pixels with *v* = 0
+are left as they are. Integer arithmetic. Our engine caps *p* at 255 (claim 27).
+
+End marker, when *s*₄ lies above *s*₀ on screen. With (*x*, *y*) = *s*₄: rows *y* and *y* + 1
+from column *x* − 2 to *x* + 1, and columns *x* − 1 and *x* from row *y* − 1 to *y* + 2, in
+(255, 0, 0), opaque. Each of the four lines includes its end pixels.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -885,6 +1014,15 @@ The normal-light override still forces their drawn brightness to 1000 ‰.
 | Mark factor scale | 256 | factor units per 1× brightness | Claim 26, F7 |
 | Brightness cap | 2000 | ‰ | F7 |
 | Recharge delay, absent-key default | 0 | ticks | Engine default |
+| Strike-line jitter step, original | 128 | ms of real time | F8 |
+| Strike-line jitter step, our engine | 4 | ticks | F8, design |
+| Strike-line jitter amplitude | 15 | leptons | F8, world X and height |
+| Strike-line jitter X rate | 0.37 | radians per step | F8 |
+| Strike-line colour draw | 190 to 270 | inclusive draw bounds | F8, unsynchronised stream |
+| Strike-line orange end | (255, 110, 30) | 8-bit channels | F8, at *k* = 14 |
+| Strike-line parts | 4 | parts | F8 |
+| Strike-line intensities | 255, 192, 128, 64 and 100, 75, 50, 25 | of 256 | F8, centre and side lines |
+| Strike-line depth bias | −32 | depth units | F8, at each end |
 
 ## State and ordering
 
@@ -999,6 +1137,10 @@ additions to the earlier isolated-protection contracts, not changes to protectio
   recently placed first. Any further ones keep their orders. No stock strike comes near this.
 - **Several strikes on one building.** Each strike marks its own strike target. When one is
   cancelled, the mark passes to another strike holding the same building, as claim 19 says.
+- **Strike-line end marker over shroud.** The end marker of claim 27 is unshaded, so it shows
+  where a strike falls even when the end lies under full shroud for the viewer, as it can for a
+  computer player's strike. Quirk `quirks.airstrike_line_marker_over_shroud` (default on, the
+  original). Off: the marker is not drawn at pixels whose light-alpha value is 0.
 - **Icon frames with a short delay.** A timed delay below 6 ticks or a flicker rate of 0 makes the
   original divide by zero while drawing. F3 gives our fixed form.
 
@@ -1039,6 +1181,8 @@ additions to the earlier isolated-protection contracts, not changes to protectio
 | Rules, audio-visual section, `AirstrikeAttackVoice` | air-strike attack sound (claim 17) | sound name | none |
 | Rules, audio-visual section, `AirstrikeAbortSound` | air-strike abort sound (claim 20) | sound name | none |
 | Rules, audio-visual section, `LaserTargetColor` | laser-target colour of a marked building (claims 17 and 26, presentation): a position in the colour-adjustment table (S-0006), read at drawing time; below 0 or above 15 our engine gives no laser-target mask and the importer warns (claim 26, Q-1621) | integer, dimensionless selector | 0 |
+| Rules, weapon section, `IsLaser`, `LaserInnerColor`, `LaserOuterColor`, `LaserOuterSpread`, `IsHouseColor`, `LaserDuration` | no effect on the strike line (claim 27); the weapon's own beam (S-0518, which owns the rows) | as S-0518 | as S-0518 |
+| No data key | the strike line's colour, jitter, parts, intensities and depth biases (claim 27, F8) | fixed behaviour | not applicable |
 | Imported bomb-icon image asset | bomb icon image (claim 24), image frames by F3 | sprite asset, resolved by S-0005 | missing: no icon is drawn; the importer warns (design) |
 | Imported cursor-palette asset | fixed palette of the bomb icon (claim 24), the same asset role as S-0111 claim 19's repair wrench | palette asset, resolved by S-0005 | owned by S-0111 |
 
@@ -1055,6 +1199,10 @@ orders. Follow the glossary's measurement setup, including its read-only recorde
 means override sections in the temporary map `S-0519-tests.map`, removed after the run,
 only the named fields differ from stock. Any result inconsistent with a variant's expected
 result falsifies that part of its claim.
+A strike that holds a building draws the strike line of claim 27. Except where a scenario checks
+the line itself, scenarios leave the line's and its end marker's pixels out of their pixel
+comparisons, and count the line's unsynchronised draws as claim 27's, not as draws of the event
+they observe.
 
 - **T1, attack animal (claim 1).** An attack animal attacks an enemy infantry unit and then an
   enemy vehicle. Expected: the animal leaves the map at the shot, and the infantry dies at the
@@ -1226,8 +1374,9 @@ result falsifies that part of its claim.
   neither credits nor queues change and the aircraft still appear. Repeat with the aircraft type's
   build limit already reached: the call-in still succeeds. Observe the building's mark and tint.
   With named test data giving a positive normal size but zero elite size, an elite designator
-  creates no aircraft, and subsequent designations at another building mark it but never create
-  aircraft (default empty-strike quirk). On our engine with that quirk off, subsequent starts
+  creates no aircraft, and subsequent designations at another building mark it, and draw a
+  strike line to it (claim 27), but never create aircraft (default empty-strike quirk). On our
+  engine with that quirk off, subsequent starts
   remain possible; this alternative is a design test, not an oracle expectation.
   Falsified by aircraft placed at different cells, outside the usable area, aimed at the object,
   any credit charge or production gate, or a later aircraft call from the empty original strike.
@@ -1252,8 +1401,10 @@ result falsifies that part of its claim.
   ammunition for unequal positive remaining counts; time the new designation while those counts
   differ: no redirect, counts preserved, retreat queued again. (f) Reissue the same object target
   while approaching: no cancellation. (g) Use two designators on one building; cancelling one
-  preserves the mark until the other also cancels. Redirect to a second building: it shows the
-  laser-target colour and a restarted pulse (claim 26), as at a start.
+  preserves the mark until the other also cancels. Each of the two designators draws its own
+  strike line (claim 27) until its own cancel. Redirect to a second building: it shows the
+  laser-target colour and a restarted pulse (claim 26), as at a start, and a strike line to it
+  from the redirect's tick (claim 27).
   (h) Named test data makes a 103-aircraft strike; cancel before firing: only the 101 newest
   linked aircraft lose their targets/destinations and queue retreat, the two oldest keep their
   orders. Repeat with an empty aircraft before cancellation: all 103 lose their ammunition.
@@ -1270,7 +1421,8 @@ result falsifies that part of its claim.
 - **T20, end, loss and credit (claim 20).** (a) Record the tick when the last strike aircraft
   leaves the map as *e*. (b) Kill the designator while aircraft approach: the abort sound plays for
   the local owner only, the aircraft retreat and later designations by other designators do not
-  affect them. (c) Let the strike destroy an enemy unit: the kill counts for the aircraft's house
+  affect them. The strike line (claim 27) is gone from the frame of the death's tick. (c) Let the
+  strike destroy an enemy unit: the kill counts for the aircraft's house
   and no experience goes to the designator. (d) Mind-control the designator after the start: the
   aircraft keep their house; their later kills still count for that house, not the designator's
   new house. (e) Repeat death after a move order has cancelled the strike: no abort sound.
@@ -1455,6 +1607,55 @@ result falsifies that part of its claim.
   force-shielded, and one importer
   warning per run naming the key and its value; any laser-target colour or a missing warning
   falsifies the engine rule. The oracle cannot falsify the engine rule.
+- **T28, strike line (claim 27; Q-3256).** Common setup, T25's lossless captures with a real-time
+  stamp on each frame, a stationary view, and the random-state recorder logging both streams. The
+  local player's stock designator designates an enemy test building with a foundation that is not
+  square, on bare flat land with nothing else between them. A named temporary loose art override,
+  as in T27(c), gives the designator's primary and secondary slots muzzle positions with no
+  lateral part that differ clearly on screen, and is removed after the run. Named test data
+  turns the designating weapon's laser flag off in runs A and on in runs B, and gives the strike
+  aircraft negligible damage so that the building survives. The recorder logs per tick the strike
+  target, the designator's target, whether the strike is in progress, and the designation shots.
+  (a) In A, keep the designator attacking through the strike, its end and the recharge, then
+  give a move order. Hold the route-mode key for 100 frames during the strike. Expected: no line
+  in the frames before the start's tick, a line in every frame from that tick until the move
+  order applies, through the end and the recharge, except while the key is held, and no line
+  after the move order.
+  (b) Repeat (a), (c) and (e) in B. Expected: they hold as in A, with (e) on the pixels that no
+  beam covers, and each shot also draws a beam with the weapon's laser colours and duration
+  (S-0518 claims 18 and 19). Falsified by a failure of (a), (c) or (e) in B, or by a strike line
+  that takes the laser colours or duration.
+  (c) In every line frame of (a), the line's start pixel is the projection of the primary slot's
+  fire point, not of the secondary slot's. Its end pixel lies within the projections of the
+  box of points (*X* ± 15, *Y*, *Z* ± 15), with (*X*, *Y*, *Z*) the building's reference point:
+  not at the building's position or its picture's centre.
+  (d) Named test data instead gives the warhead of the designator's primary weapon the air-strike
+  flag (S-0308 row 6), and the designator designates an enemy test vehicle. Expected: aircraft
+  come (claim 17), and no line is drawn.
+  (e) In the frames of (a), with every cell under the line revealed, take the picture from the
+  frame before the start as the destination, on the pixels whose picture does not otherwise
+  change. Expected: in every frame some *r* from 190 to 270 makes F8's pixel rule, with
+  light-alpha 127, give every centre-line and side-line pixel of all four parts. *r* is not the
+  same in all frames, and both the red and the orange colours occur. Falsified by a frame that
+  no *r* fits, or by a steady colour.
+  (f) Named test data gives the designating weapon a long range. A stationary own unit reveals
+  the building, and the designator fires from the edge of its own revealed area, so that the
+  middle of the line crosses cells under full shroud. Expected, in the frames before the strike
+  aircraft reveal those cells: no line pixel over them.
+  (g) Two runs, with the building above the designator on screen and then below it. Expected:
+  the end marker of F8 in the first run only, its pixels that the line does not cover in pure
+  red in the surface's format, whatever the terrain under them.
+  (h) Over 10 seconds of a steady line, at the common game speed and then at another speed index.
+  Expected: the end pixel moves, never outside the box of (c), and its changes come about every
+  128 ms of real time at both speeds, not after a fixed number of ticks.
+  Recorder: once the other unsynchronised draws are given to their owners (S-0202 claim 11),
+  each drawn frame with a line has one more such draw than one without, and the scenario
+  stream's draws are those of the other claims. Falsified by any result contrary to an
+  expectation above, or by a scenario-stream draw that the line causes.
+  Engine fixture: our engine's end point steps every 4 ticks and stays put during a freeze. With
+  `quirks.airstrike_line_marker_over_shroud` off and a test state whose end lies under full
+  shroud, no marker pixel is drawn there. A channel result above 255 is capped. The oracle cannot
+  falsify these design rules.
 
 ## Open questions
 
@@ -1484,7 +1685,11 @@ result falsifies that part of its claim.
   that object dies, other than through the designator's own loss of target (claim 19), is not
   traced.
 - Whether a designator that goes off the map without being removed from play (into a transport
-  or a garrison) ends its strike, as claim 20 says of removal from play. Not traced.
+  or a garrison) ends its strike, as claim 20 says of removal from play. Not traced. While such a
+  strike still holds a building, claim 27 makes no test of the designator's place, so its strike
+  line would still be drawn. From which point it then starts is not traced.
+- (Q-3256, claim 27.) How the depth reference runs between the end points of each part of a
+  strike line, and which of two strike lines is drawn over the other. Not traced.
 - Whether the original's persistent body picture of a marked building shows every value of the
   pulse (claim 26), or only the value at its area's last repaint. No repaint tied to the pulse was
   found, only to the flash's on/off changes. Claim 26 chooses the current value in every frame for
@@ -1517,3 +1722,14 @@ result falsifies that part of its claim.
   gives the answer (claim 4 (a)): the first descent comes later in that same turn. S-0504
   claim 4 could name that case and cite scenario T4 variant b, keeping its own rating of the
   first-descent tick.
+- **S-0518 claim 18, "Which shots draw a beam".** It could add that a designation shot's strike
+  line (claim 27, Q-3256) is not a beam: it is drawn whether or not the designating weapon has
+  the laser flag, takes none of the weapon's beam parameters, and lasts as long as the strike
+  holds a building, not for the weapon's laser duration.
+- **S-0202 claim 11.** Its list of uses during play should add the colour of a strike line, one
+  draw per line in each drawn frame (claim 27).
+- **S-0102 claim 2.** It should add that strike lines are drawn after map beacons (claim 27,
+  medium).
+- **S-0513 scenario SW10 part i5.** Its building is marked by an air strike, so a strike line
+  (claim 27) ends at that building, with its end marker when the end lies above the designator on
+  screen. Part i5's colour comparisons should leave the line's and the marker's pixels out.

@@ -1,9 +1,9 @@
 ---
 id: Q-3253
 title: Where the nuclear warning marker stands while it is attached to its missile
-status: open
+status: answered
 related: [S-0513, S-0109]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

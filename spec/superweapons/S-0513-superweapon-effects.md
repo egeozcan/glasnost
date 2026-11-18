@@ -2,15 +2,15 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 126
+revision: 129
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-16
+approved-on: 2026-11-18
 measurements: []
 requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850,
 Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740, Q-2156, Q-2211, Q-2213, Q-2276, Q-2316,
-Q-2317, Q-2376, Q-2416, Q-2418, Q-2419, Q-2468, Q-2566, Q-3141, Q-3160]
+Q-2317, Q-2376, Q-2416, Q-2418, Q-2419, Q-2468, Q-2566, Q-3141, Q-3160, Q-3253]
 supersedes: []
 ---
 
@@ -311,16 +311,34 @@ presentation and swept-layer rules below also apply where those specs cite them.
     missile directly: a payload-weapon projectile with no owner, the payload weapon's damage,
     warhead and speed, aimed at the target cell, starting 20 000 leptons above the cell centre's
     terrain surface (plus the 416-lepton lift on a high-bridge cell, F2), moving straight down with
-    start speed 100 leptons per tick. The warning marker (claim 11) is attached to it, and the
+    start speed 100 leptons per tick. The warning marker (claim 11) is tied to it, and the
     launch announcement and siren play (claim 5).
     - Backing: `measurable` (scenario SW3)
     - Confidence: high
 
-11. **The warning marker.** A nuclear strike places the warning-marker animation at the target
-    cell's centre, attached to a missile: in a silo launch to the *upward* missile (from the
-    silo's first update), in a one-time launch to the falling missile. The marker ends when that
-    missile leaves play, so in a silo launch it disappears at the upward missile's burst and the
-    falling missile has none. The marker is shown to a viewing player only while all of these hold:
+11. **The warning marker.** A nuclear strike creates the warning-marker animation at the target
+    cell's centre, at the terrain surface height there with no bridge lift, and ties it to a
+    missile: in a silo launch to the *upward* missile, in the silo's update in which that missile
+    leaves (claim 8); in a one-time launch to the falling missile. The tie is a link of lifetime
+    only. The marker is not attached to the missile in the sense of S-0109 claim 22. It keeps the
+    position it was created at for its whole life: it does not follow the missile. It is in its
+    type's own render layer,
+    the layer of an unattached animation (S-0102), not the ground layer of an attached one.
+
+    The marker ends when that missile leaves play, so in a silo launch it disappears at the upward
+    missile's burst and the falling missile has none. It leaves play at once, inside the removal
+    of the missile, so it takes no turn after that removal.
+    Its leaving is a removal under S-0203 claim 10. The marker enters play just before its
+    missile, in the action or the silo update that creates that missile, so it stands before the
+    missile in the update order. When the missile leaves play in its own turn, as at its burst or
+    its detonation, both removals count. Together they make the two objects that directly follow
+    the missile at the end of that turn miss their turns in that tick, one more than a missile
+    without a marker costs; other removals in that turn add to them as S-0203 claim 10 gives.
+    A missed turn can change the draws from the scenario random stream (S-0203 claim 10). Our
+    engine copies this; `quirks.update_order_removal_skip` (S-0203) governs both removals, and
+    with it off neither costs a turn.
+
+    The marker is shown to a viewing player only while all of these hold:
     the viewer's house is not allied with the launching house (a house is allied with itself); the
     viewer's house owns a psychic sensor from the set defined by S-0610 claim 9 that is in
     operation (S-0405); and that sensor's reference point is within its psychic-detection radius
@@ -331,8 +349,15 @@ presentation and swept-layer rules below also apply where those specs cite them.
     whole cells, an integer comparison. No building-size subtraction applies. Sensor membership
     follows placement and capture under S-0610 claim 9. The reach and operating tests are
     re-evaluated in every update of the marker. This is presentation.
-    - Backing: `measurable` (scenario SW4)
-    - Confidence: medium (the operating test of the detection building)
+    - Backing: `measurable` (scenario SW4 part (a) for the visibility and the end with the
+      missile, part (b) for the position and for the marker being gone at the end of the tick in
+      which its missile leaves play, part (c) for its place before the missile in the update order
+      and the two missed turns). The render layer uses S-0102's backing for an unattached
+      animation.
+    - Confidence: high for the position, its height, the render layer, the end when the missile
+      leaves play, the removal at once with no later turn, the marker's place before its missile
+      in the update order and the two missed turns; medium for the operating test of the
+      detection building
 
 12. **Detonation, radiation and credit.** The falling missile's detonation is S-0306 claim 25 when
     its warhead has the nuclear warhead name, otherwise an ordinary detonation (S-0306). Its damage
@@ -2699,7 +2724,7 @@ is not under test.
   kill credit. Expected: F2's initial height and downward velocity followed by S-0306 claim 11's
   flight and claim 25's wait, with no kill credit. The bridge run adds only F2's bridge lift.
   use imported projectile acceleration and weapon speed to predict each flight tick.
-- **SW4 — warning marker (claim 11).** Four houses: launcher, an ally of the launcher with a
+- **SW4 — warning marker (claim 11).** (a) Four houses: launcher, an ally of the launcher with a
   psychic sensor near the target, an enemy with an operating psychic sensor near the target, and
   an enemy whose sensor is switched off. Fire a silo strike and a one-time strike, viewing each
   house in separate runs. Expected: only the operating enemy sensor's house sees the marker.
@@ -2711,6 +2736,35 @@ is not under test.
   missed at a reachable inclusive boundary, seen outside reach, or retained for the old owner
   solely through the captured sensor falsifies the corresponding condition. A boundary that
   distinguishes the table root from an exact root is not established here.
+  (b) Position. The recorder logs, at the end of every tick from the marker's creation until
+  its missile leaves play, the marker's position and the missile's position, in integer leptons
+  with heights. Runs: (i) a one-time strike on open ground; (ii) a silo strike whose silo stands
+  five cells from the target; (iii) a one-time strike at a high-bridge cell. Expected: in every
+  logged tick the marker stands at the target cell's centre at the terrain surface height, in
+  (iii) below the deck, and it is gone at the end of the tick in which its missile leaves play.
+  A marker position that changes between ticks, one that keeps a constant displacement from the
+  missile, or a height at the deck in (iii) falsifies claim 11. A marker still logged at the end
+  of the tick in which its missile leaves play falsifies its removal at once.
+  (c) Removal and turns. The read-only recorder of S-0203 scenario O17 logs, in every tick from
+  the launch to the tick after the missile leaves play, the update order and which objects take
+  their turn, the marker and the missile among them. In a tick after the missile enters play and
+  before it leaves, a trigger creates three test vehicles far from the target, so that they enter
+  play after the missile, and orders each to move to a cell at least 30 cells away across open
+  flat ground. The recorder also logs each test vehicle's position at the end of every tick. A
+  moving vehicle changes its position in every turn it takes, so a test vehicle has taken its
+  turn in a tick when its position changed in that tick, and has missed it when its position did
+  not change. The target lies far from every object, so that the detonation destroys
+  nothing. Runs: a one-time strike and a silo strike, three of each. A run is void unless at
+  least three objects directly follow the missile in the update order at the end of its last
+  turn, those three are the test vehicles, each of them changed its position in the tick before
+  and in the tick after that tick, and no object other than the marker and the missile leaves
+  play in that tick. Expected:
+  the marker stands before its missile in the update order in every logged tick; in the tick in
+  which the missile leaves play in its own turn, the two objects that directly follow it at the
+  end of that turn miss their turns, so their positions do not change in that tick, and the
+  third takes its turn and changes its position. One missed turn there, or none,
+  falsifies the marker's removal as a counting removal at once; a marker after its missile in the
+  update order falsifies its place.
 - **SW6 — storm request and start (claims 14, 15).** (a) Fire the weather superweapon in tick *T*; record
   the activation tick (lighting change, radar outage); expected *T* + *L* (an order is
   applied after the weather update, so the countdown's first decrease is in tick *T* + 1), and
@@ -3738,6 +3792,11 @@ for these two kinds.
   Q-0740 is claim 18. No oracle measurements are claimed.
 
 ## Changes for other specs
+
+- **S-0203 claim 10, the list of causes.** It can gain: "A projectile that leaves play with a
+  nuclear warning marker tied to it (S-0513 claim 11). The marker leaves play at once with it and
+  stands before it in the update order, so a projectile that leaves play in its own turn makes
+  two counting removals: `measurable` (S-0513 scenario SW4 part (c))." Confidence: high.
 
 - **S-0010, role table.** The row of further roles says the waterfall roles' uses are not covered
   there. S-0513 Terms (*wet tile*) uses the four waterfall roles, with the shore and
