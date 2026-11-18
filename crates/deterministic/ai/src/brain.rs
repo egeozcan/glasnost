@@ -478,6 +478,8 @@ impl Brain {
         out.retain(|o| crate::lifter::keeps_order(w, o));
         // S-0608 claims 3 b and 12: a draining drainer takes no order (a move off the foundation ends the link), one on its way to drain only drain orders, and no second drainer goes for a building (`drain`)
         crate::drain::filter_orders(w, &mut out);
+        // design: own AI (#434): a unit on its way away from an air attacker takes only that move (`air_attack`)
+        out.retain(|o| self.special.air.keeps_order(w, o));
         // S-0601 claim 16: no attack order (from any part of the brain) to an unlimited controller one more victim would overload harmfully
         out.retain(|o| match o {
             Order::Behaviour {

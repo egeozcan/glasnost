@@ -202,6 +202,14 @@ pub struct Uses {
     /// (`Special::escort`, M8 step A4 round 8).
     #[serde(default)]
     pub escorts: u32,
+    /// Units shot by an air unit they cannot hit sent to cover, home or
+    /// out of its reach (`air_attack`, #434).
+    #[serde(default)]
+    pub air_escapes: u32,
+    /// Units sent at an air unit shooting one of the house's units
+    /// (`air_attack`, #434).
+    #[serde(default)]
+    pub air_helpers: u32,
 }
 
 /// What an order the brain gives is for: the counter of [`Uses`] it adds
@@ -256,6 +264,8 @@ pub(crate) enum Use {
     AntiAirBuild,
     NonFighterCancel,
     Escort,
+    AirEscape,
+    AirHelp,
 }
 
 impl Uses {
@@ -310,6 +320,8 @@ impl Uses {
             Use::AntiAirBuild => &mut self.anti_air_builds,
             Use::NonFighterCancel => &mut self.non_fighter_cancels,
             Use::Escort => &mut self.escorts,
+            Use::AirEscape => &mut self.air_escapes,
+            Use::AirHelp => &mut self.air_helpers,
         };
         *c = c.saturating_add(1);
     }
@@ -327,6 +339,9 @@ pub struct Special {
     /// The crate orders given lately (`crates`).
     #[serde(default)]
     pub(crate) crate_orders: crate::crates::Sent,
+    /// The units sent away from an air attacker (`air_attack`, #434).
+    #[serde(default)]
+    pub(crate) air: crate::air_attack::Watch,
     /// The uses offered in this think, each with the order offered for it,
     /// counted once the brain knows which orders it gives
     /// ([`Special::note_given`]); empty between thinks.
@@ -440,6 +455,10 @@ impl Special {
                 .collect();
             own.retain(|id| !given.contains(id));
         };
+        // design: own AI (#434): units under air attack first, so a unit shot from the air is moved before another part gives it a job
+        mark("ai:special:air_attack");
+        self.air_attack(script, &own, w, out);
+        free(&mut own, out);
         mark("ai:special:garrison");
         self.garrison(house, &own, home, w, out);
         free(&mut own, out);
