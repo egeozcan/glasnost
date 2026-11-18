@@ -1442,3 +1442,60 @@ Seams left:
 - A refilled slot or regenerated slave starts a creation set of its own, so each refill has its own limit of 1000, not the root's.
 
 The P3 census rule: crate places and map crates are not object back-references, so the overlay writers forget nothing in the census. The creation-set limit makes fewer slot objects and slaves. Each one made still goes through `spawn::created_in` and `census::forget` as before. No fix makes or moves a back-reference of `World::census`.
+
+## Batch S32: trains and the path refresh, the infantry crash end, S20's rest of #291 and the recruit scan
+
+Base main 23ff203, not rebased. The batch takes the four seams S29 handed back, in the brief's order: #263, #252, #291 and #339. The design text came first (00dbc8d, d1b116b, 7c6d5e3, 272e070 and ec2a78d), in *Simulation (sim issues S32 …)*. Each test was committed before its fix, and no fix commit changes a test. Every red was shown in a separate base worktree checked out at the test commit (`red-<commit>.txt` in `local-lane/sim-issues/s32/`). Requests Q-3239 (757c0f4) and Q-3240 (0417705).
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #263 (tests) | The switch-off turn and T5's moving-blocker difference at a path refresh had no test of their own | test-only (224a9f7) | No code change: both pass on base | `claims_s0212_refresh.rs` (`issue_263_off_turns_to_the_new_first_step`, `issue_263_moving_blocker_at_the_curve_takes_the_new_first_step`), each in both positions of `quirks.path_refresh_keeps_old_step` |
+| #263 (train) | S-0212 claim 20's last sentence: a train's recomputation keeps the step in progress, searches from where it leads and stores the result after it, up to 24 steps. The code treated a train like any other unit | fixed (2937b22, rustfmt 79f9d41; test 2e4b319, 1 red) | `path::compute_from` starts a search at a given cell. `drive::step_check_with` uses it for a train type and stores the step followed by the new path, cut to `path::STORED`. The switch does not apply to a train | `claims_s0212_train_refresh.rs` (`issue_263_a_train_keeps_the_step_in_progress`; the car control at P9's walls and the 24-step bound pass on base) |
+| #252 | S-0312 claim 16, *Infantry crash end*: a crashed jumpjet infantry unit left play at the impact, setting off its death weapon a second time | fixed (fc1b9cd; test 0cc4528, 3 red) | `jump::fly::impact` makes the forced request for *air-death-end* for a dead infantry unit and sets off no death weapon. `tick::object_turn` stops the jumpjet update once it is *crashed*, and `combat::death::infantry_death_turn` removes it with no corpse when *air-death-end* completes (S-0107 State and ordering). A turned-down request leaves play at the crash end (`design: Q-3239 interim`) | `claims_s0312_crash_infantry.rs` (3 tests, both positions of `quirks.crash_death_weapon_twice`) |
+| #291 (a) | A bouncing conversion animation was made a fixed infantry maker: it neither flew nor landed (S-0611 claims 8, 9 and 15) | fixed (1b7f9df; test 4417ebc, 2 red) | `mutation::start` makes a bouncing type an ordinary animation (new `combat::effects::anim_made`) that holds its infantry-making state with claim 8's owner. `mutation::mark_now` marks its point at once for a crashed victim | `claims_s0611_bouncing_conversion.rs` (2 tests) |
+| #291 (b) | The mech locomotor maps to no layer rule | not reproduced | S-0102's layer table puts mech movement in the ground layer. The importer gives it `Locomotor::None`, and `app::mapview::layers` ends in that ground row | — |
+| #291 (c) | No path detaches an attached animation while it plays | request (Q-3240) | S-0109 claim 22 rates detachment `unmeasured`, and S-0614 knows no detaching event. Claim 15's rules after a detachment are not built | — |
+| #339 | Whether `linked::recruit`'s two update-order scans cost enough to fix | measured, not changed (probe 3b972b7, clippy d357108) | Release probe, synthetic data, fillers ahead of both prism buildings: at 1000 fillers a recruitment 49 µs, the two scans 1.3 µs, a tick 5.6 ms; at 3000, 185 µs, 2.3 µs and 17.6 ms (`perf-339.txt`). The scans are 0.01 to 0.02 percent of a tick. The rest of a recruitment is the older eligibility pass over every object | `perf_linked_recruit.rs` (ignored; prints figures only) |
+
+Of the new tests, the two #263 guards and two of the three train-refresh tests pass on base. The other six fail on the base code: 1 for #263, 3 for #252 and 2 for #291.
+
+Formats (ee90863): no saved field changes, but replays change, so save 177 and AI game 153; wire 12 is unchanged. No switch is added. The sim-gate goldens were regenerated once, with the ignored tests, and none moved.
+
+Lanes compare base 23ff203 with the batch. Logs are in `local-lane/sim-issues/s32/`.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). Every output file is byte-identical to base, with these rows failing:
+- M-0001: 10 of 96;
+- M-0002: 4 of 24;
+- M-0003: 3 of 35;
+- M-0019: 0 of 6;
+- M-0020: 0 of 25;
+- M-0021: 10 of 50.
+
+**Sweeps** (`m6c-*`, `m7a-*`, `m7b-*`). M6c, M7a and M7b over seeds 1 to 16 pass. They print the same lines as base apart from timings.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games; `quick-base-<seed>.txt`, `quick-after-<seed>.txt`). 23 games end on another tick, and 5 change winner. The 12 games of sides 1 and 2 are unchanged in every seed. Each flip was played alone (`GLASNOST_AI_SIDES`), hashed every 10 ticks on both binaries, then hashed and dumped every tick over the first differing window (`GLASNOST_AI_HASH`, `GLASNOST_AI_OBJS`; `trace-*`, `objs-*`). In all five, the first difference is a dead house 0 jumpjet infantry unit (type 4) that is *crashed* and has just started *air-death-end*, where base removed it at its crash end: #252.
+
+| Flip (seed/map/sides) | Base → batch | First differing tick | Object |
+|---|---|---|---|
+| 7/2/0,2 | h1@49540 → h0@47071 | 8699 | 923 (*air-death-end* from 8698) |
+| 7/8/0,1 | h0@69495 → h1@50850 | 11456 | 316 (from 11455) |
+| 8/8/0,1 | h0@39300 → h1@38735 | 8546 | 268 (from 8545) |
+| 9/8/0,2 | h1@74400 → h0@24057 | 12900 | 948 (from 12899) |
+| 10/2/0,2 | h0@38678 → h1@71431 | 20947 | 921 (from 20946) |
+
+In the same tick a few other objects differ in their turn bookkeeping or their next motion step, as the removal on base changed. None of the traces points to a fault.
+
+**Suites.** The AI suite with its ignored tests passes 364 before and after. The sim gate with its ignored tests passes 17 before and after. On the final commit these also pass:
+- `cargo test --workspace --no-fail-fast`: 9242 pass; the 1 failure is main's known `quirks::tests::every_spec_quirk_has_a_switch` (`cleanup_shifts_start_marks`);
+- `cargo clippy --workspace --all-targets -- -D warnings`;
+- `cargo fmt --check`;
+- the wasm32 build of glasnost-app;
+- `cargo xtask check`;
+- `cargo xtask gate`.
+
+Seams left:
+- Q-3239: what removes a crashed infantry unit whose *air-death-end* request is turned down, and the ground height in a high-bridge cell. Until it is answered, such a unit leaves play at its crash end.
+- Q-3240: the events that detach an attached animation. Claim 15's rules after a detachment are not built.
+- #339's recruitment cost is mostly the eligibility pass over every object. It was measured and left as it is.
+
+The P3 census rule: a crashed infantry unit now stays in play, dead, until *air-death-end* completes, and then leaves through `combat::death::infantry_death_turn` and the ordinary removal, as a die sequence does. A bouncing conversion animation lives in `w.anims` like any ordinary animation. No fix makes or moves a back-reference of `World::census`.
