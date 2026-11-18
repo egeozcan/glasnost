@@ -780,12 +780,34 @@ fn claim_13_dying() {
         while w.tick < l + 6 {
             step(&mut w);
         }
-        w.obj_mut(v).unwrap().combat.killed = true;
+        // Killed with no health left (S-0107 claim 17a: a killed unit with health is a living unit).
+        let o = w.obj_mut(v).unwrap();
+        o.combat.killed = true;
+        o.health = 0;
         step(&mut w);
         assert!(dom_events(&w).contains(&DomEvent::Sweep));
         assert!(w.obj(v).is_some(), "dying, in play");
         assert_eq!(owner(&w, v), Some(if quirk { ALPHA } else { BETA }));
     }
+}
+
+// spec: S-0107 claim 17a (Q-3239: a killed unit that has regained a health of 1 is a living unit for every rule that looks at health) and S-0612 claim 13 (so it is not dying: with quirks.dominator_takes_dying off it is taken over like any other)
+#[test]
+fn claim_13_a_killed_unit_alive_again_is_not_dying() {
+    let mut r = rules();
+    r.globals.quirks.dominator_takes_dying = false;
+    let mut w = armed(&r);
+    let v = spawn(&mut w, "GRUNT", BETA, 0, 0);
+    let l = launch(&mut w, at(0, 0));
+    while w.tick < l + 6 {
+        step(&mut w);
+    }
+    let o = w.obj_mut(v).unwrap();
+    o.combat.killed = true;
+    o.health = 1;
+    step(&mut w);
+    assert!(dom_events(&w).contains(&DomEvent::Sweep));
+    assert_eq!(owner(&w, v), Some(ALPHA), "taken over");
 }
 
 // spec: S-0612 claim 13 (airborne objects are not taken over: S-0601 claim 13's in-the-air test)
