@@ -351,6 +351,36 @@ fn q3239_the_infantry_crash_end_in_a_high_bridge_cell() {
     }
 }
 
+// spec: S-0312 claim 16 (Infantry crash end in a high-bridge cell: the on-deck state unset, so listed on the ground layer, S-0502 claim 4; A turned-down air-death-end request: it stays in play) and Edge cases (quirks.crash_end_bridge_height off: listed on the deck after crossing it, on the ground beneath it)
+#[test]
+fn q3239_the_infantry_crash_end_in_a_high_bridge_cell_lists_it_on_its_layer() {
+    for bridge_height in [true, false] {
+        for crossing in [true, false] {
+            let mut w = game(|r| r.globals.quirks.crash_end_bridge_height = bridge_height);
+            deck(&mut w);
+            let u = hover(
+                &mut w,
+                "JJNOEND",
+                Kind::Infantry,
+                if crossing { 500 } else { 300 },
+            );
+            kill(&mut w, u);
+            assert!(to_crash_end(&mut w, u), "in play in crashed");
+            testkit::run(&mut w, 30);
+            let cell = pos(&w, u).cell();
+            let (want, other) = if !bridge_height && crossing {
+                (Layer::Deck, Layer::Ground)
+            } else {
+                (Layer::Ground, Layer::Deck)
+            };
+            let case = format!("bridge height {bridge_height}, crossing {crossing}");
+            assert_eq!(w.obj(u).unwrap().layer, want, "{case}");
+            assert!(w.cells.list(cell, want).contains(&u), "listed: {case}");
+            assert!(!w.cells.list(cell, other).contains(&u), "not listed: {case}");
+        }
+    }
+}
+
 // spec: S-0312 claim 16 (Vehicle crash end: in a high-bridge cell it is put on the terrain beneath the deck, whether its fall ended by crossing the deck or beneath it, so its impact effects come there) and Edge cases (quirks.crash_end_bridge_height off: on the deck when its fall ended by crossing it, and a balloon-hover type's death weapon comes there)
 #[test]
 fn q3239_the_vehicle_crash_end_in_a_high_bridge_cell() {
