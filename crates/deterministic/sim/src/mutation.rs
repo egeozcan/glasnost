@@ -460,8 +460,11 @@ fn spot_of(w: &World, p: Pos) -> (CellXY, u8) {
 
 /// Creates an animation of type `anim` at `pos` (S-0109): an
 /// infantry-making one is played by the simulation in the update order
-/// (claims 8 and 9), any other is an ordinary animation. Returns the
-/// infantry-making animation's number.
+/// (claims 8 and 9), any other is an ordinary animation. A bouncing
+/// infantry-making type (only the conversion animation comes here with one)
+/// flies as an ordinary animation holding its infantry-making state with
+/// owner `owner` (claim 15). Returns the infantry-making animation's
+/// number.
 pub fn start(
     w: &mut World,
     anim: u32,
@@ -476,6 +479,15 @@ pub fn start(
         // spec: S-0611 Edge cases (a conversion animation whose type makes no infantry plays and leaves nothing)
         crate::combat::effects::anim(w, &a.name, pos);
         return None;
+    }
+    if a.bouncing {
+        // spec: S-0611 claim 9 (claims 9 to 11 apply to every infantry-making animation, the conversion animation included) and claim 15 (a bouncing one flies as an ordinary animation, its point its position in play, S-0319 claim 1)
+        let id = crate::combat::effects::anim_made(w, &a.name, anim, pos)?;
+        if let Some(m) = w.anims.anims.get_mut(&id).and_then(|x| x.making.as_mut()) {
+            // spec: S-0611 claim 8 (the conversion animation's owner)
+            m.owner = owner;
+        }
+        return Some(id);
     }
     // spec: S-0109 claim 29 and S-0202 claim 10 (the creation and start-event draws at the creation)
     let drawn = crate::load::anim_created(w, &a.name, Some((pos.x, pos.y, pos.z)), true);
@@ -672,6 +684,19 @@ pub fn convert(w: &mut World, id: ObjectId, hit: &Hit, inside: bool) -> bool {
 /// standing position at once (claims 7 and 8): no ordinary removal of the
 /// victim clears that mark again in the death tick.
 fn mark_now(w: &mut World, id: ObjectId) {
+    let flying = w
+        .anims
+        .anims
+        .get(&id)
+        .and_then(|a| Some((a.making?, a.pos?)));
+    if let Some((mut m, p)) = flying {
+        // spec: S-0611 claims 8 and 15 (a bouncing conversion animation marks the standing position of its point, its creation point, at once, as its updates do)
+        update(w, id, &mut m, p, false);
+        if let Some(a) = w.anims.anims.get_mut(&id) {
+            a.making = Some(m);
+        }
+        return;
+    }
     let Some(m) = w.mutation.makers.get(&id).cloned() else {
         return;
     };

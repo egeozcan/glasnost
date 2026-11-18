@@ -910,6 +910,27 @@ pub fn anim_spawn(
 /// The initial loop delay a projectile gives its trailer, in updates.
 const TRAILER_LOOP_DELAY: i32 = 1; // spec: S-0109 claim 29 (a projectile trailer: an initial loop delay of 1 update)
 
+/// An ordinary animation of type `name` (registration index `index`) at
+/// `pos`, made as [`anim`] makes one: no reverse request, no height
+/// adjustment and the default spawn. Returns its number when it is in play.
+pub(crate) fn anim_made(
+    w: &mut crate::world::World,
+    name: &str,
+    index: u32,
+    pos: Pos,
+) -> Option<ObjectId> {
+    anim_spawned(
+        w,
+        name,
+        Some(index),
+        pos,
+        false,
+        None,
+        crate::anims::Spawn::default(),
+    )
+    .id
+}
+
 /// Creates an ordinary animation in play with `spawn` (S-0109 claim 29)
 /// and its presentation event; `index` is the registration index `name`
 /// names (`None`: no such type).
