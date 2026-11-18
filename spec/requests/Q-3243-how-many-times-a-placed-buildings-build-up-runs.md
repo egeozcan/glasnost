@@ -3,7 +3,7 @@ id: Q-3243
 title: How many times a placed building's build-up runs before handover
 status: open
 related: [S-0406, S-0108, S-0415, S-0524]
-answered-by: []
+answered-by: [M-0027]
 ---
 
 ## Need
