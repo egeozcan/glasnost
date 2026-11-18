@@ -138,7 +138,9 @@ fn vehicle_reply(
                 // spec: S-0310 claim 9 (with the turret flag: the turret's target facing becomes the direction of the target)
                 (true, false)
             } else {
-                let moving = crate::occupancy::in_progress(w, id);
+                // spec: S-0206 Terms (locomotor moving the vehicle) and S-0502 claim 10 (r27: a jumpjet's locomotor moves it for this reply while it keeps its movement commitment, hovering included)
+                let moving = crate::occupancy::in_progress(w, id)
+                    || crate::jump::moves_for_facing_reply(w, id);
                 if dest.is_none() && !moving {
                     // spec: S-0310 claim 9 and S-0206 claim 9 (without a turret: the body turns, the turret follows)
                     let d = dir(w, w.reference_point(id), t);

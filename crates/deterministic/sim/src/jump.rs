@@ -237,6 +237,24 @@ pub fn moving(w: &World, id: ObjectId) -> bool {
     st(w, id).is_some_and(|j| j.moving)
 }
 
+/// Whether a jumpjet's locomotor counts as moving it for the reply to *not
+/// facing* without a turret (S-0206 claim 9, S-0310 claim 9): while it is
+/// *moving*, the movement commitment, also while it hovers (claim 10). With
+/// `quirks.hovering_jumpjet_body_on_heading` off, a hovering vehicle's
+/// commitment does not count. False for another locomotor.
+pub fn moves_for_facing_reply(w: &World, id: ObjectId) -> bool {
+    let Some(j) = st(w, id) else { return false };
+    if !w.rules().quirks.hovering_jumpjet_body_on_heading
+        && j.phase == Phase::Hovering
+        && vehicle(w, id)
+    {
+        // spec: S-0502 Edge cases (r27, quirks.hovering_jumpjet_body_on_heading off: in hovering, for the reply to not facing without a turret a jumpjet vehicle's locomotor does not count as moving it)
+        return false;
+    }
+    // spec: S-0502 Terms and claim 10 (r27, Q-3252: for the reply to not facing without a turret, S-0206 claim 9 and S-0310 claim 9, a jumpjet's locomotor is moving it whenever it is moving, the movement commitment, so that reply gives a committed hovering vehicle no body turn)
+    j.moving
+}
+
 /// The jumpjet's speed fraction (claim 6); `None` for another locomotor.
 pub fn speed_fraction(w: &World, id: ObjectId) -> Option<F64> {
     st(w, id).map(|j| j.fraction)
