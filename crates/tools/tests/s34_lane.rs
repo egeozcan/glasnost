@@ -182,9 +182,7 @@ fn issue_444_cycle(rules: &Arc<SimRules>) {
         println!("#444 cycle: no tiberium run");
         return;
     };
-    let h = &rules.econ.harvest.vehicles;
-    for ti in 0..h.len() {
-        let u = &h[ti];
+    for (ti, u) in rules.econ.harvest.vehicles.iter().enumerate() {
         if !u.harvester || u.slave_miner || u.teleporter || u.docks.is_empty() {
             continue;
         }
