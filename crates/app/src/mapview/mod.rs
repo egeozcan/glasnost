@@ -18,6 +18,8 @@ pub mod find;
 #[cfg(test)]
 mod ground_order_tests;
 pub mod harvesting;
+#[cfg(test)]
+mod hover_pick_tests;
 pub mod layers;
 pub mod live;
 #[cfg(test)]

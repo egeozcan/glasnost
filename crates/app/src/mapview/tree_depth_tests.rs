@@ -46,7 +46,7 @@ const TREE_AT: (i32, i32) = (-35, -55);
 
 /// A shape file of canvas `canvas` whose image frames are `frames`: a
 /// rectangle size, its place on the canvas and one value for every pixel.
-fn shape(canvas: (u16, u16), frames: &[((u32, u32), (u16, u16), u8)]) -> Vec<u8> {
+pub(super) fn shape(canvas: (u16, u16), frames: &[((u32, u32), (u16, u16), u8)]) -> Vec<u8> {
     ShpWriter {
         width: canvas.0,
         height: canvas.1,
