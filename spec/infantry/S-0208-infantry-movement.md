@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 66
+revision: 67
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-15
+approved-on: 2026-11-18
 measurements: [M-0023]
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142, Q-3236]
 supersedes: []
 ---
 
@@ -183,8 +183,12 @@ used by this spec:
 - **Locomotor moving.** "Its locomotor is moving" means that the unit *has movement in progress* in
   the sense of S-0107 Terms. It does not mean S-0107's narrower *is moving now*.
 - **Locomotor destination.** The point the unit's locomotor is currently taking it to as the end of
-  its walk: while a unit walks under a move, the point that its destination gives (for a cell
-  destination, the centre and height defined by claim 18). A unit with no movement in progress has none. It differs from the
+  its walk: while a unit walks under a move, the point that its destination gave when it was last
+  assigned (for a cell destination, the centre and height defined by claim 18). A destination
+  that names an object gives the object's movement point at that assignment. The point does not
+  follow the object as it moves; only a new assignment gives a new point. The point stays when
+  the destination is lost without the locomotor being told, as when the object it names goes
+  inside (S-0507 claim 6a). A unit with no movement in progress has none. It differs from the
   *destination* above, which is the cell or object the unit's orders and behaviour give it. Claim
   16 tests the locomotor destination, not the destination. It is not the walking target (Terms below), which is only the next standing
   position on the way.
@@ -624,8 +628,12 @@ used by this spec:
    moving towards a destination, so it does not call such a walker. For the walker ordered away, the
    order has broken off its contact, and what its processings of *enter* do until the order's
    behaviour becomes current belongs to S-0507 claim 5 and S-0215. A walker follows a stored path
-   only towards a destination, so a destination that becomes nothing, as at a stop order (S-0213
-   claim 8), leaves it no path to follow, whatever it keeps.
+   only towards a locomotor destination (Terms), so a destination that becomes nothing through an
+   assignment, as at a stop order (S-0213 claim 8), leaves it no path to follow, whatever it keeps.
+   A destination lost without the locomotor being told (S-0507 claim 6a) leaves the locomotor
+   destination as it was: the walker goes on along its stored path, its fresh searches (S-0212
+   claim 20) look for that point's cell, and claim 16 ends the walk by its second case, as for any
+   locomotor destination.
    - Backing: `measurable` (scenario W17: part f for an enter order to a walker under *move*, part g
      for a move order to a walker under *enter*, part h for an enter order to a walker standing
      between steps with a stored path, part j for a garrison order to a walker under *move*, part k
@@ -645,7 +653,8 @@ used by this spec:
      S-0507 claim 5 rates its replies high, and that the walker's state meets their conditions here
      was not traced further. Low for how far the walker ordered away from what it was entering
      follows the old path, which depends on its processings of *enter* before the order's behaviour
-     becomes current.
+     becomes current. Medium, and `unmeasured`, for the walker that loses its destination without
+     its locomotor being told: S-0507 claim 6a gives why no run here isolates an infantry holder.
 
    **Requests sent from an extra locomotion (Q-2702).** The extra locomotion that a scatter gives
    (*Destinations given during a unit's update* above) is a whole locomotion of the walker, the same
@@ -1033,7 +1042,9 @@ used by this spec:
 16. **When a walk ends.** On each arrival tick (claim 6), after the walker has been placed on its
     walking target, the walk ends when either of these holds:
     - the unit has no locomotor destination (Terms), for example because claim 17 or another rule
-      cleared its destination on this tick or earlier, or
+      cleared its destination on this tick or earlier. A destination lost without the locomotor
+      being told (S-0507 claim 6a) does not remove the locomotor destination, so it does not end
+      the walk by this case; or
     - the walker's new position is in the same cell as its locomotor destination, and the two heights
       differ by less than two height levels (|Δ*z*| < 208 leptons, strict).
 
@@ -1044,9 +1055,11 @@ used by this spec:
     continues by claim 6 while path steps remain, and path exhaustion is handled by claim 18. This claim
     never ends a walk between two arrival ticks; a rule that stops the unit there (claim 17's
     exception) does so itself.
-    - Backing: `measurable` (scenario W10, parts a, d and e)
+    - Backing: `measurable` (scenario W10, parts a, d and e). `unmeasured` for a destination lost
+      without the locomotor being told (S-0507 claim 6a gives why no run here isolates it)
     - Confidence: high for the arrival and strict height tests; medium for subsequent path
-      exhaustion, specified in claim 18
+      exhaustion, specified in claim 18; medium for the kept locomotor destination after a loss of
+      S-0507 claim 6a
 
 17. **An approaching walker's stop and destination outcome (Q-0072, question 3).** On each
     arrival tick, before claim 16's test, an infantry unit loses its destination when all of these hold:
