@@ -44,7 +44,10 @@ fn land_row(ground: &str, float: &str) -> LandRow {
 /// - SLOWHOV: a slow amphibious hovering transport for four;
 /// - HAULER: a wheeled transport for four;
 /// - HUT1: a 1 × 1 garrisonable building of the civilian tech level;
-/// - the testkit's WALKER, made an occupier.
+/// - the testkit's WALKER, made an occupier;
+/// - PLANE: a flying aircraft;
+/// - PIT: a 2 × 2 tank bunker, and TANK: a turreted vehicle with a weapon
+///   (the combat ruleset's CRUSHER, not a crusher), bunker-eligible.
 fn rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     let s = &mut r.sim;
@@ -106,6 +109,37 @@ fn rules() -> Ruleset {
     if let Some(u) = r.sim.infantry.get_mut("WALKER") {
         u.occupier = Some(true);
     }
+    let plane = UnitType {
+        strength: Some(100),
+        speed: Some(30),
+        rot: Some(12),
+        locomotor: Some(Locomotor::Fly),
+        ..Default::default()
+    };
+    r.sim.aircraft.insert("PLANE".into(), plane);
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("PLANE".into());
+    let pit = BuildingType {
+        strength: Some(1000),
+        foundation: Some([2, 2]),
+        bunker: Some(true),
+        number_impassable_rows: Some(0),
+        ..Default::default()
+    };
+    r.sim.buildings.insert("PIT".into(), pit);
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("PIT".into());
+    let mut tank = r.sim.vehicles["CRUSHER"].clone();
+    tank.crusher = None;
+    r.sim.vehicles.insert("TANK".into(), tank);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("TANK".into());
     r.registries
         .entry("countries".into())
         .or_default()
@@ -393,4 +427,57 @@ fn a_revert_in_the_same_moment() {
     tick::step(&mut w);
     assert_eq!(dest(&w, h), None);
     assert_eq!(drive::goal(&w, h), Some(here));
+}
+
+// spec: S-0507 claim 6a (aircraft holders follow S-0501 claim 53 instead) and S-0501 claim 53 (an aircraft loses an object as its destination when it leaves the map by boarding any transport, from that moment in the tick)
+#[test]
+fn an_aircraft_holder_follows_s0501_claim_53() {
+    let mut w = world();
+    let i = at(&mut w, Kind::Infantry, "WALKER", 0, -7, 0);
+    let c = at(&mut w, Kind::Vehicle, "HAULER", 0, -8, 0);
+    let p = at(&mut w, Kind::Aircraft, "PLANE", 0, 6, 6);
+    testkit::run(&mut w, 5);
+    assert!(w.obj(p).unwrap().air.is_some(), "void: no aircraft state");
+    w.obj_mut(p).unwrap().dest = Some(Target::Object(i));
+    transport::board(&mut w, i, c);
+    assert_eq!(transport::riding(&w, i), Some(c), "void: not boarded");
+    assert_eq!(dest(&w, p), None, "the aircraft lost it");
+}
+
+// spec: S-0507 claim 6a (a vehicle that enters a tank bunker stays on the map, S-0606 claim 7, so claim 6a does not apply to it: a holder keeps it as its destination)
+#[test]
+fn a_tank_bunker_is_not_going_inside() {
+    let mut w = world();
+    let b = at(&mut w, Kind::Building, "PIT", 0, 5, -7);
+    let u = at(&mut w, Kind::Vehicle, "TANK", 0, 5, -3);
+    let v = at(&mut w, Kind::Vehicle, "HAULER", 0, -8, 6);
+    testkit::run(&mut w, 5);
+    econ::assign_destination(&mut w, v, Some(Target::Object(u)));
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        orders::Order::Behaviour {
+            actor: u,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Object(b)),
+        }
+    ));
+    let mut bunkered = false;
+    for _ in 0..600 {
+        assert_eq!(
+            dest(&w, v),
+            Some(Target::Object(u)),
+            "void: V lost U before it was bunkered"
+        );
+        tick::step(&mut w);
+        if glasnost_sim::structures::bunker::bunkered_in(&w, u) == Some(b) {
+            bunkered = true;
+            break;
+        }
+    }
+    assert!(bunkered, "void: U was not bunkered");
+    assert!(!inside(&w, u), "S-0606 claim 7: it stays on the map");
+    assert_eq!(dest(&w, v), Some(Target::Object(u)), "V keeps it");
 }
