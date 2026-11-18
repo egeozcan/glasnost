@@ -234,7 +234,11 @@ fn t16_after(mut w: World, a: ObjectId, i: ObjectId, d: Pos) {
     // spec: S-0507 claim 6a and T16 (no destination at the end of the tick in which I goes inside)
     assert_eq!(dest(&w, a), None, "A loses I as its destination");
     // spec: S-0507 claim 6a (the point A's locomotion last received, at the claim 5 assignment, stays: not where I went inside). Q-3235: our hover reads D from I's current position before the loss, so T16's "the same just before" holds only while I has not moved
-    assert_eq!(hover::destination_point(&w, a), Some(d), "A keeps the recorded point");
+    assert_eq!(
+        hover::destination_point(&w, a),
+        Some(d),
+        "A keeps the recorded point"
+    );
     let start = dist(w.obj(a).unwrap().pos, d);
     let mut closest = start;
     for _ in 0..150 {
@@ -281,7 +285,10 @@ fn the_transport_it_boards_loses_it() {
     let i = at(&mut w, Kind::Infantry, "WALKER", 0, -6, 0);
     testkit::run(&mut w, 5);
     // spec: S-0507 claim 5 (a transport on water with no destination takes the requester as its destination)
-    assert_eq!(transport::load_request(&mut w, a, i), transport::Reply::Approach);
+    assert_eq!(
+        transport::load_request(&mut w, a, i),
+        transport::Reply::Approach
+    );
     assert_eq!(dest(&w, a), Some(Target::Object(i)));
     let d = hover::destination_point(&w, a).unwrap();
     transport::board(&mut w, i, a);
@@ -325,7 +332,11 @@ fn other_holders_lose_it_and_a_driver_keeps_its_point() {
         assert_eq!(dest(&w, f), None);
     }
     // spec: S-0207 claim 25 (only a stop, a replacement or a qualifying completion removes the point)
-    assert_eq!(drive::goal(&w, v), Some(goal), "not cleared at the next takes");
+    assert_eq!(
+        drive::goal(&w, v),
+        Some(goal),
+        "not cleared at the next takes"
+    );
 }
 
 // spec: S-0507 claim 6a (in the same moment the object leaves the holder's queued and approach destinations, wherever it stands in them; the other entries keep their order, and a destination that is another target stays)
@@ -345,7 +356,11 @@ fn it_leaves_queued_destinations() {
     transport::board(&mut w, i, c);
     let o = w.obj(v).unwrap();
     assert_eq!(o.queued_dests, vec![p, q]);
-    assert_eq!(o.dest, Some(Target::Cell(cell(-8, 7))), "its own destination stays");
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(cell(-8, 7))),
+        "its own destination stays"
+    );
 }
 
 // spec: S-0507 claim 6a (a revert in the same moment comes first: the destination given back that is the object itself is then cleared at once, and the locomotion keeps the object's movement point at the moment of the loss) and S-0309 claims 27 and 27a
