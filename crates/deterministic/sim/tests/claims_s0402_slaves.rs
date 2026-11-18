@@ -2750,3 +2750,88 @@ fn s0107_claim_21a_completion_loops_while_harvesting() {
     glasnost_sim::infantry::sequence_turn(&mut w, s, false, false);
     assert_eq!(seq_state(&w, s).seq, Some(Seq::Stand));
 }
+
+/// The slave master of the game, building or vehicle.
+fn the_master(w: &World) -> Option<ObjectId> {
+    w.objects
+        .values()
+        .find(|o| o.econ.group.is_some() && matches!(o.kind, Kind::Building | Kind::Vehicle))
+        .map(|o| o.id)
+}
+
+/// The cells of a 3 × 3 field at (x, y) that still hold resource.
+fn left_in(w: &World, x: i32, y: i32) -> usize {
+    field(x, y, 0)
+        .iter()
+        .filter(|(c, _, _)| stage(w, *c).is_some())
+        .count()
+}
+
+/// Runs until the game's slave master is a building other than `not`,
+/// returning it.
+fn next_building(w: &mut World, not: Option<ObjectId>, max: i32) -> ObjectId {
+    until(w, max, |w| {
+        the_master(w).is_some_and(|m| {
+            Some(m) != not && w.obj(m).is_some_and(|o| o.kind == Kind::Building)
+        })
+    })
+    .expect("a deployed master");
+    the_master(w).unwrap()
+}
+
+// spec: S-0402 claims 22, 24 and 25 and F7, and S-0415 claims 9 and 10 (#451, traced): a deployed slave miner whose near field (1 bale a cell) is used up, with a reachable field (stage 5) at long-scan range but beyond its short scan, on flat open ground. Its field check finds no short-scan field, the long scan finds the far field and the site search finds a site near it, F7 requests packing (the remembered cell is its top-left cell A); the vehicle appears at the return cell A + (1, 1) with A as its destination and move queued; its first group update recalls and enters field seeking; at the following update it still drives towards A, so claim 25 keeps that destination and makes the group travelling; at A it deploys again (claim 22), the new building's top-left cell is A − (1, 1), and its field check packs it up again. The miner never drives to the far field: each cycle moves it one cell along −x and −y
+#[test]
+fn claim_25_issue_451_automatic_pack_up_redeploys_one_cell_on() {
+    let r = rules();
+    let (near, far) = ((5, -1), (10, 8));
+    let mut ore = field(near.0, near.1, 0);
+    ore.extend(field(far.0, far.1, 5));
+    let mut w = game_on(&r, &ore, false);
+    let m = place_vehicle(&mut w, "SMV", 0, at(-8, 6), 0);
+    unblock(&mut w);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: m,
+            behaviour: Behaviour::Harvest,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(6, 0))),
+        }
+    ));
+    let b = next_building(&mut w, None, 1500);
+    let a = w.obj(b).unwrap().pos.cell();
+    until(&mut w, 3000, |w| group(w, b).state == GroupState::Packing).expect("packing");
+    assert_eq!(left_in(&w, near.0, near.1), 0, "the near field is used up");
+    assert_eq!(left_in(&w, far.0, far.1), 9, "the far field is untouched");
+    // spec: S-0402 claim 24 (from the deployed master the site search near the far field succeeds)
+    assert!(slaves::site_search(&mut w, b, at(far.0 + 1, far.1 + 1)).is_some());
+    // spec: S-0402 claims 22, 25 and 28 (the remembered cell is the building's own top-left cell)
+    assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(a)));
+    until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    let o = w.obj(v).unwrap();
+    // spec: S-0415 claim 10 (the return cell of a 3 × 3 foundation: x + 1, y + 1; A as the destination, move queued)
+    assert_eq!(o.pos.cell(), CellXY::new(a.x + 1, a.y + 1));
+    assert_eq!(o.dest, Some(Target::Cell(a)));
+    until(&mut w, 20, |w| group(w, v).state == GroupState::FieldSeeking).expect("seeking");
+    until(&mut w, 20, |w| group(w, v).state != GroupState::FieldSeeking).expect("updated");
+    // spec: S-0402 claim 25 (at the following update an existing destination is kept and makes the group travelling)
+    assert_eq!(group(&w, v).state, GroupState::Travelling);
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Cell(a)));
+    // spec: S-0402 claim 22 (a travelling vehicle with no destination deploys at its next update) and S-0415 claim 10 (a 3 × 3 building deployed from cell A has its top-left cell at A − (1, 1))
+    let mut cells = vec![a];
+    let mut last = b;
+    for _ in 0..5 {
+        let next = next_building(&mut w, Some(last), 400);
+        cells.push(w.obj(next).unwrap().pos.cell());
+        until(&mut w, 200, |w| group(w, next).state == GroupState::Packing)
+            .expect("packs up again");
+        last = next;
+    }
+    for p in cells.windows(2) {
+        assert_eq!(p[1], CellXY::new(p[0].x - 1, p[0].y - 1), "{cells:?}");
+    }
+    assert_eq!(left_in(&w, far.0, far.1), 9, "the far field is still untouched");
+}
