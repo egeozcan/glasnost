@@ -779,6 +779,24 @@ fn empty_death_entries_warn() {
     assert_eq!(names, ["NoDie2", "Bare"]);
 }
 
+/// spec: S-0312 Edge cases (quirks.refused_air_death_end_keeps_unit: the importer warns about any crashable infantry type whose air-death-end entry has no image frames, whichever way the switch is set) and claim 16 (A turned-down air-death-end request)
+#[test]
+fn empty_air_death_end_entries_of_crashable_types_warn() {
+    let base = "[InfantryTypes]\n1=Flyer\n2=NoEnd\n3=Bare\n4=Walker\n5=Off\n\
+                [Flyer]\nCrashable=yes\n[NoEnd]\nCrashable=yes\n[Bare]\nCrashable=yes\n\
+                [Walker]\nX=1\n[Off]\nCrashable=no\n";
+    let art = "[Flyer]\nSequence=FlySeq\n[FlySeq]\nAirDeathFinish=1,2,3\n\
+               [NoEnd]\nSequence=EndSeq\n[EndSeq]\nAirDeathFinish=1,0,3\n";
+    let (_, w) = sim(base, "", art);
+    let names: Vec<&str> = ["Flyer", "NoEnd", "Bare", "Walker", "Off"]
+        .into_iter()
+        .filter(|n| warned(&w, &format!("infantry {n}: its air-death-end")))
+        .collect();
+    // An air-death-end entry with count 0, and the all-zero table of a crashable type without a
+    // sequence section; not a type that is not crashable.
+    assert_eq!(names, ["NoEnd", "Bare"]);
+}
+
 /// spec: S-0108 Import mapping (Foundation: vocabulary, fallback, image and id sections)
 #[test]
 fn building_foundations() {
