@@ -1001,7 +1001,10 @@ mod crate_entry_tests {
         let mut w = world();
         let c = at(0, 0);
         put(&mut w, c, ORE, 0);
-        assert!(resource_at(&w, c).is_some(), "the scenario: a resource cell");
+        assert!(
+            resource_at(&w, c).is_some(),
+            "the scenario: a resource cell"
+        );
         crate_entries(&mut w, c);
         take_all(&mut w, c);
         assert_eq!(

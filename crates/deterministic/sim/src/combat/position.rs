@@ -330,6 +330,10 @@ mod aim_difference_tests {
         let east = fire_point(TOWER_X + 500);
         assert_eq!(wrapped, east, "the wrapped difference aims east");
         // And not as a target to the west.
-        assert_ne!(wrapped, fire_point(TOWER_X - 500), "the scenario: the aim matters");
+        assert_ne!(
+            wrapped,
+            fire_point(TOWER_X - 500),
+            "the scenario: the aim matters"
+        );
     }
 }

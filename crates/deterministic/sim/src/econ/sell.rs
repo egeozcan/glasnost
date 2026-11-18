@@ -880,7 +880,10 @@ mod crate_entry_tests {
         w.houses[0].role = HouseRole::Player;
         w.houses[0].human = true;
         crate_entries(&mut w, c);
-        assert!(wall_sale(&mut w, HouseId(0), c, true), "the scenario: the wall is sold");
+        assert!(
+            wall_sale(&mut w, HouseId(0), c, true),
+            "the scenario: the wall is sold"
+        );
         assert_eq!(entries(&w, c), (false, false), "(place, map crate)");
     }
 }

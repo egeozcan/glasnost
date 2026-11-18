@@ -1319,10 +1319,7 @@ pub(crate) mod fixture {
     pub(crate) const WALL: u8 = 200;
 
     fn push(r: &mut glasnost_rules::schema::Ruleset, reg: &str, n: &str) {
-        r.registries
-            .entry(reg.into())
-            .or_default()
-            .push(n.into());
+        r.registries.entry(reg.into()).or_default().push(n.into());
     }
 
     /// A world whose overlay list is 240 invented types `OV000` … `OV239`,

@@ -239,6 +239,10 @@ fn issue_346_a_vehicle_entering_from_the_deck_sets_no_ground_flag() {
         );
     }
     assert!(on_deck > 0, "the scenario: the car drove on the deck");
-    assert_eq!(absorb::absorbed_in(&w, car), Some(bio), "the scenario: it went in");
+    assert_eq!(
+        absorb::absorbed_in(&w, car),
+        Some(bio),
+        "the scenario: it went in"
+    );
     assert_eq!(ground_counts(&w), none, "after the entry");
 }

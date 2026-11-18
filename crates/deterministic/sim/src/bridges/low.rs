@@ -273,7 +273,10 @@ mod crate_entry_tests {
         let c = at(0, 0);
         crate_entries(&mut w, c);
         let cells = write_strip(&mut w, c, Family::Bridge, Line::X, Role::X);
-        assert!(cells.contains(&c), "the scenario: the strip covers the cell");
+        assert!(
+            cells.contains(&c),
+            "the scenario: the strip covers the cell"
+        );
         assert_eq!(entries(&w, c), (false, false), "(place, map crate)");
     }
 }

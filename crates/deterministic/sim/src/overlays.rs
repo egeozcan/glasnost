@@ -529,7 +529,10 @@ mod crate_entry_tests {
         let c = at(0, 0);
         put(&mut w, c, VEIN, 0);
         crate_entries(&mut w, c);
-        assert!(place_in_play(&mut w, c, VEIN), "the scenario: the test passes");
+        assert!(
+            place_in_play(&mut w, c, VEIN),
+            "the scenario: the test passes"
+        );
         assert_eq!(entries(&w, c), (false, false), "(place, map crate)");
     }
 
@@ -541,7 +544,10 @@ mod crate_entry_tests {
         let n = at(0, -1);
         put(&mut w, n, VEIN, 0);
         crate_entries(&mut w, n);
-        assert!(place_in_play(&mut w, c, VEIN), "the scenario: the test passes");
+        assert!(
+            place_in_play(&mut w, c, VEIN),
+            "the scenario: the test passes"
+        );
         let d = w.cells.cell(n).map(|x| x.overlay_data);
         assert_ne!(d, Some(0), "the scenario: the neighbour is re-patterned");
         assert_eq!(entries(&w, n), (false, false), "(place, map crate)");
