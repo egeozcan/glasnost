@@ -904,13 +904,23 @@ fn step_check_with(
         let Some((old, keep_pos)) = w.obj(id).map(|o| (o.path.steps.clone(), o.pos)) else {
             return false;
         };
-        let found = path::compute(w, id, Mode::Fresh) == Search::Found;
+        let found = if u.train {
+            // spec: S-0212 claim 20 (for a train type the step in progress is kept on purpose: the search starts where that step leads)
+            path::compute_from(w, id, Mode::Fresh, first) == Search::Found
+        } else {
+            path::compute(w, id, Mode::Fresh) == Search::Found
+        };
         let Some(ob) = w.obj_mut(id) else {
             return false;
         };
         ob.pos = keep_pos;
         let new = std::mem::take(&mut ob.path.steps);
         match new.first() {
+            Some(&nd) if found && u.train => {
+                // spec: S-0212 claim 20 (a train's search result is stored after the step in progress, still up to 24 steps in total, so the quirk does not arise; the step and the result's first step choose the track as the current and next step of S-0207 claim 7)
+                e = Some(nd);
+                ob.path.steps = std::iter::once(d).chain(new).take(path::STORED).collect();
+            }
             Some(&nd) if found => {
                 if r.quirks.path_refresh_keeps_old_step {
                     // spec: S-0212 claim 20 (switch on: the unit still takes the old step and the new path's first step is dropped; the old step and the new path's second step choose the track as the current and next step of S-0207 claim 7)
