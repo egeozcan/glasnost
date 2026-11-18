@@ -541,3 +541,84 @@ fn claim_11_damaged_forms() {
             .any(|n| n == "DOCK" || n == "PAY" || n == "UNLD")
     );
 }
+
+/// One docking of a load of two tiberiums at REFN whose art names only
+/// the payment animation `pay`, with an invented dump rate that spaces the
+/// two payments far apart: per tick from the contact, the special-1
+/// slot's object, the other two slots' presence, the credits, the
+/// *finishing* flag and the contact.
+fn payment_only(pay: &str) -> Vec<(i32, Option<ObjectId>, bool, i32, bool, bool)> {
+    let mut r = rules();
+    r.sim.general.economy.harvester_dump_rate = dec("0.08");
+    names(&mut r, "REFN", |n| {
+        n.remove("PreProductionAnim");
+        n.remove("ProductionAnim");
+        n.insert("SpecialAnim".into(), pair(pay, pay));
+    });
+    let mut w = game(&r);
+    let (b, h) = docked(&mut w, "REFN", vec![2, 3]);
+    let mut log = Vec::new();
+    for _ in 0..600 {
+        let o = w.obj(h).unwrap();
+        log.push((
+            w.tick,
+            slot(&w, b, DepotSlot::Special1),
+            slot(&w, b, DepotSlot::PreProduction).is_some()
+                || slot(&w, b, DepotSlot::Production).is_some(),
+            w.houses[0].credits,
+            harvest::state_of(&w, h).finishing,
+            o.contact.is_some(),
+        ));
+        if o.contact.is_none() {
+            break;
+        }
+        testkit::run(&mut w, 1);
+    }
+    log
+}
+
+// spec: S-0402 r86 claim 11, What a docking shows (#444, Q-3254 answered: for art that names only the payment animation, the start row plays nothing; the payment animation enters play at the first payment row; a later payment row neither stops nor restarts it while it plays, and starts it again once it has ended on its own; the empty-load row removes it if still playing; the finishing harvester waits for no unloading animation and takes its next row in the following tick) and scenario H29; S-0108 claim 20 (the slots)
+#[test]
+fn claim_11_r86_payment_only_art_starts_keeps_restarts_and_removes() {
+    // PAYE never ends on its own; PAY (6 frames) ends long before the
+    // second payment at this dump rate.
+    for (pay, ends) in [("PAYE", false), ("PAY", true)] {
+        let log = payment_only(pay);
+        let c0 = log[0].3;
+        let paid: Vec<usize> = (1..log.len())
+            .filter(|&i| log[i].3 != log[i - 1].3)
+            .collect();
+        assert_eq!(paid.len(), 2, "{pay}: two payments {log:?}");
+        assert!(log[paid[0]].3 > c0);
+        assert!(
+            log.iter().all(|x| !x.2),
+            "{pay}: no docking or unloading animation {log:?}"
+        );
+        assert!(
+            log[..paid[0]].iter().all(|x| x.1.is_none()),
+            "{pay}: the start row plays nothing {log:?}"
+        );
+        let first = log[paid[0]].1.expect("started at the first payment");
+        let second = log[paid[1]].1.expect("playing at the second payment");
+        let ended = log[paid[0]..paid[1]].iter().any(|x| x.1.is_none());
+        assert_eq!(ended, ends, "{pay}: ended on its own {log:?}");
+        if ends {
+            assert_ne!(second, first, "{pay}: started again after it ended");
+        } else {
+            assert_eq!(second, first, "{pay}: neither stopped nor restarted");
+            assert!(log[paid[0]..paid[1]].iter().all(|x| x.1 == Some(first)));
+        }
+        let fin = log.iter().position(|x| x.4).expect("finishing");
+        assert!(fin > paid[1]);
+        if !ends {
+            assert_eq!(log[fin - 1].1, Some(first), "{pay}: still playing before");
+        }
+        assert_eq!(log[fin].1, None, "{pay}: removed by the empty-load row {log:?}");
+        let broken = log.iter().position(|x| !x.5).expect("contact broken");
+        assert_eq!(
+            log[broken].0,
+            log[fin].0 + 1,
+            "{pay}: no unloading wait {log:?}"
+        );
+    }
+}
