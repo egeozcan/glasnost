@@ -3288,7 +3288,10 @@ impl Quirks {
             ("stale_fill_tiles", self.stale_fill_tiles),
             ("observer_position_handoff", self.observer_position_handoff),
             ("cleanup_skips_next_house", self.cleanup_skips_next_house),
-            ("cleanup_shifts_start_marks", self.cleanup_shifts_start_marks),
+            (
+                "cleanup_shifts_start_marks",
+                self.cleanup_shifts_start_marks,
+            ),
             (
                 "drive_giveup_ignores_contact",
                 self.drive_giveup_ignores_contact,
