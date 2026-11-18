@@ -2619,6 +2619,121 @@ fn source_marker_shows_for_the_launching_player_until_the_launch() {
     assert_eq!(live.counts.anims_drawn, 0, "the launch ends it");
 }
 
+/// design: #442 (the trace under the pointer, our own diagnostics): an
+/// endless animation (loop count −1) at a cell is named among the drawn
+/// items under the pointer and listed with its type, no owner, its loop
+/// count and the tick in which the drawing created it; the trace changes
+/// nothing in the game.
+#[test]
+fn the_trace_names_an_endless_animation_under_the_pointer() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let rules = format!("{RULES}[Animations]\n0=BOOMX\n");
+    let art = format!("{}[BOOMX]\nLoopCount=-1\n", super::tests::ART);
+    let (mut import, catalogue, mut assets) = super::tests::context_full(&rules, &art);
+    import.arts.insert(
+        (Kind::Animations, 0),
+        super::tests::art_of("BOOMX", "boomx.shp"),
+    );
+    assets.insert(b"boomx.shp", shp((10, 10), 3, (2, 2), (4, 4)));
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (
+            testkit::new_game(5),
+            testkit::rules(),
+            testkit::setup(5),
+            Vec::new(),
+        ),
+    );
+    let mut scene = built.scene;
+    let statics = built.objects;
+    live.set_debug_markers(false);
+    live.step();
+    let made = live.world.tick;
+    let at = Pos::new(5 * 256 + 128, 5 * 256 + 128, 0);
+    live.world.effects.push(Effect::Anim {
+        name: "boomx".into(),
+        pos: at,
+        delay: None,
+        reverse: false,
+        z_adjust: None,
+        id: None,
+    });
+    live.after_tick();
+    // nocite: our own diagnostics (a test length past the animation's three frames)
+    for _ in 0..5 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+    }
+    assert_eq!(
+        live.counts.anims_drawn, 1,
+        "the endless animation still plays"
+    );
+    let (px, py) = project_lifted(at.x, at.y, at.z);
+    let pixel = (py - 64..py + 64)
+        .flat_map(|y| (px - 64..px + 64).map(move |x| (x, y)))
+        .find(|&(x, y)| {
+            live.trace_point(&scene, &statics, x, y, 0)
+                .iter()
+                .any(|l| l.contains("animation #"))
+        })
+        .expect("a pixel of the animation");
+    let hash = save::state_hash(&live.world);
+    let text = live.trace_report(
+        &scene,
+        &statics,
+        super::live::TraceAt {
+            screen: (1, 2),
+            world: pixel,
+            top: 0,
+            cell: at.cell(),
+        },
+    );
+    assert_eq!(
+        save::state_hash(&live.world),
+        hash,
+        "the trace changes nothing"
+    );
+    let all = text.join("\n");
+    assert!(
+        text[0].contains(&format!("at tick {}", live.world.tick)),
+        "{all}"
+    );
+    assert!(
+        text.iter()
+            .any(|l| l.contains("no object; animation #") && l.contains("boomx")),
+        "the drawn item names its animation: {all}"
+    );
+    let line = text
+        .iter()
+        .find(|l| l.trim_start().starts_with("animation #"))
+        .unwrap_or_else(|| panic!("the animation's line: {all}"));
+    assert!(line.contains("boomx: owner none;"), "{line}");
+    assert!(line.contains("loop count -1;"), "{line}");
+    assert!(line.contains(&format!("created in tick {made};")), "{line}");
+    assert!(
+        line.contains("an animation event of the simulation"),
+        "{line}"
+    );
+    assert!(line.contains("drawn at the pointer"), "{line}");
+}
+
 /// spec: S-0522 claim 13 and S-0109 claim 22 (a paratrooper's parachute is
 /// attached to it, follows it in the ground layer, and disappears with it)
 #[test]

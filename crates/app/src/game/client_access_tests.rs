@@ -369,15 +369,15 @@ fn keyboard_reaches_every_control_of_the_screens() {
     c.pointer_up(Button::Left, Point::new(0, 0), Modifiers::default());
 
     // The settings screen: 10 values (the name tips' since M8 A4 round 8b,
-    // touch scrolling's and the display scale's since 2026-11-10), 10
-    // bindings, Reset and Back.
+    // touch scrolling's and the display scale's since 2026-11-10), 11
+    // bindings (the trace key's since #442), Reset and Back.
     while c.menu_focus.target(&c.menu_targets) != Some(MenuHit::Settings) {
         key(&mut c, Key::Down);
     }
     key(&mut c, Key::Enter);
     assert_eq!(c.shell.screen, Screen::Settings);
     let _ = c.frame();
-    assert_eq!(c.settings_targets.stops.len(), 22);
+    assert_eq!(c.settings_targets.stops.len(), 23);
     key(&mut c, Key::Tab);
     assert_eq!(
         c.settings_focus.target(&c.settings_targets),
@@ -857,6 +857,74 @@ fn the_mark_and_report_keys_save_a_pathing_report() {
     assert_eq!(b.marks, vec![marked]);
     assert_eq!(b.look.selection, vec![mcv.0]);
     assert_eq!(b.capture_hash, session(&c).play.game.state_hash());
+}
+
+/// The traces the trace test store keeps (#442), by name.
+static TRACES: std::sync::Mutex<Vec<(String, Vec<u8>)>> = std::sync::Mutex::new(Vec::new());
+
+fn keep_trace(name: &str, bytes: &[u8]) -> Result<String, String> {
+    TRACES
+        .lock()
+        .unwrap()
+        .push((name.to_owned(), bytes.to_vec()));
+    Ok(format!("the test store as {name}"))
+}
+
+/// The trace key (#442, our own diagnostics): unbound, no key traces;
+/// bound to Q in the settings, Q over the battlefield saves a trace named
+/// for the tick through the client's store, and the game's state is the
+/// same as without it.
+#[test]
+fn the_trace_key_saves_a_trace_and_changes_nothing() {
+    let mut c = client((1024, 768), 100);
+    c.save_path_report = Some(keep_trace);
+    start_by_keyboard(&mut c);
+    let mid = session(&c).map_rect().centre();
+    c.pointer_moved(mid);
+    let before = TRACES.lock().unwrap().len();
+    key(&mut c, Key::Char('q'));
+    assert_eq!(TRACES.lock().unwrap().len(), before, "Q is not bound yet");
+    c.settings.bindings.rebind(Action::Trace, 'q').unwrap();
+    let hash = session(&c).play.game.state_hash();
+    let tick = session(&c).play.game.world.tick;
+    key(&mut c, Key::Char('q'));
+    let saved = TRACES.lock().unwrap().clone();
+    let (name, body) = saved.last().expect("a trace was saved");
+    assert_eq!(name, &format!("trace-{tick}.txt"));
+    let text = String::from_utf8(body.clone()).unwrap();
+    assert!(
+        text.starts_with(&format!("trace under the pointer at tick {tick}")),
+        "{text}"
+    );
+    assert!(text.contains("objects in the pointer's cell"), "{text}");
+    assert_eq!(session(&c).play.game.state_hash(), hash);
+}
+
+/// The trace key on the settings screen (#442, our own diagnostics): it
+/// shows no key, takes a letter like the others, and Backspace leaves it
+/// unbound again; Backspace does not unbind any other action.
+#[test]
+fn the_settings_screen_binds_and_unbinds_the_trace_key() {
+    use crate::settings::ACTIONS;
+    let mut c = client((1024, 768), 100);
+    c.open_settings(false);
+    let trace = ACTIONS
+        .iter()
+        .position(|&a| a == Action::Trace)
+        .expect("the trace action");
+    c.settings_click(SettingsHit::Rebind(trace));
+    assert!(c.settings_note.contains("Backspace"), "{}", c.settings_note);
+    key(&mut c, Key::Char('q'));
+    assert_eq!(c.settings.bindings.key(Action::Trace), 'q');
+    assert_eq!(c.rebinding, None);
+    c.settings_click(SettingsHit::Rebind(trace));
+    key(&mut c, Key::Backspace);
+    assert_eq!(c.settings.bindings, crate::settings::Bindings::default());
+    assert_eq!(c.rebinding, None);
+    c.settings_click(SettingsHit::Rebind(0));
+    key(&mut c, Key::Backspace);
+    assert_eq!(c.settings.bindings.key(ACTIONS[0]), 's');
+    assert_eq!(c.rebinding, Some(0), "the binding stays open");
 }
 
 /// Presses a control of the open options menu.

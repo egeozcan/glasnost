@@ -1721,6 +1721,87 @@ fn a_walls_event_before_the_first_drawing_is_kept() {
     );
 }
 
+/// design: #442 (the trace under the pointer, our own diagnostics): a
+/// building's slot animation is listed with its building (id and type),
+/// its slot, its type, its loop count and the tick in which the drawing
+/// started it, and the building is among the objects in the pointer's cell.
+#[test]
+fn the_trace_names_a_buildings_slot_animation() {
+    let (import, catalogue, assets) = import(true);
+    let map = testkit::empty_map(SIZE);
+    let rules = rules(false);
+    let setup = setup();
+    let world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
+    let mut scene = built.scene;
+    let statics = built.objects;
+    let cell = testkit::mid(SIZE, 0, 0);
+    let b = testkit::spawn(&mut live.world, SimKind::Building, "HUTX", 0, cell, 0);
+    // nocite: our own diagnostics (a test length)
+    for _ in 0..4 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+    }
+    let names = live.slot_names(b);
+    assert!(
+        names.iter().any(|n| n.starts_with("Active1=SLOTL")),
+        "the slot animation runs: {names:?}"
+    );
+    let pos = live.world.obj(b).expect("the building").pos;
+    let text = live.trace_report(
+        &scene,
+        &statics,
+        super::live::TraceAt {
+            screen: (0, 0),
+            world: glasnost_render::projection::project_lifted(pos.x, pos.y, pos.z),
+            top: 0,
+            cell,
+        },
+    );
+    let all = text.join("\n");
+    let line = text
+        .iter()
+        .find(|l| l.contains("slot Active1:"))
+        .unwrap_or_else(|| panic!("the slot animation's line: {all}"));
+    assert!(
+        line.contains(&format!("building object #{} Building HUTX", b.0)),
+        "{line}"
+    );
+    assert!(line.contains("slot Active1: SLOTL;"), "{line}");
+    assert!(line.contains("loop count -1;"), "{line}");
+    assert!(line.contains("created in tick "), "{line}");
+    let objects = text
+        .iter()
+        .position(|l| l.starts_with("objects in the pointer's cell"))
+        .expect("the objects' section");
+    assert!(
+        text[objects + 1..]
+            .iter()
+            .any(|l| l.contains(&format!("object #{} Building HUTX", b.0))),
+        "{all}"
+    );
+}
+
 /// The superweapon slots of a HUTX that has the superweapon CURTX
 /// (recharge 0.1 minutes, 90 ticks, S-0512): its art starts SLOTL in
 /// *super-1* and in *super-3*; with `reads` the switch

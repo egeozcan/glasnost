@@ -455,12 +455,13 @@ pub fn save_report(
 pub fn save_file(name: &str, bytes: &[u8]) -> Result<String, String> {
     let dir = std::path::Path::new(DIR);
     std::fs::create_dir_all(dir).map_err(|e| format!("cannot make {}: {e}", dir.display()))?;
-    let stem = name.strip_suffix(&format!(".{EXTENSION}")).unwrap_or(name);
+    // design: #442 (a trace's text file keeps its own extension when numbered)
+    let (stem, ext) = name.rsplit_once('.').unwrap_or((name, EXTENSION));
     let mut path = dir.join(name);
     let mut k = 1;
     while path.exists() {
         k += 1;
-        path = dir.join(format!("{stem}-{k}.{EXTENSION}"));
+        path = dir.join(format!("{stem}-{k}.{ext}"));
     }
     std::fs::write(&path, bytes).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
     Ok(path.display().to_string())

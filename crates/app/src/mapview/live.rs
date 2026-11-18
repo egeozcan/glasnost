@@ -42,6 +42,10 @@ use super::pip_scale;
 use super::slot_play;
 use super::unload::{self, Unloading};
 
+#[path = "live_trace.rs"]
+mod trace;
+pub use trace::{NEAR as TRACE_NEAR, TraceAt};
+
 /// The flag that marks an [`glasnost_render::scene::Item::object`] code as
 /// a simulation object ID (the low 31 bits); codes without it index the
 /// static object table ([`Built::objects`]). Our own encoding.
@@ -605,6 +609,10 @@ pub struct Live {
     /// Each building's running slot animations (S-0108; presentation
     /// state).
     slot_anims: BTreeMap<ObjectId, slot_play::Slots<SlotAnim>>,
+    /// The last redraw's animation items, as (image, x, y) and the serial
+    /// of the playing animation drawn by each, for the trace under the
+    /// pointer to name them (#442, our own diagnostics).
+    anim_keys: Vec<(u32, i32, i32, u32)>,
     /// Each building type's slot definitions, by import registration
     /// index, read when the type is first drawn.
     slot_defs: BTreeMap<usize, slot_play::Defs>,
@@ -678,6 +686,9 @@ pub struct SlotAnim {
     player: Player,
     /// Its current type's entry.
     entry: AnimEntry,
+    /// The tick in which the drawing started it (#442, our own
+    /// diagnostics).
+    created: i32,
 }
 
 /// Starts slot animations for [`slot_play`]: an animation type of the
@@ -699,7 +710,11 @@ impl slot_play::Make<SlotAnim> for SlotMaker<'_, '_> {
             // spec: S-0108 claim 25 (the new animation keeps the replaced one's stage, not its image frame, and takes its passes afresh)
             player.keep_stage(old.player.stage());
         }
-        Some(SlotAnim { player, entry })
+        Some(SlotAnim {
+            player,
+            entry,
+            created: self.now,
+        })
     }
 }
 
@@ -765,6 +780,12 @@ struct LiveAnim {
     /// position are the simulation's); one the simulation has removed
     /// disappears.
     sim: Option<ObjectId>,
+    /// The tick in which the drawing created it (#442, our own
+    /// diagnostics).
+    created: i32,
+    /// What made it, where the drawing knows beyond the fields above (#442,
+    /// our own diagnostics); empty otherwise.
+    cause: &'static str,
 }
 
 /// What playback asks of the live game: the follow-up types, the
@@ -1468,6 +1489,7 @@ impl Live {
             viewer: None,
             source_marker: None,
             slot_anims: BTreeMap::new(),
+            anim_keys: Vec::new(),
             slot_defs: BTreeMap::new(),
             charged_anim_times,
             special_events: Vec::new(),
@@ -2535,7 +2557,12 @@ impl Live {
         let name: Option<Vec<u8>> = self.move_flash.clone();
         // spec: S-0109 claim 5 (created after the turn pass: first update in the next tick)
         let next = self.world.tick;
+        let serial = self.anim_serial;
         let drawn = name.is_some_and(|n| self.create_anim(&n, at, next, None, false));
+        if let Some(a) = anim_mut(&mut self.anims, serial) {
+            // nocite: our own diagnostics (#442)
+            a.cause = "a move-target marker of a click";
+        }
         if !drawn && self.debug_markers {
             self.transients.push(Transient {
                 kind: TransientKind::Anim,
@@ -2601,6 +2628,8 @@ impl Live {
             shooter: None,
             z_adjust: None,
             sim: None,
+            created: self.world.tick,
+            cause: "",
         });
         self.anim_serial = self.anim_serial.wrapping_add(1);
         sprite
@@ -3029,6 +3058,8 @@ impl Live {
                     // spec: S-0301 claim 22 (Palette: no palette of its object; row 4 or 5 of S-0103 claim 8 by its own art flags, also when attached)
                     a.carrier = None;
                     a.sim = *id;
+                    // nocite: our own diagnostics (#442)
+                    a.cause = "a shot animation event of the simulation";
                 }
                 // spec: S-0301 claim 23 (no default or placeholder picture: a type without art draws nothing; the viewer's debug layer marks it)
                 if !sprite && self.debug_markers {
@@ -3070,6 +3101,8 @@ impl Live {
                 }
                 if let Some(a) = anim_mut(&mut self.anims, serial) {
                     a.sim = *id;
+                    // nocite: our own diagnostics (#442)
+                    a.cause = "an animation event of the simulation";
                 }
                 if !sprite && self.debug_markers {
                     self.transients.push(Transient {
@@ -4177,6 +4210,12 @@ impl Live {
         }
         self.counts.anims_drawn = anim_items.len();
         self.counts.most_anims_drawn = self.counts.most_anims_drawn.max(anim_items.len());
+        // design: #442 (the trace under the pointer names each animation item by its animation)
+        self.anim_keys.clear();
+        for (serial, (_, items)) in &anim_items {
+            self.anim_keys
+                .extend(items.iter().map(|i| (i.image, i.x, i.y, *serial)));
+        }
         let mut particle_items = self.particle_items(inputs, scene);
         particle_items.extend(self.projectile_items(inputs, scene));
         particle_items.extend(self.piece_items(inputs, scene));
@@ -5477,7 +5516,11 @@ impl Live {
                             None => format!("static object code {code:#x}"),
                         },
                     },
-                    None => "no object".to_string(),
+                    // design: #442 (an animation item names its animation)
+                    None => match self.anim_item_text(it) {
+                        Some(a) => format!("no object; {a}"),
+                        None => "no object".to_string(),
+                    },
                 };
                 let path = match (it.object, it.group, it.paint == Paint::Shadow) {
                     (_, glasnost_render::scene::Group::Effects, _) => {

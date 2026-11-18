@@ -57,7 +57,13 @@ impl Client {
                 }
                 self.settings_changed();
             }
-            SettingsHit::Rebind(i) => self.rebinding = Some(i),
+            SettingsHit::Rebind(i) => {
+                self.rebinding = Some(i);
+                if ACTIONS.get(i).is_some_and(|a| a.may_be_unbound()) {
+                    // design: #442 (how to leave the trace key unbound)
+                    self.settings_note = "Press a letter or a digit; Backspace: no key.".into();
+                }
+            }
             SettingsHit::Reset => {
                 // The relay address, a game to rejoin and the map picker's
                 // search and filters (kept from its own screen) are not
@@ -80,6 +86,18 @@ impl Client {
     pub(super) fn settings_key(&mut self, k: Key) {
         match (self.rebinding, k) {
             (Some(_), Key::Escape) => self.rebinding = None,
+            (Some(i), Key::Backspace | Key::Delete)
+                if ACTIONS.get(i).is_some_and(|a| a.may_be_unbound()) =>
+            {
+                // design: #442 (Backspace or Delete leaves the trace key unbound)
+                if let Some(a) = ACTIONS.get(i).copied()
+                    && self.settings.bindings.unbind(a).is_ok()
+                {
+                    self.rebinding = None;
+                    self.settings_note.clear();
+                    self.settings_changed();
+                }
+            }
             (Some(i), Key::Char(c)) => {
                 let Some(a) = ACTIONS.get(i).copied() else {
                     self.rebinding = None;
@@ -161,12 +179,7 @@ impl Client {
             ],
             bindings: ACTIONS
                 .iter()
-                .map(|a| {
-                    (
-                        label(*a).to_owned(),
-                        s.bindings.key(*a).to_ascii_uppercase().to_string(),
-                    )
-                })
+                .map(|a| (label(*a).to_owned(), s.bindings.key_text(*a)))
                 .collect(),
             rebinding: self.rebinding,
             fixed: FIXED_KEYS
@@ -203,6 +216,7 @@ fn label(a: Action) -> &'static str {
         Action::TypeSelect => "Select type (tap: extend)",
         Action::PathReport => "Save pathing report",
         Action::Mark => "Mark (pathing report)",
+        Action::Trace => "Trace under pointer",
         Action::MakeGroup => "Make a group, web (+digit)",
     }
 }

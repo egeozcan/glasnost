@@ -1207,6 +1207,9 @@ impl Client {
                 s.save_path_report(self.save_path_report);
             }
             Some(Bound::Mark) => s.mark(),
+            Some(Bound::Trace) => {
+                s.save_trace(self.save_path_report);
+            }
             Some(Bound::TypeSelect) => s.type_select_key(true),
             Some(Bound::RouteMode) => s.route_key(true),
             Some(Bound::MakeGroup) => self.group_held = self.group_fallback,
@@ -1722,6 +1725,8 @@ pub enum Bound {
     PathReport,
     /// Mark the moment for the pathing report (M8 A4).
     Mark,
+    /// Trace what is drawn under the pointer (#442, our own diagnostics).
+    Trace,
     /// The type-select role (S-0214 claim 12), held or pressed.
     TypeSelect,
     /// The route-mode key (S-0213 claims 16 and 22).
@@ -1748,6 +1753,7 @@ pub fn bound_with(b: &Bindings, k: Key) -> Option<Bound> {
             Action::Cheer => Bound::Cheer,
             Action::PathReport => Bound::PathReport,
             Action::Mark => Bound::Mark,
+            Action::Trace => Bound::Trace,
             Action::TypeSelect => Bound::TypeSelect,
             Action::RouteMode => Bound::RouteMode,
             Action::MakeGroup => Bound::MakeGroup,

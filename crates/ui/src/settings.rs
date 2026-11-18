@@ -219,8 +219,8 @@ mod tests {
         }
         for size in [(640, 480), (800, 600)] {
             let mut p = page();
-            // The client's counts: 10 bindings, 16 fixed keys.
-            p.bindings = (0..10).map(|i| (format!("A{i}"), "K".into())).collect();
+            // The client's counts: 11 bindings, 16 fixed keys.
+            p.bindings = (0..11).map(|i| (format!("A{i}"), "K".into())).collect();
             p.fixed = (0..16).map(|i| (format!("F{i}"), "K".into())).collect();
             let (_, t) = view(size, &p, None);
             for (r, _) in &t.list {

@@ -881,6 +881,53 @@ impl Session {
         text
     }
 
+    /// The trace under the screen point `p` (#442, see
+    /// `Live::trace_report`); empty without a live game.
+    pub fn trace_under(&mut self, p: Point) -> Vec<String> {
+        // design: render (#138)
+        self.draw_owed_frame();
+        let cell = self.under(p).0;
+        let world = self.world_point(p);
+        let top = self.view().origin.1;
+        let statics = self.loaded.built.objects.clone();
+        let at = crate::mapview::live::TraceAt {
+            screen: (p.x, p.y),
+            world,
+            top,
+            cell,
+        };
+        self.with_live_kept(|live, _, scene| live.trace_report(scene, &statics, at))
+            .unwrap_or_default()
+    }
+
+    /// Traces what is drawn under the pointer (#442, our own diagnostics):
+    /// writes the trace to the log and stores it with `save` as
+    /// `trace-<tick>.txt`; returns the status text shown. Nothing reaches
+    /// the game.
+    pub fn save_trace(&mut self, save: Option<super::report::SaveReport>) -> String {
+        let at = self.pointer.filter(|p| self.map_rect().contains(*p));
+        let text = match at {
+            None => "Trace under pointer: the pointer is not over the battlefield.".to_owned(),
+            Some(p) => {
+                let lines = self.trace_under(p);
+                for l in &lines {
+                    log::info!("{l}");
+                }
+                let mut body = lines.join("\n");
+                body.push('\n');
+                let name = format!("trace-{}.txt", self.play.game.world.tick);
+                match save.map(|s| s(&name, body.as_bytes())) {
+                    None => "This client cannot save a trace; it is in the log.".to_owned(),
+                    Some(Ok(place)) => format!("Trace under pointer saved to {place}."),
+                    Some(Err(why)) => format!("The trace was not saved: {why}; it is in the log."),
+                }
+            }
+        };
+        log::info!("{text}");
+        self.play.say(text.clone());
+        text
+    }
+
     /// Marks the present tick for the pathing report (M8 A4).
     pub fn mark(&mut self) {
         let tick = self.play.game.world.tick;
