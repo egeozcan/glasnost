@@ -46,6 +46,7 @@ fn land_row(ground: &str, float: &str) -> LandRow {
 /// - HUT1: a 1 × 1 garrisonable building of the civilian tech level;
 /// - the testkit's WALKER, made an occupier;
 /// - PLANE: a flying aircraft;
+/// - BIO: a 2 × 2 infantry absorber for three;
 /// - PIT: a 2 × 2 tank bunker, and TANK: a turreted vehicle with a weapon
 ///   (the combat ruleset's CRUSHER, not a crusher), bunker-eligible.
 fn rules() -> Ruleset {
@@ -133,6 +134,20 @@ fn rules() -> Ruleset {
         .entry("buildings".into())
         .or_default()
         .push("PIT".into());
+    let mut bio = BuildingType {
+        strength: Some(1000),
+        foundation: Some([2, 2]),
+        infantry_absorb: Some(true),
+        passengers: Some(3),
+        size_limit: dec("1"),
+        ..Default::default()
+    };
+    bio.econ.power = Some(10);
+    r.sim.buildings.insert("BIO".into(), bio);
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("BIO".into());
     let mut tank = r.sim.vehicles["CRUSHER"].clone();
     tank.crusher = None;
     r.sim.vehicles.insert("TANK".into(), tank);
@@ -442,6 +457,41 @@ fn an_aircraft_holder_follows_s0501_claim_53() {
     transport::board(&mut w, i, c);
     assert_eq!(transport::riding(&w, i), Some(c), "void: not boarded");
     assert_eq!(dest(&w, p), None, "the aircraft lost it");
+}
+
+// spec: S-0507 claim 6a (going into a building that takes it off the map) and Q-3237 interim (going into an infantry absorber, S-0605 claims 6 and 7, is going inside: a holder loses it as its destination)
+#[test]
+fn going_into_an_absorber_is_going_inside() {
+    let mut w = world();
+    let b = at(&mut w, Kind::Building, "BIO", 0, 5, 3);
+    let i = at(&mut w, Kind::Infantry, "WALKER", 0, 6, 7);
+    let v = at(&mut w, Kind::Vehicle, "HAULER", 0, -8, 6);
+    testkit::run(&mut w, 5);
+    econ::assign_destination(&mut w, v, Some(Target::Object(i)));
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        orders::Order::Behaviour {
+            actor: i,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Object(b)),
+        }
+    ));
+    let mut gone_in = false;
+    for _ in 0..600 {
+        let before = dest(&w, v);
+        tick::step(&mut w);
+        if glasnost_sim::structures::absorb::absorbed_in(&w, i) == Some(b) {
+            assert_eq!(before, Some(Target::Object(i)), "void: V lost I before");
+            gone_in = true;
+            break;
+        }
+    }
+    assert!(gone_in, "void: I was not absorbed");
+    assert!(inside(&w, i));
+    assert_eq!(dest(&w, v), None, "V loses I");
 }
 
 // spec: S-0507 claim 6a (a vehicle that enters a tank bunker stays on the map, S-0606 claim 7, so claim 6a does not apply to it: a holder keeps it as its destination)
