@@ -72,6 +72,19 @@ pub enum Role {
     },
 }
 
+/// What ties a nuclear strike's warning marker to its missile (S-0513
+/// claim 11): the marker ends when that missile leaves play. It stays at
+/// the target cell's centre (Q-3253's interim rule), so it has no owner
+/// object.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WarningMarker {
+    /// The missile it is attached to (a projectile).
+    pub missile: ObjectId,
+    /// The launching house, which the marker's viewer test reads
+    /// (presentation); `None` for a strike with no house.
+    pub house: Option<HouseId>,
+}
+
 /// One ordinary animation in play.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Anim {
@@ -105,6 +118,10 @@ pub struct Anim {
     /// fixed, attached to an owner or bouncing.
     #[serde(default)]
     pub making: Option<crate::mutation::Making>,
+    /// The missile and launching house of a nuclear strike's warning marker
+    /// (S-0513 claim 11, #441); `None` for every other animation.
+    #[serde(default)]
+    pub warning: Option<WarningMarker>,
 }
 
 /// What a creator gives a new ordinary animation besides its type and
@@ -121,6 +138,8 @@ pub struct Spawn {
     /// Made by an animation through a link on a loop of animation types
     /// ([`Anim::looped`]).
     pub looped: bool,
+    /// A warning marker's missile and house ([`Anim::warning`]).
+    pub warning: Option<WarningMarker>,
 }
 
 /// A created animation.
@@ -216,6 +235,7 @@ pub fn spawn_index(w: &mut World, index: Option<u32>, at: Option<Pos>, s: Spawn)
             flight,
             looped: s.looped,
             making,
+            warning: s.warning,
         },
     );
     // spec: S-0109 claim 29 and S-0203 claims 3 and 4 (appended; eligible for its first update later in the same pass)
@@ -472,6 +492,14 @@ pub fn turn(w: &mut World, id: ObjectId) {
         return;
     };
     let skip = w.rules().quirks.update_order_removal_skip;
+    if let Some(m) = a.warning
+        && !w.projectiles.contains_key(&m.missile)
+    {
+        // spec: S-0513 claim 11 (the warning marker ends when its missile leaves play) and S-0109 claim 22 (deleted at its next update, which does nothing else)
+        ended(w, id, &a);
+        w.update.leave(id, skip);
+        return;
+    }
     // spec: S-0611 claim 15 (a bouncing animation's point is its position in play from its last motion step, attached to an owner or not)
     let flown = a.pos;
     let mut factor = 1;
