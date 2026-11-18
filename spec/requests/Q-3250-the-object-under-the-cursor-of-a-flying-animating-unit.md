@@ -28,13 +28,16 @@ synthetic map (`crates/app/src/mapview/hover_pick_tests.rs`) finds the following
   the unit. That holds although its shots' effects pass over the pointer in 9 of those frames.
 - The pick reads the scene of the frame being shown. A frame put off by a tick is drawn before
   any pick, and the drawing does not interpolate between ticks.
-- A hovering jumpjet unit's height keeps changing (in the trace, between 460 and 540 leptons,
-  which moves its body by up to 12 screen rows). Its drawn frame also changes as it fires. So a
-  still pointer near a real sprite's edge, or over a transparent gap in it, lies on the unit's
-  pixels in some frames and off them in others.
+- A hovering jumpjet unit's height keeps changing: in the trace, between 460 and 540 leptons,
+  which moves its body by up to 12 screen rows. The trace's synthetic type kept one image frame
+  while it fired, so it shows only this height change. Real art also changes the drawn frame
+  through its flight and firing sequences, which this trace does not measure. Either change
+  puts a still pointer near a real sprite's edge, or over a transparent gap in it, on the
+  unit's pixels in some frames and off them in others.
 - A tree in front of the point below the unit hides it by depth, as S-0102 claims 10 and 11
-  say. Over a tall tree, the trace picks the tree in every frame. Near the tree's edge, the
-  pixel goes to the tree or to the unit depending on the unit's height.
+  say. Over a tall tree, the trace picks the tree in every frame. The trace does not place the
+  pointer at the tree's edge; there, by the same depth test, we expect the pixel to go to the
+  tree or to the unit depending on the unit's height.
 
 Each such change flips the hover between "object" and "cell", and the cursor follows. If the
 original finds the object some other way, our cursor flickers where its cursor does not.
