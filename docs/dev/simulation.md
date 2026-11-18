@@ -2444,3 +2444,61 @@ The object also leaves every vehicle's and infantry unit's queued destinations, 
 **Formats.** `HoverState::taken_point` is saved and hashed. The save format goes to 175 and the AI game format to 151 (wire 12 unchanged). The main session renumbers both at merge.
 
 **Census (P3).** The loss changes destinations, queued destinations and locomotor state. `World::census` notes none of these, so nothing new is forgotten. The census `holders_drop` builds is forgotten at its end, as before.
+
+Batch S35 builds the answers to Q-3235, Q-3236 and Q-3237. Its section below replaces the paragraph on Q-3235 and the walking bullet above.
+
+## Simulation (sim issues S35: the factory break-off and object destinations)
+
+The thirty-fifth batch builds two things:
+
+- S-0406 r19 with M-0027, the answer to Q-3243 (#440). This is the factory break-off of the build-up, written into the S-0406 paragraphs it changes.
+- The answers to S31's requests Q-3235 to Q-3237: S-0503 r29, S-0208 r67 and S-0507 r12.
+
+Each change of behaviour has a test on synthetic data committed before it. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S35*.
+
+**A hovering vehicle's object destination (S-0503 claim 20, r29).**
+
+- *D* for an object destination is the object's movement point at the effective assignment, and it does not follow the object. The movement point is the docking point of a depot or tank bunker in contact, otherwise the object's position.
+- When the locomotor takes the destination, `hover::record_taken_point` stores *D* in `HoverState::taken_point`:
+  - unless held, with the height of Terms (the surface plus 416 on a high-bridge cell);
+  - while held, as claim 18's supplied point, unadjusted.
+- `destination_point` and `path::heading_point` read that point (`hover::taken_object_point`), so the searches of S-0212 claims 20 to 23 look for *D*'s cell, not the object's current cell.
+- An assignment that is not effective is ignored and leaves *D* as it was. Such an assignment gives the same object again, with no change of the order-level destination and no destination-refresh state on (S-0207 claim 27; S-0502 claims 24 and 27). The callers pass `effective` to `hover::take_destination`.
+
+Q-3263's interims:
+
+- the height is the surface height at the movement point itself;
+- only an object destination is ignored, and not after claim 10's stop request;
+- depot or bunker contact taken in the same order sets *D* to the docking point (`hover::contact_taken`, called from `depot` and `structures::bunker`).
+
+**A walker's object destination (S-0208 Terms and claims 6 and 16, r67).**
+
+- At the assignment, `walk::take_destination` stores the object's movement point in `WalkState::object_point` (`path::heading_point` gives it). Claim 16's arrival test reads that point, not the object's position now.
+- When the destination is lost by S-0507 claim 6a, `transport::destination_went_inside` copies the point into `WalkState::kept`. The walker goes on along its stored path with no order-level destination.
+- For its own locomotion only, `walk::tick` lends the kept point's cell as its destination (`kept_in`). So the stored path, fresh searches and claim 16 (at the kept point's height, `cell_destination_height`) all read the kept point. `kept_out` ends the loan:
+  - the walk goes on: the point stays;
+  - the walk ended, or a search gave up: no point is left;
+  - a destination given meanwhile replaces the point.
+- A walker with a kept point is still in progress for the occupancy pass.
+
+Q-3262's interim: a search for a live object destination looks for the object's current cell.
+
+Q-3264, filed by this batch, has two interims:
+
+- when S-0212 claim 24 substitutes another cell for the kept point's cell, the walk goes on to the substitute's centre, at claim 18's height;
+- the object point's height is not adjusted.
+
+**The other locomotors at the loss (S-0507 claim 6a, r12).**
+
+- *Jumpjet.* The jumpjet keeps its movement point and commitment, and the loss is not an effective clear of S-0502 claim 24. Like the factory ascent report's discard (S-0417 claim 15), `JumpState::order` follows the order-level destination to none, so no reroute runs.
+- *Teleporting.* The loss does not cancel a pending jump, as claim 20 (h) would for an empty destination. `TeleportState::for_dest` becomes none and the jump goes on to its fixed landing point.
+
+**What goes inside (S-0507 claim 6a, r12).** Three more entries now call `objects::go_inside`:
+
+- a slave delivered into its master (`econ::slaves`);
+- a parasite going into its host when it fires (`parasite`);
+- a spawned aircraft docking back into its spawner (`spawn`).
+
+The lift of a unit displaced from a replacement's foundation (S-0524 claim 13) is not going inside. It keeps `objects::take_inside`, and its holders keep it as their destination.
+
+**Formats.** `WalkState::object_point` and `WalkState::kept` are new, saved and hashed, with serde defaults. The batch's format bump for S-0406 (save 183, AI game 161, wire 12 unchanged) covers them, because those formats are not yet released.
