@@ -2,13 +2,13 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 57
+revision: 58
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-13
+approved-on: 2026-11-18
 measurements: [M-0005]
-requests: [Q-0180, Q-0224, Q-0276, Q-1503, Q-1505, Q-1710, Q-3060]
+requests: [Q-0180, Q-0224, Q-0276, Q-1503, Q-1505, Q-1710, Q-3060, Q-3243]
 supersedes: []
 ---
 
@@ -1209,14 +1209,14 @@ switched off the house has full power (W3's second pair).
   - (i) at full power, a sell order on R.
   - (j) at full power with no other control centre, place K. An X vehicle of a type that does not
     hover stands where the map placed it, on a cell without a building, and has not moved since the
-    start. During K's second build-up run, no earlier than the tick after the build-up animation
-    has restarted at stage 0 (S-0406 claim 17: tick *C*), order the X vehicle to a nearby cell that
+    start. During K's build-up, no earlier than the tick after its first construction processing
+    has started the build-up animation at stage 0 (S-0406 claim 17: tick *C*), order the X vehicle to a nearby cell that
     it reaches before the build-up ends, along a route with no building, read whether it moves and
     where it stops, and read it again when the build-up ends. In the same runs, place a second
-    defence A together with K and watch whether it fires during its own second build-up run and
-    after its build-up. The X vehicle separates the two readings of claim 8's last row through
+    defence A together with K and watch whether it fires during its own build-up from its *C* on
+    and after its build-up. The X vehicle separates the two readings of claim 8's last row through
     claim 13's transitions. Under a current-only reading K would be in operation from its entry
-    until *construction* becomes current on tick *R*, and the 1-to-0 transition when it stops, by
+    until *construction* becomes current on tick *C*, and the 1-to-0 transition when it stops, by
     its turn on *C* at the latest, would disable the X vehicle before the order. Under this spec's
     reading K is not in operation before its handover, so neither transition happens and the X
     vehicle is enabled when the order is given. The second A's firing is read only from *C* on,
@@ -1243,9 +1243,9 @@ switched off the house has full power (W3's second pair).
   other specs); the refinery's unloading
   animations, which belong to the docking role, are not this part's observable; (j) the X
   vehicle obeys the order, leaves its cell and is disabled at its first arrival in a cell without
-  a building (claim 13), which falls in the second build-up run, and stays
+  a building (claim 13), which falls in the build-up after *C*, and stays
   disabled until it is enabled again in the tick after the build-up ends (the building's first
-  turn in operation); the second A does not fire during its second build-up run and does after
+  turn in operation); the second A does not fire during its build-up from its *C* on and does after
   its build-up; (k) the gap hides cells at full power and stops hiding
   them one tick after the house's low-power update.
 - *Falsified if:* any state, animation or firing result differs from the expectation, or any
