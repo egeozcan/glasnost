@@ -108,6 +108,14 @@ fn issue_444_names(import: &glasnost_convert::Import, rules: &SimRules, vfs: &gl
             "#444 refinery type {i}: slot names given {}",
             e.slot_names.is_some()
         );
+        // Every S-0108 slot whose normal name the type's art gives.
+        let named: Vec<slot_play::Slot> = defs
+            .iter()
+            .flatten()
+            .filter(|(_, def)| !def.normal.is_empty())
+            .map(|(s, _)| *s)
+            .collect();
+        println!("  the drawing's named slots: {named:?}");
         for (base, slot) in BASES {
             let pair = e.slot_names.as_ref().and_then(|m| m.get(base));
             for (v, variant) in ["normal", "damaged"].into_iter().enumerate() {
