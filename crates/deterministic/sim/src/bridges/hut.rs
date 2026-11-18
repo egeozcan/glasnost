@@ -501,6 +501,8 @@ fn place_section(w: &mut World, c: CellXY, line: Line, family: Family) {
         return;
     }
     let o = pieces::high_overlay(family, line);
+    // spec: S-0520 claims 11 and 29 (revision 17: a crate whose overlay the section replaces no longer belongs to its place, nor is it a map's own crate) (#284)
+    crate::crates::overlay_changed(w, c);
     if let Some(cell) = w.cells.grid.get_mut(c) {
         cell.overlay = o;
         // spec: S-0511 claim 19 (data 0 along x, 9 along y)
@@ -721,5 +723,28 @@ fn high_cursor(w: &World, p: CellXY, q: i32) -> bool {
             l.first
         };
         probe = at(traversal, d, 1);
+    }
+}
+
+/// A repaired section ends the crate entries of its cell (#284).
+/// Synthetic data only.
+#[cfg(test)]
+mod crate_entry_tests {
+    use super::*;
+    use crate::crates::fixture::{at, crate_entries, entries, world};
+
+    // spec: S-0520 claims 11 and 29 (revision 17: a crate whose overlay is replaced no longer belongs to its place, nor is it a map's own crate); S-0511 claim 19 (the repair places an intact section in the cell)
+    #[test]
+    fn issue_284_a_repaired_section_ends_the_crate_entries_of_its_cell() {
+        let mut w = world();
+        let c = at(0, 0);
+        crate_entries(&mut w, c);
+        place_section(&mut w, c, Line::X, Family::Bridge);
+        assert_eq!(
+            w.cells.cell(c).map(|x| x.overlay),
+            Some(pieces::high_overlay(Family::Bridge, Line::X)),
+            "the scenario: the section is placed"
+        );
+        assert_eq!(entries(&w, c), (false, false), "(place, map crate)");
     }
 }

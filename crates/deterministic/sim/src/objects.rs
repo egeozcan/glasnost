@@ -55,12 +55,40 @@ pub fn occ_quirks(w: &World) -> OccupancyQuirks {
 /// (S-0402 claim 19) are created as part of the creation, each with its
 /// own creation set before the next.
 pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>) -> ObjectId {
-    create_in(w, kind, type_index, owner, &mut Vec::new())
+    create_in(w, kind, type_index, owner, &mut Chain::default())
 }
 
-/// The types whose creation is in progress in one creation set, outermost
-/// first (S-0611 F5's chain of spawned and slave types).
-pub(crate) type Chain = Vec<(Kind, u32)>;
+/// The most members one creation set has, its root included (#344): a
+/// limit of our engine, not game behaviour. Once a set is full, a spawner
+/// gets only the slots it has filled and a slave master only the slaves it
+/// has made, and the importer warns ([`creation_set_limits`]).
+// nocite: our own input validation (#344): far above any creation set game data makes; it keeps nested spawn and slave counts from multiplying without bound
+pub const MAX_CREATION_SET: usize = 1000;
+
+/// One creation set in progress: the types whose creation is in progress,
+/// outermost first (S-0611 F5's chain of spawned and slave types), and the
+/// number of members made so far, the root included (#344).
+#[derive(Debug, Default)]
+pub(crate) struct Chain {
+    types: Vec<(Kind, u32)>,
+    made: usize,
+}
+
+impl Chain {
+    /// The set of an object `t` that already exists, as its root.
+    pub(crate) fn rooted(t: (Kind, u32)) -> Self {
+        Chain {
+            types: vec![t],
+            made: 1,
+        }
+    }
+
+    /// Whether the set holds [`MAX_CREATION_SET`] members (#344).
+    pub(crate) fn full(&self) -> bool {
+        // design: #344 (a creation set holds at most MAX_CREATION_SET members)
+        self.made >= MAX_CREATION_SET
+    }
+}
 
 /// [`create`] inside a creation set whose enclosing creations are `chain`.
 pub(crate) fn create_in(
@@ -71,6 +99,7 @@ pub(crate) fn create_in(
     chain: &mut Chain,
 ) -> ObjectId {
     let id = create_converted(w, kind, type_index, owner);
+    chain.made += 1;
     fill(w, id, chain);
     id
 }
@@ -100,16 +129,73 @@ pub(crate) fn fill(w: &mut World, id: ObjectId, chain: &mut Chain) {
     let Some(t) = w.obj(id).map(|o| (o.kind, o.type_index)) else {
         return;
     };
-    if chain.contains(&t) {
+    if chain.types.contains(&t) {
         // spec: S-0611 claim 14 and F5, S-0402 claim 19 (revision 4 and 34, Q-1530 answered: the object that closes a cycle of spawned and slave types within its own chain keeps its creation draw and number but gets neither a spawn controller nor a slave group, so no slots or places to fill later; only that object, not every object of its type; the importer warns)
         return;
     }
-    chain.push(t);
+    chain.types.push(t);
     // spec: S-0611 claim 14 and F5, S-0506 claim 1 (a spawner gets its spawn controller and its full slots when it is created; the slot objects' draws and numbers come after the spawner's own, in increasing slot index)
     crate::spawn::created_in(w, id, chain);
     // spec: S-0611 claim 14 and F5, S-0402 claim 19 (the group is created as part of the object's own creation; its slaves' draws and numbers follow the master's and those of all initial slot objects and their descendants, in place order)
     crate::econ::slaves::created_in(w, id, chain);
-    chain.pop();
+    chain.types.pop();
+}
+
+/// The warnings of #344: each spawner or slave master type whose full
+/// creation set, by the counts it names (each capped at
+/// [`crate::spawn::MAX_CREATED_COUNT`]), is above [`MAX_CREATION_SET`]. A
+/// type that closes a cycle within its chain counts as one member, as
+/// [`fill`] makes it.
+pub(crate) fn creation_set_limits(
+    missiles: &crate::spawn::MissileRules,
+    harvest: &crate::econ::harvest::Rules,
+) -> Vec<String> {
+    // A type, and the types it creates with their (capped) counts.
+    type Ty = (Kind, u32);
+    type Children<'a> = dyn Fn(Ty) -> Vec<(Ty, usize)> + 'a;
+    let cap = |n: i32| n.clamp(0, crate::spawn::MAX_CREATED_COUNT) as usize;
+    let children = |t: Ty| -> Vec<(Ty, usize)> {
+        let mut v = Vec::new();
+        if let Some(s) = missiles.spawners.get(&t) {
+            v.push(((Kind::Aircraft, s.spawned), cap(s.count)));
+        }
+        if let Some(g) = harvest.group_of(t.0, t.1)
+            && g.count >= 1
+        {
+            v.push(((Kind::Infantry, g.slave), cap(g.count)));
+        }
+        v
+    };
+    // The members of a creation set rooted at `t` inside the chain `path`,
+    // saturating just above the limit (so the search stays small).
+    fn size(t: Ty, path: &mut Vec<Ty>, children: &Children<'_>) -> usize {
+        let over = MAX_CREATION_SET + 1;
+        if path.contains(&t) {
+            return 1;
+        }
+        path.push(t);
+        let mut n: usize = 1;
+        for (k, count) in children(t) {
+            if n >= over {
+                break;
+            }
+            let each = size(k, path, children);
+            n = n.saturating_add(each.saturating_mul(count)).min(over);
+        }
+        path.pop();
+        n
+    }
+    let mut roots: Vec<(Kind, u32)> = missiles.spawners.keys().copied().collect();
+    roots.extend(harvest.masters());
+    roots.sort();
+    roots.dedup();
+    roots
+        .into_iter()
+        .filter(|&r| size(r, &mut Vec::new(), &children) > MAX_CREATION_SET)
+        .map(|(kind, i)| {
+            format!("the {kind:?} type at index {i} has a creation set of more than {MAX_CREATION_SET} objects; our engine creates at most {MAX_CREATION_SET} (#344)")
+        })
+        .collect()
 }
 
 /// The warnings of S-0611 F5: each spawned or slave type that closes a

@@ -168,12 +168,24 @@ fn a_chooser_wins_over_the_pair_early() {
 /// spec: S-0009 claim 29 and Import mapping (early phase: an unread component keeps the mark as it stands, −1; S-0003 claim 9, a departure)
 #[test]
 fn an_unread_component_keeps_the_free_mark_early() {
-    // Pair 9 = (1, unread): position 0 is house 1's, position 1 stays free.
-    let mut s = scene();
-    s.map.header = header(9, &[Some([Some(1), None])]);
-    let w = load(&s);
-    // House 0 is the farthest from position 0: position 2.
-    assert_eq!(starts(&w), [Some(2), Some(0)]);
+    for seed in 1..=5 {
+        // Pair 9 = (1, unread): position 0 is house 1's, position 1 stays free.
+        let mut s = scene();
+        s.setup.seed = seed;
+        s.map.header = header(9, &[Some([Some(1), None])]);
+        let w = load(&s);
+        // House 0 is the farthest from position 0: position 2.
+        assert_eq!(starts(&w), [Some(2), Some(0)], "seed {seed}");
+        // The same game with house 1 choosing position 0: the pair's read
+        // component places house 1 with no random-position draw, so the
+        // result is the rule's and not a draw that happens to agree.
+        let mut control = scene();
+        control.setup.seed = seed;
+        control.setup.houses[1].start = Some(0);
+        let c = load(&control);
+        assert_eq!(starts(&c), starts(&w), "seed {seed}");
+        assert_eq!(w.rng, c.rng, "seed {seed}: no random-position draw");
+    }
 }
 
 /// spec: S-0009 claim 29 (a mark at a position numbered N or above is ignored, a departure: pairs 11 and 13 mark positions 4, 5, 8 and 9 of a four-position game; our engine notes it)

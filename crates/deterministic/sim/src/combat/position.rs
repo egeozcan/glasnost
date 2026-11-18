@@ -216,9 +216,10 @@ fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos 
                 Some(tg) => {
                     let tp = crate::combat::range::target_point(w, tg);
                     let rp = w.reference_point(firer);
+                    // spec: S-0204 F3 (X = x_Q − x_P, Y likewise); S-0205 claim 1 (an integer result outside the range wraps; neither S-0313 nor S-0204 states a clamp)
                     glasnost_num::geom::direction(
-                        i64::from(tp.x - rp.x),
-                        i64::from(tp.y - rp.y),
+                        i64::from(tp.x.wrapping_sub(rp.x)),
+                        i64::from(tp.y.wrapping_sub(rp.y)),
                         r.quirks.table_direction,
                     )
                 }
@@ -284,3 +285,55 @@ pub const SPRAY: [(i32, i32); 8] = [
     (0, -256),
     (180, -180),
 ];
+
+/// F4's seam: the aim difference of a building without the turret flag
+/// wraps (S-0205 claim 1). Synthetic data only.
+#[cfg(test)]
+mod aim_difference_tests {
+    use super::*;
+    use crate::testkit;
+    use crate::world::Target;
+
+    /// The building's x, near the top of the range.
+    const TOWER_X: i32 = i32::MAX - 1000;
+
+    /// A world with a building without the turret flag aiming at a vehicle
+    /// whose x is `target_x`, the building at [`TOWER_X`] on the same row.
+    fn fire_point(target_x: i32) -> Pos {
+        let mut r = testkit::combat_ruleset();
+        if let Some(b) = r.sim.buildings.get_mut("TOWER") {
+            b.turret = Some(false);
+        }
+        let mut w = testkit::game_with(&r, 30, 7);
+        let at = |dx| testkit::mid(30, dx, 0);
+        let tower = testkit::spawn(&mut w, Kind::Building, "TOWER", 0, at(0), 0);
+        let cart = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, at(2), 0);
+        let y = w.obj(tower).map_or(0, |o| o.pos.y);
+        if let Some(o) = w.obj_mut(tower) {
+            o.pos.x = TOWER_X;
+            o.target = Some(Target::Object(cart));
+        }
+        if let Some(o) = w.obj_mut(cart) {
+            o.pos.x = target_x;
+            o.pos.y = y;
+        }
+        transform_point(&w, tower, [100, 0, 0], 0)
+    }
+
+    // spec: S-0205 claim 1 (an integer result outside the range wraps; no clamp is stated by S-0313 or S-0204); S-0313 claim 3 (a building without the turret flag aims in the direction of its target from its reference point); S-0204 F3 (X = x_Q − x_P)
+    #[test]
+    fn f4_the_aim_difference_wraps() {
+        // (i32::MIN + 1000) − (i32::MAX − 1000) wraps to X = 2001: east, as
+        // a near target 500 leptons to the east. Both |X| stay far below
+        // S-0204 F3's open range (2²⁴ and above).
+        let wrapped = fire_point(i32::MIN + 1000);
+        let east = fire_point(TOWER_X + 500);
+        assert_eq!(wrapped, east, "the wrapped difference aims east");
+        // And not as a target to the west.
+        assert_ne!(
+            wrapped,
+            fire_point(TOWER_X - 500),
+            "the scenario: the aim matters"
+        );
+    }
+}
