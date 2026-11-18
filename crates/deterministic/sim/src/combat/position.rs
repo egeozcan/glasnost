@@ -284,3 +284,44 @@ pub const SPRAY: [(i32, i32); 8] = [
     (0, -256),
     (180, -180),
 ];
+
+/// F4's seam: the aim difference of a building without the turret flag
+/// wraps (S-0205 claim 1). Synthetic data only.
+#[cfg(test)]
+mod aim_difference_tests {
+    use super::*;
+    use crate::testkit;
+    use crate::world::Target;
+
+    /// A world with a building without the turret flag aiming at a vehicle
+    /// whose x is `target_x`, the building at x = −1000 on the same row.
+    fn fire_point(target_x: i32) -> Pos {
+        let mut r = testkit::combat_ruleset();
+        if let Some(b) = r.sim.buildings.get_mut("TOWER") {
+            b.turret = Some(false);
+        }
+        let mut w = testkit::game_with(&r, 30, 7);
+        let tower = testkit::spawn(&mut w, Kind::Building, "TOWER", 0, testkit::mid(30, 0, 0), 0);
+        let cart = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, testkit::mid(30, 2, 0), 0);
+        let y = w.obj(tower).map_or(0, |o| o.pos.y);
+        if let Some(o) = w.obj_mut(tower) {
+            o.pos.x = -1000;
+            o.target = Some(Target::Object(cart));
+        }
+        if let Some(o) = w.obj_mut(cart) {
+            o.pos.x = target_x;
+            o.pos.y = y;
+        }
+        transform_point(&w, tower, [100, 0, 0], 0)
+    }
+
+    // spec: S-0205 claim 1 (an integer result outside the range wraps; no clamp is stated by S-0313 or S-0204); S-0313 claim 3 (a building without the turret flag aims in the direction of its target from its reference point); S-0204 F3 (X = x_Q − x_P)
+    #[test]
+    fn f4_the_aim_difference_wraps() {
+        // i32::MAX − 100 − (−1000) wraps to a large negative X: west, as a
+        // near target to the west.
+        let far = fire_point(i32::MAX - 100);
+        let near = fire_point(-6000);
+        assert_eq!(far, near, "the wrapped difference aims west");
+    }
+}
