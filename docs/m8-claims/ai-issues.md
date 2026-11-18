@@ -263,7 +263,7 @@ and the install bench's state hash every 500 ticks are those of the #27 tree; th
 ## Batch 8
 
 Issues #434 and #443 (units under air attack, own-AI design) and #445 (an AI airship bomber idle over
-a base, traced). AI game format 159 (the air-attack part's state and three use counters join the
+a base, traced). AI game format 159 on the branch, renumbered to 135 at the merge (the air-attack part's state and three use counters join the
 brain), save 154, wire 12. Base 96ca8d8. The part is `air_attack.rs`, owned by the default script's
 special part (`Special::think_with`); notes in [own-ai.md](../dev/own-ai.md). Each fix came after
 tests committed before it. For the escape: c41edc9 and ff434a7, then 91b37d5, which counts only the
