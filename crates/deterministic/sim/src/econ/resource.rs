@@ -500,6 +500,8 @@ fn empty_cell(w: &mut World, c: CellXY) {
     let Some((t, _)) = resource_at(w, c) else {
         return;
     };
+    // spec: S-0520 claims 11 and 29 (revision 17) and Edge cases (a crate-flagged resource overlay that is removed no longer belongs to its place, nor is it a map's own crate) (#284)
+    crate::crates::overlay_changed(w, c);
     if let Some(cell) = w.cells.grid.get_mut(c) {
         // spec: S-0401 claim 5 (the overlay is removed and the stage set to 0)
         cell.overlay = NO_OVERLAY;

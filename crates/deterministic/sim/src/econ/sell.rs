@@ -325,6 +325,8 @@ pub fn wall_sale(w: &mut World, house: HouseId, cell: CellXY, silent: bool) -> b
     {
         return false;
     }
+    // spec: S-0520 claims 11 and 29 (revision 17) and Edge cases (a crate-flagged wall overlay that is removed no longer belongs to its place, nor is it a map's own crate) (#284)
+    crate::crates::overlay_changed(w, cell);
     if let Some(c) = w.cells.grid.get_mut(cell) {
         c.overlay = NO_OVERLAY;
         c.overlay_data = 0;
