@@ -985,3 +985,28 @@ pub fn mine_turn(w: &mut World, id: ObjectId) {
 pub fn removed(w: &mut World, id: ObjectId) {
     w.econ.resources.mines.remove(&id);
 }
+
+/// Emptying a resource cell ends its crate entries (#284). Synthetic data
+/// only.
+#[cfg(test)]
+mod crate_entry_tests {
+    use super::*;
+    use crate::crates::fixture::{ORE, at, crate_entries, entries, put, world};
+
+    // spec: S-0520 claims 11 and 29 (revision 17: a crate whose overlay is removed no longer belongs to its place, nor is it a map's own crate) and Edge cases (a resource type can carry the crate flag); S-0401 claims 3 and 5 (taking more bales than the stage empties the cell)
+    #[test]
+    fn issue_284_an_emptied_resource_cell_ends_its_crate_entries() {
+        let mut w = world();
+        let c = at(0, 0);
+        put(&mut w, c, ORE, 0);
+        assert!(resource_at(&w, c).is_some(), "the scenario: a resource cell");
+        crate_entries(&mut w, c);
+        take_all(&mut w, c);
+        assert_eq!(
+            w.cells.cell(c).map(|x| x.overlay),
+            Some(NO_OVERLAY),
+            "the scenario: the cell was emptied"
+        );
+        assert_eq!(entries(&w, c), (false, false), "(place, map crate)");
+    }
+}

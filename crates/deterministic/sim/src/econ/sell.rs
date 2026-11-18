@@ -860,3 +860,25 @@ pub fn adjusted_cost(w: &World, b: u32) -> i32 {
         None => k.wrapping_sub(d),
     }
 }
+
+/// A sold wall ends its cell's crate entries (#284). Synthetic data only.
+#[cfg(test)]
+mod crate_entry_tests {
+    use super::*;
+    use crate::crates::fixture::{WALL, at, crate_entries, entries, put, world};
+
+    // spec: S-0520 claims 11 and 29 (revision 17: a crate whose overlay is removed no longer belongs to its place, nor is it a map's own crate) and Edge cases (a wall type can carry the crate flag); S-0408 claim 12 (the sale removes the wall overlay)
+    #[test]
+    fn issue_284_a_sold_wall_ends_the_crate_entries_of_its_cell() {
+        let mut w = world();
+        let c = at(0, 0);
+        put(&mut w, c, WALL, 0);
+        let i = w.cells.idx(c).expect("the cell is on the map");
+        w.cells.wall_owner[i] = Some(HouseId(0));
+        w.houses[0].role = HouseRole::Player;
+        w.houses[0].human = true;
+        crate_entries(&mut w, c);
+        assert!(wall_sale(&mut w, HouseId(0), c, true), "the scenario: the wall is sold");
+        assert_eq!(entries(&w, c), (false, false), "(place, map crate)");
+    }
+}
