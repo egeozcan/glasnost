@@ -637,10 +637,8 @@ pub fn new_game(
                 marks[s as usize] = h as i32;
             }
         }
-        // spec: S-0009 claim 29 (a non-passive house holding positions takes the highest-numbered)
-        for &h in &order {
-            w.houses[h].start = starts::highest_held(&marks, n, h);
-        }
+        // spec: S-0009 claim 29 (a non-passive house holding positions takes the highest-numbered; before the cleanup the current place is the house number)
+        starts::take_held(&mut w, &order, &marks, n);
         // spec: S-0009 claims 19 and 29 (the others in house order, against list 2)
         starts::assign(&mut w, &order, &list2, &mut marks);
         if starts::marks_apply(&map.header) {
@@ -700,14 +698,8 @@ pub fn new_game(
     if !setup.sandbox {
         // spec: S-0202 claim 14 and S-0009 claim 28 (the unused-house cleanup follows the second pass and precedes the late phase; its removals recalculate the occupied cells)
         cleanup(&mut w, setup);
-        for (h, house) in w.houses.iter().enumerate() {
-            if house.removed {
-                // spec: S-0009 claims 28 and 29 (a removed house takes no position, so its marks are free; S-0009 Open questions, Q-3213's interim rule)
-                for m in marks.iter_mut().filter(|m| i64::from(**m) == h as i64) {
-                    *m = starts::FREE;
-                }
-            }
-        }
+        // spec: S-0009 claim 29 (After the cleanup, quirks.cleanup_shifts_start_marks: what the cleanup leaves in the marks)
+        starts::after_cleanup(&w, &mut marks);
         let list3 = starts::build_list(&mut w, map, players)?;
         let n = list3.len();
         // spec: S-0009 claim 28 (a removed house takes no position in the late phase)
@@ -724,14 +716,12 @@ pub fn new_game(
                 }
             }
         }
-        // spec: S-0009 claim 29 (a non-passive house holding positions takes the highest-numbered)
-        for &h in &order {
-            w.houses[h].start = starts::highest_held(&marks, n, h);
-        }
+        // spec: S-0009 claim 29 (a non-passive house holding positions takes the highest-numbered, by its current place)
+        starts::take_held(&mut w, &order, &marks, n);
         // spec: S-0009 claims 28 and 29 (a non-passive house without a position is assigned against list 3, in house order)
         starts::assign(&mut w, &order, &list3, &mut marks);
-        // spec: S-0009 claim 29 (References read the late-phase marks when N_h ≥ 9)
-        w.start_marks = starts::marks_apply(&map.header).then(|| marks.clone());
+        // spec: S-0009 claims 21 and 29 (References read the late-phase marks when N_h ≥ 9, and on any map once the cleanup has removed a house)
+        w.start_marks = starts::references_read_marks(&w, &map.header).then(|| marks.clone());
         for (h, b) in bases.iter_mut().enumerate() {
             // spec: S-0009 claim 20 (the base cell is the position's entry in list 3)
             *b = w.houses[h]
