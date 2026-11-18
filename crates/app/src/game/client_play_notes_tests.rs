@@ -141,6 +141,128 @@ fn countdown_rows_show_the_display_name() {
     assert_eq!(s.countdown_rows()[0].name, "");
 }
 
+/// A started game past its opening order block (S-0201 claim 14) with the
+/// local house's radar on and drawn (S-0410 claim 1, set here rather than
+/// built), and the screen pixel of radar map pixel (x, y) at scale 100.
+fn radar_game() -> (Client, impl Fn(i32, i32) -> Point, (i32, i32, i32, i32)) {
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    while glasnost_sim::orders::blocked(session(&c).play.world()) {
+        session_mut(&mut c).step();
+    }
+    let s = session_mut(&mut c);
+    let local = usize::from(s.play.me().0);
+    s.play.game.world.houses[local].econ.radar.available = true;
+    let _ = c.frame();
+    let s = session(&c);
+    assert!(
+        s.hud_targets().rect_of(&hud::HudHit::Radar).is_some(),
+        "the radar is offered"
+    );
+    let image = s.radar.as_ref().expect("a radar map").image_rect();
+    let l = s.layout();
+    (
+        c,
+        move |x, y| Point::new(l.radar.x + x, l.radar.y + y),
+        image,
+    )
+}
+
+/// Whether the battlefield view is centred on the cell radar map pixel
+/// (x, y) names, as a radar click centres it.
+fn centred_on(s: &mut Session, x: i32, y: i32) -> bool {
+    let cell = s
+        .radar
+        .as_ref()
+        .unwrap()
+        .cell_at(s.play.world(), x, y)
+        .expect("on the radar image");
+    let now = s.centre();
+    let (wx, wy) = glasnost_render::projection::cell_centre(cell.x, cell.y);
+    s.set_centre(glasnost_render::projection::project_lifted(wx, wy, 0));
+    s.centre() == now
+}
+
+/// The local house's superweapon fire orders so far, from the replay.
+fn fire_orders(c: &Client) -> usize {
+    let s = session(c);
+    s.play
+        .game
+        .replay()
+        .orders
+        .iter()
+        .filter(|(_, h, o)| {
+            *h == s.play.me() && matches!(o, glasnost_sim::orders::Order::FireSuperweapon { .. })
+        })
+        .count()
+}
+
+/// design: #438 (S-0410 claim 11 leaves radar camera input to the
+/// interface): a left press inside the radar image centres the view on its
+/// cell at once, each pointer move while it is held centres it on the cell
+/// under the pointer, held to the image's edge when the pointer leaves the
+/// image, and the release ends the drag with no click of its own.
+#[test]
+fn a_radar_drag_pans_the_view() {
+    let (mut c, at, (ix, iy, iw, ih)) = radar_game();
+    let orders = session(&c).play.game.replay().orders.len();
+    let (a, b) = ((ix + iw / 4, iy + ih / 4), (ix + 3 * iw / 4, iy + ih / 2));
+    c.pointer_down(Button::Left, at(a.0, a.1));
+    assert!(
+        centred_on(session_mut(&mut c), a.0, a.1),
+        "the press centres"
+    );
+    let first = session(&c).centre();
+    c.pointer_moved(at(b.0, b.1));
+    assert!(
+        centred_on(session_mut(&mut c), b.0, b.1),
+        "each move centres"
+    );
+    assert_ne!(session(&c).centre(), first, "the view moved with the drag");
+    // Past the image's left edge: held to that edge.
+    let off = at(ix - 30, iy + ih / 2);
+    c.pointer_moved(off);
+    assert!(
+        centred_on(session_mut(&mut c), ix, iy + ih / 2),
+        "held to the edge"
+    );
+    let last = session(&c).centre();
+    c.pointer_up(Button::Left, off, Modifiers::default());
+    assert_eq!(session(&c).centre(), last, "the release gives no click");
+    assert_eq!(
+        session(&c).play.game.replay().orders.len(),
+        orders,
+        "no order"
+    );
+    // A move with no button held does not pan.
+    c.pointer_moved(at(a.0, a.1));
+    assert_eq!(session(&c).centre(), last);
+}
+
+/// design: #438 (S-0410 claim 11; claim 12's superweapon offers): with a
+/// radar-aimed superweapon armed, a press and a drag on the radar neither
+/// pan nor fire, and the release fires once at its cell, as a click does.
+#[test]
+fn a_radar_drag_with_an_aimed_superweapon_fires_once_at_the_release() {
+    let (mut c, at, (ix, iy, iw, ih)) = radar_game();
+    let s = session_mut(&mut c);
+    s.play.selection.clear();
+    s.play.tool = super::super::play::Tool::Superweapon {
+        sw: 0,
+        from_source: false,
+    };
+    assert_eq!(s.play.radar_aims(), Some(0));
+    let centre = s.centre();
+    let (a, b) = ((ix + iw / 4, iy + ih / 4), (ix + 3 * iw / 4, iy + ih / 2));
+    c.pointer_down(Button::Left, at(a.0, a.1));
+    c.pointer_moved(at(b.0, b.1));
+    assert_eq!(session(&c).centre(), centre, "no pan");
+    assert_eq!(fire_orders(&c), 0, "nothing fired before the release");
+    c.pointer_up(Button::Left, at(b.0, b.1), Modifiers::default());
+    assert_eq!(fire_orders(&c), 1, "the release fires once");
+    assert_eq!(session(&c).centre(), centre, "no pan");
+}
+
 /// The fixture's rules with its superweapon's kind and aim action word.
 fn aim_rules(kind: &str, action: &str) -> Arc<SimRules> {
     let mut r = fixture::ruleset();
