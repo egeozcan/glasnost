@@ -2283,12 +2283,24 @@ fn corridor_searches(
 /// destination substitution, the search, flattening and storage. With the
 /// movement trace on, it is recorded ([`crate::trace`]).
 pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
+    compute_at(w, id, mode, None)
+}
+
+/// [`compute`] with the search starting at cell `from` instead of the
+/// unit's own cell: a train's recomputation as its last stored step begins
+/// starts where that step leads (S-0212 claim 20).
+pub fn compute_from(w: &mut World, id: ObjectId, mode: Mode, from: CellXY) -> Search {
+    compute_at(w, id, mode, Some(from))
+}
+
+/// [`compute`] from `start`, else from the unit's cell.
+fn compute_at(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>) -> Search {
     if !crate::trace::on(w) {
-        return compute_untraced(w, id, mode);
+        return compute_untraced(w, id, mode, start);
     }
-    let from = w.obj(id).map(|o| o.pos.cell());
+    let from = start.or_else(|| w.obj(id).map(|o| o.pos.cell()));
     crate::trace::begin_search(w);
-    let result = compute_untraced(w, id, mode);
+    let result = compute_untraced(w, id, mode, start);
     let noted = crate::trace::pending(w);
     let (steps, to) = match (result, w.obj(id)) {
         (Search::Found, Some(o)) => (o.path.steps.clone(), o.path.for_goal),
@@ -2309,9 +2321,9 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     result
 }
 
-/// [`compute`] without the trace.
-fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
-    let res = compute_once(w, id, mode);
+/// [`compute`] without the trace, from `start` else the unit's cell.
+fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>) -> Search {
+    let res = compute_once(w, id, mode, start);
     if res == Search::Found || w.rules().quirks.unreachable_move_dropped {
         return res;
     }
@@ -2326,7 +2338,7 @@ fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     if let Some(ob) = w.obj_mut(id) {
         ob.dest = Some(Target::Cell(c));
     }
-    compute_once(w, id, mode)
+    compute_once(w, id, mode, start)
 }
 
 /// How far round a move's destination [`reachable_near`] looks, in rings.
@@ -2992,8 +3004,9 @@ fn holds(w: &World, id: ObjectId) -> bool {
     (blocked < HOLD_FIRST || (blocked < HOLD_WAIT && yield_near())) && jammed(w, id)
 }
 
-/// One path computation of [`compute_untraced`].
-fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
+/// One path computation of [`compute_untraced`], from `start` else the
+/// unit's cell.
+fn compute_once(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>) -> Search {
     let Some(o) = w.obj(id).cloned() else {
         return Search::SearchFailed;
     };
@@ -3005,7 +3018,8 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
         return Search::SearchFailed;
     };
-    let from = o.pos.cell();
+    // spec: S-0212 claim 20 (a train's recomputation starts where the step in progress leads)
+    let from = start.unwrap_or_else(|| o.pos.cell());
     regions::ensure(w);
     let inside = w.cells.usable(from);
     // A unit inside the usable area may not step outside it (S-0211 Terms) and
@@ -3134,7 +3148,7 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         && shut_in(w, id, &u, &ring, goal)
         && give_way(w, id, &ring) == Some(true)
     {
-        return compute_once(w, id, Mode::Fresh);
+        return compute_once(w, id, Mode::Fresh, start);
     }
     // spec: S-0212 claim 13b (the coarse end cells: the start's when the unit is on a bridge deck, the destination's when it is a bridge cell)
     let start_end = coarse_end(w, from, on_deck);
