@@ -8,6 +8,14 @@
 //!
 //! `cargo test --release -p glasnost-sim --test perf_linked_recruit -- --ignored --nocapture`
 
+// The clock and the printing belong to the probe, not to the simulation,
+// which only runs the recruitments and ticks timed.
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    clippy::disallowed_macros
+)]
+
 #[path = "linked_common/mod.rs"]
 mod linked_common;
 
@@ -49,7 +57,7 @@ fn issue_339_recruit_cost() {
         let mut k = 0;
         for dy in -30..=30 {
             for dx in -30..=30 {
-                if k < n && (dx < -3 || dx > 3 || dy < -3 || dy > 3) {
+                if k < n && (!(-3..=3).contains(&dx) || !(-3..=3).contains(&dy)) {
                     spawn(&mut w, Kind::Vehicle, "VICT", 1, at(dx, dy));
                     k += 1;
                 }
