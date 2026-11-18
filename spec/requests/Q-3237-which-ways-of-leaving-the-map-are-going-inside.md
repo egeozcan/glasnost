@@ -1,9 +1,9 @@
 ---
 id: Q-3237
 title: Which ways of leaving the map are going inside for S-0507 claim 6a
-status: open
+status: answered
 related: [S-0507, S-0402, S-0614, S-0506, S-0508, S-0605]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need
