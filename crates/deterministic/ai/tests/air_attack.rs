@@ -20,13 +20,27 @@ use glasnost_sim::world::Target;
 /// gun's range is 5.5 cells).
 const REACH: i64 = 6; // nocite: the fixture gun's range, rounded up
 
+/// Where the unit stands out in the field, from Beta's home: more than 30
+/// cells away (the brain's recall distance), on the usable area of the
+/// synthetic map (S-0009 claim 4) and away from Alpha's start.
+const FIELD: (i32, i32) = (-22, 22); // nocite: a synthetic scene
+
+/// Where FLAKT stands, from Beta's home: some nine cells from [`FIELD`].
+const FLAK: (i32, i32) = (-27, 15); // nocite: a synthetic scene
+
+/// Where the unit stands near home, from Beta's home: within 30 cells.
+const NEAR_HOME: (i32, i32) = (4, -16); // nocite: a synthetic scene
+
+/// The disc hovers two cells east of the unit it shoots.
+const OVER: i32 = 2; // nocite: a synthetic scene
+
 // design: own AI (#434); S-0306 claim 23 (the ground gun cannot fire at the airborne disc): out in the field, a unit hit by an air unit it cannot hit goes to the nearest unit of the house that can hit it.
 #[test]
 fn a_ground_unit_hit_from_the_air_goes_to_anti_air_cover() {
     let mut w = world();
-    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, -20, 30);
-    let flak = spawn(&mut w, "FLAKT", Kind::Vehicle, 1, -30, 22);
-    let d = disc(&mut w, -18, 30);
+    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, FIELD.0, FIELD.1);
+    let flak = spawn(&mut w, "FLAKT", Kind::Vehicle, 1, FLAK.0, FLAK.1);
+    let d = disc(&mut w, FIELD.0 + OVER, FIELD.1);
     let at = w.obj(flak).unwrap().pos.cell();
     let mut br = brain(&w);
     shoot(&mut w, d, x);
@@ -45,9 +59,9 @@ fn a_ground_unit_hit_from_the_air_goes_to_anti_air_cover() {
 #[test]
 fn an_anti_air_unit_nearby_is_sent_at_the_attacker() {
     let mut w = world();
-    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, -20, 30);
-    let flak = spawn(&mut w, "FLAKT", Kind::Vehicle, 1, -30, 22);
-    let d = disc(&mut w, -18, 30);
+    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, FIELD.0, FIELD.1);
+    let flak = spawn(&mut w, "FLAKT", Kind::Vehicle, 1, FLAK.0, FLAK.1);
+    let d = disc(&mut w, FIELD.0 + OVER, FIELD.1);
     let mut br = brain(&w);
     shoot(&mut w, d, x);
     let log = run(&mut w, &mut br, flak, 60, |_| {});
@@ -65,9 +79,11 @@ fn an_anti_air_unit_nearby_is_sent_at_the_attacker() {
 #[test]
 fn a_ground_unit_hit_from_the_air_in_the_field_goes_home() {
     let mut w = world();
-    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, -20, 30);
-    let d = disc(&mut w, -18, 30);
+    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, FIELD.0, FIELD.1);
+    let d = disc(&mut w, FIELD.0 + OVER, FIELD.1);
     let h = home(&w);
+    let xc = w.obj(x).unwrap().pos.cell();
+    assert!(dist2(xc, h) > 30 * 30, "the unit stands out in the field"); // nocite: the brain's recall distance
     let mut br = brain(&w);
     shoot(&mut w, d, x);
     let log = run(&mut w, &mut br, x, 60, |_| {});
@@ -85,8 +101,8 @@ fn a_ground_unit_hit_from_the_air_in_the_field_goes_home() {
 #[test]
 fn a_ground_unit_hit_from_the_air_at_home_moves_out_of_reach() {
     let mut w = world();
-    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, 6, 20);
-    let d = disc(&mut w, 8, 20);
+    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, NEAR_HOME.0, NEAR_HOME.1);
+    let d = disc(&mut w, NEAR_HOME.0 + OVER, NEAR_HOME.1);
     let mut br = brain(&w);
     shoot(&mut w, d, x);
     let log = run(&mut w, &mut br, x, 60, |_| {});
@@ -105,8 +121,8 @@ fn a_ground_unit_hit_from_the_air_at_home_moves_out_of_reach() {
 #[test]
 fn a_unit_getting_away_is_not_ordered_at_every_think() {
     let mut w = world();
-    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, 6, 20);
-    let d = disc(&mut w, 8, 20);
+    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 1, NEAR_HOME.0, NEAR_HOME.1);
+    let d = disc(&mut w, NEAR_HOME.0 + OVER, NEAR_HOME.1);
     let mut br = brain(&w);
     let mut n = 0;
     let log = run(&mut w, &mut br, x, 180, |w| {
@@ -124,8 +140,15 @@ fn a_unit_getting_away_is_not_ordered_at_every_think() {
 #[test]
 fn a_unit_of_another_house_is_never_ordered() {
     let mut w = world();
-    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 0, 6, 20);
-    let d = spawn(&mut w, "DISC", Kind::Vehicle, 1, 8, 20);
+    let x = spawn(&mut w, "GUNR", Kind::Vehicle, 0, NEAR_HOME.0, NEAR_HOME.1);
+    let d = spawn(
+        &mut w,
+        "DISC",
+        Kind::Vehicle,
+        1,
+        NEAR_HOME.0 + OVER,
+        NEAR_HOME.1,
+    );
     let (t, stale) = (w.tick, w.rules().quirks.stale_suspended_revert);
     w.obj_mut(d).unwrap().beh.force(Behaviour::Sleep, t, stale);
     glasnost_sim::jump::start_in_flight(&mut w, d, glasnost_sim::jump::Phase::Hovering, HOVER);

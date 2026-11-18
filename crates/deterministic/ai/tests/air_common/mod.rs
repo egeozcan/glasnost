@@ -106,7 +106,9 @@ pub fn home(w: &World) -> CellXY {
 /// Spawns a `name` of house `house` at (`dx`, `dy`) from Beta's home.
 pub fn spawn(w: &mut World, name: &str, kind: Kind, house: u8, dx: i32, dy: i32) -> ObjectId {
     let h = home(w);
-    testkit::spawn(w, kind, name, house, CellXY::new(h.x + dx, h.y + dy), 0)
+    let c = CellXY::new(h.x + dx, h.y + dy);
+    assert!(w.cells.usable(c), "{name} is put on a usable cell, {c:?}");
+    testkit::spawn(w, kind, name, house, c, 0)
 }
 
 /// Spawns Alpha's disc at (`dx`, `dy`) from Beta's home, in *sleep* and
