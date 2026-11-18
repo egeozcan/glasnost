@@ -266,8 +266,10 @@ Issues #434 and #443 (units under air attack, own-AI design) and #445 (an AI air
 a base, traced). AI game format 159 (the air-attack part's state and three use counters join the
 brain), save 154, wire 12. Base 96ca8d8. The part is `air_attack.rs`, owned by the default script's
 special part (`Special::think_with`); notes in [own-ai.md](../dev/own-ai.md). Each fix came after
-tests committed before it that failed there (c41edc9 and ff434a7 for the escape, e190e5b and 34228a2
-for the step, d889fce for the job test).
+tests committed before it. For the escape: c41edc9 and ff434a7, then 91b37d5, which counts only the
+orders the shot adds, since on usable cells the base's own rally move met two of the tests (ff434a7
+said they failed without the module; for those two that did not hold). For the step: e190e5b and
+34228a2. For the job test: d889fce, which failed before 83818fc.
 
 **Goldens.** All six AI duel goldens moved (the new state is hashed from the first tick): duel,
 duel-diagonal, duel-m6c, duel-m7a, duel-m7b, duel-naval (dd7054b; duel-m6c again in e45724f after
@@ -301,8 +303,9 @@ difference is one escape order of this part to a unit of the house a seen airbor
 | 1,2 map 2 seed 14 | 13223 | 839 (1, vehicle, guard) | air vehicle 1754 | home |
 
 In 0,2 map 0 seed 13 a second unit (1293, guard, not shot) got in the same think the move the
-escaping unit had in the base; no other part reads this part's state, so that is another part's
-choice once the first unit was busy. Twice the cover goal is nearer the attacker than the unit was
+escaping unit had in the base: no other part reads this part's watch, so the other part's pick
+shifted once the first unit was taken, likely through the pending-order memory the parts share (not
+traced further). Twice the cover goal is nearer the attacker than the unit was
 (the cover unit stands under it). Air steps: 3 orders in 96 house-games; slow attackers over a unit
 that can hit them are rare in stock games. A first run of the lane (before the job test) changed 9
 winners; the trace of one showed an engineer on a capture sent home, which the job test fixed.
