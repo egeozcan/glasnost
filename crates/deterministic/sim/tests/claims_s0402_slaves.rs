@@ -2835,3 +2835,38 @@ fn claim_25_issue_451_automatic_pack_up_redeploys_one_cell_on() {
     }
     assert_eq!(left_in(&w, far.0, far.1), 9, "the far field is still untouched");
 }
+
+// spec: S-0402 claim 21 (#450: on successful emergence a slave's target is its master). With the unarmed synthetic slave the held master target is never shot at; whether an armed slave bound to its master may fire at it is Q-3275
+#[test]
+fn claim_21_issue_450_an_emerged_slave_targets_its_master() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let m = place_vehicle(&mut w, "SMV", 0, at(-8, 6), 0);
+    unblock(&mut w);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: m,
+            behaviour: Behaviour::Harvest,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(6, 0))),
+        }
+    ));
+    let b = next_building(&mut w, None, 1500);
+    let strength = w.obj(b).unwrap().health;
+    let out = |w: &World| -> Vec<ObjectId> {
+        slaves::slaves_of(w, b)
+            .into_iter()
+            .filter(|&s| w.obj(s).is_some_and(|o| o.on_map))
+            .collect()
+    };
+    until(&mut w, 300, |w| out(w).len() == SLAVES as usize).expect("all slaves out");
+    for s in out(&w) {
+        assert_eq!(w.obj(s).unwrap().target, Some(Target::Object(b)), "slave {s:?}");
+    }
+    testkit::run(&mut w, 600);
+    assert_eq!(w.obj(b).unwrap().health, strength, "an unarmed slave never hurts its master");
+}
+
