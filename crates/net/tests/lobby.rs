@@ -290,6 +290,23 @@ fn the_host_sets_a_computer_rows_script_and_difficulty() {
     assert_eq!(r.setup().slots[2].ai, hard);
     assert_eq!(r.edit(B, &with(1)), Ok(()));
     assert_eq!(r.setup().slots[1].ai, AiSeat::DEFAULT, "a person's row");
+    // The choice goes with the room's setup to every member at the start.
+    r.edit(
+        HOST,
+        &Edit::Row {
+            row: 3,
+            kind: SlotKind::Closed,
+        },
+    )
+    .unwrap();
+    r.set_ready(B, true, "m4").unwrap();
+    let begin = r
+        .start(HOST, 5, Params::default())
+        .unwrap()
+        .begin_for(B)
+        .unwrap();
+    assert_eq!(begin.local_setup(0).slots[2].ai, hard);
+    assert_eq!(begin.local_setup(0).slots[1].ai, AiSeat::DEFAULT);
 }
 
 // spec: S-0412 claim 15 (on a map with fewer rows, the rows beyond it are emptied and hidden)
