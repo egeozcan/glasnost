@@ -2024,7 +2024,9 @@ Final checks on b8dd5d4:
 - the wasm32 build of glasnost-app (`final-wasm.txt`);
 - `cargo xtask gate` (`final-xgate.txt`): native 17 pass, and all nine goldens match under wasm32.
 
-`cargo xtask check` and the AI suite with its ignored tests ran again on the commit that adds this section.
+These ran on dd7a935, the commit that adds this section:
+- `cargo xtask check` (`final-xcheck-2.txt`): fails only on the 8 known stock-guard problems in M-0027;
+- the AI suite with its ignored tests (`final-ai.txt`): 387 pass.
 
 Seams left:
 - Q-3297 (#455: whether a self-teleporting infantry unit's own grinder should take it in) and Q-3298 (#453: whether attackers drop a target that an owner change makes their own) wait for answers.
