@@ -172,8 +172,8 @@ pub struct Quirks {
     // spec: S-0208 claim 14
     #[serde(default = "on")]
     pub slow_walker_stall: bool,
-    /// A walker's cell destination on a high-bridge cell aims at deck height (the centre's terrain height plus 414 leptons) whatever layer it arrives on; off: the arrival test uses the centre's height on the walker's arrival layer.
-    // spec: S-0208 claim 18 and Edge cases
+    /// A walker's cell destination on a high-bridge cell aims at deck height (the centre's terrain height plus 414 leptons) whatever layer it arrives on, and an object's point in such a cell is raised by 414 leptons; off: the arrival test uses the terrain height at the point on the walker's arrival layer.
+    // spec: S-0208 claim 18 and Edge cases (r71: an object's point too)
     #[serde(default = "on")]
     pub walker_bridge_destination_deck: bool,
     /// A teleporting infantry unit's landing entry check takes a cell at terrain level −6 or lower as clear without testing terrain or occupants; off: the ordinary landing entry check applies.

@@ -11290,7 +11290,7 @@
           "default": true
         },
         "walker_bridge_destination_deck": {
-          "description": "A walker's cell destination on a high-bridge cell aims at deck height (the centre's terrain height plus 414 leptons) whatever layer it arrives on; off: the arrival test uses the centre's height on the walker's arrival layer.",
+          "description": "A walker's cell destination on a high-bridge cell aims at deck height (the centre's terrain height plus 414 leptons) whatever layer it arrives on, and an object's point in such a cell is raised by 414 leptons; off: the arrival test uses the terrain height at the point on the walker's arrival layer.",
           "type": "boolean",
           "default": true
         },
