@@ -64,7 +64,7 @@ use glasnost_sim::regions;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::transport;
-use glasnost_sim::world::{HouseId, Layer, ObjectId, Target, World};
+use glasnost_sim::world::{AiDifficulty, HouseId, Layer, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
 use crate::scripted::{
@@ -156,6 +156,25 @@ pub fn default_plan() -> Plan {
         harvesters: 2, // nocite: tuning of our own opponent
         wave: 6,       // nocite: tuning of our own opponent
     }
+}
+
+/// The plan of the default script at difficulty `level` (#449): normal is
+/// [`default_plan`], unchanged; easy keeps one harvester and attacks in
+/// waves of three; hard keeps three harvesters. A person sees it: the
+/// harvesters on the field and the size of the attacks.
+pub fn plan_for(level: AiDifficulty) -> Plan {
+    let mut plan = default_plan();
+    match level {
+        AiDifficulty::Easy => {
+            plan.harvesters = 1; // design: own AI (#449): easy earns from one harvester
+            plan.wave = 3; // design: own AI (#449): easy attacks in small waves, easily held
+        }
+        AiDifficulty::Normal => {}
+        AiDifficulty::Hard => {
+            plan.harvesters = 3; // design: own AI (#449): hard earns from a third harvester
+        }
+    }
+    plan
 }
 
 /// One AI house's brain.
@@ -296,18 +315,23 @@ impl Brain {
     /// tools' benchmark, `glasnost_sim::probe`); `p` reads nothing and
     /// changes nothing.
     pub fn think_with<P: Probe>(&mut self, w: &World, p: &mut P) -> Vec<Order> {
-        self.think_from(w, p, None)
+        let thinks = self.thinks_at(w.tick);
+        self.think_from(w, p, None, thinks, AiDifficulty::Normal)
     }
 
-    /// [`Brain::think_with`], given the house's own list
-    /// (`scripted::own_by_house`) instead of scanning for it.
-    pub(crate) fn think_with_own<P: Probe>(
+    /// The think as the default script of the registry
+    /// ([`crate::scripts`]): on the given schedule (`thinks`: one of the
+    /// house's think ticks) and at difficulty `level`, from the house's own
+    /// list when given one.
+    pub(crate) fn think_scheduled<P: Probe>(
         &mut self,
         w: &World,
         p: &mut P,
-        own: Arc<[ObjectId]>,
+        own: Option<Arc<[ObjectId]>>,
+        thinks: bool,
+        level: AiDifficulty,
     ) -> Vec<Order> {
-        self.think_from(w, p, Some(own))
+        self.think_from(w, p, own, thinks, level)
     }
 
     /// The think, from the house's own list when given one.
@@ -316,6 +340,8 @@ impl Brain {
         w: &World,
         p: &mut P,
         own: Option<Arc<[ObjectId]>>,
+        thinks: bool,
+        level: AiDifficulty,
     ) -> Vec<Order> {
         let on = p.on();
         let mark = |p: &mut P, part: &'static str| {
@@ -329,7 +355,6 @@ impl Brain {
             None => self.script.begin_think(),
         }
         mark(p, "ai:script");
-        let thinks = self.thinks_at(w.tick);
         let mut out = if thinks {
             self.script.think_with(w, p)
         } else {
@@ -418,7 +443,10 @@ impl Brain {
         mark(p, "ai:find_deploy_spot");
         self.find_deploy_spot(w, &mut out);
         mark(p, "ai:defend");
-        self.defend(w, &mut out);
+        // design: own AI (#449): at easy the base defence reacts only on the house's think ticks, so an attack on its base is answered late
+        if thinks || level != AiDifficulty::Easy {
+            self.defend(w, &mut out);
+        }
         mark(p, "ai:filters");
         // spec: S-0214 claim 15 and S-0610 claim 6 (a berserk unit takes no orders: a person cannot give it one, so neither does the brain)
         out.retain(|o| {

@@ -10,6 +10,8 @@
 //! - [`skirmish`]: the headless skirmish runner that records a replay.
 //! - [`game`]: a game with its AI houses (world and AI state stepped, saved
 //!   and hashed together); [`brain`]: one AI house's state and thinking.
+//! - [`scripts`]: the contract of a pluggable AI script, the registry of
+//!   the scripts compiled in and each AI house's seat (#449).
 //! - [`special`]: garrisoning, engineers capturing and spies infiltrating
 //!   (M6c); [`tech_buildings`]: which tech buildings an engineer is worth
 //!   sending to (S-0515).
@@ -59,6 +61,7 @@ pub mod power;
 pub mod psychic;
 pub mod radiation;
 pub mod scripted;
+pub mod scripts;
 pub mod skirmish;
 pub mod special;
 pub mod tech_buildings;

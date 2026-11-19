@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::brain::Brain;
+use crate::scripts::Seat;
 
 /// Format version of a game save (the world's own save inside it carries
 /// the simulation's version).
@@ -43,8 +44,9 @@ const SAVE_ROOM: usize = 64 * 1024;
 pub struct Game {
     /// The simulation state.
     pub world: World,
-    /// One brain per AI house, in house order.
-    brains: Vec<Brain>,
+    /// One seat per AI house, in house order: its script and difficulty
+    /// and its script's state (#449).
+    seats: Vec<Seat>,
     /// The setup and the person's orders.
     replay: Replay,
 }
@@ -54,17 +56,17 @@ pub struct Game {
 struct SavedGame {
     version: u32,
     world: Vec<u8>,
-    brains: Vec<Brain>,
+    seats: Vec<Seat>,
     replay: Replay,
 }
 
 /// [`SavedGame`] written from borrows: the same fields in the same order,
-/// so the same bytes, without copying the brains and the replay (#51).
+/// so the same bytes, without copying the seats and the replay (#51).
 #[derive(Serialize)]
 struct SavedGameRef<'a> {
     version: u32,
     world: Bytes<'a>,
-    brains: &'a [Brain],
+    seats: &'a [Seat],
     replay: &'a Replay,
 }
 
@@ -92,7 +94,9 @@ fn ai_houses(setup: &GameSetup) -> Vec<HouseId> {
 }
 
 impl Game {
-    /// Starts a game: the world from the setup, a brain for every AI house.
+    /// Starts a game: the world from the setup, a seat for every AI house
+    /// with the script and difficulty the setup gives it
+    /// ([`GameSetup::ai_seat`]; #449).
     pub fn new(
         rules: Arc<SimRules>,
         map: &Map,
@@ -101,15 +105,15 @@ impl Game {
         setup: GameSetup,
     ) -> Result<Self, LoadError> {
         let world = new_game(rules.clone(), map, catalogue, &setup)?;
-        let brains = ai_houses(&setup)
+        let seats = ai_houses(&setup)
             .into_iter()
             .filter(|&h| !world.houses[usize::from(h.0)].removed)
-            .map(|h| Brain::new(&world, map, h))
+            .map(|h| Seat::start(setup.ai_seat(usize::from(h.0)), &world, map, h))
             .collect();
         let replay = Replay::new(&rules, map_name, setup);
         Ok(Self {
             world,
-            brains,
+            seats,
             replay,
         })
     }
@@ -146,7 +150,7 @@ impl Game {
         // orders do not change the objects (`scripted::own_by_house`). The
         // bench counts the pass in that first brain's AI time.
         let mut own: Option<Vec<Vec<glasnost_sim::world::ObjectId>>> = None;
-        for b in &mut self.brains {
+        for b in &mut self.seats {
             let h = b.house();
             if victory::defeated(&self.world, h) || self.world.houses[usize::from(h.0)].removed {
                 continue;
@@ -164,7 +168,7 @@ impl Game {
                 .get_mut(usize::from(h.0))
                 .map(std::mem::take)
                 .unwrap_or_default();
-            let orders = b.think_with_own(&self.world, p, list.into());
+            let orders = b.think(&self.world, Some(list.into()), p);
             if on {
                 p.mark(Phase::Issue);
             }
@@ -184,16 +188,16 @@ impl Game {
     /// The special-ability orders each AI house has given (M6c), in house
     /// order of the brains.
     pub fn special_uses(&self) -> Vec<(HouseId, crate::special::Uses)> {
-        self.brains
-            .iter()
+        self.brains()
+            .into_iter()
             .map(|b| (b.house(), b.special_uses()))
             .collect()
     }
 
     /// A counts-only diagnostic line per AI house (local-lane reports).
     pub fn diagnose(&self) -> Vec<(HouseId, String)> {
-        self.brains
-            .iter()
+        self.brains()
+            .into_iter()
             .map(|b| (b.house(), b.diagnose(&self.world)))
             .collect()
     }
@@ -201,8 +205,8 @@ impl Game {
     /// What each brain's anti-air step sees now, in the order of the
     /// brains (local-lane reports).
     pub fn antiair_probes(&self) -> Vec<(HouseId, crate::antiair::Probe)> {
-        self.brains
-            .iter()
+        self.brains()
+            .into_iter()
             .map(|b| (b.house(), b.antiair_probe(&self.world)))
             .collect()
     }
@@ -210,8 +214,8 @@ impl Game {
     /// What each brain's expansion step sees now, in the order of the
     /// brains (local-lane reports).
     pub fn expansion_probes(&self) -> Vec<(HouseId, crate::brain::ExpansionProbe)> {
-        self.brains
-            .iter()
+        self.brains()
+            .into_iter()
             .map(|b| (b.house(), b.expansion_probe(&self.world)))
             .collect()
     }
@@ -219,8 +223,8 @@ impl Game {
     /// What each brain's economy sees now (`Brain::economy_probe`), in the
     /// order of the brains (local-lane reports).
     pub fn economy_probes(&self) -> Vec<String> {
-        self.brains
-            .iter()
+        self.brains()
+            .into_iter()
             .map(|b| b.economy_probe(&self.world))
             .collect()
     }
@@ -229,21 +233,43 @@ impl Game {
     /// (`Brain::broke_probe`, M8 step B10), in the order of the brains
     /// (local-lane reports).
     pub fn broke_probes(&self) -> Vec<(HouseId, crate::brain::BrokeProbe)> {
-        self.brains
-            .iter()
+        self.brains()
+            .into_iter()
             .map(|b| (b.house(), b.broke_probe(&self.world)))
             .collect()
     }
 
     /// The AI houses.
     pub fn ai_houses(&self) -> Vec<HouseId> {
-        self.brains.iter().map(Brain::house).collect()
+        self.seats.iter().map(Seat::house).collect()
     }
 
-    /// The AI houses' state, in house order (read only: the desync tool's
-    /// field-by-field view, M9 N4).
-    pub fn brains(&self) -> &[Brain] {
-        &self.brains
+    /// The AI houses' seats, in house order: script, difficulty and the
+    /// script's state (read only: the desync tool's field-by-field view,
+    /// M9 N4; #449).
+    pub fn seats(&self) -> &[Seat] {
+        &self.seats
+    }
+
+    /// The brains of the AI houses the default script plays, in house
+    /// order (read only: the local-lane reports and the tests).
+    pub fn brains(&self) -> Vec<&Brain> {
+        self.seats
+            .iter()
+            .filter_map(|s| s.script().brain())
+            .collect()
+    }
+
+    /// The AI's state as hashed: with every seat on the default script at
+    /// normal, the brains alone, so that such a game hashes as it did
+    /// before the seats existed (#449); else the seats with their choices.
+    fn ai_state_bytes(&self) -> Vec<u8> {
+        if self.seats.iter().all(|s| s.choice().is_default()) {
+            postcard::to_allocvec(&self.brains())
+        } else {
+            postcard::to_allocvec(&self.seats)
+        }
+        .expect("the AI state serializes")
     }
 
     /// The replay so far: the setup and the person's orders.
@@ -255,7 +281,7 @@ impl Game {
     pub fn state_hash(&self) -> String {
         let mut h = Sha256::new();
         h.update(save::state_hash(&self.world).as_bytes());
-        h.update(postcard::to_allocvec(&self.brains).expect("the AI state serializes"));
+        h.update(self.ai_state_bytes());
         h.finalize().iter().fold(String::new(), |mut s, b| {
             use std::fmt::Write as _;
             let _ = write!(s, "{b:02x}"); // nocite: hexadecimal text of a digest
@@ -273,7 +299,7 @@ impl Game {
             &SavedGameRef {
                 version: GAME_FORMAT_VERSION,
                 world: Bytes(&world),
-                brains: &self.brains,
+                seats: &self.seats,
                 replay: &self.replay,
             },
             Vec::with_capacity(room),
@@ -298,7 +324,7 @@ impl Game {
         let world = save::load(&s.world, rules, catalogue)?;
         Ok(Self {
             world,
-            brains: s.brains,
+            seats: s.seats,
             replay: s.replay,
         })
     }
@@ -352,7 +378,7 @@ mod tests {
     struct OldRef<'a> {
         version: u32,
         world: Vec<u8>,
-        brains: &'a [Brain],
+        seats: &'a [Seat],
         replay: &'a Replay,
     }
 
@@ -373,7 +399,7 @@ mod tests {
         let old = postcard::to_allocvec(&OldRef {
             version: GAME_FORMAT_VERSION,
             world: save::save(&g.world),
-            brains: &g.brains,
+            seats: &g.seats,
             replay: &g.replay,
         })
         .expect("the game serializes");

@@ -1065,7 +1065,7 @@ fn play_ai(
         if eco_probe > 0 {
             cycles.observe(w);
             if w.tick % glasnost_ai::scripted::THINK_PERIOD == 0 {
-                field_spells.observe(w.tick, game.brains(), w);
+                field_spells.observe(w.tick, &game.brains(), w);
             }
             if w.tick % BROKE_SAMPLE == 0 {
                 broke_spells.observe(w, &game.broke_probes());
@@ -2424,7 +2424,7 @@ struct FieldSpells {
 const LONG_SPELL: i32 = 3000;
 
 impl FieldSpells {
-    fn observe(&mut self, tick: i32, brains: &[glasnost_ai::brain::Brain], w: &World) {
+    fn observe(&mut self, tick: i32, brains: &[&glasnost_ai::brain::Brain], w: &World) {
         for b in brains {
             let h = b.house().0;
             let wants = b.wants_field_refinery(w);

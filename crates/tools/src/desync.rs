@@ -308,7 +308,7 @@ pub fn diff_games(ga: &Game, gb: &Game, rules: &SimRules) -> StateDiff {
         }
     }
     d.game = game_wide(wa, wb);
-    let (ba, bb) = (ga.brains(), gb.brains());
+    let (ba, bb) = (ga.seats(), gb.seats());
     for i in 0..ba.len().max(bb.len()) {
         match (ba.get(i), bb.get(i)) {
             (Some(x), Some(y)) if !same_bytes(x, y) => d.ai.push(HouseDiff {
