@@ -1,7 +1,7 @@
 //! S-0309 claim 2 on synthetic data: a harvesting slave does not search
 //! passively (sim issues S12, issue 244).
 
-use glasnost_sim::combat::acquire;
+use glasnost_sim::combat::acquire::{self, Retaliation};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit::{self, mid, spawn};
 use glasnost_sim::world::{ObjectId, World};
@@ -49,4 +49,50 @@ fn claim_2_a_harvesting_slave_does_not_search_passively() {
     assert_eq!(got[0], (false, true, true), "control");
     // The harvesting slave may not search and picks nothing.
     assert_eq!(got[1], (true, false, false), "harvesting slave");
+}
+
+// spec: S-0309 claim 18 (#450: neither a harvesting slave nor a slave master retaliates, S-0215 Terms; an attacker allied with the actor is never retaliated against), with a free walker of the same type as the control
+#[test]
+fn claim_18_issue_450_a_harvesting_slave_does_not_retaliate() {
+    let mut got = Vec::new();
+    for slave in [false, true] {
+        let mut r = testkit::combat_ruleset();
+        r.sim.infantry.get_mut("WALKER").unwrap().primary = Some("Gun".into());
+        let cart = r.sim.vehicles.get_mut("CART").unwrap();
+        cart.econ.resource_gatherer = Some(true);
+        cart.econ.resource_destination = Some(true);
+        cart.econ.enslaves = Some("WALKER".into());
+        cart.econ.slaves_number = Some(1);
+        let mut w = testkit::game_with(&r, SIZE, 5);
+        let m = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 6, 6), 0);
+        let v = if slave {
+            let s = glasnost_sim::econ::slaves::slaves_of(&w, m)[0];
+            let p = glasnost_sim::world::Pos::centre(mid(SIZE, 0, 0), 0);
+            glasnost_sim::objects::place(&mut w, s, p, 0);
+            s
+        } else {
+            spawn(&mut w, Kind::Infantry, "WALKER", 1, mid(SIZE, 0, 0), 0)
+        };
+        let e = spawn(&mut w, Kind::Vehicle, "BUGGY", 0, mid(SIZE, -2, 0), 64);
+        force(&mut w, e, Behaviour::Sleep);
+        force(&mut w, v, Behaviour::Guard);
+        assert_eq!(glasnost_sim::seams::is_harvesting_slave(&w, v), slave);
+        // An own-house attacker, then the enemy.
+        let own = acquire::retaliate(&mut w, v, m);
+        let enemy = acquire::retaliate(&mut w, v, e);
+        got.push((own, enemy, w.obj(v).unwrap().target));
+    }
+    assert_eq!(
+        got[0].0,
+        Retaliation::MayNot,
+        "control against its own house"
+    );
+    assert_ne!(got[0].1, Retaliation::MayNot, "control against the enemy");
+    assert_eq!(
+        got[1].0,
+        Retaliation::MayNot,
+        "slave against its own master"
+    );
+    assert_eq!(got[1].1, Retaliation::MayNot, "slave against the enemy");
+    assert_eq!(got[1].2, None, "the slave holds no target");
 }

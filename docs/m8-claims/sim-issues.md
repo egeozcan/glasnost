@@ -1760,3 +1760,32 @@ The arena counts are unchanged. Two sweep seeds now give no bunker entry: M7a se
 - **M7a seed 12:** one house's bunkers stand beyond its WARD's reach. The other house's bunker has the other house's unarmed PREY within its threat reach all game.
 
 The P3 census rule: the batch reads and moves no census back-reference.
+
+## Batch S38: payment-only docking art, a slave miner that creeps, slaves shooting their master, building veterancy (#444, #450, #451, #452)
+
+Base main e533a16, not rebased. No engine change. #444 is compared with S-0402 r86, Q-3254's answer: what is built already matches it, so a claim test guards it. #451 and #450 were traced on synthetic rules. Each follows the claims as written, and each needs behaviour the specs do not give, so each has a request (Q-3274, Q-3275). #452 is a request only (Q-3273). The batch changes only tests, spec requests and this ledger.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #444 (S-0402 r86 claim 11, *What a docking shows*, scenario H29) | For art that names only the payment animation, the engine plays nothing at the start row. It starts the payment animation at the first payment and keeps it, the same object, while it plays. Once it has ended on its own, it starts again at the next payment. The empty-load row removes it. The *finishing* harvester breaks contact in the following tick | matches r86 | none | `claims_s0402_dock_anims.rs`: `claim_11_r86_payment_only_art_starts_keeps_restarts_and_removes`, with an endless and a short synthetic payment animation (c160a48) |
+| #451 (S-0402 claims 22, 24, 25 and F7; S-0415 claims 9 and 10) | Every link up to the pack-up works. A 3 × 3 master whose near field is used up packs up toward a site near a far field, and the vehicle appears at the return cell *A* + (1, 1) with destination *A*. At its second group update it is still driving to *A*, so claim 25 keeps that destination and the group travels. At *A* it deploys again with its top-left cell at *A* − (1, 1) and packs up again. It moves one cell along −*x* and −*y* every 180 ticks or so and never reaches the far field. A faster synthetic vehicle that reaches *A* before that update fails to deploy, seeks a field and drives to the far field | matches the claims; request Q-3274 (600e276) | none | `claims_s0402_slaves.rs`: `claim_25_issue_451_automatic_pack_up_redeploys_one_cell_on` (bfd414f) |
+| #450 (S-0402 claim 21, S-0301 claim 9, S-0309 claims 2 and 18) | S-0402 claim 21 gives an emerging slave its master as target, and a harvesting slave keeps it. An armed synthetic slave shoots its master: from full strength to 10 in 1500 ticks. The check answers *can fire*, *rearming* or *moving*, never *illegal*. An unarmed slave never hurts it. The answer that would refuse it, the *illegal* of a firer bound to a slave master, is ranked in S-0301 claim 9's precedence paragraphs but defined nowhere. The passive search and retaliation gates hold, against an enemy and against the own house | matches the claims; request Q-3275 (4fbccb2) | none | `claims_s0402_slaves.rs`: `claim_21_issue_450_an_emerged_slave_targets_its_master`; `claims_s0309_slave_gate.rs`: `claim_18_issue_450_a_harvesting_slave_does_not_retaliate` (4496aac) |
+| #452 (S-0311, S-0520 claim 22, S-0111 claim 18, S-0415) | The specs give a trainable building kill experience, a rank and an insignia. The lead reports that the original never ranks a building | request Q-3273 (731f1e6) | none | — |
+
+Formats: no simulation state changes. Save stays 157, AI game 134 and wire 12. No quirk switch is added.
+
+Goldens: none move. The batch changes no non-test source.
+
+Lanes compare base e533a16 with the batch at c160a48. The later commits are formatting and this ledger. Logs are in `local-lane/sim-issues/s38/`.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). `diff -rq` of `arena-base/` and `arena-after/` is empty.
+
+**Sweeps** (`m6c-base.txt`/`m6c-after.txt`, and likewise for m7a and m7b). M6c, M7a and M7b over seeds 1–16 pass. Apart from build and timing lines, they are identical to base.
+
+**AI quick lane** (seeds 7–10, maps 0, 2 and 8; `quick-base-7.txt` to `quick-base-10.txt` and `quick-after-7.txt` to `quick-after-10.txt`). Apart from the timing lines, every file is identical to base. Every game ends on the same tick with the same winner.
+
+**Suites.** The AI suite with its ignored tests passes 366 on base and on the batch (`ai-base.txt`, `ai-after.txt`). The sim gate with its ignored tests passes 17 on both (`gate-base.txt`, `gate-after.txt`).
+
+Seams left:
+- #451's other suspects are not built, because the main case already stops at claim 25 (Q-3274). They are ore under the foundation, ore the slaves cannot reach, and a site search that fails on every rectangle.
+- #450: until Q-3275 is answered, an armed slave holding its master as target can shoot it. For the next report, the pathing report (key P) should show the slave's target id against its master's id, its slave phase and behaviour, its weapon, and whether it emerged or was recalled shortly before.
