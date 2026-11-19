@@ -70,7 +70,7 @@ fn shot_down(w: &mut World, shared: bool, kill_at: i32) -> (ObjectId, Option<Obj
     (u, other)
 }
 
-// spec: S-0502 claim 18 (r24, Q-3042: starting a crash makes one empty destination assignment at once, inside the hit; a jumpjet infantry unit with a movement commitment reroutes under claim 17, a nearby search around its current cell, then standing-position adjustment with its ranged draw over 0 to 3, claim 23; the replacement point lies in another cell when the search rejects the current one, as for another unit's mark there); S-0312 claim 16 (r77)
+// spec: S-0502 claim 18 (r30, Q-3255: starting a crash makes the stop of S-0607 claim 13 at once, inside the hit, its order-level destination ending empty; a jumpjet infantry unit with a movement commitment reroutes under claim 17, a nearby search around its current cell, then standing-position adjustment with its ranged draw over 0 to 3, claim 23; the replacement point lies in another cell when the search rejects the current one, as for another unit's mark there); S-0312 claim 16 (r93)
 #[test]
 fn j31_a_the_crash_start_clears_the_destination_and_reroutes() {
     let mut w = game_def(400, true);
