@@ -384,20 +384,23 @@ impl Brain {
             self.send_for_repair(w, &mut out);
             mark(p, "ai:ferry");
             self.ferry(w, &mut out);
-            mark(p, "ai:build_superweapon");
-            self.build_superweapon(w, &mut out);
-            mark(p, "ai:build_specials");
-            if !self.build_sensor(w, &mut out)
-                && !self.build_grinder(w, &mut out)
-                && !self.build_gattling_defence(w, &mut out)
-                && !paying
-            {
-                self.build_bunker(w, &mut out);
+            // design: own AI (#449, B10): at easy the house builds no superweapon building and none of the brain's own special buildings (sensor, grinder, gattling defence, bunker, lifter, drainer): a beginner's base, without the late strikes and the defences a person sees in a harder one
+            if level != AiDifficulty::Easy {
+                mark(p, "ai:build_superweapon");
+                self.build_superweapon(w, &mut out);
+                mark(p, "ai:build_specials");
+                if !self.build_sensor(w, &mut out)
+                    && !self.build_grinder(w, &mut out)
+                    && !self.build_gattling_defence(w, &mut out)
+                    && !paying
+                {
+                    self.build_bunker(w, &mut out);
+                }
+                mark(p, "ai:build_lifter");
+                self.build_lifter(w, &mut out);
+                mark(p, "ai:build_drainer");
+                self.build_drainer(w, &mut out);
             }
-            mark(p, "ai:build_lifter");
-            self.build_lifter(w, &mut out);
-            mark(p, "ai:build_drainer");
-            self.build_drainer(w, &mut out);
             mark(p, "ai:build_anti_air");
             self.build_anti_air(w, &mut out, short);
             mark(p, "ai:expand");
