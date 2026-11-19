@@ -302,3 +302,43 @@ fn easy_acts_on_one_think_tick_in_three() {
         ]
     );
 }
+
+// design: own AI (#449, B10): at easy the default script builds no superweapon building and none of the brain's own special buildings (psychic sensor, grinder, gattling defence, bunker, lifter, drainer), as a beginner's base has none; normal and hard run those parts on every think
+#[test]
+fn easy_builds_no_superweapon_nor_special_buildings() {
+    use glasnost_ai::scripts::{AiScript, Schedule, ScriptState, View};
+    const PARTS: [&str; 4] = [
+        "ai:build_superweapon",
+        "ai:build_specials",
+        "ai:build_lifter",
+        "ai:build_drainer",
+    ];
+    let map = fixture::map();
+    for level in AiDifficulty::ALL {
+        let seat = AiSeat {
+            script: AiSeat::DEFAULT_SCRIPT,
+            difficulty: level,
+        };
+        let mut g = armed(seat);
+        let base = ScriptState::start(seat, &g.world, &map, HouseId(0));
+        let mut p = Parts(Vec::new());
+        // nocite: test data of our own (one of easy's think cycles)
+        for _ in 0..3 * THINK_PERIOD {
+            let tick = g.world.tick;
+            if glasnost_ai::scripted::thinks_at(HouseId(0), tick) {
+                let view = View::new(&g.world, HouseId(0));
+                base.clone()
+                    .think(&view, Schedule { tick, thinks: true }, level, None, &mut p);
+            }
+            g.step();
+        }
+        assert!(p.0.contains(&"ai:economy_first"), "{level:?} acted");
+        for part in PARTS {
+            assert_eq!(
+                p.0.contains(&part),
+                level != AiDifficulty::Easy,
+                "{level:?}: {part}"
+            );
+        }
+    }
+}
