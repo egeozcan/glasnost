@@ -1286,6 +1286,10 @@ fn stop_with(w: &mut World, id: ObjectId, order_level: bool, lifter_ended: bool)
         });
         return;
     }
+    if w.obj(id).is_none_or(|o| o.health <= 0) {
+        // spec: S-0502 claim 18 (r36, Q-3282, *Destination clear at crash start*) and Edge cases (r36, *No landing slot*): the no-cell outcome of either setting of quirks.jumpjet_no_cell_self_destruct acts only on a unit with health; a killed unit keeps its flight state, movement point and commitment
+        return;
+    }
     if !w.rules().quirks.jumpjet_no_cell_self_destruct {
         // spec: S-0502 Edge cases (revision 17, quirks.jumpjet_no_cell_self_destruct off: the integer height above the surface decides, 1 lepton or more hovers, 0 or less stays put grounded) and S-0607 claims 9 and 20 (revision 9; answers Q-1344)
         if height_above(w, id) < 1 {
