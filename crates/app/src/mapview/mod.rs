@@ -53,6 +53,8 @@ mod sinking_tests;
 pub mod slot_play;
 pub mod slots;
 #[cfg(test)]
+mod strike_line_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod transient_tests;
