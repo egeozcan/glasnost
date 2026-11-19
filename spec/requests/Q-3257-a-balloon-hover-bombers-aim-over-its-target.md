@@ -3,7 +3,7 @@ id: Q-3257
 title: A balloon-hover bomber that hovers over its target without facing it
 status: open
 related: [S-0307, S-0310, S-0502, S-0204]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need
