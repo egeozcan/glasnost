@@ -2874,10 +2874,16 @@ fn claim_25_issue_451_automatic_pack_up_redeploys_one_cell_on() {
 /// (deploying into the 3 × 3 SMB) ordered to harvest next to the near
 /// field. Returns the world, the first building and its top-left cell.
 fn issue_451_scene(r: &Ruleset) -> (World, ObjectId, CellXY) {
+    issue_451_scene_with(r, "SMV")
+}
+
+/// As [`issue_451_scene`], with the miner `miner` (SMV2 deploys into the
+/// 2 × 2 SMB2).
+fn issue_451_scene_with(r: &Ruleset, miner: &str) -> (World, ObjectId, CellXY) {
     let mut ore = field(5, -1, 0);
     ore.extend(field(10, 8, 5));
     let mut w = game_on(r, &ore, false);
-    let m = place_vehicle(&mut w, "SMV", 0, at(-8, 6), 0);
+    let m = place_vehicle(&mut w, miner, 0, at(-8, 6), 0);
     unblock(&mut w);
     assert!(orders::issue(
         &mut w,
@@ -2925,6 +2931,110 @@ fn claim_25_issue_451_old_top_left_off_reaches_the_far_field() {
         "redeployed at {n:?}, from {a:?}"
     );
     until(&mut w, 1500, |w| left_in(w, 10, 8) < 9).expect("the far field is mined");
+}
+
+/// Whether the redeployment at `n` lies near the far field of
+/// [`issue_451_scene`] and onwards from the return cell `ret`.
+fn near_far_field(n: CellXY, ret: CellXY) -> bool {
+    let f = at(10, 8);
+    (n.x - f.x).abs() <= 4 && (n.y - f.y).abs() <= 4 && n.x > ret.x && n.y > ret.y
+}
+
+// spec: S-0402 r90 claim 25 case (a) and H30 part a (a foundation of at most 2 × 2: the vehicle appears on A with A as its destination and does not leave it; the cleanup removes the destination, the second vehicle group update seeks with the long scan and the miner deploys near the far field); quirks.slave_auto_pack_old_top_left changes nothing there (the return cell is A)
+#[test]
+fn claim_25_h30_a_two_by_two_reaches_the_far_field_either_way() {
+    for quirk in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.slave_auto_pack_old_top_left = quirk;
+        let (mut w, b, a) = issue_451_scene_with(&r, "SMV2");
+        until(&mut w, 3000, |w| group(w, b).state == GroupState::Packing).expect("packing");
+        assert_eq!(left_in(&w, 10, 8), 9, "the far field is untouched");
+        assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(a)), "{quirk}");
+        until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
+        let v = vehicle_master(&w);
+        // spec: S-0415 claim 10 and F3 (the return cell of a 2 × 2 foundation is its top-left cell)
+        assert_eq!(w.obj(v).unwrap().pos.cell(), a);
+        let next = next_building(&mut w, Some(b), 1500);
+        let n = w.obj(next).unwrap().pos.cell();
+        assert!(near_far_field(n, a), "{quirk}: redeployed at {n:?}, from {a:?}");
+    }
+}
+
+// spec: S-0402 r90 claim 25 case (b) and H30 part b2 (a larger foundation whose one-cell drive to A ends before the second vehicle group update: no destination there, so case (a)'s seeking follows and the miner deploys near the far field), with the switch on
+#[test]
+fn claim_25_h30_b2_quick_drive_reaches_the_far_field() {
+    let mut r = rules();
+    assert!(r.globals.quirks.slave_auto_pack_old_top_left);
+    let smv = r.sim.vehicles.get_mut("SMV").unwrap();
+    // Invented: fast enough for the diagonal cell and the turn to end within a few ticks.
+    smv.speed = Some(60);
+    smv.rot = Some(60);
+    let (mut w, b, a) = issue_451_scene(&r);
+    until(&mut w, 3000, |w| group(w, b).state == GroupState::Packing).expect("packing");
+    assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(a)));
+    until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Cell(a)));
+    let next = next_building(&mut w, Some(b), 1500);
+    let n = w.obj(next).unwrap().pos.cell();
+    assert!(near_far_field(n, a), "redeployed at {n:?}, from {a:?}");
+}
+
+/// A deployed `building` at top-left `at(0, −1)` with no resource anywhere
+/// and the switch at `quirk`, run until its first automatic pack-up has
+/// finished; the world, the vehicle and the old top-left cell A.
+fn no_field_pack_up(building: &str, quirk: bool) -> (World, ObjectId, CellXY) {
+    let mut r = rules();
+    r.globals.quirks.slave_auto_pack_old_top_left = quirk;
+    let mut w = game_on(&r, &[], false);
+    let b = place_building(&mut w, building, 0, at(0, -1));
+    let a = w.obj(b).unwrap().pos.cell();
+    until(&mut w, 300, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    (w, v, a)
+}
+
+/// The deployments of the game's slave master over `ticks` ticks: the
+/// top-left cell of each new building.
+fn deployments(w: &mut World, ticks: i32) -> Vec<CellXY> {
+    let mut seen: Option<ObjectId> = None;
+    let mut cells = Vec::new();
+    for _ in 0..ticks {
+        testkit::run(w, 1);
+        let m = the_master(w).filter(|&m| w.obj(m).is_some_and(|o| o.kind == Kind::Building));
+        if let Some(m) = m
+            && seen != Some(m)
+        {
+            seen = Some(m);
+            cells.push(w.obj(m).unwrap().pos.cell());
+        }
+    }
+    cells
+}
+
+// spec: S-0402 r90 claim 25 case (c) and H30 part c1 (no field left, a larger foundation, the comparison with (0, 0) requesting packing: case (b)'s cycle runs on, each redeployment one cell along −x and −y)
+#[test]
+fn claim_25_h30_c1_no_field_cycle_runs_on() {
+    let (mut w, _, a) = no_field_pack_up("SMB", true);
+    let cells = deployments(&mut w, 1500);
+    assert!(cells.len() >= 3, "{cells:?}");
+    let mut last = a;
+    for &c in &cells {
+        assert_eq!(c, CellXY::new(last.x - 1, last.y - 1), "{cells:?} from {a:?}");
+        last = c;
+    }
+}
+
+// spec: S-0402 r90 claim 25 case (c) and H30 parts c2 and c1 (a foundation of at most 2 × 2 with no field left packs up once, then seeks without a field and rests, with no further deployment; on our engine with quirks.slave_auto_pack_old_top_left off, a larger foundation does the same)
+#[test]
+fn claim_25_h30_c2_no_field_packs_up_once() {
+    for (building, quirk) in [("SMB2", true), ("SMB2", false), ("SMB", false)] {
+        let (mut w, v, _) = no_field_pack_up(building, quirk);
+        let cells = deployments(&mut w, 1500);
+        assert!(cells.is_empty(), "{building} {quirk}: {cells:?}");
+        assert!(w.obj(v).is_some_and(|o| o.kind == Kind::Vehicle));
+        assert_eq!(group(&w, v).state, GroupState::AtRest, "{building} {quirk}");
+    }
 }
 
 // spec: S-0402 claim 21 (#450: on successful emergence a slave's target is its master). With the unarmed synthetic slave the held master target is never shot at; whether an armed slave bound to its master may fire at it is Q-3275
