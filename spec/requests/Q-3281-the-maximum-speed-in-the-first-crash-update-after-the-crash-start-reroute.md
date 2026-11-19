@@ -1,9 +1,9 @@
 ---
 id: Q-3281
 title: The maximum speed in the first crash update after the crash start's reroute
-status: open
+status: answered
 related: [S-0502, S-0312]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need

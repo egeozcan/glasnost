@@ -2,13 +2,13 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 34
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-19
 measurements: []
-requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504, Q-3042, Q-3043, Q-3252, Q-3255, Q-3257]
+requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504, Q-3042, Q-3043, Q-3252, Q-3255, Q-3257, Q-3281, Q-3282]
 supersedes: []
 ---
 
@@ -741,16 +741,24 @@ New terms:
     - **Start.** When a jumpjet has started to crash (S-0312 claim 16), is above the surface and
       is not already *crashing* or *crashed*, and is not held by magnetic lift, its next update
       includes the extra crash drop *k* and enters *crashing* with target height −5 leptons.
-      That update's ordinary physics still uses the preceding flight state and target height,
-      as left by the destination clear below: its height may therefore rise before the extra
-      drop. A rerouted *descending* unit has become *ascending* with target height *H*
-      (claim 24's table), so its first crash update climbs towards that height. The −5-lepton target first affects
-      ordinary height control in the following update (claim 3). A jumpjet that is neither
-      moving nor moving now takes no update, so it does not start this fall until it next
-      updates in the original. Claim 3's safety departure instead guarantees that next
-      update for a pending aerial crash. An infantry jumpjet switches to its *air-death-start* sequence
-      (S-0107). A seized dropped unit instead follows S-0607 claim 15's cell-centre detour
-      before crash entry.
+      That update's ordinary physics still uses the preceding flight state and target height, as
+      left by the destination clear below: its height may therefore rise before the extra drop.
+      Of the preceding state, only that physics runs, all of it as in any update (claim 3):
+      among it the height step (F4) with its wobble (F2), the speed step (F1), the step along
+      the heading (F5) and the body facing set from the heading (claim 10). The entry into
+      *crashing* comes after the physics and before the flight state's own decisions, so in that
+      update the unit makes *crashing*'s decisions (*Fall*, below) and not those of the state it
+      was killed in (Q-3281). So, for a unit killed while *cruising*, claim 11's arrival test
+      and F6's speed bands never act on the movement point that the destination clear has just
+      moved near it, and neither do the decisions of *ascending*, *hovering* or *descending* for
+      a unit killed in one of those states. A rerouted *descending* unit has become *ascending*
+      with target height *H* (claim 24's table), so its first crash update climbs towards that
+      height. The −5-lepton target first affects ordinary height control in the following update
+      (claim 3). A jumpjet that is neither moving nor moving now takes no update, so it does not
+      start this fall until it next updates in the original. Claim 3's safety departure instead
+      guarantees that next update for a pending aerial crash. An infantry jumpjet switches to
+      its *air-death-start* sequence (S-0107). A seized dropped unit instead follows S-0607
+      claim 15's cell-centre detour before crash entry.
     - **Destination clear at crash start (Q-3042, Q-3255).** Starting a crash stops the
       unit's orders at once, inside the hit or event that starts it, so before the unit's
       next movement update. It is the same stop as S-0607 claim 13's stop on dropping: its
@@ -783,7 +791,12 @@ New terms:
         instance because another unit's mark is in that cell's occupancy record (claim 23).
         When the search finds no cell, no re-order follows. Claim 17's no-cell rule acts only
         on a unit that still has health, and a killed unit has none, so a failed search does not
-        destroy it again. A unit held by magnetic lift is
+        destroy it again. The same holds for the off setting of
+        `quirks.jumpjet_no_cell_self_destruct` (Edge cases), whose outcome replaces that rule's
+        self-destruction and so also acts only on a unit with health (Q-3282): a killed unit
+        whose search finds no cell keeps its flight state, movement point and commitment under
+        both settings, and its first crash update's physics is that of the state it was killed
+        in. A unit held by magnetic lift is
         outside this bullet (S-0607).
     - **Fall.** In each tick of *crashing*:
       - after that tick's ordinary physics height step (F4), its world height drops by an
@@ -795,7 +808,9 @@ New terms:
         along the heading (F5).
     - **Path of the fall (Q-3255).** Neither the crash start nor *crashing* sets the maximum
       speed, so it keeps the value that its flight state last set (claims 7, 11 and 12)
-      until the crash end. Every crashing jumpjet that is not held by magnetic lift falls this
+      before the hit until the crash end, also through the first crash update, in which the
+      flight state's own decisions do not run (*Start*, above). Every crashing jumpjet that is
+      not held by magnetic lift falls this
       way, vehicle or infantry, balloon-hover type or not:
       - F1 goes on moving the current speed towards that maximum in every tick, with the
         overshoot that claim 6 describes, and F5 steps the unit along its spinning heading
@@ -887,7 +902,14 @@ New terms:
       case, part (a) for the infantry unit's three draws; J12's descent subcase for the changed
       first crash update and its retention subcase for the direct stop's reroute of a
       balloon-hover vehicle and the empty order-level destination). The path of the fall is
-      `measurable` (J12's balloon-hover subcases, by the speeds and the step in each tick).
+      `measurable` (J12's balloon-hover subcases, by the speeds and the step in each tick, and
+      parts (a) and (e) for the first crash update's decisions: (a)'s run near the cell's
+      centre for cruising's arrival test and its band run for F6's bands, (e) for ascending's
+      maximum speed). That the first crash update makes no decision of *hovering* or
+      *descending* is `unmeasured`: J12's balloon-hover types never enter *descending*, and no
+      scenario here kills a hovering unit in an update in which a hovering decision would
+      change a recorded value. The no-cell outcome of the
+      switch's off setting for a killed unit is a design rule.
       That the searches find the same cell is `unmeasured` apart from J31 part (a): no
       scenario changes occupancy within the hit.
       Crash requests on idle units share claim 3's `unmeasured` limitation.
@@ -895,8 +917,10 @@ New terms:
       heading, straight down at speed 0, as an arc that does not close in a fall shorter than
       a full turn; the destination clear at the hit, its direct stop, the empty order-level
       destination it leaves and the infantry unit's three draws; the reference, the height
-      per update, the speed reset and the held-up condition of a held-up crash); medium (that
-      the maximum speed keeps its last value through the fall, that each search finds the
+      per update, the speed reset and the held-up condition of a held-up crash; that the
+      maximum speed keeps its last value through the fall, and that the first crash update
+      makes *crashing*'s decisions and not those of a cruising or ascending unit's state)
+      and medium (that the same holds for *hovering* and *descending*, that each search finds the
       same cell, the contact break-off at the hit, the hand-over to S-0312's impact, and that
       nothing other than the listed events ends a held-up crash, which is a claim of absence)
 
@@ -1619,8 +1643,10 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 - **No landing slot.** A jumpjet that cannot land and finds no cell nearby destroys itself
   (claim 17). This is the original's behaviour and stays the default
   (`quirks.jumpjet_no_cell_self_destruct`, default on, YR behaviour). Off: it clears its
-  movement point and commitment. At an integer height above the surface of 1 lepton or more,
-  it re-enters *hovering* over its current cell, neither descending nor flying on. At height
+  movement point and commitment. Like the self-destruction it replaces, this outcome acts only
+  on a unit that still has health, so a unit killed at its crash start is unchanged by it
+  (claim 18). At an integer height above the surface of 1 lepton or more, it re-enters
+  *hovering* over its current cell, neither descending nor flying on. At height
   0 leptons or less, it stays put and becomes *grounded*, including from *ascending* at height
   0. For every seized set-down unit in this switch-off outcome, whatever route brought it
   there, S-0607 claims 9 and 20 apply: while hovering it is not restored and retries the
@@ -2016,8 +2042,23 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
       speed keeps its value at the hit until the crash end, and in every crashing tick the
       current speed is F1's result from the current and maximum speed of the tick before, so
       the braking goes on after the kill.
+    - (a) is run twice more, killed when the recorder shows its position under 20 leptons from
+      the centre of the cell it is in, and then at a distance ρ from that centre (truncated) of
+      20 leptons or more and below (50 × *S*) div *T* (F6), so that F6 gives that distance a
+      maximum speed below *S*. Void unless the recorder shows that at the hit. Expected, as in
+      (a): the maximum speed keeps its value at the hit until the crash end, and no crashing
+      tick shows both speeds at 0.
+    - (e) Order it from rest on the ground to a cell at least 20 cells away, and kill it with
+      one hit in the tick in which, in a run of the same set-up and seed without the kill, its
+      *h* first exceeds one half of its target height (claim 7). Void unless the recorder shows
+      *ascending*, a commitment, a maximum speed of 0 and an *h* of at most that half at the
+      hit. Expected: the maximum speed stays 0 until the crash end, and the unit makes no
+      sideways step. A maximum speed of *S* in a crashing tick shows ascending's decision
+      running in the first crash update.
     - In every part the order-level destination is empty from the hit on. A sideways step in
-      (b), a maximum speed that changes before the crash end in (a) or (d), a current speed
+      (b), a maximum speed that changes before the crash end in (a), its two further runs, (d)
+      or (e), a crashing tick with both speeds at 0 in those further runs, a sideways step in
+      (e), a current speed
       other than F1's result in (a) or (d), or a step not along the heading falsifies the path
       of the fall. In (a), when the fall lasts fewer ticks than one full turn of the heading
       at S-0206 claim 14's rate, the track is an open arc: a crash end back at the kill
