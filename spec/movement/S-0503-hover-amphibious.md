@@ -2,13 +2,13 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 29
+revision: 30
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-18
+approved-on: 2026-11-19
 measurements: []
-requests: [Q-0679, Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696, Q-1773, Q-3235]
+requests: [Q-0679, Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696, Q-1773, Q-3235, Q-3263]
 supersedes: []
 ---
 
@@ -89,11 +89,15 @@ New terms:
 - **Hovering vehicle.** A vehicle whose locomotor (S-0207 claim 14) is the hovering locomotor.
 - **Destination** *D*. The locomotor's movement point, distinct from the order-level destination
   read by behaviours and factory reporting. The two can disagree after a stop order (claim 16).
-  Unless held, assignment sets its height to the surface height of its cell, plus 416 leptons on
-  a high-bridge cell. Held assignment retains the supplied point without this height adjustment.
-  For a cell destination that supplied point is its centre at terrain surface height, without
-  a bridge-deck lift; claim 18 gives its lifetime and order-level consequences. For a destination
-  that names an object, claim 20 gives where the point comes from and when it changes.
+  Unless held, assignment sets its height to the surface height at the supplied point itself
+  (S-0106 claim 2, at the point's in-cell position, not at the centre of its cell), plus 416
+  leptons when the cell that contains the point is a high-bridge cell. The height that the
+  supplied point had is not kept. Held assignment retains the supplied point without this height
+  adjustment. For a cell destination that supplied point is its centre at terrain surface height,
+  without a bridge-deck lift; claim 18 gives its lifetime and order-level consequences. For a
+  destination that names an object, claim 20 gives where the point comes from and when it
+  changes. Outside the destination-refresh state, an assignment of the order-level destination
+  that the vehicle already holds is ignored and sets nothing (claim 20).
 - **Held.** The parasite hold timer of S-0614 claims 7–8 is running. This is the meaning of
   *paralysed* for this spec's hover assignment and choice rules, not electromagnetic-pulse disable.
   Claim 17 gives its consequences.
@@ -615,11 +619,16 @@ New terms:
     Expiry of the hold, the next path search and the next heading-point choice do not adjust
     this remembered *D*. A heading point still gets its own height by claim 5, independently
     of *D*. Until another assignment replaces it or stopping/completion/failure clears it,
-    *D* retains the height originally supplied. An assignment made after hold expiry applies
-    the ordinary height adjustment anew, even when it names the same cell. Consequently
-    raised terrain alone does not leave a held cell destination at height 0. On a high bridge,
-    however, a retained terrain-height destination can fail claim 7's arrival-height test
-    for a vehicle on the deck; later searching does not silently repair that height.
+    *D* retains the height originally supplied. An effective assignment made after hold expiry
+    applies the ordinary height adjustment anew. Giving the same cell again while the
+    order-level destination is still that cell is not effective unless the destination-refresh
+    state is on (claim 20): it leaves *D* as it was, so a *D* that the vehicle still has keeps its
+    terrain height, without the deck lift. Outside that state the same cell gets the adjustment
+    anew only once the order-level destination has changed or become empty in between.
+    Consequently raised terrain alone does not leave a held cell destination at height 0. On a
+    high bridge, however, a retained terrain-height destination can fail
+    claim 7's arrival-height test for a vehicle on the deck; neither later searching nor giving
+    the same cell again repairs that height.
 
     The order-level destination changes to the assigned cell or object in the ordinary way
     even while held. Behaviours and S-0417 claim 7's report tests see that new reference,
@@ -627,7 +636,8 @@ New terms:
     itself generate a cell-arrival update or a factory clear report. This specifies the
     result of an assignment, not permission to issue an otherwise refused move order:
     S-0614 claim 8 and S-0214's order rules still govern held-unit order legality.
-    - Backing: `measurable` (H14, raised-ground and high-bridge assignment subtests)
+    - Backing: `measurable` (H14, raised-ground and high-bridge assignment subtests, with the
+      same cell given again after expiry and then after another cell)
     - Confidence: high
 
 19. **A deploy order (Q-1773).** The deploy order's single destination-clear request (S-0213
@@ -795,34 +805,80 @@ New terms:
       whether a landing-first type's landing request ever ends while it hovers, and so for that
       type never deploying once its first step has found it above the ground
 
-20. **A destination that names an object (Q-3235).** When an effective assignment gives a hovering
-    vehicle a destination that names an object (an infantry unit, a vehicle, an aircraft or a
-    building), *D* is that object's movement point at the moment of the assignment, with the height
-    of Terms, or claim 18's point while held. *D* does not follow the object afterwards. However
-    far or fast the object moves, neither *D* nor the stored path changes because of it. The
-    throttle of claim 2, the completion test of claim 7 and the arrival rows of claim 15 use that
-    *D*, and so do the searches of S-0212 claims 20 to 23: a search looks for *D*'s cell, not for
-    the cell the object is in at the time of the search. *D* changes only by what changes it for
-    any destination: a new effective assignment, a stop (claims 16 and 19), completion, or a search
-    that fails and gives up.
+20. **A destination that names an object (Q-3235, Q-3263).** When an effective assignment gives a
+    hovering vehicle a destination that names an object (an infantry unit, a vehicle, an aircraft
+    or a building), *D* is that object's point at the moment of the assignment, with the height
+    of Terms, or claim 18's point while held. The object's point is the one that S-0502 claim 16
+    gives, with the hovering vehicle in place of the jumpjet:
+    - a building gives the centre of its foundation, its reference point of S-0204 claim 4. A
+      building whose type has the pad flag, the repair-depot flag or the vehicle-bunker flag gives
+      its docking point instead, by S-0607 claim 7's docking-point rules with the hovering vehicle
+      in place of the seized unit.
+    - a vehicle, an infantry unit or an aircraft gives the point that S-0607 claim 7 gives for a
+      lifter that is not a building, its riding rule included: outside any transport, its heading
+      point (S-0607 Terms), which is its next movement point, or its position when it has none.
 
-    As S-0502 claim 24 states for a jumpjet vehicle, a vehicle ignores an unchanged
-    order-level destination unless its destination-refresh state (S-0502 claim 27) is on, and the
-    ignored assignment leaves *D* as it was. So *D* takes the object's later position when the
-    destination has first changed or become empty and the object is then assigned again, for
-    example by a behaviour that gives it again after the vehicle has arrived (S-0215). This holds
-    whatever kind of object the destination names. It holds too for a vehicle that chases its
-    target with the target as its destination (S-0207 claim 19 (c)): the chase cut of S-0212
-    claim 20 shortens the stored path, and the fresh search that follows looks for *D*'s cell. When
-    the chase's approach step gives a cell instead (S-0215 claim 37), each new cell that it gives is
-    a new destination and gives a new *D* by Terms.
+    Unless the vehicle is held, the height of that point is taken at the point itself, not at the
+    centre of its cell (Terms). On a slope cell it is the surface height at the point's own in-cell
+    position (S-0106 claim 2), plus 416 leptons when the cell that contains the point is a
+    high-bridge cell. The object's own height then plays no part: an infantry unit standing on the
+    ground under a high bridge gives the deck height, as one standing on the deck does.
+
+    *D* does not follow the object afterwards. However far or fast the object moves, neither *D*
+    nor the stored path changes because of it. The throttle of claim 2, the completion test of
+    claim 7 and the arrival rows of claim 15 use that *D*, and so do the searches of S-0212 claims
+    20 to 23: a search looks for *D*'s cell, not for the cell the object is in at the time of the
+    search. *D* changes only by what changes it for any destination: a new effective assignment, a
+    stop (claims 16 and 19), completion, or a search that fails and gives up.
+
+    **An unchanged destination.** As S-0502 claim 24 states for a jumpjet vehicle, a vehicle
+    ignores an assignment of the order-level destination it already holds, unless its
+    destination-refresh state (S-0502 claim 27) is on. Equality means the same cell or the same
+    object, not two objects sharing a cell, and a cell is ignored in the same way as an object.
+    The ignored assignment sets nothing: *D*, the stored path, the heading point and the
+    order-level destination stay as they were, and no path search or heading-point choice is
+    made. The test reads the order-level destination, not *D*. So a vehicle whose *D* a stop
+    request has cleared while its order-level destination stays in place (claim 10) gets no new
+    *D* when that same destination is given again: it stays without *D* until its order-level
+    destination changes or is cleared, as at a repair depot by S-0314 claims 21 and 22. *D* takes
+    the object's later position when the destination has first changed or become empty and the
+    object is then assigned again, for example by a behaviour that gives it again after the
+    vehicle has arrived (S-0215). This holds whatever kind of object the destination names. It
+    holds too for a vehicle that chases its target with the target as its destination (S-0207
+    claim 19 (c)): the chase cut of S-0212 claim 20 shortens the stored path, and the fresh search
+    that follows looks for *D*'s cell. When the chase's approach step gives a cell instead (S-0215
+    claim 37), each new cell that it gives is a new destination and gives a new *D* by Terms.
+
+    **Contact taken by the assignment.** When the vehicle's current or queued behaviour is *enter*,
+    it holds no contact, and it is given a repair depot or a vehicle bunker that holds no contact,
+    it makes its entry request at once (S-0314 claim 23, S-0606 claim 3), before *D* is set. *D*
+    is then the docking point with the contact that this request has taken. At a depot with more
+    than one docking place, *D* uses the displacement of that place (S-0314 claim 18). At a bunker
+    it is the quadrant point from the vehicle's position at the assignment (S-0606 claim 4), which
+    does not depend on the contact. A contact taken after *D* is set does not change *D*. A refused
+    request is S-0314 claim 23's and S-0606 claim 3's case. When the building already holds a
+    contact, those claims give the outcome too, and the vehicle gets no destination from that
+    assignment.
     - Backing: `measurable` (S-0507 scenario T16, which records *D* and the object's position from
-      the assignment on, with its part (c), in which the object walks away without going inside).
-      `unmeasured` for the ignored repeated assignment and for the chase. No setup here gives a
-      hovering vehicle the object it already holds as its destination again with no other effect of
-      the order that does so, and S-0207 scenario D21 explains why the hovering chase cannot be
-      isolated from the vehicle's other step-point reactions.
-    - Confidence: high for *D* staying at the assignment point; medium for the ignored repeated assignment and for the chase
+      the assignment on, with its part (c), in which the object walks away without going inside; H17
+      for the point that a standing infantry unit gives and for the height at an off-centre point on
+      a slope cell; H14 for the same cell given again in claim 18's held case). `unmeasured` for the
+      point that a building gives, for the docking points, for an object with a next movement point
+      or in a transport, for an object under a high bridge, for the ignored repeated assignment of
+      an object, for a cell outside claim 18's held case, for the vehicle left without *D* after a
+      stop request, for the chase and for the contact taken by the assignment. S-0502 scenario J34
+      runs these points only with the jumpjet locomotor. No setup here gives a hovering vehicle the
+      destination it already holds again with no other effect of the order that does so, and outside
+      claim 18's held case an ignored cell and a re-applied one give the same *D*. After a repair
+      depot's switch-off, an enter order on the same depot given while the vehicle is in *enter* is
+      ignored before it reaches the assignment (S-0314 claim 20), so S-0314 scenario H4 cannot
+      isolate this rule. S-0207 scenario D21 explains why the hovering chase cannot be isolated from
+      the vehicle's other step-point reactions. The contact case needs a depot with more than one
+      docking place, which no scenario here sets up.
+    - Confidence: high for *D* staying at the assignment point, and for the ignored repeat in claim
+      18's held cell case, as claim 18 rates it; medium for the point that each kind of object
+      gives, for the height at the point itself, for the ignored repeated assignment otherwise, for
+      the vehicle left without *D*, for the chase and for the contact taken by the assignment.
 
 ## Formulas
 
@@ -1201,10 +1257,17 @@ One valid run per subcase unless stated. No completed measurement is claimed.
   Expected: unchanged *D* through expiry/search/choice while it exists, independent
   heading-point height under claim 5, F1's distance to that retained *D*, and claim 7's
   actual height-sensitive completion rather than an assumed successful bridge arrival.
-  Give the same cell again after expiry: expect the ordinary adjustment, including the
-  bridge lift. A zero remembered height on raised terrain, a bridge lift during held
-  assignment, a height repair without reassignment, a retained old order-level reference,
-  or an assignment-only arrival update falsifies the corresponding part of claim 18.
+  Give the same cell again after expiry, and read the order-level destination recorded just
+  before that assignment. While it is still that cell, expect the assignment ignored: *D*
+  unchanged at terrain height without the bridge lift, and no path search or point choice
+  caused by it. Then give another cell and, after that, the first cell again: expect the
+  ordinary adjustment, including the bridge lift. When the record shows the order-level
+  destination empty or another cell just before the first repeat, that repeat is effective
+  and the expectation is the adjustment. A zero remembered height on raised terrain, a bridge
+  lift during held assignment, a height repair without reassignment, a bridge lift from the
+  same cell given again while it is still the order-level destination, no bridge lift from
+  an effective assignment of it, a retained old order-level reference, or an assignment-only
+  arrival update falsifies the corresponding part of claim 18.
   Where a contact/update trace exists, apply S-0417 claim 7's report test to the new
   order-level reference, not *D*. Do not infer reporting merely from assignment.
   One qualifying run per subcase; propose any missing read-only recorder support.
@@ -1356,6 +1419,20 @@ One valid run per subcase unless stated. No completed measurement is claimed.
     while the vehicle still moves counts for this).
   One qualifying run per case; a part without a qualifying run (in particular (j), whose
   timing is found by repetition) leaves its row unmeasured rather than confirming it.
+- **H17 Height of an object's point (Q-3263).** Start as S-0507 scenario T16, with I placed by
+  the map at a standing spot other than the centre of its cell, on a slope cell of the shore
+  whose surface height (S-0106 F1) at that spot differs from that at the cell's centre, and with
+  no high bridge within three cells of I. Order I to enter A. Record, at the end of the tick in
+  which A takes I as its destination: A's order-level destination, *D* (all three coordinates),
+  I's position and I's next movement point if it has one. Let I's point be that next movement
+  point, or I's position when it has none (claim 20). Void the run if A does not take I as its
+  destination, or if F1 gives the same height at I's point as at the centre of the cell that
+  contains I's point.
+  - *Expected:* *D*'s horizontal position is I's point, and *D*'s height is F1's surface height
+    at I's point itself.
+  - *Falsified by:* judged in this order, a horizontal position of *D* other than I's point,
+    whatever its height; then a height of *D* equal to the surface height at the centre of the
+    cell that contains I's point, or any other height than the expected one.
 
 ## Open questions
 
@@ -1392,6 +1469,12 @@ One valid run per subcase unless stated. No completed measurement is claimed.
 
 ## Changes for other specs
 
+- **S-0606 claim 4.** "The direction is taken from the vehicle's position at the time the point
+  is asked for, so the docking cell can change while the vehicle drives around the bunker."
+  should add that a vehicle with the hovering locomotor moves toward the point asked at its
+  effective assignment (S-0503 claim 20), so that point does not change while it drives around
+  the bunker. Level medium, backing `unmeasured`: those of S-0503 claim 20 for the contact taken
+  by the assignment.
 - **S-0212 claim 20, chase paragraph.** "When the chased unit moves slowly it stays close to the
   chased unit's position." should say that the fresh search after a cut looks for the movement
   point that the last effective assignment fixed (S-0503 claim 20 for hovering movement, S-0207
