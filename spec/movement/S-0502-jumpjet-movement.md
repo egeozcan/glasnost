@@ -2,13 +2,13 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 27
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-18
 measurements: []
-requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504, Q-3042, Q-3043, Q-3252]
+requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504, Q-3042, Q-3043, Q-3252, Q-3255]
 supersedes: []
 ---
 
@@ -687,25 +687,40 @@ New terms:
       update for a pending aerial crash. An infantry jumpjet switches to its *air-death-start* sequence
       (S-0107). A seized dropped unit instead follows S-0607 claim 15's cell-centre detour
       before crash entry.
-    - **Destination clear at crash start (Q-3042).** Starting a crash makes one empty
-      destination assignment at once, inside the hit or event that starts it, so before the
-      unit's next movement update. It is an ordinary assignment, so claims 24, 27 and 28 decide
-      its effect:
-      - A jumpjet-type infantry unit has no equality suppression. With a movement commitment
-        it always reroutes under claim 17: a nearby search around its current cell, then
-        standing-position adjustment with its eligible ranged draw over 0 to 3 (claim 23).
-      - An ordinary jumpjet vehicle reroutes only when its order-level destination is not
-        already empty, or destination refresh is pending (claim 27). Otherwise its movement
-        point and commitment stay as they were. Its reroute takes no draw.
-      - A balloon-hover vehicle can reject the clear under claim 28.
-
-      An effective clear empties the order-level destination. With a commitment, the
-      commitment survives with the replacement point. Without a commitment claim 17 makes no
-      reroute, so the movement point and flight state stay as they were. The
-      replacement point lies in another cell whenever the search rejects the current cell,
-      for instance because another unit's mark is in that cell's occupancy record (claim 23).
-      A killed unit has no health left, so a failed search does not destroy it again
-      (claim 17). A unit held by magnetic lift is outside this bullet (S-0607).
+    - **Destination clear at crash start (Q-3042, Q-3255).** Starting a crash stops the
+      unit's orders at once, inside the hit or event that starts it, so before the unit's
+      next movement update. It is the same stop as S-0607 claim 13's stop on dropping: its
+      target is cleared, it breaks off any contact, and its movement receives two empty
+      destination assignments with a direct instruction to stop between them, the second
+      made after its target has been cleared. The two assignments are ordinary ones, so
+      claims 24, 27 and 28 decide their effect. The direct stop is not a destination
+      assignment, so claim 24's rule for redundant assignments does not bear on it: claim
+      17's stopped-movement rule runs on it whatever the first assignment did. None of this
+      stops the unit's horizontal motion (*Path of the fall*, below). What the stop decides:
+      - **Order-level destination.** Every unit ends the crash start with an empty
+        order-level destination, whatever it had before. A balloon-hover vehicle can reject
+        the first assignment under claim 28, with that claim's effect on its behaviour, but
+        not the second, made when it has no target.
+      - **Without a movement commitment** the stop changes neither the unit's movement point
+        nor its flight state (claim 17).
+      - **With a movement commitment** the unit keeps its commitment, and its movement point
+        ends at the cell that claim 17's nearby search around its current cell finds.
+        Nothing marks or frees a cell between the searches of its reroutes, so each one
+        finds the same cell. The direct stop always reroutes it, and the assignments
+        reroute it whenever they are effective clears.
+        - A vehicle's point is that cell's centre. Its reroutes take no draw and all end
+          there, so their number has no observable effect.
+        - A jumpjet-type infantry unit has no equality suppression, so all three reroute
+          it. Its point is its standing position in that cell (claim 23), which each reroute
+          adjusts afresh: it takes three of its ranged draws over 0 to 3 when the cell is
+          eligible for adjustment and none when it is not, and the last draw chooses the
+          position.
+      - The point lies in another cell whenever the search rejects the current cell, for
+        instance because another unit's mark is in that cell's occupancy record (claim 23).
+        When the search finds no cell, no re-order follows. Claim 17's no-cell rule acts only
+        on a unit that still has health, and a killed unit has none, so a failed search does not
+        destroy it again. A unit held by magnetic lift is
+        outside this bullet (S-0607).
     - **Fall.** In each tick of *crashing*:
       - after that tick's ordinary physics height step (F4), its world height drops by an
         additional *k*, with the resulting world height truncated toward zero. Away from the
@@ -714,6 +729,33 @@ New terms:
         the heading's current value, so it spins at the rate of S-0206 claim 14
       - its current speed continues to evolve under F1 and it keeps stepping
         along the heading (F5).
+    - **Path of the fall (Q-3255).** Neither the crash start nor *crashing* sets the maximum
+      speed, so it keeps the value that its flight state last set (claims 7, 11 and 12)
+      until the crash end. Every crashing jumpjet that is not held by magnetic lift falls this
+      way, vehicle or infantry, balloon-hover type or not:
+      - F1 goes on moving the current speed towards that maximum in every tick, with the
+        overshoot that claim 6 describes, and F5 steps the unit along its spinning heading
+        with that tick's current speed. A unit that was accelerating or braking when it was
+        killed goes on accelerating or braking. One killed at its full speed keeps stepping
+        at about that speed. Because F5 rounds each coordinate separately, the length of a
+        single tick's step varies with the heading.
+      - A unit killed with maximum and current speed 0, such as one hovering after its
+        arrival (claim 12), keeps its current speed at 0. It falls straight down, with no
+        sideways step, while its heading spins.
+      - The track of a unit killed at speed bends with the spinning heading. A full turn of
+        the heading at S-0206 claim 14's rate takes a fixed number of ticks, and the track
+        covers the share of that turn that the fall's own length in ticks gives. A fall that
+        ends before one full turn leaves an open arc, not a closed loop. The slower the
+        unit's speed against the heading's turn rate, the closer to its kill point it falls
+        and ends its crash. A balloon-hover type sets off its death weapon where its fall
+        ends (S-0312 claim 16's *Vehicle crash end*).
+      - The body facing is set to the heading in every physics step (claim 10), so the spin
+        seen is the heading's spin, drawn as the body's facing. Its rocking angles still
+        step (S-0113 claim 16), but whether they are drawn depends on the type: S-0113
+        claim 18.
+      - What the unit was doing when it was killed matters only through the flight state,
+        maximum speed and current speed that it left. An attacker hovering over its target
+        after its arrival falls straight down. One killed while cruising moves along an arc.
     - **Crossing a deck.** Over a high-bridge cell, the extra crash drop ends the ordinary
       jumpjet's fall when its height before that drop is at or above the deck and its height
       after it is below the deck. It does not snap its world height back to the deck.
@@ -778,12 +820,21 @@ New terms:
       and L4 for the cell-centre detour, zero-speed fall, no spin, initial rate,
       drop-before-growth ordering and zero target height). The destination clear at crash
       start and the held-up crash are `measurable` (J31, with named test data for the held-up
-      case; J12's descent subcase for the changed first crash update).
+      case, part (a) for the infantry unit's three draws; J12's descent subcase for the changed
+      first crash update and its retention subcase for the direct stop's reroute of a
+      balloon-hover vehicle and the empty order-level destination). The path of the fall is
+      `measurable` (J12's balloon-hover subcases, by the speeds and the step in each tick).
+      That the searches find the same cell is `unmeasured` apart from J31 part (a): no
+      scenario changes occupancy within the hit.
       Crash requests on idle units share claim 3's `unmeasured` limitation.
-    - Confidence: high (fall and spin; the destination clear at the hit and its dispatch; the
-      reference, the height per update, the speed reset and the held-up condition of a held-up
-      crash); medium (the hand-over to S-0312's impact, and that nothing other than the listed
-      events ends a held-up crash, which is a claim of absence)
+    - Confidence: high (fall and spin; that horizontal motion goes on along the spinning
+      heading, straight down at speed 0, as an arc that does not close in a fall shorter than
+      a full turn; the destination clear at the hit, its direct stop, the empty order-level
+      destination it leaves and the infantry unit's three draws; the reference, the height
+      per update, the speed reset and the held-up condition of a held-up crash); medium (that
+      the maximum speed keeps its last value through the fall, that each search finds the
+      same cell, the contact break-off at the hit, the hand-over to S-0312's impact, and that
+      nothing other than the listed events ends a held-up crash, which is a claim of absence)
 
 19. **What sets a jumpjet sinking.** Only a dropped unit (S-0607 claim 13) is
     checked on impact. S-0607 claims 16 and 17 decide the outcome: a blocked water cell,
@@ -1868,6 +1919,39 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
     slot still held after crash completion, continued fall after the crossing or a snap back
     to exact deck height falsifies claim 18. Repeat with a crashing infantry variant from *jumpjet-flight-test*: expected
     air-death-start presentation at crash entry; a different sequence falsifies that part.
+  - **Balloon-hover fall (Q-3255).** Use a crashable balloon-hover jumpjet vehicle type from
+    *jumpjet-flight-test*, one copy with the tilt-crash flag off and one with it on (S-0113
+    claim 18), on open flat land away from other objects. Record each tick, from the tick
+    before the kill to the crash end: position, world height, current and maximum speed,
+    movement heading, movement point, order-level destination, body facing, roll and pitch.
+    - (a) Kill it with one hit while it cruises at full speed towards a cell at least 20 cells
+      away. Void unless the recorder shows its maximum speed at its full speed at the hit.
+      Expected: the maximum speed stays at that value until the crash end, and in every
+      crashing tick the position moves by F5's step for that tick's current speed and heading,
+      so the track bends with the spinning heading.
+    - (b) Kill it while it hovers after the arrival of a move order, with no target. Expected:
+      current and maximum speed 0 in every crashing tick and no change of horizontal position
+      from the kill to the crash end, while the heading and body facing spin.
+    - (c) Repeat (a) after J25's retention setup, so that it holds a retained destination and
+      a target at the hit; void unless the recorder shows both at the hit. Expected: at the
+      hit its movement point moves to its own cell's centre, or to a neighbour cell's centre if
+      its own cell is refused, and its order-level destination becomes empty. A movement
+      point still at the retained destination after the hit falsifies the direct stop of
+      claim 18's destination clear.
+    - (d) Order a move to a cell 3 cells away and kill it with one hit in the first tick in
+      which the recorder shows its maximum speed below its current speed, while it brakes
+      towards that cell. Void unless the recorder shows that at the hit. Expected: the maximum
+      speed keeps its value at the hit until the crash end, and in every crashing tick the
+      current speed is F1's result from the current and maximum speed of the tick before, so
+      the braking goes on after the kill.
+    - In every part the order-level destination is empty from the hit on. A sideways step in
+      (b), a maximum speed that changes before the crash end in (a) or (d), a current speed
+      other than F1's result in (a) or (d), or a step not along the heading falsifies the path
+      of the fall. In (a), when the fall lasts fewer ticks than one full turn of the heading
+      at S-0206 claim 14's rate, the track is an open arc: a crash end back at the kill
+      position falsifies it. The body facing equals the
+      heading after every crashing tick in all parts. Roll and pitch are recorded for S-0113
+      scenario RK13.
 - **J13 Sinking only after a magnetic-lift drop.** Shoot down a jumpjet vehicle over water.
   Expected: it is not set sinking by its movement (claim 19). A magnetic-lift drop over water is
   tested by S-0607 scenarios L5 and L6. Record sinking state through impact as a diagnostic observation.
@@ -2216,12 +2300,13 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
     own cell's clearance counts. Void if the kill falls outside that height window. Record
     every tick for 3000 ticks after the kill.
     Expected: at the hit the order-level destination becomes empty, the movement point moves
-    to a nearby cell other than the current one and one ranged draw over 0 to 3 is taken.
+    to a nearby cell other than the current one and three ranged draws over 0 to 3 are taken,
+    one for each reroute of claim 18's destination clear.
     The two rates are equal, so by claim 18 the unit keeps its kill height in every update,
     stays *crashing*, has current speed 0 at the end of each update and does not move
     sideways. A crash end while the other unit stays, or any change of its height, falsifies
     the held-up crash. No reroute at the hit, or a point in the current cell, falsifies the
-    destination clear.
+    destination clear, and so does a number of draws at the hit other than three.
   - (b) Continue (a): order the other infantry unit out of the cell. Expected: the crash ends
     within a few ticks of that unit's listing leaving the cell, by claim 18's ordinary end.
   - (c) Control: (a) with the test unit alone in its cell. Expected: the crash ends within a

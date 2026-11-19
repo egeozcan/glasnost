@@ -2,13 +2,13 @@
 id: S-0113
 title: Body rocking
 topic: rendering
-revision: 17
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-01
+approved-on: 2026-11-18
 measurements: []
-requests: [Q-2081, Q-2236]
+requests: [Q-2081, Q-2236, Q-3255]
 supersedes: []
 ---
 
@@ -24,7 +24,10 @@ question 3, claim 6 question 4, claims 3 and 11 question 5, claim 13 question 6,
 question 7 and claims 18 and 19 question 8. The causes of a push stay with the specs that own
 them (S-0303 claim 20, S-0514 claim 20, S-0614 claims 9 and 10, S-0601 claim 16, S-0210,
 S-0312 claim 16); this spec gives what a push of each kind does to the angles. Claim 20 answers
-Q-2236: how a crashing aircraft's body is drawn with its tumble.
+Q-2236: how a crashing aircraft's body is drawn with its tumble. Claims 16, 18 and 19 answer
+Q-3255 on a crashing balloon-hover jumpjet vehicle: its angles grow as any crashing body's do,
+and the jumpjet locomotor draws them, and builds fire points on them, only for a type with the
+tilt-crash flag.
 
 ## Terms
 
@@ -337,9 +340,16 @@ define *melee-linked*.
     (Formulas F5). While it crashes, each angle adds its rate in every turn, with no limit, no pull
     toward level, no stop and no rolling-over destruction. For a balloon-hover type, the pitch is
     then raised to −π/4 when below it (it has no upper bound) and the roll is held within ±π/4.
-    - Backing: `measurable` (RK9) for the rates, the growth and the balloon-hover roll bound.
-      `unmeasured` for the balloon-hover lower pitch bound: RK9 does not exercise it.
-    - Confidence: high for the rates, medium for the balloon-hover bounds
+    The pitch rate applies to a balloon-hover type as to any other, so its pitch changes by that
+    rate in every tick of the whole fall, with no upper bound; a rate drawn as 0 leaves it
+    unchanged (Q-3255). Whether the angles are drawn is claim 18's rule: a jumpjet type without
+    the tilt-crash flag is drawn level while they grow.
+    - Backing: `measurable` (RK9) for the rates, the growth and the balloon-hover roll bound,
+      and (RK13) for a balloon-hover jumpjet vehicle's pitch growth. `unmeasured` for the
+      balloon-hover lower pitch bound: the pitch rate is never negative, so a crash alone never
+      brings the pitch below −π/4, and no scenario here sets a pitch that low before a crash.
+    - Confidence: high for the rates and the growth, the balloon-hover pitch's growth included,
+      and medium for the balloon-hover bounds
 
 17. **Other writers.** A mind-control overload sets the roll rate to S-0601 F4's value, replacing
     the rate, unscaled. A crush tip of S-0210 claims 6 and 9 sets the pitch rate to S-0210's body
@@ -361,36 +371,64 @@ define *melee-linked*.
 
 ### What reads the angles
 
-18. **Drawing.** The driving, naval, hovering and jumpjet locomotors draw a body with its pitch
-    and roll (S-0106 claim 9, S-0504 F5). The flying locomotor draws them only while the aircraft
-    is crashing at strictly positive signed height (claim 20). The walking, mechanical walking,
+18. **Drawing.** The driving, naval and hovering locomotors draw a body with its pitch and roll
+    (S-0106 claim 9, S-0504 F5).
+    - **The jumpjet locomotor (Q-3255).** It draws them only for a type with the tilt-crash
+      flag (Import mapping), and then only while its pitch or its roll is 0.005 radians or more
+      in magnitude. Otherwise, and always for a type without the flag, it draws the body turned
+      to its body facing only, with no pitch, no roll and no slope tilt. This holds in every
+      flight state, crashing included, so a type without the flag is drawn level however far
+      its angles have grown, while they still step (claims 5 and 16). The flag has no effect
+      beyond this drawing and claim 19's fire point. A crashing jumpjet's spin is its body
+      facing following its spinning movement heading (S-0502 claim 18).
+
+    The flying locomotor draws them only while the aircraft is crashing at strictly positive
+    signed height (claim 20). The walking, mechanical walking,
     drop-pod and teleporting locomotors draw the body without them, although their angles still
     step. The tunnelling locomotor draws the body without them too: with the cell's slope tilt, or
     with its own digging pitch (S-0106). The rocket locomotor draws its own attitude (S-0105
     claim 41) and not the rocking angles.
-    - Backing: `measurable` (RK2 part b) for the walking body's angles stepping, and (RK12) for
-      the flying locomotor's crashing body. The drawing is `unmeasured` for every other
-      locomotor: RK8 records fire points and RK9 records angles and rates, not drawing; no scenario
+    - Backing: `measurable` (RK2 part b) for the walking body's angles stepping, (RK12) for
+      the flying locomotor's crashing body, and (RK13) for the jumpjet locomotor's flag, its
+      level body without the flag and the spin as body facing: part (a) in *crashing*, part (b)
+      in *hovering* and *cruising*. The flag's effect in the other flight states is
+      `unmeasured`: no scenario here rocks a jumpjet while it ascends or descends. The
+      0.005-radian threshold of a flagged jumpjet type is `unmeasured`: RK13 compares grown
+      angles only. The drawing is
+      `unmeasured` for every other locomotor: RK8 records fire points and RK9 records angles
+      and rates, not drawing; no scenario
       here runs the mechanical walking, drop-pod, teleporting, tunnelling or rocket locomotors, and
       RK2 part b records the walking body's angles, not its drawing.
     - Confidence: high for the flying locomotor's crashing body at strictly positive signed
-      height; medium for the others, except low for the rocket locomotor's drawing, which is
-      believed but not checked as closely as the others.
+      height, and for the jumpjet locomotor's flag and level body without it in *crashing*,
+      *hovering* and *cruising*; medium for the others, the jumpjet flag in the other flight
+      states and the jumpjet threshold included, except low for the rocket locomotor's drawing,
+      which is believed but not checked as closely as the others.
 
-19. **Fire points.** A body of the driving, naval, hovering and jumpjet locomotors of claim 18
-    takes its fire point (S-0313 claim 1) through its body transform: the rocking angles with
-    S-0106 claim 9's table tilt, which is the transform the original also draws with. S-0106
-    claim 4's presentation-only correction of the drawn tilt does not enter the fire point. So
-    rocking moves the point where its shots start, outside sinking as well as in it (S-0504
-    claim 16). With claim 9's destruction, this makes rocking game state.
-    DECIDED (autonomy, 2026-10-29): our engine simulates the angles and rates as game state,
-    advances them once in each turn of the body as this spec gives, and builds fire points on them.
+19. **Fire points.** A body of the driving, naval and hovering locomotors of claim 18, and a
+    body of the jumpjet locomotor whose type has the tilt-crash flag, takes its fire point
+    (S-0313 claim 1) through its body transform: the rocking angles with S-0106 claim 9's table
+    tilt, which is the transform the original also draws with. S-0106 claim 4's
+    presentation-only correction of the drawn tilt does not enter the fire point. So rocking
+    moves the point where its shots start, outside sinking as well as in it (S-0504 claim 16).
+    With claim 9's destruction, this makes rocking game state.
+    A jumpjet body whose type lacks the flag takes its fire point from the transform claim 18
+    draws it with, turned to its body facing only, so its rocking never moves its fire point
+    (Q-3255). A flagged jumpjet body takes it through the rocking angles while claim 18 draws
+    them, at 0.005 radians or more.
+    DECIDED (autonomy, 2026-10-29 and 2026-11-18): our engine simulates the angles
+    and rates as game state, advances them once in each turn of the body as this spec gives, and
+    builds fire points on them for the bodies whose transform this claim says includes them.
     The view only reads them. The rocking step is the first part of the body's turn, before its
     movement and its firing (in the arrival hold, after the hold-end test), so a shot fired in a
     turn starts from the angles after that turn's step, and a push in that turn shows from the next
     one. Which order the original uses is open (Open questions).
-    - Backing: `measurable` (RK8)
-    - Confidence: medium
+    - Backing: `measurable` (RK8, part b with the jumpjet subject's flag set and unset). The
+      0.005-radian threshold of a flagged jumpjet body's fire point is `unmeasured`: RK8 voids
+      a run whose roll is below it, so it compares rocked and level positions only, as RK13
+      does for claim 18's threshold.
+    - Confidence: high for the jumpjet flag's effect on the fire point; medium for the rest,
+      the 0.005-radian threshold included
 
 20. **A crashing aircraft's body (Q-2236).** While an aircraft with the flying locomotor crashes
     at strictly positive signed height above the current surface (the height of S-0105 claims 40
@@ -650,6 +688,7 @@ Ordering, as observable consequences:
 | rules, warhead | `Rocker` | area-damage rocking (S-0303 claim 20) | boolean | as S-0303 |
 | rules, warhead | `directrocker` | direct-rocking row (S-0514 claim 20) | boolean | as S-0514 |
 | rules, vehicle type | `BalloonHover` | balloon-hover bounds while crashing (claim 16) | boolean | as S-0310 |
+| rules, object type | `TiltCrashJumpjet` | the tilt-crash flag: whether the jumpjet locomotor draws the angles and builds fire points on them (claims 18 and 19) | boolean | off, an engine default |
 | rules, object type | `Strength` | damage of the rolling-over hit (claim 9) | integer | as S-0302 |
 
 ## Measurement scenarios
@@ -760,8 +799,13 @@ target while rocked by a sideways push, and again at rest. Observable: the
 shot's start position. Expected: shifted toward the lowered side by about *H* × sin(roll). (b) The
 same with a hovering and a jumpjet subject. The jumpjet, hovering to fire, is rocked by RK4 (b)'s
 direct-rocking hit from abeam with a test weapon copy that can target it, since an area push does
-not reach a jumpjet in high hover (RK2 b). A run in which that hit does not rock it is void. An
-unshifted start position falsifies claim 19.
+not reach a jumpjet in high hover (RK2 b). A run in which that hit does not rock it is void. The
+jumpjet subject runs twice: as a test jumpjet vehicle type with the tilt-crash flag set, and as a
+copy of it with the flag unset, both read by a recorder that logs their roll and pitch in the
+tick of the shot. A run whose recorded roll is below 0.005 radians in magnitude in that tick is
+void. An unshifted start position falsifies claim 19 for every subject except the unflagged
+jumpjet. For the unflagged jumpjet, the expected start position is the one it has at rest, and a
+shifted one falsifies claim 19.
 
 **RK9. Crash tumble (claims 16, 18).** Aircraft and jumpjet test copies destroyed in the air, and a
 balloon-hover copy. Observable: rates at the start of the crash and angles per tick. Expected:
@@ -817,6 +861,42 @@ for the recorded turn added, a pitch in a judged frame of (c) equal to (a)'s at 
 angles, an outline in (d) turned to the body facing, or a shadow that changes with the tumble
 falsifies claim 20.
 
+**RK13. A jumpjet's drawing with and without the tilt-crash flag (claims 16, 18, Q-3255).**
+(a) Two test jumpjet vehicle types
+with balloon hover set (the named test data *jumpjet-flight-test* of S-0502 scenario J12, with
+its balloon-hover subcase), identical except that one has the tilt-crash flag set and the other
+has it unset. Their bodies are an asymmetric test model as in RK12, so that the outline differs
+under every nonzero roll and pitch. Each is destroyed by scripted damage while hovering high over
+open flat ground, in separate runs, with screenshots in every tick from the crash start to the
+crash end (the bench at 800 × 600). The test types set a hover height high enough, and a crash
+rate low enough, that the fall lasts many ticks. A recorder reads, in the same ticks, the roll,
+pitch, pitch rate, body facing, movement heading and height. A run is void unless the pitch
+rate recorded in the crash start's tick, times the number of crashing ticks, exceeds π/2, so
+that a pitch growing by that rate in every tick passes +π/4 well before the crash end; a void
+run is repeated with another seed, or with a higher hover height. A build that stores a pitch
+rate of 0 for a balloon-hover type voids every run here; RK9's balloon-hover copy catches it.
+Frames are compared from the first tick in which the recorded pitch is at least 0.3 radians.
+Observable: the body outline in each compared frame beside the recorded values.
+Expected: in both runs the recorded pitch grows by its rate in every tick past +π/4 and the roll
+stays within ±π/4 (claim 16); the body facing follows the movement heading. The unflagged body's
+outline in every compared frame is the level outline for the recorded body facing, the same as
+it has before the crash start. The flagged body's outline is tilted by the recorded roll and
+pitch. A pitch that stops growing or turns back, a tilted outline for the unflagged type, or a
+level outline for the flagged type at a compared frame falsifies claims 16 and 18. A drawn
+facing other than the recorded body facing falsifies claim 18's spin sentence.
+(b) The same two types, not destroyed. Each is rocked as the jumpjet of RK8 (b) is: by a
+direct-rocking hit, with RK4 (b)'s direct-rocking flag set on a test weapon copy that can target
+it and does it no lasting harm, from a test shooter abeam of it, since an area push does not
+reach a jumpjet in high hover or in cruise (RK2 b, S-0502 claim 22). It is hit once while it hovers and
+once while it cruises towards a cell at least 20 cells away, in separate runs. Screenshots are
+taken in every tick from the hit until the recorder shows its roll and pitch back at 0, with the
+same recorder. A run whose recorded roll or pitch never reaches 0.1 radians in magnitude is void.
+Frames are compared in the ticks in which the recorded roll or pitch is at least 0.1 radians in
+magnitude. Expected: the unflagged body's outline in every compared frame is the level outline
+for the recorded body facing; the flagged body's outline is tilted by the recorded roll and
+pitch. A tilted outline for the unflagged type, or a level outline for the flagged type, at a
+compared frame falsifies claim 18's rule for that flight state.
+
 ## Changes for other specs
 
 - **For S-0105 claim 42 (*Flying bodies pitch and bank*) and Terms (*Flight bank*, *flight
@@ -836,6 +916,34 @@ falsifies claim 20.
   covers a crashing aircraft's tumble roll and pitch (S-0113 claim 20): the shadow of a crashing
   flying body keeps the transform S-0106 claim 11 gives. Scenario T4's attitude part can
   cite S-0113 RK12 for a crashing aircraft. Confidence: high. Backing: `measurable` (S-0113 RK12).
+
+- **For S-0106 claims 9 and 13, and scenarios T9 and T11 (Q-3255).** Claim 9's "The jumpjet
+  locomotor's body shows only its rocking, never a slope" holds only for a jumpjet type with the
+  tilt-crash flag (S-0113 claim 18, Import mapping): a jumpjet type without it is drawn turned to
+  its body facing only, with no rocking and no slope, in every flight state (high in *crashing*,
+  *hovering* and *cruising*; medium in the other flight states, as S-0113 claim 18 rates them). Claim 13's "while a
+  jumpjet rocks" becomes "while a jumpjet whose type has the tilt-crash flag rocks", and a
+  jumpjet body without the flag may be drawn from its image. The jumpjet subjects of T9 and of
+  T11's rocking part are then a named test jumpjet type with the flag set. In T9 a copy with it
+  unset is a control, rocked by the same hit while a recorder logs its roll and pitch: once
+  settled at a previously captured facing, its body's row stops following P even in ticks in
+  which its recorded angles are not 0, and a row that keeps following P then falsifies the
+  image reuse. Confidence: high for the level body without the flag in *crashing*, *hovering*
+  and *cruising*, backed `measurable` by S-0113 RK13; medium in the other flight states,
+  `unmeasured` for S-0113 claim 18's reason; medium for its image reuse, backed `measurable` by that T9 control, since RK13
+  and RK8 compare outlines and positions, which a fresh drawing and a reused image give
+  alike.
+
+- **For S-0105 claim 26 (fresh bodies).** Its list "jumpjet while it rocks" can read "jumpjet
+  whose type has the tilt-crash flag while it rocks" (S-0113 claim 18). Confidence: medium.
+  Backing: `measurable` by the unflagged control in S-0106 scenario T9 given above; S-0113
+  RK13 cannot tell a fresh drawing from a reused image.
+
+- **For S-0504 claim 16 (*Which locomotors show it*).** The jumpjet locomotor shows the lean
+  only for a type with the tilt-crash flag (S-0113 claim 18). For a jumpjet type without it, the
+  pitch still changes but is not drawn. Confidence: high in *crashing*, *hovering* and
+  *cruising*, backed `measurable` (S-0113 RK13); medium in the other flight states, `unmeasured`
+  for S-0113 claim 18's reason.
 
 - **For S-0504 claim 15 (*The pitch belongs to the lean; the roll is left free*).** Its statement
   that no approved spec gives how a rolled body comes back to level, and its open question on
