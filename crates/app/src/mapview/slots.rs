@@ -337,6 +337,19 @@ pub fn end_in_play(t: &AnimType, n: i32) -> i32 {
     }
 }
 
+/// The loop end λₑ in play for a sprite of `n` image frames (F2's assumed
+/// case).
+fn loop_end_in_play(t: &AnimType, n: i32) -> i32 {
+    let end = end_in_play(t, n);
+    // spec: S-0109 F2 (LoopEnd: absent E_s, not End; −1 E; 0 kept except for a new-theater type)
+    match t.loop_end {
+        None => sprite_end(t, n),
+        Some(-1) => end,
+        Some(0) if t.new_theater => end,
+        Some(v) => v,
+    }
+}
+
 /// The image frame an animation of type `t` shows when it is created, its
 /// sprite holding `n` image frames (F2's assumed case).
 pub fn first_frame(t: &AnimType, n: i32) -> i32 {
@@ -344,14 +357,7 @@ pub fn first_frame(t: &AnimType, n: i32) -> i32 {
         // spec: S-0109 claims 1 and 12, F3 (k₀ = 0: image frame a; no random start)
         return t.start;
     }
-    let end = end_in_play(t, n);
-    // spec: S-0109 F2 (LoopEnd: absent E_s, not End; −1 E; 0 kept except for a new-theater type)
-    let loop_end = match t.loop_end {
-        None => sprite_end(t, n),
-        Some(-1) => end,
-        Some(0) if t.new_theater => end,
-        Some(v) => v,
-    };
+    let loop_end = loop_end_in_play(t, n);
     // spec: S-0109 claim 8, F3 (k₀ = λ_e − 1 for a reversed animation: image frame a + λ_e − 1)
     // spec: S-0205 claim 1 (the sums wrap in the 32-bit range, as the simulation's clock does)
     t.start.wrapping_add(loop_end.wrapping_sub(1))
@@ -380,13 +386,7 @@ pub fn first_frame_under(t: &AnimType, n: i32, raw_loop_end: bool) -> i32 {
     if !t.reverse || raw_loop_end {
         return first_frame(t, n);
     }
-    // spec: S-0109 F2 (LoopEnd: absent E_s, not End; −1 E; 0 kept except for a new-theater type)
-    let loop_end = match t.loop_end {
-        None => sprite_end(t, n),
-        Some(-1) => end_in_play(t, n),
-        Some(0) if t.new_theater => end_in_play(t, n),
-        Some(v) => v,
-    };
+    let loop_end = loop_end_in_play(t, n);
     // spec: S-0109 Edge cases (quirks.anim_reverse_raw_loop_end off: k₀ = λₑ − a − 1, so the first
     // image frame a + k₀ is λₑ − 1); S-0205 claim 1 (wraps, as the clock's sum does)
     loop_end.wrapping_sub(1)
