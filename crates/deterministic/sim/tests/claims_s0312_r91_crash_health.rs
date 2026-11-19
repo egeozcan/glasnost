@@ -376,7 +376,10 @@ fn q3239_the_infantry_crash_end_in_a_high_bridge_cell_lists_it_on_its_layer() {
             let case = format!("bridge height {bridge_height}, crossing {crossing}");
             assert_eq!(w.obj(u).unwrap().layer, want, "{case}");
             assert!(w.cells.list(cell, want).contains(&u), "listed: {case}");
-            assert!(!w.cells.list(cell, other).contains(&u), "not listed: {case}");
+            assert!(
+                !w.cells.list(cell, other).contains(&u),
+                "not listed: {case}"
+            );
         }
     }
 }
