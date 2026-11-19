@@ -2487,3 +2487,40 @@ fn a_reversed_slot_animation_starts_where_the_raw_loop_end_switch_says() {
         assert_eq!(px, frame + 1, "switch {on}: first image frame");
     }
 }
+
+/// A reversed slot animation with an end field and no loop end, in a scene
+/// built with typed rules, starts where the rules'
+/// `quirks.anim_loop_end_from_sprite` says, as the simulation's clock does
+/// (render batch R14's seam).
+///
+/// spec: S-0109 F2 and claim 8, F3 (on: an absent loop end takes the sprite end Eₛ, so the first
+/// image frame is a + Eₛ − 1); S-0109 Edge cases (`quirks.anim_loop_end_from_sprite` off: an
+/// absent loop end takes the end field E, so it is a + E − 1)
+#[test]
+fn a_reversed_slot_animation_without_a_loop_end_starts_where_the_sprite_switch_says() {
+    let text: &[u8] = b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+          [Structures]\n0=Neutral,HUTX,256,6,10,0\n";
+    // HUTX's one slot animation SLOTA: start field a = 0, end field E = 3 and no loop end, on a
+    // sprite of eight image frames (Eₛ = 8) whose frame f has pixel value f + 1.
+    for (on, frame) in [(true, 8 - 1), (false, 3 - 1)] {
+        let rules = format!("{RULES}[Animations]\n0=SLOTA\n");
+        let art = format!(
+            "{ART}[HUTX]\nActiveAnim=SLOTA\n\
+             [SLOTA]\nLayer=ground\nStart=0\nEnd=3\nReverse=yes\n"
+        );
+        let mut ctx = context_full(&rules, &art);
+        ctx.0
+            .arts
+            .insert((Kind::Animations, 0), art_of("SLOTA", "slota.shp"));
+        ctx.2.insert(b"slota.shp", shp((20, 20), 8, (2, 2), (9, 9)));
+        let quirks = glasnost_rules::quirks::Quirks {
+            anim_loop_end_from_sprite: on,
+            ..Default::default()
+        };
+        let b = build_with_quirks_in(ctx, text, quirks);
+        let items = &b.scene.items[b.scene.cell_pass_len..];
+        assert_eq!(items.len(), 1, "switch {on}: the slot animation is drawn");
+        let px = b.scene.images[items[0].image as usize].pixels()[0];
+        assert_eq!(px, frame + 1, "switch {on}: first image frame");
+    }
+}

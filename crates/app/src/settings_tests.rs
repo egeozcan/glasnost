@@ -276,6 +276,44 @@ fn a_file_older_than_the_make_group_key_keeps_its_own() {
     assert_eq!(Settings::from_text(&s.to_text()).bindings, s.bindings);
 }
 
+/// The trace key (#442, our own diagnostics): unbound in a fresh profile,
+/// written empty and read back unbound; bound, it is kept and acts; it can
+/// be unbound again, which no other action can; an unbound key clashes
+/// with nothing and no key press gives it.
+#[test]
+fn the_trace_key_is_unbound_until_bound() {
+    let s = Settings::default();
+    assert_eq!(s.bindings.key(Action::Trace), UNBOUND);
+    assert_eq!(s.bindings.key_text(Action::Trace), "none");
+    assert!(s.to_text().contains("key.trace=\n"), "{}", s.to_text());
+    assert_eq!(Settings::from_text(&s.to_text()).bindings, s.bindings);
+    assert_eq!(s.bindings.action(UNBOUND), None);
+    let mut b = s.bindings;
+    assert_eq!(
+        b.rebind(Action::Trace, 'p'),
+        Err(BindError::Taken(Action::PathReport))
+    );
+    b.rebind(Action::Trace, 'Q').unwrap();
+    assert_eq!(b.action('q'), Some(Action::Trace));
+    assert_eq!(b.key_text(Action::Trace), "Q");
+    let bound = Settings {
+        bindings: b,
+        ..Settings::default()
+    };
+    assert!(bound.to_text().contains("key.trace=q\n"));
+    assert_eq!(Settings::from_text(&bound.to_text()).bindings, b);
+    b.unbind(Action::Trace).unwrap();
+    assert_eq!(b, Bindings::default());
+    assert_eq!(b.unbind(Action::Stop), Err(BindError::NotBindable));
+    // A file that binds the trace key keeps every other key.
+    let s = Settings::from_text("key.stop=q\nkey.trace=w\n");
+    assert_eq!(s.bindings.key(Action::Stop), 'q');
+    assert_eq!(s.bindings.key(Action::Trace), 'w');
+    // One that gives it a key another action has spoils the set as before.
+    let s = Settings::from_text("key.trace=s\n");
+    assert_eq!(s.bindings, Bindings::default());
+}
+
 #[test]
 fn steps_stay_in_range() {
     let mut s = Settings::default();

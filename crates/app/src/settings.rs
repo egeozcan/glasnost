@@ -43,6 +43,9 @@ pub enum Action {
     PathReport,
     /// Mark the moment in the pathing report's window (M8 A4).
     Mark,
+    /// Trace what is drawn under the pointer to the log and a file (#442,
+    /// our own diagnostics). Unbound in a fresh profile.
+    Trace,
     /// Held with a digit, makes that control group: the web build's
     /// stand-in for Ctrl+digit, which browsers may keep for themselves
     /// (M8 A4 round 5 seams, design).
@@ -50,7 +53,7 @@ pub enum Action {
 }
 
 /// Every bindable action, in the order the screen lists them.
-pub const ACTIONS: [Action; 10] = [
+pub const ACTIONS: [Action; 11] = [
     Action::Stop,
     Action::Scatter,
     Action::Guard,
@@ -60,8 +63,14 @@ pub const ACTIONS: [Action; 10] = [
     Action::TypeSelect,
     Action::PathReport,
     Action::Mark,
+    Action::Trace,
     Action::MakeGroup,
 ];
+
+/// The key of an action that has none (#442: the trace key may be left
+/// unbound): no key press gives it.
+// nocite: our own diagnostics (an unbound key)
+pub const UNBOUND: char = '\0';
 
 impl Action {
     /// The name shown and stored.
@@ -76,8 +85,15 @@ impl Action {
             Action::TypeSelect => "typeselect",
             Action::PathReport => "report",
             Action::Mark => "mark",
+            Action::Trace => "trace",
             Action::MakeGroup => "group",
         }
+    }
+
+    /// Whether the action may have no key ([`UNBOUND`]).
+    pub fn may_be_unbound(self) -> bool {
+        // design: #442 (the trace key is unbound by default and may be unbound again)
+        self == Action::Trace
     }
 
     fn index(self) -> usize {
@@ -117,9 +133,10 @@ pub const KEYBOARD_KEYS: [(&str, &str); 14] = [
 ];
 
 /// The key bindings of the command keys. Keys are lower-case letters or
-/// digits, and no two actions share one.
+/// digits, and no two actions share one; an action that may be unbound
+/// can have [`UNBOUND`] instead.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Bindings([char; 10]);
+pub struct Bindings([char; 11]);
 
 /// Why a key could not be bound.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,19 +152,40 @@ impl Default for Bindings {
         // spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer, Z route mode)
         // nocite: our own client setting (T plays S-0214's type-select role, whose key is the player's binding; P saves a pathing report and M marks, M8 A4: no command key of S-0213 claim 22)
         // design: N held with a digit makes a group on the web (M8 A4 round 5 seams; no command key of S-0213 claim 22)
-        Self(['s', 'x', 'g', 'd', 'c', 'z', 't', 'p', 'm', 'n'])
+        // design: #442 (the trace key is unbound in a fresh profile)
+        Self(['s', 'x', 'g', 'd', 'c', 'z', 't', 'p', 'm', UNBOUND, 'n'])
     }
 }
 
 impl Bindings {
-    /// The key of an action.
+    /// The key of an action ([`UNBOUND`] for none).
     pub fn key(&self, a: Action) -> char {
         self.0[a.index()]
     }
 
     /// The action a key is bound to.
     pub fn action(&self, c: char) -> Option<Action> {
+        if c == UNBOUND {
+            return None;
+        }
         ACTIONS.iter().copied().find(|a| self.key(*a) == c)
+    }
+
+    /// Leaves `a` without a key, for an action that may have none.
+    pub fn unbind(&mut self, a: Action) -> Result<(), BindError> {
+        if !a.may_be_unbound() {
+            return Err(BindError::NotBindable);
+        }
+        self.0[a.index()] = UNBOUND;
+        Ok(())
+    }
+
+    /// The key's text on the settings screen: upper case, or "none".
+    pub fn key_text(&self, a: Action) -> String {
+        match self.key(a) {
+            UNBOUND => "none".to_owned(),
+            c => c.to_ascii_uppercase().to_string(),
+        }
     }
 
     /// Binds `c` to `a`. A key another action has is refused, not swapped.
@@ -337,7 +375,13 @@ impl Settings {
         );
         s += &format!("tool_tips={}\n", u8::from(self.tool_tips));
         for a in ACTIONS {
-            s += &format!("key.{}={}\n", a.name(), self.bindings.key(a));
+            // design: #442 (an unbound key is written empty)
+            let k = Some(self.bindings.key(a)).filter(|&c| c != UNBOUND);
+            s += &format!(
+                "key.{}={}\n",
+                a.name(),
+                k.map(String::from).unwrap_or_default()
+            );
         }
         let relay: String = self.relay.chars().filter(|c| !c.is_control()).collect();
         s += &format!("relay={relay}\n");
@@ -466,13 +510,15 @@ impl Settings {
             }
         }
         // A key that is not a letter or digit, or that two actions share,
-        // spoils the whole set; the defaults stand then.
-        let distinct = ACTIONS.iter().all(|a| keys.key(*a).is_ascii_alphanumeric())
-            && ACTIONS.iter().enumerate().all(|(i, a)| {
-                ACTIONS[i + 1..]
-                    .iter()
-                    .all(|b| keys.key(*a) != keys.key(*b))
-            });
+        // spoils the whole set; the defaults stand then. An action that may
+        // be unbound may have no key (#442).
+        let distinct = ACTIONS.iter().all(|a| {
+            keys.key(*a).is_ascii_alphanumeric() || (a.may_be_unbound() && keys.key(*a) == UNBOUND)
+        }) && ACTIONS.iter().enumerate().all(|(i, a)| {
+            ACTIONS[i + 1..]
+                .iter()
+                .all(|b| keys.key(*a) == UNBOUND || keys.key(*a) != keys.key(*b))
+        });
         if distinct {
             s.bindings = keys;
         }
