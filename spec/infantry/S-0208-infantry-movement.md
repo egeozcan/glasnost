@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 71
+revision: 75
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-19
+approved-on: 2026-11-20
 measurements: [M-0023]
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142, Q-3236, Q-3262, Q-3264]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142, Q-3236, Q-3262, Q-3264, Q-3301, Q-3303]
 supersedes: []
 ---
 
@@ -56,8 +56,13 @@ failure. Neither supplied the locomotor destination's numeric height. Claim 25 a
 the cell that a walker's searches look for while its destination names an object that has moved,
 and what a failed search near its locomotor destination does. Claim 26 answers Q-3264 question 1:
 what a substitute cell of S-0212 claim 24 replaces, a kept locomotor destination included. Claim
-18 answers its question 2: the height of an object's point in a high-bridge cell. Skirmish only.
-Network games and campaigns are out of scope.
+18 answers its question 2: the height of an object's point in a high-bridge cell. Claim 25 also
+answers Q-3301: its failed-search rules hold for a cell destination too, a walker kept by S-0212
+claim 23's third row makes no search until an assignment, which the end-of-update check makes at
+once for a walker in *move*, and a walker standing in its own destination cell searches. Claim
+26 answers Q-3303: a substitute cell replaces a building that the walker is to enter, which in
+the original leaves a walker sent by an enter-nearest instruction standing near the building.
+Skirmish only. Network games and campaigns are out of scope.
 
 Citations refer to the approved specs and their current correction-round drafts, including
 S-0417 (factory unloading). The other cited specs are: S-0003 (INI value forms), S-0006 (rules
@@ -153,7 +158,10 @@ used by this spec:
   behaviour aims to enter, capture, sabotage or otherwise reach, while the unit is in a behaviour
   that has one. Claim 4 uses only a mission target that is an object; a mission target that is a
   cell plays no part there. The master of an enslaved unit is not a mission target (glossary
-  *mission target*); claim 4 names it beside it.
+  *mission target*); claim 4 names it beside it. A queued behaviour's mission target counts only
+  while no behaviour is current (S-0215 claim 1), so a queued *enter* behind a current *guard*
+  gives none (claim 26), except with `quirks.walker_search_ignores_queued_enter` off (Edge
+  cases).
 - **Enslaved unit, master, master's unloading cell.** As defined in S-0209 Terms.
 - **Team member.** As in the glossary and S-0215 Terms: a unit that belongs to a team of
   the original's computer-player script system. A unit of an AI house is never one (glossary *AI
@@ -164,6 +172,9 @@ used by this spec:
 - **The cow.** The hard-coded infantry type that S-0107 claim 14 singles out for its idle scatter
   (`quirks.cow_idle`); S-0107 Import mapping names how the type is recognised.
 - **Known attacker.** As defined in S-0107 Terms: damage that comes with the object that caused it.
+- **Engineer type.** As defined in S-0408 Terms: an infantry type with the engineer flag (Import
+  mapping). A unit of such a type is the engineer-like unit of S-0209 claim 4 (claim 26 rates
+  this: medium that a unit of no other type is one, low that every unit of such a type is one).
 - **Behaviour.** A unit's current behaviour in the sense of S-0215 (behaviours), for example *move*
   or *guard*.
 - **Retaliate property, scatter property.** Two of the behaviour properties of S-0215 Terms: the
@@ -1110,7 +1121,9 @@ used by this spec:
     its firing check (S-0301, S-0310) answers *can fire*, the unit loses its destination and any movement still
     in progress ends on the tick on which it starts its firing sequence. By S-0310 claim 8 the check
     answers *moving* while the speed fraction is above 0.1, so this happens only to a walker that is
-    already standing (for example blocked, S-0209), never in the middle of a step.
+    already standing (for example blocked, S-0209), never in the middle of a step. A standing
+    walker whose speed fraction is 1 at that check, as claim 25's end-of-update assignment leaves
+    a walker in *move*, also answers *moving*.
     S-0307 claim 22(b)'s close-range shortcut also requests movement within the walker's
     own cell while assigning the target's cell as destination. Claim 21 below owns its
     second position choice and walking outcome; the immediate walking target need not be
@@ -1171,7 +1184,8 @@ used by this spec:
       so it finds no path (S-0212 claim 12). Claim 25's failed-search rule then takes away its
       destination when its distance *D*, with the 414 leptons of height included, is less than
       the close-enough distance and it is not held by a tether link. Otherwise S-0212 claim 23
-      decides, and its third row keeps the destination with no movement in progress.
+      decides, and its third row keeps the destination with no movement in progress. A walker in
+      *move* is then given that destination again at the end of that update (claim 25).
     - an object standing on the ground under that deck is at *H*, and the locomotor destination is
       at *H* + 414, as for a cell destination of that cell. The walker's search for that cell ends
       on the deck (S-0212 claim 7), and its walk ends there, above the object, as in the second
@@ -1547,11 +1561,15 @@ used by this spec:
     - Confidence: high for destination selection not bypassing pathfinding; medium for the
       combined cliff-cell outcome, pending a discriminating observation
 
-### Searches for an object destination
+### Searches for the locomotor destination
 
-25. **Searches for an object destination that moves (Q-3262).** While a walker's destination
-    names an object, each search that its walking makes looks for the cell of its locomotor
-    destination (Terms): the point that the object gave when the destination was last assigned.
+25. **Searches for the locomotor destination, and a failed search (Q-3262, Q-3301).** The first
+    paragraph below is about a destination that names an object. The rules on a failed search that
+    follow it hold for every kind of destination (*Every kind of destination*, below).
+
+    While a walker's destination names an object, each search that its walking makes looks for
+    the cell of its locomotor destination (Terms): the point that the object gave when the
+    destination was last assigned.
     The object's place at the time of the search is not read. This holds for the fresh search of
     S-0212 claim 20 when no stored steps are left, for the immediate new path of S-0209 claim 7 and
     for the re-paths of S-0209 claim 10. It holds whatever the object is: an infantry unit, a
@@ -1560,7 +1578,8 @@ used by this spec:
     cell of that point, and claim 16 decides there whether its walk ends, unless a search adopts a
     substitute cell for that cell (claim 26). It heads for the object's
     new place only when a later assignment gives it a new point, as S-0215 claim 26's leash can do
-    for *area guard* once the walker has no destination.
+    for *area guard* once the walker has no destination, or as the end-of-update assignment below
+    does for a walker in *move* after a failed search that keeps its destination.
 
     **A failed search near the locomotor destination.** When a walker's fresh search finds no path
     and the reachability gate has passed (S-0212 claim 23, the rows after the gate's row), the
@@ -1577,6 +1596,38 @@ used by this spec:
     has no locomotor destination from then on, so it makes no further search until its destination
     is assigned again.
 
+    **Every kind of destination (Q-3301 question 1).** This rule and the two paragraphs below hold
+    whatever the walker's destination is: a cell, an object, or none, with a kept locomotor
+    destination (S-0507 claim 6a). The rule reads only the walker's position, its locomotor
+    destination and its tether links, never what the destination names.
+
+    **After a failed search (Q-3301 question 2).** Every failed fresh search that passes the gate
+    ends the walker's movement in progress, sets its infantry speed fraction (S-0310 Terms) to 0
+    and leaves it with no locomotor destination, whether it keeps its destination or not. A walker
+    that keeps its destination therefore makes no search when the retry delay that S-0212 claim
+    23's third row starts runs out. It searches again only after an assignment of a destination,
+    which gives it a locomotor destination again and ends that delay (S-0212 claim 21). For a
+    walker in *move* that assignment comes in the same update: S-0215 claim 22's end-of-update
+    check finds it in *move*, not moving and with a destination, and gives it the destination it
+    holds again. That assignment:
+    - clears its stored path and ends its retry delay (S-0212 claims 20 and 21),
+    - gives it a locomotor destination again by the Terms and claim 18: the same point for a cell
+      destination, and the object's movement point at that moment for a destination that names an
+      object,
+    - sets its infantry speed fraction to 1, with no walking step.
+
+    So at its locomotion on the next tick it makes the fresh search again. While each of these
+    searches fails in the same way, the walker searches once per tick and does not change its
+    position, and it ends every tick with its destination, movement in progress and a speed
+    fraction of 1. This goes on until a search finds a path, this rule's clearing applies (for
+    an object destination, a new point that lies within the close-enough distance), the gate
+    fails, or another rule changes the walker's destination or behaviour. Neither the search
+    (S-0212) nor the assignment takes a random draw. A walker in any other behaviour gets no such
+    assignment: it keeps its destination with no movement in progress until a rule assigns or
+    clears it. Each end-of-update assignment in *move* gives the walker the same destination it
+    already holds, so a prone walker that S-0213 claim 21 (S-0107 claim 15) makes eligible asks for
+    *get-up* at it, as that rule gives for a repeated assignment of the same destination.
+
     **A walker standing with no stored path (Q-3262 question 3).** For such a walker the cell that
     decides whether anything is left to walk is its locomotor destination's cell. The cell that the
     object is in at the time decides nothing:
@@ -1585,23 +1636,53 @@ used by this spec:
       search layer gets no path (S-0212 claim 12), and S-0212 claim 23's third row applies. The
       rule above then clears its destination when *D* is less than the close-enough distance and
       it is not held by a tether link. Otherwise it keeps its destination with no movement in
-      progress. A walker outside that cell walks to it when the search finds a path, and claim 16
+      progress, and in *move* it is given that destination again at the end of the same update
+      (above). A walker outside that cell walks to it when the search finds a path, and claim 16
       decides on its arrival tick.
     - With no movement in progress, it has no locomotor destination. Its walking makes no search and
       tests no cell, so a destination that it keeps stays until a rule assigns or clears it.
 
     So a walker never ends its move because it stands in the cell that its object is in at that
     time, unless that is also the cell of its locomotor destination.
+
+    **A cell destination that is the walker's own cell (Q-3301 question 3).** The same holds for a
+    cell destination. A walker standing with no stored path and with movement in progress, whose
+    destination is the cell it stands in, makes the fresh search too, even when it stands within
+    two height levels of that cell's point: its walk ends only on an arrival tick (claim 16), and
+    standing gives it none. That search finds no path on the walker's own search layer (S-0212
+    claim 12), and the rule above decides: the walker loses its destination when *D* is less than
+    the close-enough distance and it is not held by a tether link, and otherwise keeps it. A walker
+    in *move* that keeps it searches again on every tick, as above, without changing its position.
     - Backing: `measurable` (scenario W18: part a for the fresh search's cell with an infantry
       object and with a vehicle object, part b for a walker standing in that cell that keeps its
-      destination, part c for the clearing near the locomotor destination). `unmeasured` for the
-      searches of S-0209 claims 7 and 10, for an aircraft or a building as the object and for the
-      tether condition. W18 arranges no blocked step and no tether link, a walker given a flying
-      aircraft as its destination is not arranged here, and a building does not move.
-    - Confidence: high for the fresh search's cell with an infantry or a vehicle object, and for a
-      walker standing in its locomotor destination's cell that does not end its move. Medium for
-      the searches of S-0209 claims 7 and 10, for an aircraft or a building as the object, for the
-      clearing near the locomotor destination and for its tether condition.
+      destination, part c for the clearing near the locomotor destination; scenario W20 for a
+      walker in *move* whose cell destination is its own cell: part a for the kept destination,
+      the search on every tick and the speed fraction of 1 at the end of every tick, part b for the
+      clearing). `unmeasured` for the searches of S-0209 claims 7 and 10, for an aircraft or a
+      building as the object and for the tether condition. W18 arranges no blocked step and no
+      tether link, a walker given a flying aircraft as its destination is not arranged here, and a
+      building does not move. `unmeasured` for a walker in *move* whose destination names an
+      object, which no scenario here arranges, for a kept locomotor destination with no
+      destination, for the reason S-0507 claim 6a gives, and for the absence of a draw: W20 records
+      no random-stream state, and which other draws the stream takes per tick on that map is not
+      established here, so no run here isolates the walker's draws. `unmeasured` for the get-up
+      request of a prone walker in that loop: W20's walker stands, and no scenario here makes a
+      prone walker's search fail in *move*. `unmeasured` for the speed
+      fraction of 0 at each failure, which in *move* the end-of-update assignment replaces within
+      the same update, so no end-of-tick reading shows it, and for a walker in another behaviour
+      that makes no search when the retry delay runs out: W20 holds its walker in *move* only.
+    - Confidence: high for the fresh search's cell with an infantry or a vehicle object, for a
+      walker standing in its locomotor destination's cell that does not end its move, and for a
+      walker in *move* whose cell destination is its own cell: it searches, keeps that destination
+      without moving when *D* is not less than the close-enough distance, and loses it when *D* is
+      less. Medium for the search on every tick and the speed fraction of 1 at the end of every
+      tick, for the speed fraction of 0 at each failure, for a walker in another behaviour that
+      makes no search when the retry delay runs out, for the object's new point at the end-of-update
+      assignment, for a kept locomotor destination with no destination, for the get-up
+      request of a prone walker in that loop and for the absence of a draw. Medium for the searches
+      of S-0209 claims 7 and 10, for an aircraft or a building as the object, for the clearing near
+      the locomotor destination in other cases and for its tether
+      condition.
 
 26. **A substitute cell replaces the locomotor destination (Q-3264 question 1).** When S-0212
     claim 24 adopts a substitute cell for the cell that a walker's search looks for, the walker is
@@ -1620,8 +1701,60 @@ used by this spec:
     walker then loses the substitute as its destination, as with any cell destination. It does not
     walk on towards the point it held before. It heads there again only when a later assignment
     gives it that cell or that object again, as a behaviour can at its processing (S-0215 claim 26's
-    leash for *area guard*, or the processing of *enter* in S-0212 claim 24's last bullet). Such an
-    assignment gives the walker a new point by the Terms and claim 18.
+    leash for *area guard*, or a harvester's processing of *enter* in S-0212 claim 24's last
+    bullet). Such an assignment gives the walker a new point by the Terms and claim 18.
+
+    **A building that the walker is to enter (Q-3303).** The assignment replaces the destination
+    also when that destination is an absorbing building that the walker is in contact with or
+    bound for by an enter-nearest instruction (S-0215 Terms and claim 24, S-0605 claims 3 and 16).
+    The assignment of the substitute cell does not end that contact, and the walker's *enter*,
+    queued or current, stays. Whether a search reaches the building case of S-0212 claim 24 depends
+    on the mission target that its cell check reads (S-0209 Terms): the current behaviour's, and a
+    queued behaviour's only while no behaviour is current (S-0215 claim 1). A queued *enter* behind
+    a current behaviour is not read. *Guard* and *area guard* give a walker no mission target,
+    except a walker of an engineer type (Terms), for which they have its destination as their
+    mission target. This engineer type is the engineer-like unit of S-0209 claim 4 and its Open
+    questions: whether *guard*, *area guard* or patrolling gives a walker its destination as
+    mission target is decided by the engineer flag of its type alone. No other type flag gives it.
+    A vehicle thief (S-0215 claim 14, row 9) has it only if its type also has the engineer flag.
+    So:
+    - When a processing of *guard* or *area guard* carries out the enter-nearest instruction for
+      an absorbing building, it queues *enter* without a start and assigns the building (S-0215
+      claim 24). That assignment, with *enter* queued, runs S-0605 claim 3's rule: when the building
+      grants the walker contact and accepts its loading request, the walker holds contact with
+      it. A walker that
+      is not of an engineer type and has no walking target searches in the locomotion of that
+      same update, while *guard* or *area guard*, which gives it no mission target, is still
+      current. The building's cell reads as *blocked* to it (S-0209 claim 4, row WP19), and S-0212
+      claim 24's building case adopts a substitute cell near the building, which replaces the
+      building as the walker's destination. *Enter* becomes current at a later start (S-0215 claim
+      11). The walker walks to the substitute, and its walk ends there (claim 16). It then stands
+      near the building in
+      *enter*, holding its contact, with no destination.
+    - Its *enter* processing (S-0215 claim 29, S-0605 claim 5) does not give it the building again:
+      after an accepted loading request, a walker with no destination takes only the first of its
+      queued destinations (S-0215 Terms), when it has any. The processing of *guard* no longer runs
+      while *enter* is current, so nothing gives it the building again. It goes in only when a later
+      order or rule gives it the building as its destination again. While its contact lasts it keeps
+      the building's link place, so every other actor sent to that building waits in line (S-0605
+      claims 3 and 17). This is the original's behaviour,
+      `quirks.walker_search_ignores_queued_enter` (Edge cases).
+    - Where the building is the mission target that the walker's search reads, S-0209 claim 4
+      decides the building's cell by row WP3 and the exceptions that claim gives it (an
+      invulnerable building, the zero walker speed check), not by row WP19. Where that gives
+      *clear*, no substitute is adopted, and the walker goes in under S-0605 claim 6 once *enter*
+      is current. Where it gives *blocked*, S-0212 claim 24's building case applies as in the
+      first bullet. This is the case of a walker of an engineer type in *guard* or *area
+      guard* at the search of the first bullet, and of the two cases below.
+    - A walker that is still walking a step at that processing makes no search in that update. It
+      searches after its arrival. When *enter* has become current by then, the building is the
+      mission target that this search reads (the bullet above).
+    - An order to enter (S-0213 table T3) and the fate of S-0605 claim 16 queue *enter* outside the
+      walker's update. When the walker is ready at its next per-tick start (S-0215 claim 11),
+      *enter* becomes current before its locomotion, so its first search reads the building as its
+      mission target (the bullet above). When it is not ready there, the first bullet applies with
+      the behaviour that is then current, unless that behaviour's own mission target is the
+      building.
 
     Where S-0212 claim 24 finds no substitute for a cell that holds a building, the original gives
     the walker a destination that names no cell, and what follows is undefined (S-0212 departure
@@ -1634,7 +1767,23 @@ used by this spec:
       destination: S-0507 claim 6a gives why no run here isolates an infantry holder. `unmeasured`
       for a substitute that carries a high bridge, which no scenario here arranges, for a walker
       with a cell destination, for which S-0212 claim 24 gives the substitution itself, and for the
-      D3 case, whose outcome in the original is undefined
+      D3 case, whose outcome in the original is undefined. `measurable` (scenario W21) for a
+      released neutral passenger that is not of an engineer type whose *guard* processing carries
+      out its enter-nearest instruction: the contact from the assignment of the building, the
+      substitute near the building, the kept contact and the stand outside in *enter*. `unmeasured`
+      for the same at a processing of *area guard*, for a walker of an engineer type, for a walker
+      still walking a step at that processing and for the order and fate cases: no scenario here
+      puts the passenger in *area guard*, sets up an engineer passenger or times the others.
+      For the engineer flag as what alone gives *guard*, *area guard* and patrolling a mission
+      target: `measurable` (scenario W21) for the passenger of W21, whose type lacks the engineer
+      flag, having none in *guard*. `unmeasured` for the same in *area guard* and while
+      patrolling: no scenario here puts the passenger in either. `unmeasured` for "No other type
+      flag gives it" and for the vehicle thief: W21 plays one type, which it does not require to
+      lack the other type flags that S-0215 names, and no vehicle thief, and no scenario here
+      plays a type for each of those flags or a vehicle thief. `unmeasured` for its positive half,
+      that a type with the flag has one: no scenario here sets up a passenger of an engineer type,
+      and the flag's effect shows only through row WP3 of S-0209 claim 4, which that spec rates
+      low.
     - Confidence: high for a walker whose destination names an infantry unit, with the substitute
       found by claim 24's *stationary friendly* case on open ground: the substitute becomes its
       destination and its locomotor destination, and its walk ends in the substitute cell. Medium
@@ -1642,7 +1791,17 @@ used by this spec:
       locomotor destination and no destination: it gets the same assignment, but no run here shows
       it. Medium for a walker with a cell destination, for the same reason. Medium for a substitute
       that carries a high bridge. Medium for the D3 case, which is our engine's rule, not a claim
-      about the original
+      about the original. Medium for the building being entered: the mission target read, the
+      contact from the assignment, the kept contact, the *enter* processing that gives no
+      destination and the stand outside (W21 is not yet run). Low for a walker of an
+      engineer type, for the walker still walking a step and for the order and fate cases:
+      each rests on row WP3 of S-0209 claim 4, which that spec rates low. Medium for the W21
+      passenger, whose type lacks the engineer flag, having no mission target in *guard* (W21 is
+      not yet run). Medium for the same in *area guard* and while patrolling, for no other type
+      flag giving a mission target and for the vehicle thief: each was traced with the same rule
+      as the *guard* case, and no scenario here plays them. Low for the positive half, that a type
+      with the engineer flag has its destination as mission target in these behaviours: its only
+      effect rests on row WP3 of S-0209 claim 4, which that spec rates low.
 
 ## Formulas
 
@@ -1789,6 +1948,8 @@ positions are never taken, as claim 3 says).
 | Walking, arrival tick | neither of the above; path steps remain | destination kept; asks for its next walking target on the next tick (claim 6) |
 | Walking, arrival tick | destination height test fails; no path steps remain | destination kept, speed fraction 0; subsequent path computation and give-up follow S-0212 (claim 18) |
 | Walking, search | S-0212 claim 24 adopts a substitute cell | the substitute becomes the destination, with its claim 18 point as the locomotor destination; any earlier destination or kept point is replaced (claim 26) |
+| Walking, search | fresh search passes the gate, finds no path; the third row of S-0212 claim 23 applies and claim 25's clearing does not | destination kept; movement in progress ends; speed fraction 0; no locomotor destination. In *move*: given its destination again at the end of the update, speed fraction 1, searches again on the next tick (claim 25) |
+| Walking, search | *enter* queued by an enter-nearest instruction behind current *guard* or *area guard*, a walker not of an engineer type; the building's cell reads *blocked* | the substitute replaces the building; the walker ends next to it in *enter*, with contact and no destination (claim 26, `quirks.walker_search_ignores_queued_enter`) |
 | Walking, destination is its target object | firing check answers *can fire* (claim 17, exception) | loses its destination and stops as its firing sequence starts |
 | Teleporting infantry without warp-pending immobilization, destination supplied | first landing choice succeeds | reserves the chosen standing position; jump follows S-0207 claim 20 |
 | Teleporting infantry with warp-pending immobilization (S-0207 Terms) | landing choice succeeds | reserves the chosen standing position; no jump to it; released when the unit appears at the warp's landing point, whose standing position is then taken (claim 19) |
@@ -1989,6 +2150,25 @@ position stops on that same tick and does not ask for a next walking target (sce
   - Backing: `unmeasured` (the original has no such form; this is an engine design choice)
   - Confidence: medium
 
+- **A queued *enter* is not read by the walker's search**
+  (`quirks.walker_search_ignores_queued_enter`, default: on, the original). Claim 26, *A building
+  that the walker is to enter*: a walker not of an engineer type whose *guard* or *area guard*
+  processing carries out an enter-nearest instruction searches while that behaviour is current, has
+  the building replaced by a substitute cell near it, and then stands there in *enter* with its
+  contact and no destination. It holds the building's link place, so every other actor sent there
+  waits in line, and a released passenger of the neutral or special house does not walk back in
+  (S-0605 claim 16). With the switch off, while a walker's queued behaviour is *enter* and its
+  current behaviour has no mission target, *enter*'s mission target is the one that S-0209 reads for
+  it (S-0209 Terms *mission target*), in its searches and in its asks. S-0209 claim 4 then decides
+  the building's cell by row WP3, as claim 26 gives for a building that is the mission target: where
+  that gives *clear*, no substitute replaces the building, the search finds a path into it, and the
+  walker goes in under S-0605 claim 6 once *enter* is current; where it gives *blocked*, S-0212
+  claim 24's building case applies, as claim 26's third bullet gives. Nothing else changes: a walker
+  with no current behaviour already has its queued behaviour's mission target (S-0215 claim 1), a
+  current behaviour with a mission target keeps its own, and orders are unchanged.
+  - Backing: `unmeasured` for the off form (an engine design choice); the on form is claim 26's
+  - Confidence: medium
+
 ## Import mapping
 
 | User data | Feeds | Form | Absent |
@@ -1999,6 +2179,7 @@ position stops on that same tick and does not ask for a next walking target (sce
 | Rules, infantry type section, `VeteranAbilities` / `EliteAbilities` naming `FASTER` or `SCATTER` | faster and scatter veterancy abilities (Terms) | list, parsed as S-0311 Import mapping gives (letter case ignored) | empty list (S-0311) |
 | Art, image section, `Crawls` | can crawl | boolean | yes (S-0107) |
 | Rules, infantry type section, `Cyborg`, `Fraidycat` | cyborg, fraidycat | boolean | no (S-0107) |
+| Rules, infantry type section, `Engineer` | engineer type (Terms; claim 26) | boolean | no (S-0214) |
 | Rules, the combat-damage section, `PlayerScatter` | the player-scatter rule (claims 11 and 15) | boolean | no |
 | Rules, infantry type section, `Locomotor` | whether claims 19 and 20 apply, including claim 19's pre- and post-jump record rules, refused-replacement rule and landing choice while a warp is pending | identifier parsed and recognised by S-0207 claim 14 and its Import mapping | keeps the value in force; teleporting locomotor before any layer gives one |
 | Rules, infantry type section, `SpeedType`, `MovementZone` | landing-search locomotion class and movement zone (claim 19) | named choices parsed by S-0211 Import mapping | S-0211's defaults and layering rules |
@@ -3261,6 +3442,67 @@ cases).**
   tick, when *A*'s target is ever present, or when *A* is given another order. Remove the test files
   afterwards.
 
+**Scenario W20: a walker in *move* whose cell destination is its own cell (claim 25; Q-3301).**
+- *Setup:* a purpose-made flat map of open, clear ground, stock data except the test files named
+  below, game speed index 2, director off and mods off. Walker *A* is an ordinary walking infantry
+  unit of the human-controlled house that is not of an engineer type, placed by the map in
+  cell *C*₀ with a sub-cell value that names a side standing position (claim 5, table P), alone
+  in that cell. No enemy unit or building is within 30 cells and no other unit within 5 cells.
+  Orders are scripted input, as in S-0212 scenario P25, and the harness logs each order it gives
+  with its tick, its kind and its destination. The recorder reads at the end of each tick *A*'s
+  position, cell, destination, target, current and queued behaviour, speed fraction and retry
+  timer, and every path computation of *A* with its tick.
+- *Procedure and expected results:* (a) A test file sets the close-enough distance to 0.1 cells
+  (25 leptons by S-0209 F2). At the start of tick *T* give *A* a move order to *C*₀. Record 600
+  ticks. *A*'s side position lies more than 25 leptons from the centre of *C*₀ (table P), so *D*
+  is above the close-enough distance. Let *T*₁ be the first tick from *T* on in which *A* makes a
+  path computation. Expected: *T*₁ is *T* or *T* + 1, and *A*'s position never changes. At the end
+  of every tick from *T*₁ on, its destination is *C*₀, *move* is current, its speed fraction is 1
+  and its retry timer has run out, and in every tick after *T*₁ it makes a path computation.
+  Falsified by no path computation of *A* in *T* or *T* + 1, by any change of *A*'s position, by
+  *A* having no destination at the end of any tick from *T* on, by a speed fraction of 0 or a
+  running retry timer at the end of a tick from *T*₁ on, or by a tick after *T*₁ without a path
+  computation of *A*. (b) Part a with the test file setting the close-enough distance to 2 cells
+  (512 leptons) instead. Expected: *T*₁ is *T* or *T* + 1, *A* has no destination at the end of
+  *T*₁, and its position does not change before then. Falsified by no path computation of *A* in
+  *T* or *T* + 1, by *A* having no destination at the end of a tick from *T* on before *T*₁ (a walk
+  ended without a search), by *A*'s destination being *C*₀ at the end of *T*₁, or by a change of
+  position before *A* first has no destination. What *A* does after that (its rest behaviour,
+  S-0215 claim 22) is not part of this test. In both parts, a run decides nothing when the
+  harness's log does not show the move order to *C*₀ at the start of *T*, or shows another order
+  to *A* during the run, or when *A* has a target at the end of any tick.
+  Remove the test files afterwards.
+
+**Scenario W21: a released passenger that is to walk back in (claim 26; Q-3303).**
+- *Setup:* the set-up of S-0605 scenario A13 with one infantry absorber *P* of the neutral house on
+  open, clear ground, stock data except the test files of that scenario, game speed index 2,
+  director off and mods off, with a passenger *U* of a stock infantry type without the engineer flag
+  (Terms *Engineer type*). No other unit is within 5 cells of *P*. The recorder reads at the end of
+  each tick *U*'s owner, position, cell, destination, current and queued behaviour, contact, whether
+  it is walking a step (Terms *walking target*), whether it holds an enter-nearest instruction
+  (S-0215 Terms) and whether it is inside *P*, and *P*'s passenger count and whether *P* is switched
+  off.
+- *Procedure:* let *U* go in under the fate as in that scenario. Then release it as in that
+  scenario's variant (e). Record until 3000 ticks after the release.
+- *Expected (the original, switch on):* after the release *U* walks out to its exit cell and, once
+  it has no destination there, falls back to rest, *guard* or *area guard* (S-0215 claim 14). Let
+  *G* be the tick at whose end *U* first has *enter* queued or current after the release. At the end
+  of *G*, *U*'s destination is a cell outside *P*'s foundation, and *U* is in contact
+  with *P*. *U* walks to that cell, and at the end of the tick on which its walk ends it has no
+  destination and *enter* current. From then until the end of the run *U* is not inside *P*, its
+  position does not change, it keeps its contact with *P*, and *P*'s passenger count does not go up.
+  Falsified by *U* going into *P*, by *U*'s destination naming *P* at the end of *G*, by *U*
+  having no contact with *P* at the end of any tick from *G* to the end of the run, or, at the end
+  of the first tick after *G* at which *U* has no destination, by *U* having a current behaviour
+  other than *enter* or standing in a cell other than its destination at the end of *G*, or, at the
+  end of any later tick, by *U* having a destination or a position other than the one it had at the
+  end of that first tick.
+- A run decides nothing when *U* is walking a step at the end of tick *G* − 1 (it then makes no
+  search in *G*), when *P* is switched off at any time after the release, when *U* gets another
+  order, or when *U* holds no enter-nearest instruction at the end of a tick after the release at
+  which it is outside *P* (S-0605 claim 16 and its Edge cases keep it there). Remove the test files
+  afterwards.
+
 ## Open questions
 
 - A walker that already has a walking target and accepts a scatter whose destination comes from the
@@ -3312,6 +3554,11 @@ cases).**
   keep the height of the position it left until it arrives, which is what our engine does (claim 6).
   Scenario W2(e) records the height on every tick of its walks, without an expected value; a
   measured value replaces our engine's choice.
+- A walker in *move* that claim 25's end-of-update assignment keeps searching ends every tick
+  with movement in progress and a speed fraction of 1 while it stands. Which sequence S-0107's
+  follow-up table then gives it, the walking one in place or a standing one, depends on where in
+  the update that table is checked, which was not traced for this case (low). Our engine applies
+  S-0107 as written, with the values that claim 25 gives.
 
 
 ## Changes for other specs
@@ -3414,10 +3661,16 @@ cases).**
   reachability gate (S-0212 claim 23)") may add a failed fresh search near the locomotor
   destination (S-0208 claim 25).
 - **S-0417, claim 17.** Its "A walking unit that keeps its destination after a failed search waits
-  for the delay with it (S-0212 claim 23, third row)" may add that a walking unit not held by a
-  tether link whose distance to its locomotor destination is less than the close-enough distance
-  loses its destination at that failure instead (S-0208 claim 25). Its movement in progress ends
-  at the failure in both cases, so the bullet's conclusion about the first request is unchanged.
+  for the delay with it (S-0212 claim 23, third row)", and the like sentence of its summary, should
+  say instead that such a unit has no locomotor destination and makes no search when the delay
+  runs out: it searches again only after an assignment, which ends the delay (S-0208 claim 25). A
+  walking unit not held by a tether link whose distance to its locomotor destination is less than
+  the close-enough distance loses its destination at that failure instead (S-0208 claim 25). Its
+  movement in progress ends at the failure in both cases. For a unit in *move* that keeps its
+  destination, the end-of-update check gives the destination again in the same update, which
+  restores its movement in progress and sets its speed fraction to 1 (S-0208 claim 25), so the
+  bullet's conclusion about the first request holds only for a request that comes before that
+  check, or for a unit in another behaviour.
 - **S-0212, claim 24, last bullet.** Its first sentence "Once a substitute is adopted it is the
   unit's destination, and later path computations apply the ordinary substitution rules to that
   new destination" may add for the walk locomotor: the substitute is also the walker's locomotor
@@ -3434,3 +3687,87 @@ cases).**
   search for which S-0212 claim 24 adopts a substitute cell gives a walking holder that cell as its
   destination and replaces the kept point by the substitute's point. The walk then ends in the
   substitute cell, not at the kept point (S-0208 claim 26, medium, `unmeasured` for this case).
+- **S-0212, claim 21.** Its "A walker that keeps its destination after a failed search (claim 23,
+  third row) waits for *R* before it searches for that destination again, unless an assignment
+  ends the delay first (above)" should say that such a walker has no locomotor destination and
+  makes no search when *R* runs out. It searches again only after an assignment of a destination,
+  which ends the delay. For a walker in *move*, S-0215 claim 22's end-of-update check makes that
+  assignment in the same update, so it searches again at its locomotion on the next tick
+  (S-0208 claim 25). The same holds for every kind of destination: a cell, an object or a kept
+  locomotor destination.
+- **S-0212, claim 23, third row, and its Open question on that row.** The row's "the destination
+  is kept, and the unit tries again once its behaviour starts it moving towards it (S-0215), which
+  the retry delay holds back" should point to S-0208 claim 25 for the walk locomotor: the retry
+  delay holds nothing back, since the walker makes no search until an assignment, and the
+  end-of-update check of S-0215 claim 22 makes one in the same update for a walker in *move*. The
+  Open question "whether a unit of claim 23's third row keeps its destination, and when it starts
+  moving towards it again (S-0215), is not established" is answered for the walk locomotor by
+  S-0208 claim 25 (medium, `measurable` by S-0208 scenario W20 part a). The row's low rating for
+  the remaining locomotors can say that the walk locomotor is now covered there.
+- **S-0212, State and ordering, rows "no stored steps, retry delay over" and "no stored steps,
+  retry delay running".** For the walk locomotor "needs to move" means that the walker has a
+  locomotor destination (S-0208 Terms). A walker that claim 23's third row leaves with its
+  destination has none, so neither row applies to it until an assignment (S-0208 claim 25).
+- **S-0212, scenario P25, parts (a) and (e).** For a walker in *move*, part (a)'s "after the
+  passed-gate search the walker keeps its destination and its timer reads 90 ticks from that
+  computation tick" does not hold at the end of that tick: the end-of-update check gives the
+  destination again, which ends the delay, and the walker searches again on the next tick (S-0208
+  claim 25, scenario W20). A walker whose distance *D* to its locomotor destination is less than the
+  close-enough distance loses its destination at that search instead (S-0208 claim 25's clearing).
+  Part (a) needs a test close-enough distance below *D*, and either a behaviour other than *move* or
+  an expectation that the timer has run out at the end of that tick with a path computation on every
+  later tick. Part (e)'s expectations then hold at once from tick *c* + 1, so it tests the order's
+  ending of the delay only for a walker in a behaviour other than *move*.
+- **S-0215, Open question "Other cases of the end-of-update check (claim 22)".** For an infantry
+  unit in *move*, not moving, with a destination, the effect of setting that destination again is
+  now given by S-0208 claim 25: it clears the stored path, ends the retry delay, gives a new
+  locomotor destination (for an object, its movement point at that moment) and sets the speed
+  fraction to 1. It happens after a failed fresh search that keeps the destination (S-0212 claim
+  23, third row), and S-0208 scenario W20 part a holds an infantry unit in that state. The
+  question's "our engine does nothing in that case" should be replaced by that rule for the *move*
+  case. The rest of the question stays open, among it whether the check makes further tests
+  after that re-assignment: S-0208 makes no claim about them. The vehicle part stays open.
+- **S-0215, claim 24, *Enter-nearest instruction*.** Its "If it finds one, it takes that building
+  as its destination and queues *enter*" may point to S-0208 claim 26 for what the walker's search
+  in the same update then does: for a walker not of an engineer type, with *guard* or *area
+  guard* still current, the building's cell reads as blocked, a substitute cell near the building
+  replaces it as the destination, and the walker ends near the building in *enter* with its contact
+  (`quirks.walker_search_ignores_queued_enter`).
+- **S-0209, Terms, *Mission target*.** "The object or cell that a unit's current behaviour aims to
+  enter" may say that a queued behaviour's mission target counts only while no behaviour is
+  current (S-0215 claim 1), so a queued *enter* behind a current *guard* supplies none of its own.
+  With `quirks.walker_search_ignores_queued_enter` off, a walker whose queued behaviour is *enter*
+  and whose current behaviour has no mission target has *enter*'s (S-0208 Edge cases).
+- **S-0209, claim 4 and Open questions, *engineer-like unit*.** Its engineer-like unit, for which
+  guarding, area guarding and patrolling have a mission target, could be defined as a unit whose
+  type has the engineer flag (S-0208 Terms *Engineer type*, claim 26). No other type flag makes a
+  unit engineer-like there; a vehicle thief is one only if its type also has the engineer flag.
+  Level and backing, as S-0208 claim 26 rates them: medium, `measurable` by S-0208 scenario W21,
+  for the W21 passenger's type, which lacks the flag, in *guard*; medium, `unmeasured`, for
+  *area guard*, patrolling, the other type flags and the vehicle thief; low, `unmeasured`, for a
+  type with the flag.
+- **S-0310, Terms, *Infantry speed fraction*.** Its "It is 1 from any walking step of S-0208
+  (claim 6) until the unit next stops walking, and 0 from that stop until its next walking step"
+  should add that the end-of-update assignment of S-0208 claim 25 sets it to 1 with no walking
+  step. A walker in *move* that keeps searching that way without moving is *moving* for claim 8 at
+  the end of every tick; its speed fraction is 0 only between each failed search and the
+  assignment that follows it in the same update.
+- **S-0605, claims 16 and 17, Edge case `quirks.enter_nearest_survives_absorption` and scenario A13
+  (e).** In the original, a re-run of the enter-nearest search at a processing of *guard* or *area
+  guard* does not bring in a standing walker that is not of an engineer type: its search in
+  that update replaces the building by a substitute cell near it, and it ends there in *enter*,
+  holding its contact, with no destination, so every other actor sent to that building waits in line
+  (S-0208 claim 26). Claim 16's "So a passenger of a neutral or special house that comes out of a
+  building walks back in at its next *guard* processing", its "finds the same one if it still
+  accepts the unit", the Edge case's "so a released passenger walks straight back in" and A13 (e)'s
+  expected result hold only with S-0208's `quirks.walker_search_ignores_queued_enter` off. With it
+  on, the default, the passenger stands near the building in *enter* (S-0208 scenario W21). Claim
+  17's "an entrant that holds the building as its destination keeps it while it has contact" may add
+  that a substitute cell can replace that destination (S-0208 claim 26). Claim 16's "After that the
+  unit goes in under claims 3 to 7" holds for the fate when the unit is ready at its next per-tick
+  start, so that *enter* is current at its first search (S-0208 claim 26, low). Claim 5 may add
+  that at an accepted loading request an actor with no destination is given only the first of its
+  queued destinations, when it has any, and never the building again (S-0208 claim 26). Claim 3's
+  list of the places where its rule runs may add the assignment of the building at a re-run of the
+  enter-nearest search at a processing of *guard* or *area guard* (S-0215 claim 24), which comes
+  with *enter* queued (S-0208 claim 26).
