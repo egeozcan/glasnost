@@ -1980,6 +1980,8 @@ fn building_rules(
     combat.air_range_bonus =
         crate::combat::data::range_field(combat.air_range_bonus, cx.negative_range_fields, false);
     combat.immune = bt.immune.unwrap_or(false);
+    // spec: S-0311 r14 claim 16 and Import mapping (Trainable absent: no for a building type, Q-3273)
+    combat.trainable = bt.combat.trainable.unwrap_or(false);
     // spec: S-0302 Import mapping (ImmuneToRadiation absent: no)
     combat.immune_radiation = bt.immune_to_radiation.unwrap_or(false);
     // spec: S-0514 Import mapping (Warpable absent: yes)
