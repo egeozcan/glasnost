@@ -2,14 +2,14 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 47
+revision: 50
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-12
+approved-on: 2026-11-19
 measurements: []
 requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490,
-Q-0520, Q-0580, Q-0742, Q-1560, Q-2176, Q-2346, Q-2419, Q-3007, Q-3008]
+Q-0520, Q-0580, Q-0742, Q-1560, Q-2176, Q-2346, Q-2419, Q-3007, Q-3008, Q-3248, Q-3249]
 supersedes: []
 ---
 
@@ -387,10 +387,54 @@ screen rows.
    most recently entered or re-entered the layer is drawn over the others regardless of screen
    position. The first movement update after a take-off starts and every movement update of a
    landing are such events; cruising
-   flight is not (claim 4).
+   flight is not (claim 4). Claim 7a gives the order in which the objects made in one tick enter.
    - Backing: `measurable` (D5, D47, D12 (c)) for the top layer; `unmeasured` for the underground,
-     surface and air layers, whose insertion order no scenario here isolates
+     surface and air layers, whose insertion order no scenario here isolates, apart from the
+     air layer's entry order at creation, which claim 7a gives and D50 measures
    - Confidence: high
+7a. **Entry order of the air layer (Q-3248).** An animation, a particle and a debris piece first
+   enter a layer at the moment the game makes them, and a projectile when it is placed in play at
+   its launch, all in one sequence in that tick (their later re-entries are those of claims 4 and
+   7), so the air-layer objects of these kinds made in one tick are drawn in the order of the events
+   that made them. No kind has a fixed point of the tick: animations are neither all placed before
+   nor all after that tick's particles, projectiles and debris pieces. An animation enters the layer
+   of its type when it is created, before its start event (S-0109 claim 13), and keeps that place
+   when its creator gives it a loop delay, so that its start event comes later. This holds for every
+   creator: an animation that our engine makes from an event of the tick, outside the simulation,
+   takes the place in this sequence of the event that made it. Whether an animation that switches to
+   a follow-up type (S-0109 claim 15) keeps its place is not established (Open questions). Where two
+   of these objects overlap on screen, the consequences below hold while both are in the air
+   layer. Otherwise the layer order of claim 1 decides.
+   - **An animation's own particles.** The particles of its middle event (S-0109 claim 14),
+     including the one that its start event produces at its creation when μ = 0, are made after
+     the animation has entered its layer. Where the animation is in the air layer, they are drawn
+     over it.
+   - **A projectile's detonation** (S-0303 claims 20 to 22). The air-layer objects that its area
+     damage makes, among them an exploding overlay's animation, the first particle of the
+     warhead's particle system and the objects made at the deaths of the objects it kills, come
+     before the explosion animation (or the nullify animation) and are drawn under it. The
+     particles of the explosion animation's own start event follow it at once. The warhead's
+     debris, voxel pieces and metallic debris animations alike, comes after both and is drawn over
+     the explosion animation.
+   - **A shot** (S-0301 claim 22, S-0109 claim 29). The projectile is placed in play before the
+     shot animation is created. A building's shot animation is not attached to the building and
+     stays in its type's layer, by default air (claim 3), so it is drawn over the projectile
+     launched with it. The shot animation of any other firer is attached to the firer and is in
+     the ground layer (claim 3), so the projectile, in the air layer, is drawn over it by the
+     layer order (claim 1). In both cases the particles of the shot animation's start event are
+     made after the projectile and are in the air layer, so they are drawn over both.
+   - Backing: `measurable` (D50 (a) to (d) together for the entry at creation in one sequence, (a)
+     for the particles of a trigger-played animation, (b) for the warhead's first particle and for
+     both kinds of debris against the explosion animation, (c) and (d) for the two kinds of shot),
+     `unmeasured` for an animation with a loop delay, for the particles of an animation from any
+     other creator, for the exploding overlay's animation, for the objects made at the deaths of
+     kills and for the explosion animation's own particles, since no part of D50 makes them beside
+     an overlapping object of the same tick
+   - Confidence: high for the entry at creation in one sequence, for the particles of a
+     trigger-played animation, for the warhead's first particle, the explosion animation and the
+     debris, and for both kinds of shot; medium for an animation with a loop delay, for the
+     particles of an animation from any other creator, for the exploding overlay's animation, for
+     the objects made at the deaths of kills and for the explosion animation's own particles
 
 ### Depth compositing
 
@@ -1285,6 +1329,45 @@ screen rows.
     - Backing: `measurable` (D39 for live bodies and encoded values; remembered placement
       is an engine scene-fixture test because fog is out of skirmish scope, claim 16)
     - Confidence: high for selection, encoding, reference point, sign and coverage clipping
+
+31a. **A tree beside a building (Q-3249).** Where a terrain object that is not animated (a tree)
+    and a live building body with a companion depth image overlap on screen, the cell pass
+    decides each overlapping pixel on its own. The tree pixel's depth is the tree's upright
+    profile of F2, anchored at the last row of its own image frame's stored rectangle, with the
+    tree's bias of claim 13. The body pixel's depth is the body's constant anchor (F2: the
+    unrounded upright anchor at the last row of the body image frame's whole stored rectangle,
+    with the body's bias of claim 13, its normal depth adjustment included) minus the value *a*
+    that F5 samples there. Between these two writers, the tree pixel shows where its depth is
+    less than or equal to the body pixel's, and the body pixel shows where its depth is less.
+    Another writer nearer than both, or a pixel that the companion image does not cover, is
+    still decided by claim 10 and F5. A tie goes to the tree because the tree ranks before the
+    body (claim 16) and a later writer needs a strictly smaller depth (F2). The order of the cell
+    pass adds nothing but this tie rule, and no rule depends on the side or corner of the
+    foundation beside which the tree stands. The rounding Q of the tree's depth uses F1's fixed
+    depth reference. In the original the amount that Q removes changes with the view's position
+    (F1's departure), so there a pixel at which the tree's depth before the rounding is 1 or 2
+    units more than the body pixel's can show either drawing.
+    - **The body's depth beside its west corner.** With a companion image every row of the body uses
+      its one anchor, at the bottom of its whole stored image (F2), not the ground row of the
+      foundation's west corner or the body's front edge there. How far back the body lies at its
+      west side therefore comes from the values of *a* at those pixels alone. Where they leave the
+      body pixel nearer than the tree pixel, the body hides the tree. Where they put it no nearer,
+      the tree shows. So a tree on the cell west of the foundation's west corner cell (the same
+      *x* + *y*), or on the cell north-west of it (*x* + *y* one less), is hidden or shown pixel by
+      pixel, as the user's shared depth image, the body's image frame and art displacement, the
+      tree's image frame and the normal depth adjustment give. A companion image other than the
+      user's can give a different picture.
+    - **Other cells.** The same comparison decides a tree on any other cell beside the body,
+      including the cells in front of the foundation's south-west edge, where a tree's crown can
+      likewise be drawn over the body at some pixels and hidden at others.
+    - Backing: `measurable` (D51) for the per-pixel comparison, the two depths and the picture.
+      `unmeasured` for the tie going to the tree and for the cell pass adding nothing but that
+      rule: exact depth ties between these writers cannot be set up on purpose (claim 16), and
+      D51 leaves out every pixel near a tie
+    - Confidence: high for the per-pixel comparison and the two depths; medium for the tie going
+      to the tree, for the cell pass adding nothing but that rule, and for the picture that a
+      given building, tree and cell give with given files, which is computed from these rules,
+      not observed
 
 32. **Translucent animation pixels (Q-0418 question 5).** A non-transparent image pixel
     that passes its depth test blends its selected, lit hi-colour source pixel with the
@@ -3152,7 +3235,87 @@ game's state, and, where two images named below overlap, which one is on top.
     J1 before the launch is inconclusive. Falsified if J1 covers G4 after the launch, or covers G5
     at any recorded tick: a re-file puts J1 after the equal-key G4 or G5.
 
+**D50 — Same-tick entry order in the air layer (claim 7a; Q-3248).** A flat open map at level 0, the
+common measurement setup, with named test files: test sprites and a named art fixture. Image *A* is
+a sprite with a single image frame (so μ = 0, S-0109 claim 14): a wide, low opaque bar of one
+colour, centred on the frame's centre, with no translucency. Images *B*, *C* and *D* are narrow,
+tall opaque bars of three other colours, each taller than *A*'s bar is high and narrower than it is
+wide, so that wherever one of them crosses *A* both images extend beyond the crossing and the
+crossing shows which one is on top. *C* is a projectile sprite, not marked flat. Test animation type
+*A*1 shows *A* in the air layer, and its middle event requests particles of a test particle type
+that shows *B*. Test animation type *A*2 shows *A* in the air layer and requests no particles. Give
+*A*1 and *A*2 a rate field low enough that each stays on its single image frame for at least 30
+ticks (S-0109 claim 2), so that it is drawn in several drawn frames; μ stays 0, since it follows
+from the frame count alone. Keep the test area clear of every other object. Record, in the first
+drawn frame after the tick in which the compared objects are made and in each later drawn frame
+while both are drawn, which image shows at each crossing. A voxel debris piece is seen in the same
+way, where its image crosses *A*'s bar. A run with no crossing, or in which *A* is not drawn in the
+first drawn frame after the tick that creates it, is inconclusive.
+  - (a) A trigger of the test map plays *A*1 at a waypoint (no loop delay, S-0011 claim 36).
+    Expected: *B* is on top at every crossing. Falsified if *A* is on top at a crossing in the
+    first drawn frame after the trigger's tick.
+  - (b) A vehicle of the test house is ordered to fire, by force fire, a test weapon at an empty
+    ground cell that is not water, with no bridge in the area. The test weapon has no shot
+    animation, and its warhead has *A*2 as the only entry of its animation list. Run 1: the warhead
+    names a particle system of the fire kind whose held particle type shows *B*. Such a system made
+    at a detonation never emits (S-0616 claim 22), so its first particle (S-0303 claim 20) is its
+    only one. Run 2: no particle system and a positive maximum debris count with metallic debris of
+    a test animation type that shows *D* in the air layer. Run 3: as run 2 with voxel-model debris
+    pieces (S-0317) instead. Expected: in run 1 *A* is on top at the crossing; in runs 2 and 3 the
+    debris is on top at every crossing. Falsified if *B* is on top in run 1 in the first drawn frame
+    after the detonation tick, or if *A* is on top at a crossing with debris in run 2 or 3. A run 2
+    or 3 that throws no debris is inconclusive; repeat it.
+  - (c) A defensive building type of the test house, through the test map's override section, has a
+    weapon with *A*2 as its shot animation and a projectile that shows *C*, whose warhead has no
+    animation list and no debris. Order it to fire, by force fire, at an empty ground cell in range
+    and at least 3 cells away, so that the detonation does not overlap the shot animation. Read only
+    crossings that lie outside the building's own image, where the building's depth cannot hide
+    either drawing (claim 10). Expected: *A* is on top at every crossing while both are drawn.
+    Falsified if *C* is on top at a crossing. A run in which the building does not fire is
+    inconclusive.
+  - (d) As (c), with the same weapon on a vehicle type of the test house. Expected: *C* is on top
+    at every crossing (the attached shot animation is in the ground layer). Falsified if *A* is on
+    top at a crossing.
+
+**D51 — A tree beside a building's west corner (claim 31a; Q-3249).** A flat snow map at level 0,
+the common measurement setup, game speed 2, 800 × 600. A building type of the test house with a
+foundation at least 3 cells wide and high and less than 8 cells wide, so that its body uses the
+companion image (F5), at full health and idle, with its top-left foundation cell at (*x*, *y*),
+*h* its foundation height in cells and (*x*, *y* + *h* − 1) its west corner cell. One tree, a
+terrain object whose type is not animated, per run, on one of these cells:
+  - (a) (*x* − 1, *y* + *h*), west of the west corner cell (the same *x* + *y*),
+  - (b) (*x* − 1, *y* + *h* − 1), north-west of it (*x* + *y* one less),
+  - (c) (*x*, *y* + *h*), south-west of it (*x* + *y* one more).
+
+Choose the building and tree types by observing that the tree's image overlaps the body's image. A
+part in which they do not overlap is inconclusive and is run again with another building or tree
+type. Choose a building type whose body image frames are compressed, since the original ignores the
+companion values of an uncompressed body (claim 31). Keep both drawings fully inside the view, since
+the original anchors a clipped image at its last visible row (F2). A run in which either drawing is
+clipped is inconclusive and is run again with the corner moved into the view. Before the runs,
+compute for every overlapping pixel which of the two drawings claim 31a predicts on top, from F2, F5
+and F6 with the user's shared depth image, the body's image frame, art displacement and normal depth
+adjustment and the tree's image frame, using the actual anchor rows as D40 does. Leave out of the
+comparison every pixel that a shadow, bib, slot animation or unit also covers, and every pixel where
+two control captures, the building alone and the tree alone in the same place, show the same colour:
+there the drawing on top cannot be seen, and such pixels do not void the run. Leave out, too, every
+pixel at which the tree's depth before the rounding Q of F2 is equal to the body pixel's depth or 1
+or 2 units more: there a tie or the amount that Q removes, which in the original depends on the
+view's position (F1), decides the pixel. Capture the corner losslessly, one run per part. Expected:
+every compared pixel shows the colour of the predicted drawing. Falsified if any compared pixel
+shows the other drawing. Capture the same scenes on our engine with the same files, and again with
+an equivalent uncompressed body on our engine only: at every compared pixel its drawing must match
+the original's.
+
+
 ## Open questions
+
+Q-3248 is answered by claim 7a and D50 for animations, particles, projectiles and debris made in
+one tick. Still open: whether an animation that switches to a follow-up type (S-0109 claim 15)
+keeps its place in its layer or goes to the end of it, which matters only where it overlaps an
+object of the same layer made after its creation.
+
+Q-3249 is answered by claim 31a and D51.
 
 Q-1560 is fully answered by claim 4 and scenarios D5, D12 and D47. Before this revision
 claim 4 left the in-flight moments open. A jumpjet's layer is checked around every movement
@@ -3277,6 +3440,11 @@ the current owning specs; no requested part owned here remains open.
   D49 (b)); `unmeasured` for a landing on a high-bridge deck, from the ground or from another
   deck, since D49 runs on a flat map, and for an
   aircraft member whose type cannot land, since no scenario there warps one.
+- **For S-0303 claim 20 (*Particle systems and rocking*).** Its words "at the end of the
+  detonation" can read "at the end of the area damage, before the explosion animation of claim
+  21": the system and its first particle are made before that animation and the warhead's debris,
+  so the first particle is drawn under the explosion animation where they overlap in the air
+  layer (S-0102 claim 7a). Confidence: high. Backing: `measurable` (S-0102 D50 (b), run 1).
 - **For S-0209 claim 13 (cell listing).** S-0102 claim 3 states that units with drop-pod movement
   and tunnelling units while digging are listed in no cell, so a superweapon warp, which takes
   only objects listed in a cell and not in the air (S-0513 claims 4 and 34), never takes them.
