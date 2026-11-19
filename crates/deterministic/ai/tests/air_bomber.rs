@@ -205,18 +205,19 @@ fn a_bomber_that_reaches_from_afar_bombs_the_plant_from_some_sides() {
         seen.push((side.0, fired));
         traces.push(trace);
     }
+    // spec: S-0502 claim 16 (r34): its heading points at the plant's reference point, so it bombs on its way in from every side
     let expected = vec![
         ("west", true),
-        ("east", false),
+        ("east", true),
         ("north", true),
         ("south", true),
     ];
     assert_eq!(seen, expected, "{}", traces.join("\n\n"));
 }
 
-// spec: S-0307 claim 18 (the target is kept as the destination), S-0502 claim 12 (on arrival the bomber moves onto its destination point and hovers), S-0310 claims 1, 2 and 9 (its body aims, τ = 2048, and with a destination a vehicle without the turret flag gives no reply to not facing): a bomber whose bomb reaches half a cell flies onto the plant's position, its top-left cell, and stays there not facing the plant's reference point; it never bombs it (Q-3257).
+// spec: S-0307 claim 18 (the target is kept as the destination), S-0502 claim 16 (r34: its movement point is the plant's reference point), S-0310 claims 1, 2 and 7 (its body aims, τ = 2048; its bomb has the fire-while-moving flag): a bomber whose bomb reaches half a cell flies towards the plant's reference point with its body on it and bombs the plant on its way in, from every side (Q-3257).
 #[test]
-fn a_bomber_that_reaches_half_a_cell_stalls_over_the_plant() {
+fn a_bomber_that_reaches_half_a_cell_bombs_the_plant_on_its_way_in() {
     for side in SIDES {
         let v = Variant {
             range: "0.5",
@@ -224,15 +225,18 @@ fn a_bomber_that_reaches_half_a_cell_stalls_over_the_plant() {
             side,
         };
         let (fired, w, b, p, trace) = by_hand(v);
-        assert!(!fired, "{trace}");
+        // spec: S-0502 claim 16 (r34)
+        assert!(fired, "{trace}");
         let o = w.obj(b).unwrap();
-        let plant = w.obj(p).unwrap().pos;
+        let point = w.reference_point(p);
         assert_eq!(o.beh.current, Some(Behaviour::Attack), "{trace}");
         assert_eq!(o.dest, Some(Target::Object(p)), "{trace}");
-        assert_eq!(jump::phase(&w, b), Some(Phase::Hovering), "{trace}");
-        assert_eq!((o.pos.x, o.pos.y), (plant.x, plant.y), "{trace}");
-        assert_eq!(answer(&w, b), Answer::NotFacing, "{trace}");
-        assert!(aim_error(&w, b).is_some_and(|e| e > 2048), "{trace}");
+        // spec: S-0502 claim 16 (r34)
+        let hover = o.jump.as_ref().and_then(|j| j.dest);
+        // spec: S-0502 claim 16 (r34)
+        assert_eq!(hover.map(|h| (h.x, h.y)), Some((point.x, point.y)), "{trace}");
+        // spec: S-0502 claim 16 (r34)
+        assert!(aim_error(&w, b).is_some_and(|e| e <= 2048), "{trace}");
     }
 }
 
@@ -255,7 +259,8 @@ fn a_bomber_without_mobile_fire_never_bombs_the_plant() {
 // design: own AI (#445): Alpha's brain gives its idle bomber that sees an enemy building near it one attack order on it, which the bomber takes (its lasting check is neither illegal nor impossible), and gives it nothing more while the bomber holds that attack, stalled or not.
 #[test]
 fn an_ai_bomber_at_an_enemy_base_is_sent_at_it_once() {
-    for (range, fires) in [("2", true), ("0.5", false)] {
+    // spec: S-0502 claim 16 (r34)
+    for (range, fires) in [("2", true), ("0.5", true)] {
         let v = Variant {
             range,
             mobile_fire: true,
