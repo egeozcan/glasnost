@@ -611,7 +611,9 @@ fn bytes_that_are_no_message_close_the_connection_with_a_reason() {
 #[test]
 fn the_limits_on_size_rate_rooms_and_connections_hold() {
     let mut h = hub_with(Limits {
-        max_message: 100,
+        // Room for the one-row create (each row carries its computer
+        // player's script and difficulty since wire version 13, #449).
+        max_message: 120,
         max_connections: 3,
         max_rooms: 1,
         rate: 10,
@@ -621,7 +623,7 @@ fn the_limits_on_size_rate_rooms_and_connections_hold() {
     // Size.
     let a = h.connect(0).unwrap();
     let mut big = b"GL".to_vec();
-    big.resize(101, 0);
+    big.resize(121, 0);
     h.receive(0, a, &big);
     assert_eq!(closes(&h.take_out()), [(a, "message too large".to_owned())]);
     // Rooms.

@@ -111,6 +111,7 @@ async fn meet(addr: std::net::SocketAddr) -> Vec<(Client, Begin)> {
             colour: Some(colour),
             team: None,
             start: None,
+            ai: Default::default(),
         }));
     }
     loop {

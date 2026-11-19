@@ -1546,7 +1546,9 @@ impl Client {
             SetupHit::Country(i, _)
             | SetupHit::Colour(i, _)
             | SetupHit::Team(i, _)
-            | SetupHit::Start(i, _) => {
+            | SetupHit::Start(i, _)
+            | SetupHit::Script(i, _)
+            | SetupHit::Difficulty(i, _) => {
                 setup.apply(&hit, &install.setup, &maps);
                 let s = setup.slots[i];
                 ToRelay::Edit(Edit::Choices {
@@ -1555,6 +1557,7 @@ impl Client {
                     colour: s.colour,
                     team: s.team,
                     start: s.start,
+                    ai: s.ai,
                 })
             }
             SetupHit::Credits(_)

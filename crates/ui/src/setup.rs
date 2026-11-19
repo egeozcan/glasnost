@@ -12,7 +12,8 @@
 use glasnost_rules::layers::{Layers, PLAY_FIXES_NAME};
 use glasnost_sim::econ::setup::{self, HouseValues, LobbyChoice, Player, Settings};
 use glasnost_sim::rules::SimRules;
-use glasnost_sim::world::GameSetup;
+use glasnost_ai::scripts::{self, REGISTRY};
+use glasnost_sim::world::{AiDifficulty, AiSeat, GameSetup};
 use serde::{Deserialize, Serialize};
 
 use crate::draw::{DrawList, Rgba, colour};
@@ -113,6 +114,10 @@ pub struct Slot {
     /// A start position (0-based entry of the start list, S-0009 claim
     /// 17), `None` for random (S-0009 claim 19).
     pub start: Option<u32>,
+    /// A computer row's script and difficulty (our own AI, #449; not a
+    /// setting of the original's lobby). A person's row keeps the default.
+    #[serde(default)]
+    pub ai: AiSeat,
 }
 
 impl Slot {
@@ -124,6 +129,7 @@ impl Slot {
             colour: None,
             team: None,
             start: None,
+            ai: AiSeat::DEFAULT,
         }
     }
 }
@@ -238,6 +244,9 @@ pub struct Lobby {
     pub layers: Layers,
     /// Our own skirmish dummy mode (#439, [`GameSetup::dummy`]).
     pub dummy: bool,
+    /// Our own AI's script and difficulty for each player, in house order
+    /// ([`GameSetup::ai`], #449): a person's entry is the default.
+    pub ai: Vec<AiSeat>,
 }
 
 /// The name of the house of the person (the client renames it as it
@@ -434,6 +443,7 @@ impl Setup {
         }
         let mut players = Vec::new();
         let mut choices = Vec::new();
+        let mut seats = Vec::new();
         let mut ais = 0;
         let mut persons = 0;
         for i in self.house_order() {
@@ -473,6 +483,12 @@ impl Setup {
                 country: s.country.is_none(),
                 colour: s.colour.is_none(),
             });
+            // design: own AI (#449): a computer row's script and difficulty; a person's row has none
+            seats.push(if ai {
+                scripts::known(s.ai)
+            } else {
+                AiSeat::DEFAULT
+            });
         }
         let f = |x: Flag| Some(self.flags[x as usize]);
         Ok(Lobby {
@@ -503,6 +519,7 @@ impl Setup {
             },
             // design: #439 (the skirmish screen's shell sets dummy mode; a room's setup never has it)
             dummy: false,
+            ai: seats,
         })
     }
 
@@ -572,6 +589,23 @@ impl Setup {
                 let n = maps.get(self.map).map_or(0, |m| m.starts) as usize;
                 let s = &mut self.slots[i];
                 s.start = cycle_opt(s.start.map(|x| x as usize), d, n).map(|x| x as u32);
+            }
+            SetupHit::Script(i, d) => {
+                // design: own AI (#449): the registry's scripts in its order, round
+                let s = &mut self.slots[i];
+                let n = REGISTRY.len() as i32;
+                let k = REGISTRY
+                    .iter()
+                    .position(|e| e.id == s.ai.script)
+                    .unwrap_or(0) as i32;
+                s.ai.script = REGISTRY[(k + d).rem_euclid(n) as usize].id;
+            }
+            SetupHit::Difficulty(i, d) => {
+                // design: own AI (#449): easy, normal, hard, round
+                let s = &mut self.slots[i];
+                let all = AiDifficulty::ALL;
+                let k = all.iter().position(|x| *x == s.ai.difficulty).unwrap_or(1) as i32;
+                s.ai.difficulty = all[(k + d).rem_euclid(all.len() as i32) as usize];
             }
             SetupHit::Credits(d) => {
                 let (lo, hi, st) = rules.money_range;
@@ -700,12 +734,15 @@ impl Setup {
         }
         y += 24;
         // Player table header.
+        // design: own AI (#449): the script and difficulty columns of a computer row, after the original's columns (narrowed for them)
         let cols = [
             (0, 70, "Player"),
-            (74, 140, "Country"),
-            (218, 90, "Colour"),
-            (312, 70, "Team"),
-            (386, 90, "Start"),
+            (74, 120, "Country"),
+            (198, 80, "Colour"),
+            (282, 62, "Team"),
+            (348, 80, "Start"),
+            (446, 76, "Script"),
+            (526, 74, "Difficulty"),
         ];
         for (cx, cw, name) in cols {
             d.text_left(Rect::new(x0 + cx, y, cw, 12), name, colour::DIM);
@@ -772,12 +809,22 @@ impl Setup {
                 let start = s
                     .start
                     .map_or("Random".to_owned(), |c| format!("Start {}", c + 1));
-                let cells: [Cell; 4] = [
-                    (74, 140, country.to_owned(), SetupHit::Country),
-                    (218, 90, colour_name, SetupHit::Colour),
-                    (312, 70, team, SetupHit::Team),
-                    (386, 90, start, SetupHit::Start),
+                let mut cells: Vec<Cell> = vec![
+                    (74, 120, country.to_owned(), SetupHit::Country),
+                    (198, 80, colour_name, SetupHit::Colour),
+                    (282, 62, team, SetupHit::Team),
+                    (348, 80, start, SetupHit::Start),
                 ];
+                if s.kind == SlotKind::Ai {
+                    let script = scripts::entry(s.ai.script).map_or("Default", |e| e.name);
+                    cells.push((446, 76, script.to_owned(), SetupHit::Script));
+                    cells.push((
+                        526,
+                        74,
+                        s.ai.difficulty.name().to_owned(),
+                        SetupHit::Difficulty,
+                    ));
+                }
                 for (cx, cw, value, mk) in cells {
                     let r = Rect::new(x0 + cx, y, cw, 16);
                     let (a, b) = widget::choice(&mut d, r, "", &value, editable);
@@ -786,8 +833,8 @@ impl Setup {
                     }
                 }
                 if let Some(c) = s.colour.and_then(|c| rules.colours.get(c as usize)) {
-                    d.fill(Rect::new(x0 + 480, y + 3, 10, 10), *c);
-                    d.frame(Rect::new(x0 + 480, y + 3, 10, 10), colour::EDGE);
+                    d.fill(Rect::new(x0 + 432, y + 3, 10, 10), *c);
+                    d.frame(Rect::new(x0 + 432, y + 3, 10, 10), colour::EDGE);
                 }
             }
             y += 18;
@@ -951,6 +998,10 @@ pub enum SetupHit {
     Team(usize, i32),
     /// Slot `.0`'s start position.
     Start(usize, i32),
+    /// A computer slot `.0`'s script (our own AI, #449).
+    Script(usize, i32),
+    /// A computer slot `.0`'s difficulty (our own AI, #449).
+    Difficulty(usize, i32),
     /// The credits setting.
     Credits(i32),
     /// The unit-count setting.
@@ -1010,6 +1061,10 @@ pub fn game_setup(
     setup::check(&g, rules)?;
     // design: #439 (the lobby's dummy mode is the setup's; a network game's lobby never has it)
     g.dummy = lobby.dummy;
+    // design: own AI (#449): the AI choices by house; with every house on the default script at normal none are written, so such a setup is the one made before the choices existed
+    if lobby.ai.iter().any(|s| !s.is_default()) {
+        g.ai = lobby.ai.clone();
+    }
     Ok(g)
 }
 
@@ -1080,6 +1135,44 @@ mod tests {
         assert!(!s.fixes);
         assert_eq!(s.lobby(&r, &maps()).unwrap().layers, Layers::REFERENCE);
         assert_eq!(s.flags, r.flags, "the original's settings are untouched");
+    }
+
+    /// Our own AI's choices (#449): a computer row has a script and a
+    /// difficulty selector, a person's row none; the choice reaches the
+    /// lobby values and the game setup, and the default writes nothing.
+    #[test]
+    fn a_computer_row_chooses_its_script_and_difficulty() {
+        let r = rules();
+        let mut s = Setup::new(&r);
+        let (_, t) = s.view((640, 480), &r, &maps(), None);
+        assert!(t.rect_of(&SetupHit::Difficulty(1, 1)).is_some());
+        assert!(t.rect_of(&SetupHit::Script(1, 1)).is_some());
+        assert!(t.rect_of(&SetupHit::Difficulty(0, 1)).is_none(), "the person's row");
+        assert_eq!(s.slots[1].ai, AiSeat::DEFAULT);
+        let rules_sim = glasnost_ai::fixture::rules();
+        let offered = vec!["Alphaland".to_owned(), "Betaland".to_owned()];
+        let lobby = s.lobby(&r, &maps()).unwrap();
+        assert_eq!(lobby.ai, vec![AiSeat::DEFAULT; 2]);
+        let g = game_setup(&lobby, &rules_sim, &offered, 1, 2).unwrap();
+        assert!(g.ai.is_empty(), "the default writes no choice");
+        s.apply(&SetupHit::Difficulty(1, 1), &r, &maps());
+        assert_eq!(s.slots[1].ai.difficulty, AiDifficulty::Hard);
+        s.apply(&SetupHit::Difficulty(1, 1), &r, &maps());
+        assert_eq!(s.slots[1].ai.difficulty, AiDifficulty::Easy, "round");
+        s.apply(&SetupHit::Script(1, 1), &r, &maps());
+        assert_eq!(s.slots[1].ai.script, AiSeat::DEFAULT_SCRIPT, "one script");
+        let lobby = s.lobby(&r, &maps()).unwrap();
+        let easy = AiSeat {
+            script: AiSeat::DEFAULT_SCRIPT,
+            difficulty: AiDifficulty::Easy,
+        };
+        let person = lobby.players.iter().position(|p| !p.ai).unwrap();
+        let computer = lobby.players.iter().position(|p| p.ai).unwrap();
+        assert_eq!(lobby.ai[computer], easy);
+        assert_eq!(lobby.ai[person], AiSeat::DEFAULT);
+        let g = game_setup(&lobby, &rules_sim, &offered, 1, 2).unwrap();
+        assert_eq!(g.ai_seat(computer), easy);
+        assert_eq!(g.ai_seat(person), AiSeat::DEFAULT);
     }
 
     #[test]

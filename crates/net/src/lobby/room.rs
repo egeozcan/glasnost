@@ -517,6 +517,7 @@ impl Room {
                 colour,
                 team,
                 start,
+                ai,
             } => {
                 let i = usize::from(*row);
                 if i >= self.rows() {
@@ -533,6 +534,12 @@ impl Room {
                     colour: *colour,
                     team: *team,
                     start: *start,
+                    // design: own AI (#449): only a computer row has a script and difficulty
+                    ai: if target.kind == SlotKind::Ai {
+                        *ai
+                    } else {
+                        glasnost_sim::world::AiSeat::DEFAULT
+                    },
                 };
                 self.check_choices(i, &new)?;
                 self.setup.slots[i] = new;
