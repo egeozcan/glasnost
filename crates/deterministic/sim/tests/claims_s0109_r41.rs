@@ -376,7 +376,7 @@ fn state_and_ordering_the_middle_event_comes_before_a_follow_up_switch() {
 
 #[test]
 fn open_question_owner_removed_by_its_own_detonation() {
-    // spec: S-0109 Open questions and claim 22 (an attached animation whose own damage detonation removes its owner goes on with the rest of that update, its middle event at the owner's last position, our engine's design; it is deleted at its next update)
+    // spec: S-0109 Open questions and claim 22 (an attached animation whose own damage detonation removes its owner goes on with the rest of that update, its middle event at the owner's last position, our engine's design; r45: not drawn from the killing hit on, it is deleted at its next update)
     let r = order_rules(|_| {});
     let half = glasnost_sim::rules::SimRules::new(&r, "t")
         .quirks
@@ -407,9 +407,14 @@ fn open_question_owner_removed_by_its_own_detonation() {
         e.ranged(0, 2147483646, half);
         assert_eq!(w.rng, e, "seed {seed}");
         assert_eq!(stage(w, at(0, 0)), Some(if crater { 2 } else { 8 }));
-        assert!(anims::shown(w, id).is_some(), "still in play this tick");
+        // spec: S-0109 r45 claim 22 (the killing hit ends the attachment: not drawn from it on, deleted at its next update)
+        assert!(
+            anims::shown(w, id).is_none(),
+            "not drawn from the killing hit on"
+        );
+        assert!(w.update.contains(id), "still in the update order this tick");
         let mut w = runs.pop().unwrap().0;
         tick::step(&mut w);
-        assert!(anims::shown(&w, id).is_none(), "deleted at its next update");
+        assert!(!w.update.contains(id), "deleted at its next update");
     }
 }

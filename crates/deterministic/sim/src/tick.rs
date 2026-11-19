@@ -167,8 +167,8 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         crate::combat::projectile::turn(w, id);
         return;
     }
-    if w.anims.anims.contains_key(&id) {
-        // spec: S-0109 claim 5 and S-0203 claim 2 (an animation updates in its own turn)
+    if crate::anims::takes_turn(w, id) {
+        // spec: S-0109 claim 5 and S-0203 claim 2 (an animation updates in its own turn); claim 22 (one ended with its owner is deleted in it)
         crate::anims::turn(w, id);
         return;
     }

@@ -1001,13 +1001,18 @@ fn create_grab_anim(w: &mut World, host: ObjectId, p: ObjectId) {
 }
 
 /// The parasite tends its grab animation in a turn of the hold that
-/// reaches the attached-parasite step (claim 25): attached again when
-/// found detached, given the parasite's house for its palette and the
-/// host's cell for its brightness. Nothing once it has ended.
+/// reaches the attached-parasite step (claim 25): given the parasite's
+/// house for its palette and the host's cell for its brightness. Nothing
+/// once it has ended. No event detaches it while it plays (S-0109 claim
+/// 22), so it is never found detached.
 fn tend_grab_anim(w: &mut World, host: ObjectId, p: ObjectId) {
     let Some(id) = state(w, p).and_then(|s| s.grab_anim) else {
         return;
     };
+    if w.anims.ended.contains_key(&id) {
+        // spec: S-0614 claim 25 (Removal: the parasite still removes it in that turn after an event of S-0109 claim 22's End with the owner list for the host)
+        return;
+    }
     let house = w.obj(p).and_then(|o| o.owner);
     let cell = w.obj(host).filter(|o| o.on_map).map(|o| o.pos.cell());
     let Some(a) = w.anims.anims.get_mut(&id) else {
@@ -1017,10 +1022,6 @@ fn tend_grab_anim(w: &mut World, host: ObjectId, p: ObjectId) {
         }
         return;
     };
-    if a.owner.is_none() {
-        // spec: S-0614 claim 25 (attached again, with no displacement, in a later turn that finds it detached)
-        a.owner = Some((host, Pos::new(0, 0, 0)));
-    }
     // spec: S-0614 claim 25 (the house-colour palette of the parasite's house; the unscaled ground level of the host's cell, when it is in a cell: the view reads both)
     a.role = crate::anims::Role::Grab {
         parasite: p,

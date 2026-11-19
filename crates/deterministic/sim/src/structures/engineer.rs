@@ -283,6 +283,8 @@ pub fn takeover(w: &mut World, unit: ObjectId, b: ObjectId) -> bool {
     let new = w.obj(unit).and_then(|o| o.owner);
     crate::mp_triggers::carry_over(w, unit, b);
     ownership::change_by(w, b, new, Cause::Takeover, Some(unit));
+    // spec: S-0109 claim 22 (End with the owner: a vehicle-like building taken over by an infantry unit, S-0509 claim 17)
+    crate::anims::owner_ended(w, b);
     scatter_standing(w, b);
     used_up(w, unit);
     true

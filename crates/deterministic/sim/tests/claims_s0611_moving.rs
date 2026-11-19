@@ -27,7 +27,7 @@ use glasnost_sim::cells::{Marker, position};
 use glasnost_sim::combat::effects;
 use glasnost_sim::rules::Kind;
 use glasnost_sim::world::{HouseId, Layer, ObjectId, Pos, World};
-use glasnost_sim::{objects, save, testkit};
+use glasnost_sim::{save, testkit};
 use sw_common::{BETA, at};
 
 const CIV: HouseId = HouseId(2);
@@ -287,12 +287,16 @@ fn attached(w: &mut World) -> (ObjectId, ObjectId) {
     (car, a)
 }
 
-/// Moves `id` to the centre of cell `c` at terrain height.
+/// Moves `id` to the centre of cell `c` at terrain height without taking
+/// it off the map, as a teleporting jump does: going off the map would end
+/// the attachment (S-0109 r45 claim 22).
 fn move_to(w: &mut World, id: ObjectId, c: CellXY) {
-    objects::take_inside(w, id);
+    let old = w.obj(id).unwrap().pos.cell();
+    w.cells.leave_both(old, id);
     let p = Pos::centre(c, 0);
     let z = w.surface_at(p.x, p.y);
-    objects::place(w, id, Pos::new(p.x, p.y, z), 0);
+    w.obj_mut(id).unwrap().pos = Pos::new(p.x, p.y, z);
+    w.cells.enter(c, Layer::Ground, id, false);
 }
 
 fn cells_of(w: &World, a: ObjectId) -> BTreeSet<(i32, i32)> {

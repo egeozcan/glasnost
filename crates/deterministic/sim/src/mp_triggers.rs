@@ -731,6 +731,8 @@ pub fn hijack_seam(
     // spec: S-0524 claim 11 (then the carry-over rule of claim 10)
     carry_over(w, thief, vehicle);
     takeover(w);
+    // spec: S-0109 claim 22 (End with the owner: a vehicle taken over by a vehicle thief)
+    crate::anims::owner_ended(w, vehicle);
     // spec: S-0524 claim 11 (the thief is removed without a destroyed-by-anything raise on its own tag)
     crate::objects::remove(w, thief);
 }

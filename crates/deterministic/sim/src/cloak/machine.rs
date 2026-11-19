@@ -156,6 +156,8 @@ fn start(w: &mut World, id: ObjectId) {
         ob.cloak.stage = 0;
     }
     ob.cloak.stepped = tick;
+    // spec: S-0109 claim 22 (End with the owner: it starts to cloak, whatever house owns it and whatever senses its cell)
+    crate::anims::owner_ended(w, id);
     // spec: S-0615 claim 14 (an object that begins to cloak is lost to its disc lasers)
     crate::disc::object_lost(w, id);
     // spec: S-0607 claim 2 (revision 50: a firer that has started to cloak since the shot seizes nothing)
@@ -574,6 +576,8 @@ fn step(w: &mut World, id: ObjectId) {
                     }
                 }
                 if done {
+                    // spec: S-0109 claim 22 (End with the owner: it becomes fully cloaked, not being a building)
+                    crate::anims::owner_ended(w, id);
                     // spec: S-0516 claim 14 (full cloak of a vehicle, infantry unit or aircraft: attackers drop the target again)
                     drop_attackers(w, id);
                     // spec: S-0516 claim 42 (no abort draw on the step reaching the fully cloaked threshold)
@@ -803,6 +807,10 @@ pub fn entered_map(w: &mut World, id: ObjectId) {
             ob.cloak.state = CloakState::Cloaked;
             ob.cloak.stage = 0;
         }
+    }
+    if forced {
+        // spec: S-0109 claim 22 (End with the owner: it becomes fully cloaked, a vehicle)
+        crate::anims::owner_ended(w, id);
     }
     // spec: S-0516 claim 22 (a mobile sensor's disc is added when it enters play)
     super::sensor::mobile_entered(w, id);

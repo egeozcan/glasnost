@@ -631,7 +631,10 @@ fn claim_5_when_the_link_forms() {
 fn claim_6_a_hover_disc_drains_end_to_end() {
     for (range, links) in [("0.1", true), ("1.5", false)] {
         let mut r = rules();
-        r.sim.weapons.get_mut("SUCKER").unwrap().range = Some(dec(range));
+        let sucker = r.sim.weapons.get_mut("SUCKER").unwrap();
+        sucker.range = Some(dec(range));
+        // spec: S-0310 claim 7 and S-0502 claim 16 (r34): without fire-while-moving a balloon-hover drainer fires only once its locomotor no longer moves it, over the building's reference point, a corner of all four foundation cells; with it, the reach of 0.1 cell plus S-0307 claim 9's lengthening is met on the way in, one cell short of the foundation
+        sucker.fire_while_moving = Some(!links);
         let mut w = game_of(&r);
         let b = put(&mut w, Kind::Building, "PLANT", BETA, 0, 0);
         let d = put(&mut w, Kind::Vehicle, "HDISC", ALPHA, -6, 0);

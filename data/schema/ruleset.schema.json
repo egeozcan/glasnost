@@ -8839,6 +8839,11 @@
           "type": "boolean",
           "default": true
         },
+        "balloon_hover_mobile_fire_by_destination": {
+          "description": "The first *moving* condition of a vehicle, a type without the mobile-fire flag that has a destination, reads the destination for every vehicle, balloon-hover types included, so a balloon-hover vehicle without that flag attacking with a vertical projectile never fires at its target, which is its destination; off: for a balloon-hover type that condition reads *its locomotor is moving it* (for a jumpjet locomotor, *moving now*), as the fire-while-moving condition does, so it gets no *moving* from it while it hovers or stands. Every other vehicle is unchanged.",
+          "type": "boolean",
+          "default": true
+        },
         "barrel_probe_top_left_only": {
           "description": "An exploding building probes for barrels from its top-left cell only.",
           "type": "boolean",

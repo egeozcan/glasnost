@@ -388,6 +388,8 @@ pub(crate) fn mark_killed(w: &mut World, id: ObjectId) {
     crate::disc::object_lost(w, id);
     // spec: S-0519 claim 20 (a strike aircraft stops being linked when it is destroyed, the last one making the strike idle with this tick as its end tick; a designator's strike ends from its killing hit) (#161)
     crate::strike::killed(w, id);
+    // spec: S-0109 claim 22 (End with the owner: destroyed, at the killing hit, also when it stays in play after it)
+    crate::anims::owner_ended(w, id);
     if o.kind == Kind::Building {
         // spec: S-0501 claim 21 (r176, Q-2866: the recorded building destroyed leaves no pad recorded)
         crate::air::heading_pad_gone(w, id);

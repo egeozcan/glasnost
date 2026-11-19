@@ -351,7 +351,9 @@ fn claim22_owner_removed_deletes_at_the_next_update() {
         Some(Pos::new(p.x + d.x, p.y + d.y, p.z + d.z))
     );
     glasnost_sim::objects::remove(&mut w, owner);
-    assert!(anims::shown(&w, id).is_some(), "until its next update");
+    // spec: S-0109 r45 claim 22 (End with the owner: it disappears at once and is deleted at its next update)
+    assert!(anims::shown(&w, id).is_none(), "disappears at once");
+    assert!(w.update.order.contains(&id), "until its next update");
     tick::step(&mut w);
     assert!(anims::shown(&w, id).is_none());
     assert!(!w.update.order.contains(&id));

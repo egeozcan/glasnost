@@ -1856,6 +1856,27 @@ Goldens (ec59e15): all nine sim-gate goldens move, and every hash line in each f
 Lanes compare base 2a4d7db with the batch at 87b6491. The later clippy fix changes no behaviour, and the gate and the AI suite ran again on it. The quick lane was also run on an item-1-only build (f5e4ec9) to split its moves by item.
 
 **Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). `diff -r --brief` of the two output directories is empty. The text outputs differ only in load and play times and the output directory names (`arena-diff.txt`). These rows fail, on base and after:
+
+## Batch S40: a balloon-hover bomber over its target, and what ends an attachment (#445, Q-3257; #291, Q-3240)
+
+Base main 5b6d561, not rebased. The batch builds two answers. S-0502 r34 and S-0310 r13 answer Q-3257 (#445). S-0109 r45, S-0611 r12 and S-0614 r35 answer Q-3240 (#291). The design text came first for each item (5fe88ae, 8c6b6ef), in *Simulation (sim issues S40 …)* in `docs/dev/simulation.md`. Each test was committed before its fix, and no fix commit changes a test. Every red was shown in a separate base worktree checked out at the test commit (`red1.txt`, `red2.txt`, `red2b.txt`). Two AI test commits follow item 1's fix by the main session's leave (7cdc65d, 4230677). No request is filed. Logs are in `local-lane/sim-issues/s40/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #445 (S-0502 claim 16, r34) | A jumpjet's movement point for an object destination was the object's position. For a building that is the centre of its top-left cell, so a balloon-hover bomber sent at a building hovered there, not facing the building's reference point, and never bombed it | fixed (8551a8d; switch 6471b31; tests 6f66ea4, 8 red) | `jump::object_point`, read once at the assignment by `jump::order_point`. A rider in an open-topped transport gives its own position. Any other object gives `lift::lifter_point` with the jumpjet as the seized unit: a building's reference point, or its docking point with the pad, repair-depot or vehicle-bunker flag, and a mobile object's heading point. The point does not follow the object | `claims_s0502_r34_balloon_target.rs` (12 tests: S-0502 J34 parts (a) to (g) and Q-3257's half-cell reach; 8 fail on base, and the 4 that pass are the as-built guards). `claims_s0608.rs` claim_6: the linking case's drain weapon gets no fire-while-moving flag (it passes on base) |
+| #445 (S-0310 claims 7 and 9, r13) | Claim 7's first *moving* condition reads the destination for every vehicle, balloon-hover types included. With `quirks.hovering_jumpjet_body_on_heading` off, a hovering jumpjet vehicle counts as having no destination for claim 9's reply | fixed (8551a8d; switch 6471b31) | `combat::check::vehicle_moving` reads `occupancy::in_progress` for a balloon-hover type when the new `quirks.balloon_hover_mobile_fire_by_destination` is off (default on, the original). `jump::hover_reply_ignores_destination` is read by `combat::behave::vehicle_reply` | the same file, both positions of each switch |
+| #445 (AI tests) | `air_bomber.rs`'s three #445 traces had asserted the old stall | moved (7cdc65d) | the bomber now bombs the plant on its way in. From afar, east fires too (`("east", false)` → `("east", true)`). `a_bomber_that_reaches_half_a_cell_stalls_over_the_plant` is renamed `…_bombs_the_plant_on_its_way_in`: it now asserts `fired`, a movement point equal to the plant's reference point and an aim error within 2048. The AI bomber test's half-cell row goes from `false` to `true`, and its one-order assertion is unchanged | — |
+| #445 (AI fixtures) | With claim 16 and S-0307 claim 9's lengthening for a building, the M7b fixture's SUCK (a reach of a tenth of a cell) is met on the way in, about a cell short of the foundation. In `antiair.rs`'s stand-off scene, FLAKT had fired by the time the link formed | moved (4230677) | `fixture_m7b.rs`: SUCK gets `fire_while_moving: Some(false)`, a synthetic fixture choice that keeps the documented intent (the disc fires once it hovers over the building). `an_anti_air_unit_standing_off_the_drainer_does_not_answer`: FLAKT's spawn goes from (-1, 3) to (4, 3). From (-1, 3) and (2, 3) it had fired; from (3, 3) it stands out of range; (4, 3) adds a cell of margin. The name and assertion are unchanged | — |
+| #291 (S-0109 claim 22, r45) | No event ended an attachment. r45 names the *End with the owner* list | fixed (c9ee82a; tests 4242679, 15 red; test update 59cf169, 2 red) | `anims::owner_ended` moves each attached animation into the saved `AnimWorld::ended`, with S-0611 claim 15's release and the parachute's end at the event. Its next turn only deletes it (`anims::takes_turn` in `tick::object_turn` and `probe::classify`). It is called at the killing hit, the start of sinking, an aircraft's and a jumpjet's crash start, going off the map, removal, the start of cloaking, a non-building's full cloak (the forced one at placement included), the vehicle thief's and the vehicle-like building's takeovers, and the hijack seam. An event in the animation's own turn ends it when its playback returns. `parasite::tend_grab_anim` loses its reattachment branch (S-0614 claim 25) | `claims_s0109_r45_attachment_end.rs` (17 tests; 15 fail on base, and the guards for mind control and another rule's removal pass). `claims_s0109_playback.rs` and `claims_s0109_r41.rs`: r41's "still drawn until its next update" becomes r45's "not drawn from the event on" (59cf169, both red at that commit). `claims_s0611_moving.rs` moves its owner on the map instead of taking it off and back |
+| #291 (S-0601 claim 18) | The control ring stayed while its object was cloaked, off the map, sinking, crashing or destroyed | fixed (c9ee82a; tests 4242679) | `mind::ring` gives a ring only while the object is on the map, not destroyed, not sinking or crashing and neither cloaking nor cloaked. It comes back with no switch. It changes no game state and takes no draw | the ring tests in `claims_s0109_r45_attachment_end.rs` |
+
+Switch: `quirks.balloon_hover_mobile_fire_by_destination`, default on. On the branch, the rules quirk test lists only S-0519's `airstrike_line_marker_over_shroud`, which is not this batch's (`ws-i2.txt`, line 3441).
+
+Formats (c9ee82a): `AnimWorld::ended` is a new saved field, and replays change. On the branch the save format goes from 160 to 195 and the AI game format from 138 to 173, the numbers the main session gave this batch (renumbered to 163 and 141 at the merge). Wire stays 12. Item 1 regenerated the goldens once with the ignored tests (7f02994). Only `duel-m7b.txt` moves, from tick 576, in 224 lines. With the fix and without the fixture line (`golden-nofixture.txt`, in the base worktree at 7cdc65d), duel-m7b also moves, but to other hashes: the move comes from the behaviour alone and changes again with the fixture line. Item 2 regenerated the goldens again (78a5d82). All nine files move from the first tick, as the new field enters every state hash, and each keeps its length.
+
+Lanes compare base 5b6d561 with the batch at 6d6ce5f, the last code commit. The AI suite ran again on the final commit.
+
+**Oracle arena** (`--record all`; `arena-base.txt`, `arena-i2.txt`). `diff -r` of the two output directories is empty. These rows fail, on base and after:
 - M-0001: 10 of 96;
 - M-0002: 4 of 24;
 - M-0003: 3 of 35;
@@ -1928,3 +1949,49 @@ Seams left:
 - Claim 19's flagged fire point (a flagged jumpjet's fire point through its rocking angles) stays the existing seam: the simulation's fire points ignore rocking.
 
 The P3 census rule: `AnimWorld::markers` maps projectile numbers to animation numbers. It is not an object-table reference, so the batch makes or moves no back-reference of `World::census`.
+
+**Sweeps** (`m6c-*`, `m7a-*`, `m7b-*`). M6c, M7a and M7b over seeds 1 to 16 pass, before and after. M6c and M7a print the same lines as base apart from build and timing lines. M7b moves on every seed. `m7b-i2.txt` equals `m7b-i1.txt` (item 1 alone), so the move is item 1's. Every seed still plays its 8000 ticks with no result and no drain counter below 3, and the first link is 19 to 31 ticks later on every seed (seed 1: 6107 → 6126, seed 5: 6032 → 6063). In the summary:
+- drain orders: median 4 → 3;
+- drain links formed: max 4 → 3;
+- credits drained: min 1560 → 1520, median 2360 → 2280, max 3360 → 3320;
+- drained-building ticks: min 4119 → 4026, median 5437 → 5474, max 6897 → 6893;
+- mutator launches: min 6 → 5, median 10 → 9;
+- infantry mutated: min 18 → 16, max 33 → 28;
+- dominator launches: max 9 → 10;
+- objects taken over: min 13 → 15, median 18 → 19, max 25 → 23;
+- berserk weapon orders: min 16 → 14, median 26 → 31, max 47 → 60;
+- units made berserk: min 13 → 14, median 17 → 18, max 30 → 27;
+- takeover orders: max 6 → 8;
+- absorber entry orders: median 11 → 9, max 17 → 13;
+- infantry absorbed: median 7 → 6;
+- grinder entry orders and units ground: max 5 → 6;
+- bunker exit orders: max 0 → 1.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-i2-7.txt` to `quick-i2-10.txt`). 5 games end on the same tick with the same winner as base. 31 move, and these five change winner:
+
+| Seed | Map | Sides | Base ticks (winner) | Batch ticks (winner) | First difference | Cause |
+|---|---|---|---|---|---|---|
+| 8 | 2 | 1, 2 | 72985 (house 0) | 67172 (house 1) | tick 18504: object 4730, a house 1 jumpjet vehicle (type 70) attacking house 0's building 997; `jump.dest` (18816, 9088, 624) → (19072, 9216, 624) | item 1 |
+| 8 | 8 | 1, 2 | 65040 (house 1) | 58666 (house 0) | tick 25969: object 6147, a house 0 jumpjet vehicle (type 15) attacking house 1's infantry unit 7212; `jump.dest` (10672, 15552, 650) → (10688, 15552, 546) | item 1 |
+| 9 | 0 | 0, 1 | 111410 (house 1) | 51912 (house 0) | tick 22949: object 4824, a cloaked house 1 vehicle (type 24, not a jumpjet), in AreaGuard on base and in Move with an attack-move to cell (66, 82) in the batch | item 2 |
+| 10 | 2 | 1, 2 | 63858 (house 1) | 84310 (house 0) | tick 17351: object 2456, a house 1 jumpjet vehicle (type 70) attacking house 0's building 1977; `jump.dest` (17536, 32384, 624) → (17792, 32512, 624) | item 1 |
+| 10 | 8 | 1, 2 | 39946 (house 0) | 95421 (house 1) | tick 17154: object 3280, a house 1 jumpjet vehicle (type 70) attacking house 0's building 410; `jump.dest` (7040, 18048, 832) → (7424, 18304, 832) | item 1 |
+
+Each flip was traced with the timeline (`GLASNOST_AI_TRACE`, `trace-*`), then with whole-object dumps (`GLASNOST_AI_OBJS`, `objs-*`), down to the first tick at which a dumped line differs. Every line before it is equal. `save::state_hash` parts from tick 1, because of the new saved field, so it could not be used. In the four item 1 flips, the first difference is only `jump.dest`, which is claim 16's object point (a building's reference point, a mobile object's heading point).
+
+In 9/0/0,1 every dumped field is equal before tick 22949. The cause therefore lies in state the dump leaves out: the animations and the AI brains. An item-1-only build at 8c6b6ef (`objs-9-0-w2-i1.txt`) prints the same lines as base over ticks 22931 to 22965. It parts from the batch at the same line, so the first difference is item 2's. Played out alone, item 1 also flips this game (`quick-i1-9-0-01.txt`: house 0 after 68017 ticks). It parts from base after tick 22965, and that was not traced further.
+
+**Suites.** The AI suite with its ignored tests passes on base, after item 1, on the batch and on the final commit (`ai-base.txt`, `ai-i1.txt`, `ai-i2.txt`, `ai-final.txt`: 41 binaries ok, 381 tests). The sim gate with its ignored tests passes 17 on base (`gate-base.txt`). After item 1's fix, `full_run_matches_golden` failed at duel-m7b tick 576 (`gate-i1.txt`). With the regenerated goldens it passes 17 (`gate-i2.txt`). On 6d6ce5f these also pass:
+- `cargo test --workspace --no-fail-fast`, apart from the rules quirk test above (`ws-i2.txt`, at 78a5d82);
+- `cargo clippy --workspace --all-targets -- -D warnings` (`clippy-i2b.txt`);
+- `cargo fmt --check`;
+- the wasm32 build of glasnost-app;
+- `cargo xtask check`, apart from the 8 known stock-guard problems in M-0027 (`xcheck-final.txt`);
+- `cargo xtask gate`.
+
+Seams left:
+- S-0502 claim 16: `lift::lifter_point` reads no next movement point for an aircraft, so an aircraft gives its position (claim 16 rates aircraft `unmeasured`). Claim 23's own-cell filter is left as it was.
+- S-0109 claim 22: no underground type moves in our engine, so going underground has no call. The hijack is still `mp_triggers::hijack_seam`.
+- The client needs no change for either item. It draws `world.anims.anims`, which no longer holds an ended animation. Its control-ring marker follows `mind::ring`. When the ring's art is drawn, each return of the ring should start a new playback, with draws from the cosmetic random stream (S-0202 claim 11).
+
+The P3 census rule: the batch makes or moves no back-reference of `World::census`.

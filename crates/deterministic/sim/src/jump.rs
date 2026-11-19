@@ -33,7 +33,18 @@ use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 mod fly;
 
-pub use fly::{crash_end_fires, impact, start_crash, tick};
+pub use fly::{crash_end_fires, impact, tick};
+
+/// [`fly::start_crash`], then the end of the jumpjet's attached animations
+/// when a crash started. Returns whether a crash started.
+pub fn start_crash(w: &mut World, id: ObjectId, hit: Option<&Hit>) -> bool {
+    let started = fly::start_crash(w, id, hit);
+    if started {
+        // spec: S-0109 claim 22 (End with the owner: it starts to crash)
+        crate::anims::owner_ended(w, id);
+    }
+    started
+}
 
 /// The arrival radius: a cruising jumpjet arrives when ρ is below it.
 // spec: S-0502 claim 11 and Constants (arrival radius 20 leptons)
@@ -1004,7 +1015,11 @@ pub fn no_point(w: &mut World, id: ObjectId) {
 /// order-level destination.
 fn order_point(w: &mut World, id: ObjectId, t: Target) {
     let phase = st(w, id).map_or(Phase::Grounded, |j| j.phase);
-    let p = point_of(w, t);
+    let p = match t {
+        // spec: S-0502 claim 16 (r34, Q-3257: a destination that names an object gives the object's point at the moment of the assignment, which does not follow the object afterwards)
+        Target::Object(x) => object_point(w, id, x),
+        Target::Cell(_) => point_of(w, t),
+    };
     // spec: S-0502 claim 16 (it releases any landing reservation it holds, unless it is grounded or claim 24's safety refusal retains the preceding movement)
     let held = st(w, id).and_then(|j| j.reservation);
     if phase != Phase::Grounded {
@@ -1062,6 +1077,33 @@ fn order_point(w: &mut World, id: ObjectId, t: Target) {
         });
         landing_cancelled(w, id);
     }
+}
+
+/// The point of an object destination `x` of jumpjet `id` (claim 16, r34):
+/// an object riding in an open-topped transport gives its own position;
+/// any other gives S-0607 claim 7's lifter point with the jumpjet in place
+/// of the seized unit: a building its reference point, or its docking point
+/// with the pad, repair-depot or vehicle-bunker flag; a mobile object its
+/// heading point (its next movement point, or its position when it has
+/// none). Seam: an aircraft's next movement point is not read, so it gives
+/// its position.
+fn object_point(w: &World, id: ObjectId, x: ObjectId) -> Pos {
+    if crate::transport::riding(w, x).is_some() {
+        // spec: S-0502 claim 16 (r34: S-0607 claim 7's riding rule included) and S-0607 claim 7 (a passenger of an open-topped transport gives its own position)
+        return w.obj(x).map_or(Pos::default(), |o| o.pos);
+    }
+    // spec: S-0502 claim 16 (r34: a building gives its reference point, S-0204 claim 4, or its docking point with the pad, repair-depot or vehicle-bunker flag by S-0607 claim 7 with the jumpjet in place of the seized unit; a vehicle, infantry unit or aircraft the point S-0607 claim 7 gives for a lifter that is not a building)
+    crate::lift::lifter_point(w, x, id)
+}
+
+/// Whether, for the reply to *not facing* without a turret (S-0310 claim
+/// 9), jumpjet vehicle `id` counts as having no destination: with
+/// `quirks.hovering_jumpjet_body_on_heading` off, while it is *hovering*.
+pub fn hover_reply_ignores_destination(w: &World, id: ObjectId) -> bool {
+    // spec: S-0310 claim 9 (r13: with quirks.hovering_jumpjet_body_on_heading off, a jumpjet vehicle in hovering counts here neither as being moved by its locomotor nor as having a destination, so it takes the row with no destination) and S-0502 Edge cases (r34, Body on the heading while hovering)
+    !w.rules().quirks.hovering_jumpjet_body_on_heading
+        && phase(w, id) == Some(Phase::Hovering)
+        && vehicle(w, id)
 }
 
 /// An *unload* in progress at a cancelled landing is replaced by *guard*
