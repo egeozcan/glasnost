@@ -485,7 +485,11 @@ fn trace_missed(miss_after_c: impl Fn(i32) -> i32) -> ((i32, i32), i32, Vec<(i32
             look(&scene, sim_code(b)),
         ));
     }
-    ((range.n, range.delay), c.expect("construction starts"), seen)
+    (
+        (range.n, range.delay),
+        c.expect("construction starts"),
+        seen,
+    )
 }
 
 /// #440. spec: S-0108 Terms (body stage, r111: an advance that falls due on a tick on which the
