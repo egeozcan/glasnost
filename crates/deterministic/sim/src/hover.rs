@@ -319,14 +319,8 @@ pub fn taken_object_point(w: &World, id: ObjectId, t: ObjectId) -> Option<Pos> {
 /// point, a rider's own position), with the height of Terms unless `held`
 /// (claim 18: the supplied point unadjusted).
 fn object_point(w: &World, id: ObjectId, t: ObjectId, held: bool) -> Option<Pos> {
-    let x = w.obj(t)?;
-    let p = if crate::transport::open_topped_passenger(w, t) {
-        // spec: S-0503 claim 20 (r30: S-0607 claim 7's riding rule: a passenger of an open-topped transport gives its own position)
-        x.pos
-    } else {
-        // spec: S-0503 claim 20 (r30: a building gives its foundation centre, or its docking point for the pad, repair-depot and vehicle-bunker flags by S-0607 claim 7's rules with the hovering vehicle in place of the seized unit; a vehicle, infantry unit or aircraft gives its heading point, its next movement point or its position)
-        crate::lift::lifter_point(w, t, id)
-    };
+    // spec: S-0503 claim 20 (r30: a building gives its foundation centre, or its docking point for the pad, repair-depot and vehicle-bunker flags, by S-0607 claim 7's rules with the hovering vehicle in place of the seized unit; a vehicle, infantry unit or aircraft gives its heading point; a passenger of an open-topped transport gives its own position)
+    let p = crate::lift::destination_point(w, t, id)?;
     if held {
         // spec: S-0503 claims 18 and 20 (while held: the supplied point, without the height adjustment)
         return Some(p);
