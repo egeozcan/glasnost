@@ -1,9 +1,9 @@
 ---
 id: Q-3273
 title: Whether a building can gain experience and show a rank
-status: open
+status: answered
 related: [S-0311, S-0520, S-0111, S-0415]
-answered-by: []
+answered-by: [S-0311]
 ---
 
 ## Need
