@@ -1325,6 +1325,72 @@ pub fn infantry_death_turn(w: &mut World, id: ObjectId) {
     }
 }
 
+/// Whether S-0107 claim 17a gives the infantry unit a health of 1 in this
+/// update: its health is 0 and its current sequence, if any, is none of
+/// the death kinds and the air-death kinds. With
+/// `quirks.falling_infantry_regains_health` off, a jumpjet infantry unit
+/// whose crash has started and not ended is left out (S-0107 Edge cases).
+pub fn regains_health(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0107 claim 17a (an infantry unit whose health is 0)
+    if o.kind != Kind::Infantry || o.health != 0 {
+        return false;
+    }
+    let seq = o.infantry.as_ref().and_then(|s| s.seq);
+    // spec: S-0107 claim 17a (a current sequence that is none of die-1 to die-5, wet-die-1, wet-die-2, air-death-start, air-death-fall and air-death-end; a unit with no current sequence also gets a health of 1)
+    if matches!(
+        seq,
+        Some(
+            Seq::Die1
+                | Seq::Die2
+                | Seq::Die3
+                | Seq::Die4
+                | Seq::Die5
+                | Seq::WetDie1
+                | Seq::WetDie2
+                | Seq::AirDeathStart
+                | Seq::AirDeathFall
+                | Seq::AirDeathEnd
+        )
+    ) {
+        return false;
+    }
+    let jumpjet = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.jumpjet);
+    // spec: S-0107 Edge cases (quirks.falling_infantry_regains_health off: claim 17a's test does not apply to a jumpjet infantry unit whose crash has started and not yet ended, from its killing hit through crashing up to its crash end; from its crash end on it applies as usual)
+    if !w.rules().quirks.falling_infantry_regains_health
+        && jumpjet
+        && crate::jump::crash_in_progress(w, id)
+    {
+        return false;
+    }
+    true
+}
+
+/// S-0107 claim 17a in the unit's update: a killed unit with health whose
+/// death sequence has completed leaves play first
+/// ([`infantry_death_turn`]); then a unit that [`regains_health`] gets a
+/// health of 1. It stays *killed* (S-0302). Returns whether the unit is
+/// still in play.
+pub fn regain_health_turn(w: &mut World, id: ObjectId) -> bool {
+    if w.obj(id).is_some_and(|o| o.combat.killed) {
+        // spec: S-0312 claim 16 (Infantry crash end: when air-death-end starts, its completion removes the unit, also one that regained health while it fell) and S-0107 State and ordering
+        infantry_death_turn(w, id);
+    }
+    if w.obj(id).is_none() {
+        return false;
+    }
+    if regains_health(w, id)
+        && let Some(o) = w.obj_mut(id)
+    {
+        // spec: S-0107 claim 17a (it gets a health of 1 and stays killed in S-0302's sense)
+        o.health = 1;
+    }
+    true
+}
+
 /// A destroyed vehicle's crew (S-0312 claim 13).
 fn crew(w: &mut World, id: ObjectId, hit: &Hit) {
     let Some(o) = w.obj(id).cloned() else { return };

@@ -9124,6 +9124,11 @@
           "type": "boolean",
           "default": true
         },
+        "crash_end_bridge_height": {
+          "description": "In a high-bridge cell a crash end puts a vehicle on the terrain beneath the deck and an\ninfantry unit at the deck's height without the on-deck state, however the fall ended; off:\nat height 0 above the surface the fall ended over (on the deck after crossing it).",
+          "type": "boolean",
+          "default": true
+        },
         "crate_beneath_overlay_refusal": {
           "description": "A crate beneath whose selected cell holds an overlay is refused, so a building that leaves rubble loses its crate when its top-left cell is selected; off: the crate's search also asks for the no-overlay condition and selects a nearby cell without an overlay.",
           "type": "boolean",
@@ -9586,6 +9591,11 @@
         },
         "failed_packup_keeps_vehicle": {
           "description": "The vehicle of a failed pack-up remains.",
+          "type": "boolean",
+          "default": true
+        },
+        "falling_infantry_regains_health": {
+          "description": "A falling jumpjet infantry unit regains a health of 1 by S-0107 claim 17a, so it can be\nhit and killed again; off: the test does not apply from its killing hit to its crash end.",
           "type": "boolean",
           "default": true
         },
@@ -10539,8 +10549,13 @@
           "type": "boolean",
           "default": true
         },
+        "refused_air_death_end_keeps_unit": {
+          "description": "A crashed infantry unit whose forced air-death-end request is turned down stays in play\nfor good with a health of 1 and no corpse; off: it leaves play at its crash end, no corpse.",
+          "type": "boolean",
+          "default": true
+        },
         "refused_death_keeps_unit": {
-          "description": "A death request turned down because the die-1 or die-2 entry has no image frames leaves the unit in play with its current sequence; off: the resulting death kind counts as completed on the death tick.",
+          "description": "A death request turned down because the die-1 or die-2 entry has no image frames leaves the unit in play with its current sequence, and it regains a health of 1 at its next update (S-0107 claim 17a); off: the resulting death kind counts as completed on the death tick.",
           "type": "boolean",
           "default": true
         },

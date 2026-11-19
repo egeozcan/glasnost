@@ -35,9 +35,10 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
     }
 }
 
-fn game(twice: bool) -> World {
+fn game(twice: bool, keeps: bool) -> World {
     let mut r = ruleset();
     r.globals.quirks.crash_death_weapon_twice = twice;
+    r.globals.quirks.refused_air_death_end_keeps_unit = keeps;
     register(&mut r, "animations", "BODYA");
     r.sim.animations.insert(
         "BODYA".into(),
@@ -105,9 +106,10 @@ struct Crash {
 }
 
 /// A unit of type `name` alone at (0, 0), ordered to (10, 0) and killed at
-/// 50 leptons or more during its ascent; run until it leaves play.
-fn shot_down(twice: bool, name: &str) -> Crash {
-    let mut w = game(twice);
+/// 50 leptons or more during its ascent; run until it leaves play. `keeps`
+/// is `quirks.refused_air_death_end_keeps_unit`.
+fn shot_down(twice: bool, keeps: bool, name: &str) -> Crash {
+    let mut w = game(twice, keeps);
     let u = put(&mut w, name, Kind::Infantry, 0, 0, 0);
     go(&mut w, u, at(10, 0));
     assert!(until(&mut w, 60, |w| height(w, u) >= 50));
@@ -161,7 +163,7 @@ fn kill(w: &mut World, id: ObjectId) {
 // spec: S-0312 claim 16 (Infantry crash end: put at ground height, the forced request for air-death-end, S-0107 claims 6 and 21; when that sequence starts, its completion removes the unit with no corpse) and S-0107 State and ordering (air-death-end complete: unit removed, no corpse)
 #[test]
 fn issue_252_a_crashed_infantry_unit_plays_air_death_end_and_leaves_with_no_corpse() {
-    let c = shot_down(true, "JJEND");
+    let c = shot_down(true, true, "JJEND");
     let (h, seq, t) = c.crashed.expect("in play in the crashed state");
     assert_eq!(h, 0, "at ground height: {c:?}");
     assert_eq!(seq, Some(Seq::AirDeathEnd), "{c:?}");
@@ -177,16 +179,16 @@ fn issue_252_a_crashed_infantry_unit_plays_air_death_end_and_leaves_with_no_corp
 #[test]
 fn issue_252_an_exploding_crashed_infantry_unit_fires_only_at_death() {
     for twice in [true, false] {
-        let c = shot_down(twice, "JJEND");
+        let c = shot_down(twice, true, "JJEND");
         assert_eq!((c.at_death, c.total), (1, 1), "{twice}: {c:?}");
     }
 }
 
-// design: Q-3239 interim (S-0312 claim 16 leaves open what removes a crashed infantry unit whose air-death-end request is turned down, S-0107 claim 6 row 1: it leaves play at its crash end with no corpse, as before) and S-0312 claim 16 (no death weapon at the crash end either way)
+// spec: S-0312 Edge cases (quirks.refused_air_death_end_keeps_unit off: when the forced air-death-end request is turned down, S-0107 claim 6 row 1, the unit is removed at its crash end with no corpse) and claim 16 (no death weapon at the crash end either way); the switch's on form is tests/claims_s0312_r91_crash_health.rs
 #[test]
-fn issue_252_a_turned_down_air_death_end_leaves_play_at_the_crash_end() {
+fn issue_252_a_turned_down_air_death_end_leaves_play_at_the_crash_end_with_the_switch_off() {
     for twice in [true, false] {
-        let c = shot_down(twice, "JJNOEND");
+        let c = shot_down(twice, false, "JJNOEND");
         assert!(c.crashed.is_none(), "{twice}: {c:?}");
         assert!(c.left_while_crashing, "{twice}: {c:?}");
         assert_eq!(c.corpses, 0, "{twice}: {c:?}");

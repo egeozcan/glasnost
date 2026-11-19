@@ -469,8 +469,44 @@ fn claim_3_not_human_leaves_one_cloud() {
     let l = list(&w, shared(&w));
     assert_eq!(l.len(), 1);
     assert_eq!((l[0].pos.x, l[0].pos.y), (at.x, at.y));
+    // spec: S-0107 claim 17a (the turned-down die-1 leaves the drone in play and it regains a health of 1, so its cloud could kill it again: claim_3_a_drone_left_in_play_regains_health_and_dies_again_in_its_cloud); taken out here so that only the removed animation could add a middle event
+    glasnost_sim::objects::remove(&mut w, victim);
     testkit::run(&mut w, 10);
     assert_eq!(list(&w, shared(&w)).len(), 1, "no later middle event");
+}
+
+/// spec: S-0107 claim 17a (Q-3239: a turned-down death request, here a not-human type whose die-1 entry has no image frames, leaves the unit in play; it gets a health of 1 at its next update, stays killed, and a further killing hit runs claim 17 again) and S-0613 claim 3 (so a virus death by its own cloud delivers one more particle)
+#[test]
+fn claim_3_a_drone_left_in_play_regains_health_and_dies_again_in_its_cloud() {
+    let mut w = game(&rules());
+    let victim = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "DRONE",
+        1,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
+    venom(&mut w, victim, None, None);
+    assert_eq!(w.obj(victim).map(|o| o.health), Some(0));
+    assert_eq!(list(&w, shared(&w)).len(), 1);
+    testkit::run(&mut w, 1);
+    let o = w.obj(victim).expect("left in play");
+    assert_eq!(o.health, 1, "a health of 1 at its next update");
+    assert!(o.combat.killed, "it stays killed");
+    let mut grew = false;
+    for _ in 0..20 {
+        testkit::run(&mut w, 1);
+        assert!(w.obj(victim).is_some(), "left in play again");
+        if list(&w, shared(&w)).len() > 1 {
+            grew = true;
+            break;
+        }
+    }
+    assert!(
+        grew,
+        "a further virus death in its cloud delivers another particle"
+    );
 }
 
 /// spec: S-0613 claim 3 (with μ = 0 the creation middle event's particles come first, then the one extra)

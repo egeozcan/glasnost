@@ -2874,8 +2874,8 @@ impl Builder<'_> {
         let mut crawls = None;
         let mut fire: [Option<i32>; 4] = [None; 4];
         let mut sequences: Option<Vec<(String, Node)>> = None;
-        // The die-1 and die-2 frame counts of the table in force (claim 1: all zero without one).
-        let mut die_counts = [0i32; 2];
+        // The die-1, die-2 and air-death-end frame counts of the table in force (claim 1: all zero without one).
+        let mut die_counts = [0i32; 3];
         let mut sequence_line = 0u32;
         for image in self.images(kind, index, t) {
             let Some(sec) = self.art_section(&image) else {
@@ -2900,10 +2900,20 @@ impl Builder<'_> {
                 sequence_line = line;
             }
         }
-        if die_counts.contains(&0) {
+        if die_counts[..2].contains(&0) {
             // spec: S-0107 claim 17 and Edge cases (the importer warns about an infantry type whose die-1 or die-2 entry has no image frames, whatever quirks.refused_death_keeps_unit says)
             self.art_warn(sequence_line, format!(
                 "infantry {}: its die-1 or die-2 sequence entry has no image frames, so a death of that kind is turned down (S-0107 claim 17, quirks.refused_death_keeps_unit)",
+                show(&t.name)
+            ));
+        }
+        let crashable = fold(t.keys.get(&b"Crashable"[..]), None, |v, _| {
+            value::boolean(v)
+        });
+        if die_counts[2] == 0 && crashable == Some(true) {
+            // spec: S-0312 Edge cases (quirks.refused_air_death_end_keeps_unit: the importer warns about any crashable infantry type whose air-death-end entry has no image frames, whichever way the switch is set)
+            self.art_warn(sequence_line, format!(
+                "infantry {}: its air-death-end sequence entry has no image frames, so its request at a crash end is turned down (S-0312 claim 16, quirks.refused_air_death_end_keeps_unit)",
                 show(&t.name)
             ));
         }
@@ -2940,9 +2950,10 @@ impl Builder<'_> {
     }
 
     /// The entries of a sequence section (S-0107 Import mapping), with the
-    /// frame counts of the die-1 and die-2 entries (0 when absent, claim 1).
-    fn sequence_table(&mut self, name: &[u8], t: &TypeRec) -> (Vec<(String, Node)>, [i32; 2]) {
-        let mut die = [0i32; 2];
+    /// frame counts of the die-1, die-2 and air-death-end entries (0 when
+    /// absent, claim 1).
+    fn sequence_table(&mut self, name: &[u8], t: &TypeRec) -> (Vec<(String, Node)>, [i32; 3]) {
+        let mut die = [0i32; 3];
         let Some(sec) = self.art_section(name) else {
             return (Vec::new(), die);
         };
@@ -2970,6 +2981,7 @@ impl Builder<'_> {
             match kind {
                 "die_1" => die[0] = e.0[1],
                 "die_2" => die[1] = e.0[1],
+                "air_death_end" => die[2] = e.0[1],
                 _ => {}
             }
             let mut members = vec![

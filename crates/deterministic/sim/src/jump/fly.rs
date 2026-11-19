@@ -574,9 +574,9 @@ fn crashing_outcome(w: &mut World, id: ObjectId) {
             j.ht = CRASH_TARGET;
             j.crash_started = false;
         });
-        // spec: S-0502 claim 18 (an infantry jumpjet switches to its air-death-start sequence, S-0107 claim 21)
+        // spec: S-0502 claim 18 (an infantry jumpjet switches to its air-death-start sequence, S-0107 claim 21) and S-0312 claim 16 (Health while it falls: that request is not forced, so S-0107 claim 6 can turn it down and the unit keeps its current sequence)
         if w.obj(id).is_some_and(|o| o.kind == Kind::Infantry) {
-            crate::infantry::request(w, id, crate::infantry::Seq::AirDeathStart, true);
+            crate::infantry::request(w, id, crate::infantry::Seq::AirDeathStart, false);
         }
     }
     if st(w, id).is_none_or(|j| j.phase != Phase::Crashing) {
@@ -604,21 +604,47 @@ fn crashing_outcome(w: &mut World, id: ObjectId) {
 /// The impact of an ordinary crash (S-0312 claim 16). A vehicle's is the
 /// *Vehicle crash end*: a balloon-hover type sets off its death weapon at
 /// its position, any other type shows claim 9's animations, and it leaves
-/// play, alive or dead. A killed infantry unit's is the *Infantry crash
-/// end*: it makes the forced request for *air-death-end*, sets off no death
-/// weapon, and stays in play until that sequence completes
-/// ([`crate::combat::death::infantry_death_turn`]). For another kind a
+/// play, alive or dead. An infantry unit's is the *Infantry crash end*: it
+/// makes the forced request for *air-death-end*, sets off no death weapon,
+/// and stays in play until that sequence completes
+/// ([`crate::combat::death::infantry_death_turn`]), or for good when the
+/// request is turned down (`quirks.refused_air_death_end_keeps_unit`). In a
+/// high-bridge cell `quirks.crash_end_bridge_height` decides the height it
+/// is put at. For another kind a
 /// shot-down jumpjet's death weapon goes off at the impact point and it
 /// leaves play; one that still lives is destroyed by damage equal to its
 /// health, with the demolition warhead, ignoring defences, with the
 /// no-escape marker and no attacker.
 pub fn impact(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
-    // spec: S-0312 claim 16 (the impact is on the ground: the unit is at the surface under it, which also ends the crash for a unit that a deck crossing stopped above the terrain; the height in a high-bridge cell is an Open question)
-    let surface = w.surface_at(o.pos.x, o.pos.y);
+    let terrain = w.surface_at(o.pos.x, o.pos.y);
+    let high = w.high_bridge(o.pos.cell());
+    let crossed = st(w, id).is_some_and(|j| j.crossed_deck);
+    let infantry = o.kind == Kind::Infantry;
+    let (surface, deck) = if !high {
+        // spec: S-0312 claim 16 (Vehicle and Infantry crash end: put at height 0 above the terrain)
+        (terrain, false)
+    } else if w.rules().quirks.crash_end_bridge_height {
+        if infantry {
+            // spec: S-0312 claim 16 (Infantry crash end: in a high-bridge cell it is put at the deck's height above the terrain without standing on the deck, whether its fall ended by crossing the deck or beneath it)
+            (terrain + BRIDGE_HEIGHT, false)
+        } else {
+            // spec: S-0312 claim 16 (Vehicle crash end: in a high-bridge cell, the terrain beneath the deck, whether its fall ended by crossing the deck or beneath it)
+            (terrain, false)
+        }
+    } else if crossed && matches!(o.kind, Kind::Infantry | Kind::Vehicle) {
+        // spec: S-0312 Edge cases (quirks.crash_end_bridge_height off: at height 0 above the surface its fall ended over: on the deck, with its on-deck state set, when its fall ended by crossing the deck)
+        (terrain + BRIDGE_HEIGHT, true)
+    } else {
+        // spec: S-0312 Edge cases (quirks.crash_end_bridge_height off: on the terrain when its fall ended beneath the deck)
+        (terrain, false)
+    };
     if let Some(ob) = w.obj_mut(id) {
         ob.pos.z = surface;
+        // spec: S-0502 claim 4 (with the on-deck state unset it is listed on the ground layer; with it set, on the deck)
+        ob.layer = if deck { Layer::Deck } else { Layer::Ground };
     }
+    upd(w, id, |j| j.on_deck = deck);
     let at = Pos::new(o.pos.x, o.pos.y, surface);
     if o.kind == Kind::Vehicle {
         if balloon_vehicle(w, id) {
@@ -632,10 +658,12 @@ pub fn impact(w: &mut World, id: ObjectId) {
         crate::combat::death::leave_play(w, id);
         return;
     }
-    if o.kind == Kind::Infantry && damage::dead(&o) {
-        // spec: S-0312 claim 16 (Infantry crash end: put at ground height, the forced request for air-death-end, S-0107 claims 6 and 21; it sets off no death weapon at its crash end)
-        if !crate::infantry::request(w, id, crate::infantry::Seq::AirDeathEnd, true) {
-            // design: Q-3239 interim (what removes a unit whose request is turned down is an Open question of S-0312 claim 16: it leaves play at its crash end with no corpse, as before)
+    if infantry {
+        // spec: S-0312 claim 16 (Infantry crash end: then the forced request for air-death-end, S-0107 claims 6 and 21, for a unit that regained health while it fell as for one without; it sets off no death weapon at its crash end)
+        if !crate::infantry::request(w, id, crate::infantry::Seq::AirDeathEnd, true)
+            && !w.rules().quirks.refused_air_death_end_keeps_unit
+        {
+            // spec: S-0312 Edge cases (quirks.refused_air_death_end_keeps_unit off: a turned-down request removes the unit at its crash end with no corpse; on: nothing removes it there, claim 16)
             crate::combat::death::leave_play(w, id);
         }
         return;
@@ -684,6 +712,28 @@ pub fn crash_end_fires(w: &World, id: ObjectId) -> bool {
         && (crashing(w, id) || (height_above(w, id) > 0 && !seized(w, id)))
 }
 
+/// The crash start of an infantry unit already crashing or crashed (S-0312
+/// claim 16): its passengers die and it makes S-0502 claim 18's empty
+/// destination assignment again; its fall does not start again and it
+/// takes no draws for tumbling.
+fn again(w: &mut World, id: ObjectId, hit: Option<&Hit>) {
+    let none = Hit {
+        amount: 0,
+        warhead: None,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: false,
+        no_escape: false,
+    };
+    // spec: S-0312 claim 16 (an object that starts to crash loses all its passengers, credited to the attacker)
+    crate::transport::kill_passengers(w, id, hit.unwrap_or(&none));
+    // spec: S-0502 claim 18 (starting a crash makes one empty destination assignment at once, inside the hit) and S-0312 claim 16 (that clear comes after the further hit has taken its health to 0, so a failed search there does not destroy it, S-0502 claim 17)
+    if !super::clear_rejected(w, id) {
+        crate::econ::assign_destination(w, id, None);
+    }
+}
+
 /// A jumpjet above the surface that has been killed, or a crash started
 /// without a kill, starts to crash (S-0312 claim 16): the passengers die,
 /// then the three tumbling draws (none for infantry); the fall begins in the
@@ -693,6 +743,12 @@ pub fn start_crash(w: &mut World, id: ObjectId, hit: Option<&Hit>) -> bool {
         return false;
     }
     if crashing(w, id) {
+        let falling =
+            st(w, id).is_some_and(|j| matches!(j.phase, Phase::Crashing | Phase::Crashed));
+        if falling && w.obj(id).is_some_and(|o| o.kind == Kind::Infantry) {
+            // spec: S-0312 claim 16 (Health while it falls: a further killing hit's crash start takes the crash-start effects again, the passengers' deaths and S-0502 claim 18's destination clear, but the unit stays in crashing: its fall is not started again; A turned-down air-death-end request: in crashed above the surface the hit starts a crash which never runs)
+            again(w, id, hit);
+        }
         return true;
     }
     if seized(w, id) {

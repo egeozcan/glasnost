@@ -485,9 +485,10 @@ pub fn update(w: &mut World) {
 
 /// Whether an object is dying while still in play (S-0612 claim 13;
 /// S-0203 claim 6): an infantry unit in its death sequence, a sinking
-/// vessel.
+/// vessel. A killed unit that has regained health is not dying.
 fn dying(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| o.combat.killed) || crate::naval::sinking(w, id)
+    // spec: S-0107 claim 17a (a killed unit with a health of 1 is a living unit for every rule that looks at health; one that plays its death sequence keeps a health of 0)
+    w.obj(id).is_some_and(crate::combat::damage::dead) || crate::naval::sinking(w, id)
 }
 
 /// The objects the sweep examines in cell `c`, layer `l` (claim 12).

@@ -19,6 +19,13 @@ fn j(w: &World, id: ObjectId) -> &JumpState {
     w.obj(id).unwrap().jump.as_ref().unwrap()
 }
 
+/// Whether the unit has reached its crash end: no longer crashing, or
+/// crashed and left in play.
+fn crash_ended(w: &World, id: ObjectId) -> bool {
+    // spec: S-0312 claim 16 (r91, Q-3239: JJDEF's air-death-end entry has no image frames, so its forced request is turned down at the crash end and, with quirks.refused_air_death_end_keeps_unit on, the unit stays in play in crashed)
+    !jump::crashing(w, id) || phase(w, id) == Phase::Crashed
+}
+
 fn kill(w: &mut World, id: ObjectId) {
     let health = w.obj(id).unwrap().health;
     damage::apply(
@@ -119,9 +126,7 @@ fn j31_b_the_held_up_crash_ends_once_the_other_unit_leaves() {
     assert!(jump::crashing(&w, u), "held up");
     glasnost_sim::objects::remove(&mut w, other.unwrap());
     assert!(
-        until(&mut w, 30, |w| w
-            .obj(u)
-            .is_none_or(|_| !jump::crashing(w, u))),
+        until(&mut w, 30, |w| w.obj(u).is_none_or(|_| crash_ended(w, u))),
         "the crash ends within a few ticks"
     );
 }
@@ -133,9 +138,7 @@ fn j31_c_alone_in_its_cell_the_crash_ends() {
     let (u, _) = shot_down(&mut w, false, 50);
     kill(&mut w, u);
     assert!(
-        until(&mut w, 30, |w| w
-            .obj(u)
-            .is_none_or(|_| !jump::crashing(w, u))),
+        until(&mut w, 30, |w| w.obj(u).is_none_or(|_| crash_ended(w, u))),
         "the crash ends within a few ticks"
     );
 }
@@ -173,9 +176,7 @@ fn j31_a_with_the_crash_lookahead_off_the_crash_ends() {
     let (u, _) = shot_down(&mut w, true, 50);
     kill(&mut w, u);
     assert!(
-        until(&mut w, 30, |w| w
-            .obj(u)
-            .is_none_or(|_| !jump::crashing(w, u))),
+        until(&mut w, 30, |w| w.obj(u).is_none_or(|_| crash_ended(w, u))),
         "the crash ends"
     );
 }
