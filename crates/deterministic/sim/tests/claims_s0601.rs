@@ -2014,6 +2014,73 @@ fn s0309_full_controller_does_not_search() {
     assert_eq!(w.obj(c1).unwrap().target, None);
 }
 
+/// A TANK of house `holder` attacking a BOX of house `victim` three cells
+/// away, which a CTRL3 of house `holder` then takes over. With `by_order`
+/// the attack is ordered; otherwise the target and *attack* are given
+/// directly, as a search would. Returns the world, the tank, the box and
+/// the box's health just after the takeover.
+fn attacked_then_taken(holder: u8, victim: u8, by_order: bool) -> (World, ObjectId, ObjectId, i32) {
+    let mut w = testkit::game_with_non_players(&rules(), SIZE, 1);
+    let tank = veh(&mut w, "TANK", holder, 0, 0);
+    let t = veh(&mut w, "BOX", victim, 3, 0);
+    let c = veh(&mut w, "CTRL3", holder, 0, 4);
+    while glasnost_sim::orders::blocked(&w) {
+        testkit::run(&mut w, 1);
+    }
+    if by_order {
+        let o = glasnost_sim::orders::Order::Behaviour {
+            actor: tank,
+            behaviour: Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(t)),
+            dest: None,
+        };
+        assert!(glasnost_sim::orders::issue(&mut w, HouseId(holder), o));
+    } else {
+        let tick = w.tick;
+        let o = w.obj_mut(tank).unwrap();
+        o.beh.force(Behaviour::Attack, tick, false);
+        o.target = Some(Target::Object(t));
+    }
+    assert!(
+        !w.allied(Some(HouseId(holder)), Some(HouseId(victim))),
+        "set-up: enemies"
+    );
+    testkit::run(&mut w, 2);
+    assert_eq!(
+        w.obj(tank).unwrap().target,
+        Some(Target::Object(t)),
+        "set-up"
+    );
+    assert!(mind::take(&mut w, c, t));
+    assert_eq!(owner(&w, t), Some(holder), "set-up: taken");
+    let health = w.obj(t).unwrap().health;
+    (w, tank, t, health)
+}
+
+// spec: S-0309 claim 30 (only a holder that changes owner drops its target; the change of the target's owner is not this claim's), claim 29 (the periodic check drops only on illegal or impossible, every check tick), S-0301 claim 9 (no reason refuses a target for its relation to the holder's owner) and S-0309 claim 25 part k (in our engine the holders of every player house keep an allied target, their own house's included), as claim 31 puts it for a target an owner change made own or allied ("held like any other target"): #453, Q-3298, today's behaviour kept. A player house's attacker keeps the target that its own controller took over, through four check ticks, and goes on firing on it
+#[test]
+fn s0309_issue_453_a_player_attacker_keeps_a_target_its_house_took_over() {
+    // spec: S-0309 claim 29 (the check reads only the held target, whatever gave it: an order or a search)
+    for by_order in [true, false] {
+        let (mut w, tank, t, health) = attacked_then_taken(BETA, ALPHA, by_order);
+        for _ in 0..64 {
+            testkit::run(&mut w, 1);
+            if w.obj(t).is_none() {
+                break;
+            }
+            let o = w.obj(tank).unwrap();
+            let at = (by_order, w.tick);
+            assert_eq!(o.target, Some(Target::Object(t)), "{at:?}");
+            assert_eq!(o.beh.current, Some(Behaviour::Attack), "{at:?}");
+        }
+        assert!(
+            w.obj(t).is_none_or(|o| o.health < health),
+            "by order {by_order}: fired on after the takeover"
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The transport pair (S-0507 claims 4 and 6).
 
