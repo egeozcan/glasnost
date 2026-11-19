@@ -1038,9 +1038,10 @@ impl Special {
                 // design: own AI (#454): a disguiser keeps its building, also while it copies or walks round
                 let kept = self.spy_jobs.jobs.get(&id).map(|j| j.building).or_else(|| {
                     w.obj(id).and_then(|o| match (o.beh.current, o.dest) {
-                        (Some(glasnost_sim::rules::Behaviour::Capture), Some(Target::Object(b))) => {
-                            Some(b)
-                        }
+                        (
+                            Some(glasnost_sim::rules::Behaviour::Capture),
+                            Some(Target::Object(b)),
+                        ) => Some(b),
                         _ => None,
                     })
                 });

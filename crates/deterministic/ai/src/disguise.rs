@@ -125,7 +125,8 @@ impl Watch {
     /// buildings gone or no longer seen.
     pub(crate) fn prune(&mut self, w: &World, house: HouseId) {
         self.jobs.retain(|&id, j| {
-            w.obj(id).is_some_and(|o| o.owner == Some(house) && o.on_map)
+            w.obj(id)
+                .is_some_and(|o| o.owner == Some(house) && o.on_map)
                 && w.obj(j.building).is_some_and(|b| b.on_map && b.health > 0)
                 && crate::in_view(w, house, j.building)
         });
@@ -303,10 +304,14 @@ pub(crate) fn round_cell(
                 CellXY::new(k.x + dx * d, k.y + dy * d)
             })
         })
-        .filter(|&c| {
-            !covered(c) && w.cells.usable(c) && regions::reach_in(w, c, zone) == region
+        .filter(|&c| !covered(c) && w.cells.usable(c) && regions::reach_in(w, c, zone) == region)
+        .map(|c| {
+            (
+                cost(from, c) + cost(c, to),
+                steps(from, c) + steps(c, to),
+                c,
+            )
         })
-        .map(|c| (cost(from, c) + cost(c, to), steps(from, c) + steps(c, to), c))
         .filter(|&(n, _, _)| n < straight)
         .min_by_key(|&(n, len, c)| (n, len, c.y, c.x))
         .map(|(_, _, c)| c)

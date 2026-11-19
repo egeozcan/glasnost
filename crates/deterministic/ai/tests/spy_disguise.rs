@@ -231,12 +231,7 @@ fn enters(o: &Order, actor: ObjectId, b: ObjectId) -> bool {
 fn line(a: CellXY, b: CellXY) -> Vec<CellXY> {
     let n = (b.x - a.x).abs().max((b.y - a.y).abs()).max(1);
     (0..=n)
-        .map(|i| {
-            CellXY::new(
-                a.x + (b.x - a.x) * i / n,
-                a.y + (b.y - a.y) * i / n,
-            )
-        })
+        .map(|i| CellXY::new(a.x + (b.x - a.x) * i / n, a.y + (b.y - a.y) * i / n))
         .collect()
 }
 
@@ -294,7 +289,9 @@ fn a_spy_goes_in_once_disguised() {
         }
     }
     let trace = trace.join("\n");
-    let d = sent.expect("the spy was sent into the building").expect("disguised");
+    let d = sent
+        .expect("the spy was sent into the building")
+        .expect("disguised");
     assert_eq!(d.house, Some(HouseId(1)), "{trace}");
     assert!(w.obj(s).is_none_or(|o| !o.on_map), "it went in: {trace}");
 }
@@ -330,7 +327,10 @@ fn a_spy_whose_disguise_a_hit_cleared_disguises_again() {
     let mut br = Brain::new(&w, &fixture::map(), ALPHA);
     run_to_think(&mut w, 2);
     let out = br.think(&w);
-    assert!(out.iter().any(|o| enters(o, s, b)), "disguised, it goes in: {out:?}");
+    assert!(
+        out.iter().any(|o| enters(o, s, b)),
+        "disguised, it goes in: {out:?}"
+    );
     for o in out {
         orders::issue(&mut w, ALPHA, o);
     }
@@ -462,7 +462,14 @@ fn a_spy_avoids_only_detectors_it_sees() {
     let b2 = orders_to(&Brain::new(&shown, &fixture::map(), ALPHA).think(&shown), s);
     let moves = |v: &[Order]| {
         v.iter().any(|o| {
-            matches!(o, Order::Behaviour { behaviour: Behaviour::Move, dest: Some(Target::Cell(_)), .. })
+            matches!(
+                o,
+                Order::Behaviour {
+                    behaviour: Behaviour::Move,
+                    dest: Some(Target::Cell(_)),
+                    ..
+                }
+            )
         })
     };
     assert!(!moves(&a), "unseen, the spy goes straight: {a:?}");
