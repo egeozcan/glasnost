@@ -56,14 +56,14 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0307](combat/S-0307-range.md) | Weapon range test | combat | 24 | approved | — |
 | [S-0315](combat/S-0315-suppression-panic.md) | Suppression and panic (infantry fear, prone and panic in combat; parasite suppression) | combat | 9 | approved | — |
 | [S-0313](combat/S-0313-firing-positions.md) | Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack, shot animation position) | combat | 42 | approved | — |
-| [S-0311](combat/S-0311-veterancy.md) | Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience) | combat | 13 | approved | — |
+| [S-0311](combat/S-0311-veterancy.md) | Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience) | combat | 14 | approved | — |
 | [S-0401](economy/S-0401-ore-and-gems.md) | Ore and gems (resource cells, bales and value, growth, spread, ore mines) | economy | 17 | approved | — |
-| [S-0406](structures/S-0406-building-placement.md) | Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades) | structures | 19 | approved | — |
+| [S-0406](structures/S-0406-building-placement.md) | Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades) | structures | 20 | approved | — |
 | [S-0412](simulation/S-0412-skirmish-setup-rules.md) | Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings) | simulation | 14 | approved | — |
 | [S-0413](simulation/S-0413-country-bonuses.md) | Country bonuses (what each country field does, which spec owns it, and the fields with no effect) | simulation | 6 | approved | — |
 | [S-0414](simulation/S-0414-victory-and-defeat.md) | Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders) | simulation | 30 | approved | — |
 | [S-0416](ui/S-0416-credit-display.md) | Credit display (the ticking credits counter on the sidebar) | ui | 3 | approved | — |
-| [S-0503](movement/S-0503-hover-amphibious.md) | Hover and amphibious movement | movement | 29 | approved | — |
+| [S-0503](movement/S-0503-hover-amphibious.md) | Hover and amphibious movement | movement | 30 | approved | — |
 | [S-0508](structures/S-0508-garrisons.md) | Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing) | structures | 39 | approved | — |
 | [S-0509](structures/S-0509-engineers-capture.md) | Engineers and capture | structures | 7 | approved | — |
 | [S-0512](superweapons/S-0512-superweapon-charge.md) | "Superweapons: charge and readiness" | superweapons | 21 | approved | — |
@@ -98,14 +98,14 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0603](structures/S-0603-grinder.md) | Grinder (recycling units into credits) | structures | 9 | approved | — |
 | [S-0606](structures/S-0606-vehicle-bunker.md) | Vehicle bunker | structures | 14 | approved | — |
 | [S-0507](combat/S-0507-transports.md) | Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers) | combat | 12 | approved | — |
-| [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 84 | approved | — |
+| [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 87 | approved | — |
 | [S-0212](movement/S-0212-pathfinding.md) | Pathfinding (observable behaviour) | movement | 107 | approved | — |
 | [S-0308](combat/S-0308-weapon-choice.md) | Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons) | combat | 17 | approved | — |
 | [S-0303](combat/S-0303-area-damage.md) | Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects) | combat | 32 | approved | — |
 | [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 139 | approved | — |
 | [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 34 | approved | — |
-| [S-0309](combat/S-0309-target-acquisition.md) | Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching) | combat | 144 | approved | — |
-| [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 67 | approved | — |
+| [S-0309](combat/S-0309-target-acquisition.md) | Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching) | combat | 145 | approved | — |
+| [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 68 | approved | — |
 | [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 58 | approved | — |
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 6 | approved | — |
 | [S-0607](combat/S-0607-magnetic-lift.md) | Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall) | combat | 52 | approved | — |

@@ -1,9 +1,9 @@
 ---
 id: Q-3263
 title: A hovering vehicle's repeated assignment and the point of an object destination
-status: open
+status: answered
 related: [S-0503, S-0502, S-0314, S-0606]
-answered-by: []
+answered-by: [S-0503]
 ---
 
 ## Need

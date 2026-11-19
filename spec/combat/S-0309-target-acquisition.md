@@ -2,15 +2,15 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 144
+revision: 145
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-14
+approved-on: 2026-11-19
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
 Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712, Q-2747, Q-2801, Q-2841, Q-2987,
-Q-2988, Q-3061, Q-3102, Q-3109]
+Q-2988, Q-3061, Q-3102, Q-3109, Q-3261]
 supersedes: []
 ---
 
@@ -2326,6 +2326,28 @@ index 1. This is a design rule, not an additional claim about the original.
       processing makes. A building that is ready at the *guard* request already has *guard*
       current inside the change. The original's result, a building handed over during its build-up
       comes into service at once, is kept, with no switch.
+
+      The cases above are for a building in its construction state. The building a place order
+      names is out of that state in its factory break-off window (S-0406 claim 17), with
+      *construction* current and not yet processed or still queued, and a change in that window
+      reads differently. In the window its ready mark is clear between two of its turns: the mark
+      is clear at entry, the per-tick start that makes *construction* current clears it (S-0215
+      claim 11), and a building turn in the window whose body sets it processes *construction* in
+      that turn and so ends the window. The *guard* request therefore finds the building not
+      ready, and *guard* is queued: it replaces a still-queued *construction*, and a current
+      *construction* stays current until the next start. The fall-back's idle-body request asks
+      for the state the building already has, so it changes nothing (S-0108 claim 6). At the
+      building's next turn the first per-tick start applies, since the building is out of its
+      construction state, and finds the ready mark that the grand opening set: it makes *guard*
+      current, and *guard* is first processed on that same turn (S-0215 claim 3a), whatever the
+      idle range. *construction* is never processed, so the build-up does not restart, and the
+      building keeps the idle body from the break-off with its stage and delay unchanged, since
+      *guard*'s first processing also asks for the state it already has. The change ends the
+      window: from it the building is construction-completed, so it draws its body sprite (S-0108
+      claim 1), and it gets no free unit, as in the cases above. Until that next start, a rule
+      that reads the building's current behaviour sees *construction* where it was current. The
+      result is the same with *construction* current or still queued, and it too is kept with no
+      switch.
     - *A vehicle docked at a repair depot.* A docked vehicle that stands still follows the depot
       (S-0509 claim 14). Its *guard* request finds it ready, so *guard* becomes current, and its
       fall-back is the ordinary one, which leaves it where it stands with no destination. The
@@ -2366,6 +2388,8 @@ index 1. This is a design rule, not an additional claim about the original.
       first processing, and no setup here times a change into it), the guard-spot rules of a
       sale after the change, a building whose *construction* is still queued or not yet processed
       at the change (each a window of at most one tick that no setup times a change into), a
+      change in the factory break-off window of S-0406 claim 17 (with the absent-key idle range
+      that window lasts about one tick, and no setup here times a change into it), a
       depot that is not ready at the change, a simple-deployer vehicle in
       *unload*, the harvester docked but not yet unloading (no setup times a change into that window
       of a few ticks), a vehicle of another locomotor on a factory's exit, the factory's own
@@ -2400,8 +2424,10 @@ index 1. This is a design rule, not an additional claim about the original.
       its build-down; the queued *unload* replaced, the unit left at its exit point, the next
       release taking its contact and the door left open; the depot's repair ended and the vehicle
       kept docked in *guard*; the grand opening at the change, the cut build-up and the missing free
-      unit; the effects at a psychic domination; the naval vehicle factory's rally point given
-      again; the *rescue* rule with *wait* current. Low for the stalled sale under an idle range of
+      unit; the change in the factory break-off window, with *guard* current at the next turn's
+      first start, no processing of *construction* and the idle body kept; the effects at a
+      psychic domination; the naval vehicle factory's rally point given again; the *rescue*
+      rule with *wait* current. Low for the stalled sale under an idle range of
       one stage with a positive delay, for the depot that is not ready at the change, which goes on
       repairing, and for the cases left to the Open questions: where the naval vehicle factory's new
       rally point lies, and what the factory's apron requests and its next unloading do with a unit
