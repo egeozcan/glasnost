@@ -2909,14 +2909,19 @@ fn claim_25_issue_451_old_top_left_off_reaches_the_far_field() {
     until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
     let v = vehicle_master(&w);
     let o = w.obj(v).unwrap();
-    // spec: S-0415 claim 10 (the vehicle appears at the return cell, now also its destination)
+    // spec: S-0415 claim 10 (the vehicle appears at the return cell, now also its destination) and S-0402 claim 25 case (a) (with no active track that cell destination goes at the vehicle's first update, which can fall in the conversion tick)
     assert_eq!(o.pos.cell(), ret);
-    assert_eq!(o.dest, Some(Target::Cell(ret)));
+    assert!(
+        o.dest.is_none() || o.dest == Some(Target::Cell(ret)),
+        "{:?}",
+        o.dest
+    );
     // spec: S-0402 claim 25 case (a) (the vehicle never leaves the cell before its redeployment near the far field) and claim 22 (it deploys there)
     let next = next_building(&mut w, Some(b), 1500);
     let n = w.obj(next).unwrap().pos.cell();
+    let f = at(10, 8);
     assert!(
-        (n.x - 10).abs() <= 4 && (n.y - 8).abs() <= 4 && n.x > ret.x && n.y > ret.y,
+        (n.x - f.x).abs() <= 4 && (n.y - f.y).abs() <= 4 && n.x > ret.x && n.y > ret.y,
         "redeployed at {n:?}, from {a:?}"
     );
     until(&mut w, 1500, |w| left_in(w, 10, 8) < 9).expect("the far field is mined");
