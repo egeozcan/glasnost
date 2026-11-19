@@ -148,6 +148,10 @@ const LAND_RINGS: (i32, i32) = (4, 9); // nocite: tuning of our own opponent
 /// paradrop is aimed.
 const DROP_RINGS: (i32, i32) = (3, 8); // nocite: tuning of our own opponent
 
+/// At easy, the house acts on one of every this many of its think ticks
+/// (#449, B10).
+pub const EASY_EVERY: i32 = 3; // nocite: design: own AI (#449): easy acts at a third of the think rate
+
 /// The default plan of an AI house: types by role, two harvesters, waves of
 /// six (tuning of our own opponent).
 pub fn default_plan() -> Plan {
@@ -343,6 +347,13 @@ impl Brain {
         thinks: bool,
         level: AiDifficulty,
     ) -> Vec<Order> {
+        // design: own AI (#449, B10): at easy the house acts on one of every `EASY_EVERY` of its think ticks; on the others it plays as between thinks, so it builds, sends its army and answers a raid on its base later, as a slow player does. Read from the tick alone: no state is added, and normal and hard think as before
+        let thinks = thinks
+            && (level != AiDifficulty::Easy
+                || w.tick
+                    .div_euclid(crate::scripted::THINK_PERIOD)
+                    .rem_euclid(EASY_EVERY)
+                    == 0);
         let on = p.on();
         let mark = |p: &mut P, part: &'static str| {
             if on {
