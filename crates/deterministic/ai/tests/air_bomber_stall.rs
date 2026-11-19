@@ -32,6 +32,10 @@ const PLANT: (i32, i32) = (-10, -28); // nocite: a synthetic scene
 /// Where the bomber starts, from the plant: north of it.
 const NORTH: (i32, i32) = (0, -4); // nocite: a synthetic scene
 
+/// Where the bomber starts, from the plant: west of it, so that it flies in
+/// towards map east.
+const WEST: (i32, i32) = (-4, 0); // nocite: a synthetic scene
+
 /// The air_common ruleset with BOMB: the mobile-fire flag `mobile` and the
 /// weapon's fire-while-moving flag `fwm` (absent: the default).
 fn rules(mobile: bool, fwm: Option<bool>) -> Arc<SimRules> {
@@ -69,18 +73,29 @@ fn rules(mobile: bool, fwm: Option<bool>) -> Arc<SimRules> {
     Arc::new(SimRules::new(&r, kit::MAP_NAME))
 }
 
-/// The scene: the hovering bomber north of Beta's plant, both shown to
-/// Alpha.
-fn scene(mobile: bool, fwm: Option<bool>) -> (World, ObjectId, ObjectId) {
+/// The scene: the hovering bomber at `from` off Beta's plant, both shown
+/// to Alpha. Alpha's start discs are taken out of the game first, so that
+/// none of them holds the bomber's hover slot over the plant (S-0502 claim
+/// 12): the bomber is Alpha's only flier.
+fn scene(mobile: bool, fwm: Option<bool>, from: (i32, i32)) -> (World, ObjectId, ObjectId) {
     let mut w = world_with(rules(mobile, fwm));
+    let discs: Vec<ObjectId> = w
+        .objects
+        .iter()
+        .filter(|(id, o)| o.owner == Some(ALPHA) && o.on_map && jump::is_jumpjet(&w, **id))
+        .map(|(id, _)| *id)
+        .collect();
+    for d in discs {
+        glasnost_sim::objects::remove(&mut w, d);
+    }
     let p = spawn(&mut w, "POWR", Kind::Building, 1, PLANT.0, PLANT.1);
     let b = spawn(
         &mut w,
         "BOMB",
         Kind::Vehicle,
         0,
-        PLANT.0 + NORTH.0,
-        PLANT.1 + NORTH.1,
+        PLANT.0 + from.0,
+        PLANT.1 + from.1,
     );
     jump::start_in_flight(&mut w, b, Phase::Hovering, HOVER);
     let c = w.obj(b).unwrap().pos.cell();
@@ -96,6 +111,7 @@ fn play(w: &mut World, b: ObjectId, ticks: i32) -> (Vec<(i32, Order)>, bool, Str
     let mut br = Brain::new(w, &kit::map(), ALPHA);
     let mut given = Vec::new();
     let mut trace = Vec::new();
+    let mut fired = false;
     for _ in 0..ticks {
         let out = br.think(w);
         for o in orders_to(&out, b) {
@@ -115,8 +131,9 @@ fn play(w: &mut World, b: ObjectId, ticks: i32) -> (Vec<(i32, Order)>, bool, Str
             orders::issue(w, ALPHA, o);
         }
         testkit::run(w, 1);
+        // the bomber may fall with the plant it bombs, so its shots are watched on every tick
+        fired |= w.obj(b).is_some_and(|o| o.last_fired > since);
     }
-    let fired = w.obj(b).is_some_and(|o| o.last_fired > since);
     if let Some(x) = w.obj(b) {
         let t = x.target.and_then(|t| match t {
             Target::Object(t) => w.obj(t).map(|o| (o.kind, o.type_index, o.owner, o.pos.cell())),
@@ -170,7 +187,7 @@ const MOVED_WITHIN: i32 = 1500; // nocite: a synthetic scene
 // design: own AI (#445), S-0310 claim 7 and S-0307 claim 18 (a balloon-hover type without the mobile-fire flag gets *moving* while its target is its destination, so no attack order makes it fire): the brain sees its bomber hold over the plant without a shot and moves it away, and over a long window sends it at the plant no more than twice.
 #[test]
 fn an_ai_bomber_that_never_fires_over_its_target_is_moved_on() {
-    let (mut w, b, p) = scene(false, None);
+    let (mut w, b, p) = scene(false, None, NORTH);
     let plant = w.reference_point(p).cell();
     let start = w.tick;
     let (given, fired, trace) = play(&mut w, b, 9000);
@@ -195,7 +212,7 @@ fn an_ai_bomber_that_never_fires_over_its_target_is_moved_on() {
 // design: own AI (#445) and S-0502 claim 10 (Q-3257: over the plant's reference point the plant lies straight below the bomber, a direction of map east, so a bomb without the fire-while-moving flag falls only after an approach flown towards map east): a bomber that holds over the plant from the north without a shot is sent round to the west and in again, and bombs it.
 #[test]
 fn an_ai_bomber_whose_bomb_needs_its_heading_comes_again_from_the_west() {
-    let (mut w, b, p) = scene(true, Some(false));
+    let (mut w, b, p) = scene(true, Some(false), NORTH);
     let plant = w.reference_point(p).cell();
     let start = w.tick;
     let (given, fired, trace) = play(&mut w, b, 3000);
@@ -209,11 +226,14 @@ fn an_ai_bomber_whose_bomb_needs_its_heading_comes_again_from_the_west() {
     assert_eq!(attacks_on(&given, p), 2, "in again: {trace}");
 }
 
-// design: own AI (#445): a bomber that fires over the plant is not moved on.
+// design: own AI (#445) and S-0502 claim 10 (Q-3257: flown in towards map east, its body stays on the plant below it): a bomber that keeps bombing the plant is not moved on.
 #[test]
 fn an_ai_bomber_that_fires_is_left_alone() {
-    let (mut w, b, _) = scene(true, None);
-    let (given, fired, trace) = play(&mut w, b, 1500);
+    let (mut w, b, _) = scene(true, None, WEST);
+    // a run that ends before the plant falls to its bombs
+    let (given, fired, trace) = play(&mut w, b, 600);
     assert!(fired, "{trace}");
+    let last = w.obj(b).map_or(i32::MIN, |o| o.last_fired);
+    assert!(w.tick - last <= 300, "still bombing: {trace}");
     assert!(moves(&given).is_empty(), "{trace}");
 }
