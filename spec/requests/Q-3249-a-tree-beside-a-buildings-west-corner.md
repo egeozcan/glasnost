@@ -1,9 +1,9 @@
 ---
 id: Q-3249
 title: What the game shows where a tree beside a large building's west corner overlaps the building's body
-status: open
+status: answered
 related: [S-0102, S-0112]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need
