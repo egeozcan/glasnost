@@ -110,7 +110,7 @@ fn r20_construction_current_in_the_window_the_change_ends_it() {
     assert_eq!(o.beh.current, Some(Behaviour::Construction));
     assert_eq!(o.econ.construction.first, None, "not yet processed");
     assert!(placement::in_break_off_window(o), "in the window");
-    let idle = o.econ.idle_body.clone();
+    let idle = o.econ.idle_body;
     assert!(idle.is_some(), "the break-off's idle body");
     ownership::change(&mut w, b, Some(B), Cause::Trigger);
     let o = w.obj(b).unwrap();
@@ -151,7 +151,7 @@ fn r20_construction_queued_in_the_window_the_change_ends_it() {
     let o = w.obj(b).unwrap();
     assert_eq!(beh(&w, b), (None, Some(Behaviour::Construction)));
     assert!(placement::in_break_off_window(o), "in the window");
-    let idle = o.econ.idle_body.clone();
+    let idle = o.econ.idle_body;
     ownership::change(&mut w, b, Some(B), Cause::Trigger);
     let o = w.obj(b).unwrap();
     assert_eq!(o.beh.queued, Some(Behaviour::Guard), "replaced by guard");
