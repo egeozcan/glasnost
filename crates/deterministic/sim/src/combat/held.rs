@@ -26,8 +26,10 @@ pub enum Leaving {
     Destroyed,
     /// It goes off the map (a transport, a building entered, a master).
     OffMap,
-    /// It goes inside (S-0507 claim 6a): it boards a transport of either
-    /// kind or goes into a building that takes it off the map. Otherwise as
+    /// It goes inside (S-0507 claim 6a, r12): it boards a transport of
+    /// either kind, goes into a building as an occupant, into an absorber,
+    /// as a slave into its master, as a parasite into its host when it
+    /// fires, or as a spawned aircraft back into its spawner. Otherwise as
     /// [`Leaving::OffMap`].
     Inside,
     /// It is removed (a crush included).

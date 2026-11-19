@@ -507,7 +507,7 @@ pub const SELLING_DELAY: i32 = 1;
 /// The fewest stages of a range whose report falls on its last stage
 /// (S-0406 claims 15 and 18, S-0408 claim 17).
 // spec: S-0406 F6 and S-0408 F4 (n ≥ 2 stages)
-const MULTI_STAGE: i32 = 2;
+pub(crate) const MULTI_STAGE: i32 = 2;
 
 /// A building type's construction range (S-0108 claim 5): its stage count
 /// *n* and its stage delay *d_b* in ticks.

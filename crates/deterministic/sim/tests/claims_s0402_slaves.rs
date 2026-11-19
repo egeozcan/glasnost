@@ -2750,3 +2750,26 @@ fn s0107_claim_21a_completion_loops_while_harvesting() {
     glasnost_sim::infantry::sequence_turn(&mut w, s, false, false);
     assert_eq!(seq_state(&w, s).seq, Some(Seq::Stand));
 }
+
+// spec: S-0507 claim 6a (r12, Q-3237: a slave going inside its master, here a deployed building, S-0402 claim 14, is going inside: every vehicle and infantry unit that holds it as its destination loses it at that moment)
+#[test]
+fn s0507_claim_6a_a_delivered_slave_is_lost_as_a_destination() {
+    let mut r = rules();
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("CART".into());
+    r.sim.vehicles.insert("CART".into(), wheel());
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    until(&mut w, 800, |w| {
+        delivery_ready(w, b).is_some() && w.tick == group(w, b).next_update
+    })
+    .expect("a slave ready for the due update");
+    let s = delivery_ready(&w, b).unwrap();
+    let h = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, at(-6, 6), 0);
+    glasnost_sim::econ::assign_destination(&mut w, h, Some(Target::Object(s)));
+    testkit::run(&mut w, 1);
+    assert!(!w.obj(s).unwrap().on_map, "void: not delivered");
+    assert_eq!(w.obj(h).unwrap().dest, None, "the holder lost it");
+}

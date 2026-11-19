@@ -1278,6 +1278,12 @@ pub fn heading_point(w: &World, id: ObjectId) -> Option<Pos> {
         )),
         // spec: S-0314 claim 18 (a vehicle in depot contact heads for the docking point, not the building's position)
         Target::Object(t) => {
+            if w.obj(t).is_some()
+                && let Some(p) = crate::hover::taken_object_point(w, id, t)
+            {
+                // spec: S-0503 claim 20 (r29, Q-3235: a hovering vehicle's searches, S-0212 claims 20 to 23, look for D's cell, not the cell the object is in at the time of the search)
+                return Some(p);
+            }
             // spec: S-0606 claim 4 (a vehicle approaching a bunker heads for the docking point)
             crate::depot::heading_point(w, id, t)
                 .or_else(|| crate::structures::bunker::heading_point(w, id, t))

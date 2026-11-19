@@ -491,6 +491,7 @@ fn replace(w: &mut World, b: &StartingBuilding) {
     }
     let lifted = occupants(w, &cells);
     for d in &lifted {
+        // spec: S-0507 claim 6a (r12: the claim covers going inside only, in the ways it lists; this lift is none of them, so the unit's holders keep it as their destination)
         crate::objects::take_inside(w, d.id);
     }
     // spec: S-0524 claim 13 (a missing building is a fresh object at full type strength, not the former object's saved state)

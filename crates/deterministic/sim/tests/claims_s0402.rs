@@ -605,6 +605,60 @@ fn claim_10_acceptance() {
     assert_eq!(harvest::choose_refinery(&mut w, b, true), None);
 }
 
+/// A REFN put on the map at `refinery_cell()` as a place order puts the
+/// building it names, before the turn pass of its first turn *E*, and run
+/// through *E*: its factory break-off window has begun (S-0406 claim 17).
+/// `buildup`: REFN with a build-up sprite of 10 image frames (n = 5, a
+/// positive delay, S-0108 claim 5), whose construction range does not set
+/// the mark on *E*, so *construction* is still queued; without one its
+/// zero-delay range sets the mark on *E* and *construction* is current.
+fn refinery_in_its_window(buildup: bool) -> (World, ObjectId) {
+    let mut r = ruleset();
+    if buildup {
+        let b = r.sim.buildings.get_mut("REFN").unwrap();
+        b.econ.buildup = Some(true);
+        b.econ.buildup_frames = Some(10);
+    }
+    let mut w = game(&r);
+    testkit::run(&mut w, 4);
+    let t = w
+        .rules()
+        .index_of(glasnost_sim::rules::Kind::Building, "REFN")
+        .unwrap();
+    let id = glasnost_sim::objects::create(
+        &mut w,
+        glasnost_sim::rules::Kind::Building,
+        t,
+        Some(HouseId(0)),
+    );
+    glasnost_sim::econ::placement::put_on_map(&mut w, id, refinery_cell(), true);
+    testkit::run(&mut w, 1);
+    let o = w.obj(id).unwrap();
+    assert!(
+        o.econ.idle_body.is_some(),
+        "in the factory break-off window"
+    );
+    assert!(o.econ.construction.building_up);
+    assert_eq!(o.econ.construction.first, None);
+    (w, id)
+}
+
+// spec: S-0402 claim 10 and S-0406 claim 17 and Changes for other specs (r19, Q-3243: in its factory break-off window, with construction queued, the building a place order names is out of its construction state and a refinery there accepts; with construction current there it refuses, as in its construction state) (#440)
+#[test]
+fn claim_10_acceptance_in_the_factory_break_off_window() {
+    let (mut w, refn) = refinery_in_its_window(true);
+    assert_eq!(w.obj(refn).unwrap().beh.current, None);
+    let b = place_vehicle(&mut w, "HARV", 0, at(0, 3), 0);
+    assert_eq!(harvest::choose_refinery(&mut w, b, false), Some(refn));
+    let (mut w, refn) = refinery_in_its_window(false);
+    assert_eq!(
+        w.obj(refn).unwrap().beh.current,
+        Some(Behaviour::Construction)
+    );
+    let b = place_vehicle(&mut w, "HARV", 0, at(0, 3), 0);
+    assert_eq!(harvest::choose_refinery(&mut w, b, false), None);
+}
+
 /// A harvester docked at REFN (contact, slot held) with `load`, facing
 /// `facing`, in unload.
 fn docked(w: &mut World, load: Vec<i32>, facing: u16) -> (ObjectId, ObjectId) {

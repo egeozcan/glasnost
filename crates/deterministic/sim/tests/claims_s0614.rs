@@ -2112,3 +2112,16 @@ fn claim_25_save_load_mid_hold() {
         assert_eq!(grabs(&l), grabs(&w));
     }
 }
+
+// spec: S-0507 claim 6a (r12, Q-3237: a parasite going inside its host when it fires its latching weapon, S-0614 claim 1, is going inside: every vehicle and infantry unit that holds it as its destination loses it at that moment)
+#[test]
+fn s0507_claim_6a_a_firing_parasite_is_lost_as_a_destination() {
+    let mut w = game();
+    let host = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(3, 0), 0);
+    let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+    let h = spawn(&mut w, Kind::Vehicle, "BUGGY", 0, cell(-6, 4), 0);
+    glasnost_sim::econ::assign_destination(&mut w, h, Some(Target::Object(p)));
+    assert!(fire::shot(&mut w, p, 0, Target::Object(host)));
+    assert!(!w.obj(p).unwrap().on_map, "void: still on the map");
+    assert_eq!(w.obj(h).unwrap().dest, None, "the holder lost it");
+}

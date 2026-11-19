@@ -617,7 +617,7 @@ fn go_in(w: &mut World, u: ObjectId, b: ObjectId, infantry: bool) {
             pos,
         });
     }
-    // spec: S-0605 claims 7 and 9 (it leaves the map and play; its destination is cleared); S-0507 claim 6a and Q-3237 (a building that takes it off the map: going inside, its holders lose it as their destination)
+    // spec: S-0605 claims 7 and 9 (it leaves the map and play; its destination is cleared); S-0507 claim 6a (r12, Q-3237: going into an absorber, as an infantry unit or as a vehicle, is going inside: its holders lose it as their destination)
     crate::objects::go_inside(w, u);
     let keep = w.rules().quirks.enter_nearest_survives_absorption;
     if let Some(ob) = w.obj_mut(u) {

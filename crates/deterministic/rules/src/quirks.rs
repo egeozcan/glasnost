@@ -1302,10 +1302,10 @@ pub struct Quirks {
     // spec: S-0415 claim 9; S-0408
     #[serde(default = "on")]
     pub packup_release_by_guard_spot: bool,
-    /// A placed building's build-up runs once before *construction* becomes current and again after (off: the place order sets the ready mark at entry, as a deploy does).
-    // spec: S-0406 claim 17, F7 and Edge cases
+    /// A filling building and a restored replacement get no factory break-off, so their build-up runs twice (off: they get the break-off of the building a place order names, and run it once).
+    // spec: S-0406 claim 17, F7 and Edge cases (a building with no factory break-off runs its build-up twice; default on)
     #[serde(default = "on")]
-    pub placed_buildup_twice: bool,
+    pub buildup_twice_without_break_off: bool,
     /// A positive-delay construction range of one stage or fewer never reports completion (off: it reports d_b ticks after the range starts).
     // spec: S-0406 claim 18 and Edge cases
     #[serde(default = "on")]
@@ -2687,7 +2687,7 @@ impl Default for Quirks {
             nominal_survivor_count: true,
             wall_sale_no_refund: true,
             packup_release_by_guard_spot: true,
-            placed_buildup_twice: true,
+            buildup_twice_without_break_off: true,
             single_stage_buildup_never_completes: true,
             gap_radius_wrap: true,
             sight_bonus_wrap: true,
@@ -3734,7 +3734,10 @@ impl Quirks {
                 "packup_release_by_guard_spot",
                 self.packup_release_by_guard_spot,
             ),
-            ("placed_buildup_twice", self.placed_buildup_twice),
+            (
+                "buildup_twice_without_break_off",
+                self.buildup_twice_without_break_off,
+            ),
             (
                 "single_stage_buildup_never_completes",
                 self.single_stage_buildup_never_completes,

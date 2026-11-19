@@ -11,7 +11,7 @@ use glasnost_sim::econ::{TypeRef, placement};
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit;
-use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
+use glasnost_sim::world::{HouseId, ObjectId, Pos, Target, World};
 
 const SIZE: i32 = 24;
 const A: HouseId = HouseId(0);
@@ -71,7 +71,7 @@ fn placed(r: &Ruleset) -> (World, ObjectId) {
     (w, id)
 }
 
-// spec: S-0213 claim 10 (the deploy order's actor must not be under construction) and S-0406 claim 17 (the construction state: no current behaviour, construction queued, ended by the build-up's handover) (#299)
+// spec: S-0213 claim 10 (the deploy order's actor must not be under construction) and S-0406 claim 17 (the construction state, ended by the build-up's handover; r19: for the building a place order names it resumes at C, which ends the factory break-off window, with construction current) (#299, #440)
 #[test]
 fn deploy_order_to_a_building_under_construction() {
     let r = rules();
@@ -81,11 +81,19 @@ fn deploy_order_to_a_building_under_construction() {
     testkit::run(&mut w, 300);
     assert!(!w.obj(id).unwrap().econ.construction.building_up);
 
-    // A deploy order in the construction state.
+    // A deploy order in the construction state: from C on, after the
+    // factory break-off window (S-0406 claim 17, r19), construction current.
     let (mut w, id) = placed(&r);
+    for _ in 0..20 {
+        if w.obj(id).unwrap().econ.construction.first.is_some() {
+            break;
+        }
+        glasnost_sim::tick::step(&mut w);
+    }
     let o = w.obj(id).unwrap();
-    assert_eq!(o.beh.current, None);
-    assert_eq!(o.beh.queued, Some(Behaviour::Construction));
+    assert!(o.econ.construction.first.is_some(), "C");
+    assert!(placement::in_construction_state(o));
+    assert_eq!(o.beh.current, Some(Behaviour::Construction));
     assert!(orders::issue(&mut w, A, Order::Deploy { actor: id }));
     glasnost_sim::tick::step(&mut w);
     let o = w.obj(id).unwrap();
@@ -94,11 +102,83 @@ fn deploy_order_to_a_building_under_construction() {
     let o = w.obj(id).unwrap();
     assert_eq!(
         after,
-        (None, Some(Behaviour::Construction)),
-        "the deploy order leaves the queued construction alone"
+        (Some(Behaviour::Construction), None),
+        "the deploy order leaves the construction alone"
     );
     assert!(
         !o.econ.construction.building_up,
         "the construction state ends as without the order"
     );
+}
+
+/// BIG placed as a place order puts the building it names (before the
+/// turn pass of its first turn *E*), given `order` before *E* and run
+/// through *E*. Orders take effect after the turn pass (S-0203 claim 7), so
+/// the order takes effect in *E*'s orders part, in the factory break-off
+/// window (S-0406 claim 17), which has begun at the end of BIG's update in
+/// *E*. `buildup`: BIG with its build-up sprite (n = 5, a positive delay),
+/// whose construction range does not set the mark on *E*, so
+/// *construction* is still queued; without one its zero-delay construction
+/// range sets the mark on *E* and *construction* is current from *E*'s
+/// second start. Returns the world, BIG and *E*.
+fn in_the_window(buildup: bool, before: fn(&mut World, ObjectId)) -> (World, ObjectId, i32) {
+    let mut r = rules();
+    if !buildup {
+        r.sim.buildings.get_mut("BIG").unwrap().econ.buildup = Some(false);
+    }
+    let (mut w, id) = placed(&r);
+    before(&mut w, id);
+    let e = w.tick;
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(id).unwrap();
+    assert!(
+        o.econ.idle_body.is_some(),
+        "in the factory break-off window"
+    );
+    assert!(o.econ.construction.building_up);
+    assert_eq!(o.econ.construction.first, None);
+    let current = if buildup {
+        None
+    } else {
+        Some(Behaviour::Construction)
+    };
+    assert_eq!(o.beh.current, current);
+    (w, id, e)
+}
+
+// spec: S-0213 claim 10 and S-0406 claim 17 and Changes for other specs (r19, Q-3243: in its factory break-off window, with construction queued, the building a place order names is outside its construction state and claim 10 applies as it reads: the deploy order queues unload in place of the queued construction; with construction current there it refuses the order, as in its construction state) (#440)
+#[test]
+fn deploy_order_in_the_factory_break_off_window() {
+    let deploy: fn(&mut World, ObjectId) = |w, actor| {
+        assert!(orders::issue(w, A, Order::Deploy { actor }));
+    };
+    let (w, id, _) = in_the_window(true, deploy);
+    let o = w.obj(id).unwrap();
+    assert_eq!(placement::seen_behaviour(o), Some(Behaviour::Unload));
+    assert_eq!(o.econ.construction.first, None, "no first processing");
+    let (mut w, id, e) = in_the_window(false, deploy);
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(id).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Construction), "refused");
+    // spec: S-0406 claim 17 (construction current in the window: C on the next turn)
+    assert_eq!(o.econ.construction.first, Some(e + 1));
+}
+
+// spec: S-0213 claim 8, S-0215 claim 12 and S-0406 claim 17 and Changes for other specs (r19, Q-3243: in its factory break-off window, with construction queued, the building a place order names is outside its construction state and the stop order applies: its target becomes nothing; with construction current there the stop order does nothing, as in its construction state) (#440)
+#[test]
+fn stop_order_in_the_factory_break_off_window() {
+    for buildup in [true, false] {
+        let (w, id, _) = in_the_window(buildup, |w, id| {
+            let o = w.obj_mut(id).unwrap();
+            o.target = Some(Target::Cell(c(5, 5)));
+            o.combat.opportunity = false;
+            assert!(orders::issue(w, A, Order::Stop { actor: id }));
+        });
+        let kept = w.obj(id).unwrap().target;
+        if buildup {
+            assert_eq!(kept, None, "applied");
+        } else {
+            assert_eq!(kept, Some(Target::Cell(c(5, 5))), "refused");
+        }
+    }
 }

@@ -282,7 +282,7 @@ fn t16_after(mut w: World, a: ObjectId, i: ObjectId, d: Pos) {
     assert!(gone_in, "I went inside");
     // spec: S-0507 claim 6a and T16 (no destination at the end of the tick in which I goes inside)
     assert_eq!(dest(&w, a), None, "A loses I as its destination");
-    // spec: S-0507 claim 6a (the point A's locomotion last received, at the claim 5 assignment, stays: not where I went inside). Q-3235: our hover reads D from I's current position before the loss, so T16's "the same just before" holds only while I has not moved
+    // spec: S-0507 claim 6a (the point A's locomotion last received, at the claim 5 assignment, stays: not where I went inside) and S-0503 claim 20 (r29, Q-3235: D does not follow I before it goes inside either)
     assert_eq!(
         hover::destination_point(&w, a),
         Some(d),
@@ -459,7 +459,7 @@ fn an_aircraft_holder_follows_s0501_claim_53() {
     assert_eq!(dest(&w, p), None, "the aircraft lost it");
 }
 
-// spec: S-0507 claim 6a (going into a building that takes it off the map) and Q-3237 interim (going into an infantry absorber, S-0605 claims 6 and 7, is going inside: a holder loses it as its destination)
+// spec: S-0507 claim 6a (r12, Q-3237: going into an absorber, as an infantry unit or as a vehicle, S-0605 claims 7 and 8, is going inside: a holder loses it as its destination)
 #[test]
 fn going_into_an_absorber_is_going_inside() {
     let mut w = world();
@@ -530,4 +530,127 @@ fn a_tank_bunker_is_not_going_inside() {
     assert!(bunkered, "void: U was not bunkered");
     assert!(!inside(&w, u), "S-0606 claim 7: it stays on the map");
     assert_eq!(dest(&w, v), Some(Target::Object(u)), "V keeps it");
+}
+
+/// From T16's start, orders I to a far shore cell and runs until I has left
+/// the cell of A's *D* while A still holds I. Returns whether that came.
+fn walk_away(w: &mut World, a: ObjectId, i: ObjectId, d: Pos) -> bool {
+    click(w, &[i], ClickOn::Cell(cell(-10, 7)));
+    for _ in 0..200 {
+        tick::step(w);
+        if dest(w, a) != Some(Target::Object(i)) {
+            return false;
+        }
+        if w.obj(i).unwrap().pos.cell() != d.cell() {
+            return true;
+        }
+    }
+    false
+}
+
+// spec: S-0503 claim 20 (r29, Q-3235: D is the object's movement point at the effective assignment and does not follow it; a search looks for D's cell, not the cell the object is in) and S-0507 T16 part (c) (the object walks away without going inside)
+#[test]
+fn t16c_d_stays_where_the_unit_was_at_the_assignment() {
+    let (mut w, a, i, _, _, d) = t16_start();
+    assert!(walk_away(&mut w, a, i, d), "void: I did not leave D's cell");
+    assert_eq!(hover::destination_point(&w, a), Some(d), "D stays");
+    assert_eq!(
+        glasnost_sim::path::goal_cell(&w, a),
+        Some(d.cell()),
+        "a search looks for D's cell"
+    );
+}
+
+// spec: S-0503 claim 20 (r29: a vehicle ignores an unchanged order-level destination unless its destination-refresh state is on, S-0502 claims 24 and 27, and the ignored assignment leaves D; a destination first emptied and then given again takes the object's later position, with the height of Terms)
+#[test]
+fn an_unchanged_assignment_leaves_d_and_a_new_one_takes_the_later_position() {
+    let (mut w, a, i, _, _, d) = t16_start();
+    assert!(walk_away(&mut w, a, i, d), "void: I did not leave D's cell");
+    econ::assign_destination(&mut w, a, Some(Target::Object(i)));
+    assert_eq!(hover::destination_point(&w, a), Some(d), "ignored");
+    econ::assign_destination(&mut w, a, None);
+    econ::assign_destination(&mut w, a, Some(Target::Object(i)));
+    let p = w.obj(i).unwrap().pos;
+    // spec: S-0503 Terms (unless held, D's height is the surface height, plus 416 leptons on a high-bridge cell; none here)
+    let later = Pos::new(p.x, p.y, w.surface_at(p.x, p.y));
+    assert_eq!(
+        hover::destination_point(&w, a),
+        Some(later),
+        "the later position"
+    );
+}
+
+// spec: S-0507 claim 6a (r12, Q-3236: walking: S-0208 claim 16 with the point as its locomotor destination; the walker goes on along its stored path, and its fresh searches look for that point's cell) and S-0208 claims 6 and 16 (r67: the loss does not end the walk by claim 16's first case; its second case does, in the point's cell)
+#[test]
+fn a_walking_holder_goes_on_to_the_point() {
+    let mut w = world();
+    let i = at(&mut w, Kind::Infantry, "WALKER", 0, -7, 0);
+    let c = at(&mut w, Kind::Vehicle, "HAULER", 0, -8, 0);
+    let f = at(&mut w, Kind::Infantry, "WALKER", 0, -8, 7);
+    testkit::run(&mut w, 5);
+    let p = w.obj(i).unwrap().pos;
+    econ::assign_destination(&mut w, f, Some(Target::Object(i)));
+    testkit::run(&mut w, 3);
+    assert!(
+        !w.obj(f).unwrap().path.steps.is_empty(),
+        "void: F has a stored path"
+    );
+    click(&mut w, &[i], ClickOn::Object(c));
+    let mut gone_in = false;
+    for _ in 0..300 {
+        tick::step(&mut w);
+        if inside(&w, i) {
+            gone_in = true;
+            break;
+        }
+    }
+    assert!(gone_in, "void: I did not board C");
+    assert_eq!(dest(&w, f), None, "F lost I");
+    let mut ended = false;
+    for _ in 0..300 {
+        tick::step(&mut w);
+        assert_eq!(dest(&w, f), None, "still no destination");
+        if !glasnost_sim::occupancy::in_progress(&w, f) {
+            ended = true;
+            break;
+        }
+    }
+    assert!(ended, "F's walk ends");
+    assert_eq!(
+        w.obj(f).unwrap().pos.cell(),
+        p.cell(),
+        "it ends in the point's cell"
+    );
+}
+
+// spec: S-0208 Terms (r67: for a destination that names an object, the locomotor destination is the object's movement point at the assignment; it does not follow the object as it moves) and claim 16 (its second case tests that point)
+#[test]
+fn a_walker_ends_its_walk_at_the_point_of_the_assignment() {
+    let mut w = world();
+    let i = at(&mut w, Kind::Infantry, "WALKER", 0, -7, 0);
+    let f = at(&mut w, Kind::Infantry, "WALKER", 0, -8, 5);
+    testkit::run(&mut w, 5);
+    let p = w.obj(i).unwrap().pos;
+    econ::assign_destination(&mut w, f, Some(Target::Object(i)));
+    testkit::run(&mut w, 3);
+    assert!(
+        !w.obj(f).unwrap().path.steps.is_empty(),
+        "void: F has a stored path"
+    );
+    click(&mut w, &[i], ClickOn::Cell(cell(-10, -7)));
+    let mut ended = false;
+    for _ in 0..300 {
+        tick::step(&mut w);
+        if dest(&w, f).is_none() && !glasnost_sim::occupancy::in_progress(&w, f) {
+            ended = true;
+            break;
+        }
+    }
+    assert!(ended, "F's walk ends");
+    assert_ne!(w.obj(i).unwrap().pos.cell(), p.cell(), "void: I moved");
+    assert_eq!(
+        w.obj(f).unwrap().pos.cell(),
+        p.cell(),
+        "it ends in the point's cell"
+    );
 }

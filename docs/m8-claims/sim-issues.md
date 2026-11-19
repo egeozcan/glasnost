@@ -1715,3 +1715,48 @@ Seams left:
 - The client needs no change: it draws `body.value`, which the sim now keeps on the heading.
 
 The P3 census rule: the fix reads a vehicle's jumpjet state and changes when its body facing is set. It makes or moves no back-reference of `World::census`.
+
+## Batch S35: the factory break-off (#440) and object destinations (S-0406 r19, S-0503 r29, S-0208 r67, S-0507 r12)
+
+Base main 951cdbf, not rebased. The batch has two items.
+
+**Item 1** builds S-0406 r19 with M-0027, the answer to Q-3243 (#440). Its commits:
+- the switch rename bb5dc88;
+- the tests moved to r19 b45b73e, and the failing tests cb5f128;
+- the request Q-3261 291142e;
+- the fix 2242bfd, the app drawing tests 24c6b63 and the docs a27b463;
+- the formats 140c90b.
+
+**Item 2** builds S-0503 r29, S-0208 r67 and S-0507 r12, the answers to S31's Q-3235 to Q-3237. Its commits:
+- the requests Q-3262 and Q-3263 d15e2c8;
+- the failing tests 3fae352: ten fail at their target assertion on their own tree, and the S-0524 lift guard passes (`local-lane/sim-issues/s35/test-i2b.txt`);
+- the request Q-3264 cec9863;
+- the fix d5f8728 and rustfmt f728931;
+- the docs 7c6ed0f, the section *Simulation (sim issues S35: the factory break-off and object destinations)* of `docs/dev/simulation.md`.
+
+The goldens of both items are 06c7466. The save format goes to 183 and the AI game format to 161 on the branch, renumbered to 159 and 137 at the merge; wire 12 is unchanged. Neither revision names a new quirk switch. Item 1 renames the build-up switch to `buildup_twice_without_break_off`.
+
+| Item | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| 1: S-0406 r19 claims 15, 17 and 18, F6 and F7, M-0027 (Q-3243, #440) | The building a place order names ran its build-up twice. Under r19 the break-off requests the idle body as a deferred change at the end of its first turn T + 1. Until its first construction processing C, the building is in the factory break-off window: out of its construction state while still building up. The queued construction becomes current at the ready mark and is processed in it, C resets the range to stage 0, and the handover is at H = C + (n - 1) d_b. A stage advances only in an update, so a missed turn holds a due advance (S-0108 r111). A positive-delay range of fewer than two stages never reports (claim 18). A filling building and a restored replacement keep two runs while `buildup_twice_without_break_off` is on; a deployed building gets none. In the window, a refinery's harvester acceptance and the stop and deploy orders refuse the building only while construction is current (S-0402 claim 10, S-0213 claims 8 and 10) | fixed (2242bfd); an owner change in the window is asked in Q-3261 | `econ::placement` keeps the construction range as a stage and the update of its last change. `econ::deploy`, `econ::harvest`, `orders` and `process` follow the window. The client's `Live::buildup_of` does not yet draw the held advance (reported, not changed) | `claims_s0406.rs` (`claim_17_place_order_runs_the_build_up_once`, `claim_17_positive_delay_idle_range_sets_c`, `claim_17_a_missed_turn_holds_a_due_stage_advance`, `claim_18_deployed_single_stage_never_completes`), `claims_s0402.rs` (`claim_10_acceptance_in_the_factory_break_off_window`), `claims_s0213_deploy_construction.rs` (`deploy_order_in_the_factory_break_off_window`, `stop_order_in_the_factory_break_off_window`), `claims_s0524.rs` (`claim15_restored_replacement_gets_the_break_off_with_the_switch_off`), `claims_s0309_r126.rs`, the app's `buildup_tests` |
+| 2: S-0503 claim 20 r29, S-0208 Terms and claims 6 and 16 r67, S-0507 claim 6a r12 (Q-3235 to Q-3237) | The hover's *D* for an object followed the object; it is now the movement point at the effective assignment, and an unchanged assignment that is not effective is ignored (Q-3235). A walker's arrival test read the object's position now, and after a claim 6a loss the walk ended; it now keeps the point the assignment gave and walks on to it along its stored path (Q-3236). At the loss, the jumpjet's and the teleport's tick-start take ran a clear (a reroute, a jump cancel); not "as built" (Q-3236). A slave into its master, a parasite into its host at firing and a spawned aircraft docking into its spawner are going inside; the S-0524 lift is not, and stays as built with a guard test (Q-3237) | fixed (d5f8728); interims of Q-3262, Q-3263 and Q-3264 built | `hover::record_taken_point`, `taken_object_point`, `object_point`, `contact_taken` (called from `depot` and `structures::bunker`), `take_destination(.., effective)`. `path::heading_point` reads the hover's taken point. `WalkState::object_point` and `kept`, with `walk::kept_in` and `kept_out`. In `transport::destination_went_inside`, `JumpState::order` and `TeleportState::for_dest` go to none and the walker's point is kept. `objects::go_inside` is called from `econ::slaves`, `parasite` and `spawn` | `claims_s0507_r11.rs` (`t16c_d_stays_where_the_unit_was_at_the_assignment`, `an_unchanged_assignment_leaves_d_and_a_new_one_takes_the_later_position`, `a_walking_holder_goes_on_to_the_point`, `a_walker_ends_its_walk_at_the_point_of_the_assignment`), `claims_s0507_r12.rs` (`a_jumpjet_holder_keeps_its_point_and_commitment`), `claims_s0402_slaves.rs` (`s0507_claim_6a_a_delivered_slave_is_lost_as_a_destination`), `claims_s0614.rs` (`s0507_claim_6a_a_firing_parasite_is_lost_as_a_destination`), `claims_s0506_r40.rs` (`s0507_claim_6a_a_docking_spawned_aircraft_is_lost_as_a_destination`), `claims_s0524.rs` (`s0507_claim_6a_a_displaced_unit_is_not_lost_as_a_destination`), `claims_s0207_teleport.rs` (`claim_20_a_destination_that_goes_inside_keeps_the_pending_jump`) |
+
+Open requests and interims:
+
+- **Q-3261.** It asks what an owner change does in the factory break-off window. Its row in the S-0309 r126 test ends the window by hand.
+- **Q-3262.** Interim: a search for a live object destination looks for the object's current cell.
+- **Q-3263.** Interims:
+  - the hover's *D* height is the surface height at the movement point itself;
+  - only an object destination is ignored, and not after claim 10's stop request;
+  - contact taken in the same order sets *D* to the docking point.
+- **Q-3264.** Interims:
+  - an S-0212 claim 24 substitute cell replaces the walker's kept point;
+  - the object point's height is not adjusted.
+
+Lanes. Every AI quick-lane game moves, because the state hash covers the new fields and item 1 changes build-up timing. One winner change is traced to item 1's single build-up run: the first refinery's free harvester comes about 48 ticks earlier.
+
+The arena counts are unchanged. Two sweep seeds now give no bunker entry: M7a seed 12 and M7b seed 15. A per-tick check of the bunker entry gates found no taken bunker and no kept walker point; neither item caused this. The causes:
+- **M7b seed 15:** no free vehicle with the *enter* cursor stood within reach of a bunker.
+- **M7a seed 12:** one house's bunkers stand beyond its WARD's reach. The other house's bunker has the other house's unarmed PREY within its threat reach all game.
+
+The P3 census rule: the batch reads and moves no census back-reference.

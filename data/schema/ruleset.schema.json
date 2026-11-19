@@ -8969,6 +8969,11 @@
           "type": "boolean",
           "default": true
         },
+        "buildup_twice_without_break_off": {
+          "description": "A filling building and a restored replacement get no factory break-off, so their build-up runs twice (off: they get the break-off of the building a place order names, and run it once).",
+          "type": "boolean",
+          "default": true
+        },
         "bunker_clear_chosen_only": {
           "description": "The clearing and waiting rows of a tank bunker's entry look only at the single chosen object of each foundation cell (F5), so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every candidate other than the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left.",
           "type": "boolean",
@@ -10351,11 +10356,6 @@
         },
         "placed_buildings_not_ever_built": {
           "description": "A building put on the map by a place order does not raise its type's ever-built count.",
-          "type": "boolean",
-          "default": true
-        },
-        "placed_buildup_twice": {
-          "description": "A placed building's build-up runs once before *construction* becomes current and again after (off: the place order sets the ready mark at entry, as a deploy does).",
           "type": "boolean",
           "default": true
         },

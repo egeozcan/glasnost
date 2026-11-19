@@ -947,8 +947,8 @@ fn slot_step(w: &mut World, spawner: ObjectId, i: usize) {
                 set_slot(w, spawner, i, SlotState::Attacking, slot.until);
                 aircraft_attack(w, x, tg);
             } else if docks(w, x, spawner) {
-                // spec: S-0506 Slot table (docking: taken off the map; reloading, reload countdown starts)
-                crate::objects::take_inside(w, x);
+                // spec: S-0506 Slot table (docking: taken off the map; reloading, reload countdown starts) and S-0507 claim 6a (r12, Q-3237: a spawned aircraft returning into its spawner, vehicle or building, is going inside: its vehicle and infantry holders lose it as their destination)
+                crate::objects::go_inside(w, x);
                 set_slot(
                     w,
                     spawner,

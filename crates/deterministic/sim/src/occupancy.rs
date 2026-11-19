@@ -87,6 +87,10 @@ pub fn in_progress(w: &World, id: ObjectId) -> bool {
             // spec: S-0417 claim 17 (No path: a failed search ends the walk locomotor's movement in progress although the destination is kept, S-0212 claim 23)
             o.walk.is_some() && o.dest.is_some() && o.path.failed_for != o.dest
         })
+        // spec: S-0208 Terms and claim 6 (r67: a walker whose destination was lost without its locomotor being told walks on towards the kept locomotor destination; S-0507 claim 6a)
+        || w.obj(id)
+            .and_then(|o| o.walk.as_ref())
+            .is_some_and(|s| s.kept.is_some())
 }
 
 /// Movement in progress without a walker's destination that has no path

@@ -621,21 +621,24 @@ pub fn place_in_play(w: &mut World, id: ObjectId, cell: CellXY, v: u8) -> bool {
     true
 }
 
-/// Takes an infantry unit off the map for a while without ending it: a
-/// slave that goes inside its master (S-0402 claim 14). Like [`remove`] it
-/// leaves the update order, a counting removal during the turn pass
-/// (S-0203 claim 10), and its cell list entry and standing marks are
-/// cleared; the object stays in the world, off the map, with no
-/// destination, target or walk.
+/// Takes an object off the map for a while without ending it, in a way
+/// that is not going inside in the sense of S-0507 claim 6a, such as the
+/// lift of a unit displaced from a replacement's foundation (S-0524 claim
+/// 13). Like [`remove`] it leaves the update order, a counting removal
+/// during the turn pass (S-0203 claim 10), and its cell list entry and
+/// standing marks are cleared; the object stays in the world, off the map,
+/// with no destination, target or walk. Its holders keep it as their
+/// destination.
 pub fn take_inside(w: &mut World, id: ObjectId) {
     off_the_map(w, id, crate::combat::held::Leaving::OffMap);
 }
 
 /// [`take_inside`] for an object that goes inside in the sense of S-0507
-/// claim 6a: it boards a transport of either kind or goes into a building
-/// that takes it off the map, as a garrison occupant does. Its vehicle and
-/// infantry holders also lose it as their destination, their locomotion
-/// keeping its point.
+/// claim 6a: it boards a transport of either kind, goes into a building as
+/// an occupant, into an absorber, as a slave into its master, as a
+/// parasite into its host when it fires, or as a spawned aircraft back
+/// into its spawner. Its vehicle and infantry holders also lose it as
+/// their destination, their locomotion keeping its point.
 pub fn go_inside(w: &mut World, id: ObjectId) {
     off_the_map(w, id, crate::combat::held::Leaving::Inside);
 }

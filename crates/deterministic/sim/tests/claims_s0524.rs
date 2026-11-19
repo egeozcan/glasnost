@@ -17,7 +17,7 @@ use glasnost_sim::mp_triggers::{self, Coverage};
 use glasnost_sim::rules::{Kind, SimRules};
 use glasnost_sim::superweapons::StormState;
 use glasnost_sim::testkit;
-use glasnost_sim::world::{ObjectId, World};
+use glasnost_sim::world::{ObjectId, Target, World};
 use sw_common::{ALPHA, BETA, DEFER, SIZE, at, run, step};
 
 /// The demolition warhead's verses: one tenth against every armour.
@@ -1111,6 +1111,28 @@ fn claim13_displaced_occupants_are_placed_by_the_nearby_search() {
     );
 }
 
+// spec: S-0507 claim 6a (r12: the claim covers going inside only, in the ways it lists; the lift of a unit displaced from a replacement's foundation, re-placed by S-0524 claim 13's search, is none of them, so a holder keeps the unit as its destination)
+#[test]
+fn s0507_claim_6a_a_displaced_unit_is_not_lost_as_a_destination() {
+    let r = ruleset();
+    let mut w = game(&r, triggers(vec![], 0), &[], &[("Alpha", "WIDE", at(0, 0))]);
+    for id in wide(&w) {
+        glasnost_sim::objects::remove(&mut w, id);
+    }
+    let man = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at(1, 0), 64);
+    let h = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, at(6, 6), 0);
+    glasnost_sim::econ::assign_destination(&mut w, h, Some(Target::Object(man)));
+    let a = country(&w, "Alphaland");
+    mp_triggers::restore_starting_buildings(&mut w, a, None);
+    assert_eq!(wide(&w).len(), 1, "void: not replaced");
+    assert!(w.obj(man).unwrap().on_map, "void: not re-placed");
+    assert_eq!(
+        w.obj(h).unwrap().dest,
+        Some(Target::Object(man)),
+        "the holder keeps it"
+    );
+}
+
 // spec: S-0524 claim 13 (a displaced unit whose search finds no cell is not left off the map: the placement at the stand-in cell fails and the unit is removed; Q-0764)
 #[test]
 fn claim13_no_nearby_cell_removes_the_unit() {
@@ -1614,7 +1636,7 @@ fn restored_construction(mut r: Ruleset, frames: Option<i32>) -> Restored {
     out
 }
 
-// spec: S-0524 claim 15 (a restored replacement enters with its ready mark clear; a positive-delay range of at least 2 stages sets the mark when an eligible building turn first lands on the last stage; construction becomes current at that turn's second per-tick start, its first processing is on the next tick, and the handover follows F6; the build-up runs twice, as for a placed building) and S-0406 claim 17 (restored replacement, positive delay: C = R + 1, H follows F6)
+// spec: S-0524 claim 15 (a restored replacement enters with its ready mark clear; a positive-delay range of at least 2 stages sets the mark when an eligible building turn first lands on the last stage; construction becomes current at that turn's second per-tick start, its first processing is on the next tick, and the handover follows F6; r10: the build-up runs twice, as for a filling building, since a replacement gets no factory break-off) and S-0406 claim 17 (restored replacement, positive delay: C = R + 1, H follows F6)
 #[test]
 fn claim15_restored_multi_stage_range_runs_twice_and_hands_over_by_f6() {
     // 10 image frames: n = 5 stages, d_b = 9 ticks (S-0108 claim 5), the range of 36 ticks.
@@ -1644,16 +1666,19 @@ fn claim15_restored_zero_delay_range_sets_the_mark_at_its_first_eligible_turn() 
     assert_eq!(k.handover, Some(u + 2), "H = U + 2");
 }
 
-// spec: S-0524 claim 15 (the shared quirks.placed_buildup_twice applies to restored replacements too: off sets the mark at entry and uses the deployed-style start) and S-0406 claim 17 and Edge cases (off: C = U + 1 and the handover follows F6; U the first eligible building turn)
+// spec: S-0524 claim 15 (r10: the shared quirks.buildup_twice_without_break_off off gives restored replacements S-0406 claim 17's factory break-off: with a zero-delay idle range, construction is first processed one tick after the first eligible building turn and the build-up runs once) and S-0406 claim 17 and Edge cases (r19, off: the mark clear at entry, C = U + 1, H by F6; the restoration runs between ticks here, so U is the entry tick)
 #[test]
-fn claim15_restored_replacement_follows_the_placed_buildup_twice_switch() {
+fn claim15_restored_replacement_gets_the_break_off_with_the_switch_off() {
     let mut r = ruleset();
-    r.globals.quirks.placed_buildup_twice = false;
+    r.globals.quirks.buildup_twice_without_break_off = false;
     let k = restored_construction(r, Some(10));
-    assert!(k.mark_at_entry, "off: the mark is set at entry");
-    let u = k
-        .current
-        .expect("construction becomes current at the first turn");
+    assert!(!k.mark_at_entry, "off: the mark is still clear at entry");
+    let u = k.entry;
+    assert_eq!(
+        k.current,
+        Some(u + 1),
+        "current from the first start after the break-off: {k:?}"
+    );
     assert_eq!(k.first, Some(u + 1), "C = U + 1");
     assert_eq!(k.handover, Some(u + 1 + 36), "H follows F6");
 }
