@@ -166,10 +166,8 @@ fn missile(
 /// with its missile ([`crate::anims::missile_left`]). Its visibility to a
 /// viewer is presentation. Returns its number when it is in play.
 fn marker(w: &mut World, cell: CellXY) -> Option<ObjectId> {
-    if w.rules().animation(super::WARNING_MARKER).is_none() {
-        // spec: S-0513 Edge cases (a missing marker animation type: no animation)
-        return None;
-    }
+    // spec: S-0513 Edge cases (a missing marker animation type: no animation)
+    w.rules().animation(super::WARNING_MARKER)?;
     // spec: S-0513 claim 11 (r129, Q-3253: at the target cell's centre, at the terrain surface height there with no bridge lift; it keeps that position for its whole life and does not follow the missile: it has no owner, as it is not attached in the sense of S-0109 claim 22)
     let p = super::cell_point(w, cell, false);
     // spec: S-0513 claim 11 (r129: the marker enters play just before its missile, in the action or the silo update that creates that missile, so it stands before the missile in the update order; S-0203 claim 3, entering appends)
