@@ -222,6 +222,15 @@ pub struct Uses {
     /// (S-0516 claim 40, `disguise`, #454).
     #[serde(default)]
     pub spy_detours: u32,
+    /// Orders of a new approach for a jumpjet that held over its target
+    /// without firing: the move round and the attack after it (`bomber`,
+    /// #445).
+    #[serde(default)]
+    pub bomber_rounds: u32,
+    /// Jumpjets that held over their target without firing after a new
+    /// approach sent home (`bomber`, #445).
+    #[serde(default)]
+    pub bomber_retreats: u32,
 }
 
 /// What an order the brain gives is for: the counter of [`Uses`] it adds
@@ -281,6 +290,8 @@ pub(crate) enum Use {
     AirStep,
     Disguise,
     SpyDetour,
+    BomberRound,
+    BomberRetreat,
 }
 
 impl Uses {
@@ -340,6 +351,8 @@ impl Uses {
             Use::AirStep => &mut self.air_steps,
             Use::Disguise => &mut self.disguises,
             Use::SpyDetour => &mut self.spy_detours,
+            Use::BomberRound => &mut self.bomber_rounds,
+            Use::BomberRetreat => &mut self.bomber_retreats,
         };
         *c = c.saturating_add(1);
     }
@@ -363,6 +376,10 @@ pub struct Special {
     /// The jobs of the house's spies that disguise (`disguise`, #454).
     #[serde(default)]
     pub(crate) spy_jobs: crate::disguise::Watch,
+    /// The jumpjets that hold over their target without firing (`bomber`,
+    /// #445).
+    #[serde(default)]
+    pub(crate) bomber: crate::bomber::Watch,
     /// The uses offered in this think, each with the order offered for it,
     /// counted once the brain knows which orders it gives
     /// ([`Special::note_given`]); empty between thinks.
@@ -479,6 +496,10 @@ impl Special {
         // design: own AI (#434): units under air attack first, so a unit shot from the air is moved before another part gives it a job
         mark("ai:special:air_attack");
         self.air_attack(script, &own, w, out);
+        free(&mut own, out);
+        // design: own AI (#445): a jumpjet that holds over its target without firing is moved on before another part gives it a job
+        mark("ai:special:bombers");
+        self.bombers(script, &own, w, out);
         free(&mut own, out);
         mark("ai:special:garrison");
         self.garrison(house, &own, home, w, out);

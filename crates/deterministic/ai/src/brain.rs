@@ -508,6 +508,8 @@ impl Brain {
         crate::drain::filter_orders(w, &mut out);
         // design: own AI (#434): a unit on its way away from an air attacker takes only that move (`air_attack`)
         out.retain(|o| self.special.air.keeps_order(w, o));
+        // design: own AI (#445): a jumpjet on its way round takes only that move, one sent home no attack and no attack-move, and one with a job no repeat of an order (`bomber`)
+        self.special.bomber.filter_orders(w, &mut out);
         // S-0601 claim 16: no attack order (from any part of the brain) to an unlimited controller one more victim would overload harmfully
         out.retain(|o| match o {
             Order::Behaviour {

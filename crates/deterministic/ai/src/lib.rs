@@ -36,6 +36,7 @@
 pub mod absorber;
 pub mod air_attack;
 pub mod antiair;
+pub mod bomber;
 pub mod brain;
 pub mod bunker;
 pub mod chrono;
