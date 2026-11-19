@@ -902,6 +902,145 @@ fn claim_7_consumption_effect() {
     ));
 }
 
+/// [`rules`] plus LEGION: a self-teleporting infantry type (S-0214 Terms)
+/// with the teleporting locomotor (S-0208 claim 19), armed with an invented
+/// temporal weapon Warp (warhead TEMPW), and its controls WARPER (LEGION
+/// unarmed) and TEMPI (an armed walker: LEGION without the teleporter flag
+/// and locomotor).
+fn legion_rules() -> Ruleset {
+    let mut r = rules();
+    r.sim.warheads.insert(
+        "TEMPW".into(),
+        WarheadType {
+            verses: ones(),
+            temporal: Some(true),
+            ..Default::default()
+        },
+    );
+    r.sim.weapons.insert(
+        "Warp".into(),
+        WeaponType {
+            damage: Some(30),
+            rof: Some(40),
+            range: Some(dec("5")),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("TEMPW".into()),
+            ..Default::default()
+        },
+    );
+    infantry(&mut r, "LEGION", |t| {
+        t.teleporter = Some(true);
+        t.locomotor = Some(glasnost_rules::sim::Locomotor::Teleport);
+        t.primary = Some("Warp".into());
+    });
+    infantry(&mut r, "WARPER", |t| {
+        t.teleporter = Some(true);
+        t.locomotor = Some(glasnost_rules::sim::Locomotor::Teleport);
+    });
+    infantry(&mut r, "TEMPI", |t| t.primary = Some("Warp".into()));
+    r
+}
+
+// spec: S-0603 claim 1 and S-0214 table I row I26 (#455: any infantry unit may be sent into a recycling building of its own house; no row excludes a self-teleporting type, S-0214 Terms, nor one with a temporal weapon). The derivation: g is select (table G row G10: G8's attack rule fails on an own building without force-fire, G9 needs another house), g₁ = g (value e is undefined: not a hospital), v = g₁ and g₂ = v (value x is undefined: the building has no passengers), so row I26 gives recycle; at rest and while phasing in after its own jump (S-0207 claim 20 f). The click gives table M's eaten order once phasing in has ended, and none while it phases in (table M: recycle needs a movable actor). Controls: the same type unarmed, and armed without the teleporter flag
+#[test]
+fn claim_1_issue_455_a_self_teleporting_infantry_gets_recycle() {
+    let mut w = game_on(&legion_rules());
+    let own = grnd(&mut w, "GRND", 0, 0, 0);
+    let legion = put(&mut w, Kind::Infantry, "LEGION", 0, 3, 4);
+    let warper = put(&mut w, Kind::Infantry, "WARPER", 0, 4, 4);
+    let tempi = put(&mut w, Kind::Infantry, "TEMPI", 0, 2, 4);
+    testkit::run(&mut w, 2);
+    let got: Vec<(&str, Action)> = [("LEGION", legion), ("WARPER", warper), ("TEMPI", tempi)]
+        .into_iter()
+        .map(|(n, u)| (n, cursor_as(&w, ALPHA, &[u], own)))
+        .collect();
+    for (n, a) in &got {
+        assert_eq!(*a, Action::Recycle, "{n} at rest: {got:?}");
+    }
+    // After its own jump to a cell, while it phases in.
+    orders::issue(
+        &mut w,
+        ALPHA,
+        Order::Behaviour {
+            actor: legion,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(6, 6))),
+        },
+    );
+    testkit::run(&mut w, 3);
+    assert_eq!(w.obj(legion).unwrap().pos.cell(), at(6, 6), "jumped");
+    assert!(glasnost_sim::teleport::phasing_in(&w, legion), "phasing in");
+    assert_eq!(
+        cursor_as(&w, ALPHA, &[legion], own),
+        Action::Recycle,
+        "LEGION phasing in"
+    );
+    // spec: S-0214 table M (recycle needs a movable actor) and Terms (movable: not phasing in): the click while phasing in gives no order
+    assert_eq!(click_as(&mut w, ALPHA, &[legion], own), vec![]);
+    for _ in 0..200 {
+        if !glasnost_sim::teleport::phasing_in(&w, legion) {
+            break;
+        }
+        tick::step(&mut w);
+    }
+    assert!(!glasnost_sim::teleport::phasing_in(&w, legion));
+    // spec: S-0214 table M (recycle gives eaten with the building as destination and no target)
+    assert_eq!(
+        click_as(&mut w, ALPHA, &[legion], own),
+        vec![Order::Behaviour {
+            actor: legion,
+            behaviour: Behaviour::Eaten,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Object(own)),
+        }]
+    );
+}
+
+// spec: S-0603 claims 3 to 5 with S-0213 claim 5 and table T3 parts (d) and (f), S-0215 claims 11 and 12, S-0207 claim 20 (a) and (e) and S-0208 claim 19 (#455, Q-3297, today's behaviour kept): the recycle order queues eaten without an immediate start and sets the destination, which the teleporting locomotor takes at once, so the landing point is chosen while the rest behaviour is still current: occupants are not ignored and the building is no mission target (S-0209 Terms), the own building refuses the entry (S-0209 claim 4 row WP19) and the object destination's nearby-cell search lands the unit beside the foundation; the jump removes the destination, eaten then has none and falls back to rest (S-0603 claim 3), and the unit is never consumed. The walking control TEMPI is consumed (claims 4 and 5)
+#[test]
+fn claims_3_5_issue_455_a_self_teleporting_entrant_lands_beside_and_stays() {
+    for name in ["TEMPI", "WARPER", "LEGION"] {
+        let mut w = game_on(&legion_rules());
+        let own = grnd(&mut w, "GRND", 0, 0, 0);
+        let u = put(&mut w, Kind::Infantry, name, 0, 3, 4);
+        testkit::run(&mut w, 2);
+        send(&mut w, u, own);
+        let mut cells = Vec::new();
+        for _ in 0..400 {
+            if gone(&w, u) {
+                break;
+            }
+            let c = w.obj(u).unwrap().pos.cell();
+            if cells.last() != Some(&c) {
+                cells.push(c);
+            }
+            tick::step(&mut w);
+        }
+        if name == "TEMPI" {
+            assert!(gone(&w, u), "the walker is consumed; cells {cells:?}");
+            continue;
+        }
+        let o = w.obj(u).expect("not consumed");
+        let foundation = |c: CellXY| {
+            (at(0, 0).x..=at(1, 0).x).contains(&c.x) && (at(0, 0).y..=at(0, 1).y).contains(&c.y)
+        };
+        assert_eq!(cells.len(), 2, "{name}: one jump; cells {cells:?}");
+        let c = o.pos.cell();
+        assert!(!foundation(c), "{name}: beside the foundation, at {c:?}");
+        assert!(
+            (c.x - at(0, 0).x).abs() <= 2 && (c.y - at(0, 0).y).abs() <= 2,
+            "{name}: next to the building, at {c:?}"
+        );
+        assert_eq!(o.dest, None, "{name}");
+        assert_eq!(o.beh.current, Some(Behaviour::Guard), "{name}");
+        round_trip(&w);
+    }
+}
+
 // spec: S-0603 claim 13 (an eaten destination without the grinding flag still consumes and pays, without the enter-grinder sound; set up directly, unreachable through orders)
 #[test]
 fn claim_13_non_grinding_destination() {
