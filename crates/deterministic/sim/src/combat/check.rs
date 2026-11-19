@@ -148,12 +148,17 @@ fn vehicle_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
     };
     let wr = r.combat.weapon(weapon);
     let dest = o.dest.is_some();
-    // spec: S-0310 claim 7 (the type lacks the mobile-fire flag and has a destination)
-    if !u.combat.mobile_fire && dest {
+    let balloon = u.raw.balloon_hover.unwrap_or(false);
+    // spec: S-0310 claim 7 (r13: the type lacks the mobile-fire flag and has a destination, for every vehicle, balloon-hover types included) and Edge cases (quirks.balloon_hover_mobile_fire_by_destination off: for a balloon-hover type this condition reads its locomotor moving it, for a jumpjet moving now)
+    let mobile_cond = if balloon && !r.quirks.balloon_hover_mobile_fire_by_destination {
+        crate::occupancy::in_progress(w, firer)
+    } else {
+        dest
+    };
+    if !u.combat.mobile_fire && mobile_cond {
         return true;
     }
     // spec: S-0310 claim 7 (the weapon lacks fire-while-moving: a destination; a balloon-hover type: its locomotor moving it)
-    let balloon = u.raw.balloon_hover.unwrap_or(false);
     let moving_cond = if balloon {
         crate::occupancy::in_progress(w, firer)
     } else {
