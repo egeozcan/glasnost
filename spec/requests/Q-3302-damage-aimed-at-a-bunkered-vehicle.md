@@ -1,9 +1,9 @@
 ---
 id: Q-3302
 title: Damage aimed at a bunkered vehicle, and whether the bunker takes it
-status: open
+status: answered
 related: [S-0302, S-0309, S-0606, S-0303]
-answered-by: []
+answered-by: [S-0302]
 ---
 
 ## Need
