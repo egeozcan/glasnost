@@ -1,9 +1,9 @@
 ---
 id: Q-3248
 title: Where animations made in a tick enter the air layer among that tick's particles, projectiles and debris
-status: open
+status: answered
 related: [S-0102, S-0616, S-0109, S-0306, S-0317]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need
