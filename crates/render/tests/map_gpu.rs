@@ -1558,6 +1558,123 @@ fn gpu_spots_match_cpu() {
     }
 }
 
+/// #448. spec: S-0519 claim 27 and F8 (strike line pixels blended by F8 at the light-alpha value,
+/// strictly nearer than the stored depth, left as they are at v = 0, capped at 255; the end
+/// marker opaque with no depth test, and with quirks.airstrike_line_marker_over_shroud off not
+/// drawn at v = 0): the GPU path gives the CPU reference's pixels
+#[test]
+fn gpu_strike_spots_match_cpu() {
+    use glasnost_render::spots::{Spot, SpotGroup, SpotKind};
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    for (g, over_shroud) in [(0, true), (1, false)] {
+        let mut marker = Vec::new();
+        for k in 0..40 {
+            marker.push(Spot {
+                x: 4 + k + 50 * g,
+                y: 20 + k % 6,
+                bias: 900,
+                kind: SpotKind::Marker {
+                    colour: 0xF800,
+                    over_shroud,
+                },
+            });
+        }
+        s.spots.push(SpotGroup {
+            at: usize::MAX,
+            group: Group::Effects,
+            provisional: false,
+            spots: marker,
+        });
+    }
+    let mut line = Vec::new();
+    for k in 0..100 {
+        let (x, y) = (k + 2, 18 + k / 4);
+        let bias = [-200, -32, 30, 400][(k % 4) as usize];
+        let rgb = [
+            (190 + k % 66) as u8,
+            (k * 7 % 111) as u8,
+            (k * 3 % 31) as u8,
+        ];
+        for alpha in [255u8, 192, 128, 64, 100, 75, 50, 25]
+            .into_iter()
+            .skip((k % 5) as usize)
+        {
+            line.push(Spot {
+                x,
+                y,
+                bias,
+                kind: SpotKind::Strike { rgb, alpha },
+            });
+            line.push(Spot {
+                x,
+                y: y + 1,
+                bias,
+                kind: SpotKind::Strike { rgb, alpha },
+            });
+        }
+    }
+    s.spots.push(SpotGroup {
+        at: usize::MAX,
+        group: Group::Effects,
+        provisional: false,
+        spots: line,
+    });
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let size = (128u32, 72u32);
+    for (origin, step) in [((0, 0), 1usize), ((5, 3), 7)] {
+        let view = View {
+            origin,
+            size,
+            reference: DEPTH_REFERENCE,
+        };
+        let alpha: Vec<u8> = (0..(size.0 * size.1) as usize)
+            .map(|i| [127, 0, 64, 200, 255][(i * step) % 5])
+            .collect();
+        let filter = Filter::default();
+        let q = ComposeQuirks::default();
+        let cpu = s
+            .compose_lit(&view, &filter, &q, Some(alpha.clone()))
+            .to_rgba();
+        let plain = scene()
+            .compose_lit(&view, &filter, &q, Some(alpha.clone()))
+            .to_rgba();
+        assert!(
+            cpu.chunks(4)
+                .zip(plain.chunks(4))
+                .filter(|(a, b)| a != b)
+                .count()
+                > 100,
+            "the spots show"
+        );
+        let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        r.render_lit(
+            &device,
+            &queue,
+            &mut encoder,
+            &color,
+            &depth.create_view(&Default::default()),
+            &s,
+            &view,
+            &filter,
+            &q,
+            Some(&alpha),
+        );
+        queue.submit([encoder.finish()]);
+        let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+        let differing = cpu
+            .chunks(4)
+            .zip(gpu.chunks(4))
+            .filter(|(a, b)| a[..3] != b[..3])
+            .count();
+        assert_eq!(differing, 0, "view at {origin:?}");
+    }
+}
+
 /// spec: S-0102 F3 (a tile pixel's depth is (e + d(t + 30)) mod 65536); S-0010 claim 23 (the
 /// depth data cover the tile's image). design: render (#151): a tile whose depth image is
 /// smaller than the tile reads e = 0 past the depth image, on the GPU path as on the CPU

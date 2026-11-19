@@ -357,10 +357,13 @@ enum Role {
     /// Single-pixel drawings ([`crate::spots`]): depth readers that compute
     /// their pixel from the copy of the target.
     Spot,
+    /// Single-pixel drawings with no depth test: the strike line's end
+    /// marker (S-0519 claim 27).
+    SpotIgnore,
 }
 
 /// Every role, in pipeline order.
-const ROLES: [Role; 9] = [
+const ROLES: [Role; 10] = [
     Role::Tile,
     Role::Writer,
     Role::Reader,
@@ -370,12 +373,18 @@ const ROLES: [Role; 9] = [
     Role::BlendReader,
     Role::BlendIgnore,
     Role::Spot,
+    Role::SpotIgnore,
 ];
 
 impl Role {
     /// The role's pipeline.
     fn index(self) -> usize {
         ROLES.iter().position(|&r| r == self).unwrap_or(0)
+    }
+
+    /// Whether the role draws spots from the spot buffer.
+    fn spot(self) -> bool {
+        matches!(self, Role::Spot | Role::SpotIgnore)
     }
 
     /// Whether the role blends with the target's earlier pixels in the
@@ -388,6 +397,7 @@ impl Role {
                 | Role::BlendReader
                 | Role::BlendIgnore
                 | Role::Spot
+                | Role::SpotIgnore
         )
     }
 }
@@ -825,16 +835,15 @@ impl MapRenderer {
         // design: render (#117): a spot's pipeline reads the compact spot buffer
         let spot_attributes = wgpu::vertex_attr_array![0 => Sint32x4, 1 => Uint32x2];
         let make = |role: Role| {
-            let (entry, stride, attributes): (_, _, &[wgpu::VertexAttribute]) =
-                if role == Role::Spot {
-                    (
-                        "vs_spot",
-                        std::mem::size_of::<SpotInstance>(),
-                        &spot_attributes,
-                    )
-                } else {
-                    ("vs_main", std::mem::size_of::<Instance>(), &attributes)
-                };
+            let (entry, stride, attributes): (_, _, &[wgpu::VertexAttribute]) = if role.spot() {
+                (
+                    "vs_spot",
+                    std::mem::size_of::<SpotInstance>(),
+                    &spot_attributes,
+                )
+            } else {
+                ("vs_main", std::mem::size_of::<Instance>(), &attributes)
+            };
             let (compare, write) = match role {
                 Role::Tile => (wgpu::CompareFunction::LessEqual, true),
                 Role::Writer => (wgpu::CompareFunction::Less, true),
@@ -847,6 +856,8 @@ impl MapRenderer {
                 Role::BlendIgnore => (wgpu::CompareFunction::Always, false),
                 // spec: S-0518 claim 20 (a beam reads depth and never writes it; strictly less passes)
                 Role::Spot => (wgpu::CompareFunction::Less, false),
+                // spec: S-0519 claim 27 (the end marker has no depth test)
+                Role::SpotIgnore => (wgpu::CompareFunction::Always, false),
             };
             // design: render (#114): source + target × source alpha; `fs_main` gives an opaque
             // drawing alpha 0 (its own colour) and a shadow black with alpha `SHADOW_FACTOR`
@@ -885,11 +896,7 @@ impl MapRenderer {
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some(if role == Role::Spot {
-                        "fs_spot"
-                    } else {
-                        "fs_main"
-                    }),
+                    entry_point: Some(if role.spot() { "fs_spot" } else { "fs_main" }),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: target_format,
@@ -1649,7 +1656,7 @@ impl MapRenderer {
         self.stats.draws += batches.len();
         let mut first = true;
         let drawn_meets = |b: &Batch, c: &[u32; 4]| {
-            if b.0 == Role::Spot {
+            if b.0.spot() {
                 spots.meets(b.1.start, c, view)
             } else {
                 rects[b.1.start as usize..b.1.end as usize]
@@ -1689,7 +1696,7 @@ impl MapRenderer {
             // `begin` binds the instance buffer.
             let mut on_spots = false;
             for (role, range, _) in run {
-                let spot = role == Role::Spot;
+                let spot = role.spot();
                 if spot != on_spots {
                     let buffer = if spot {
                         &self.spot_buffer
@@ -1802,6 +1809,8 @@ const SPOT_ADDITIVE: i32 = 1; // design: render (#117)
 const SPOT_BLENDED: i32 = 2; // design: render (#117)
 const SPOT_FLASH: i32 = 3; // design: render (#117)
 const SPOT_WAVE: i32 = 4; // design: render (#117)
+const SPOT_STRIKE: i32 = 5; // design: render (#448)
+const SPOT_MARKER: i32 = 6; // design: render (#448)
 
 /// A spot's instance: its world pixel, bias, kind code, offset (a blended
 /// spot's light-alpha pixel, a wave's source pixel) and paint.
@@ -1822,6 +1831,16 @@ fn spot_instance(s: &Spot) -> SpotInstance {
         ),
         SpotKind::Flash { rgb } => (SPOT_FLASH, rgb_word(rgb), 0, (0, 0)),
         SpotKind::Wave { shift, k } => (SPOT_WAVE, 0, u32::from(k), shift),
+        SpotKind::Strike { rgb, alpha } => (SPOT_STRIKE, rgb_word(rgb), u32::from(alpha), (0, 0)),
+        SpotKind::Marker {
+            colour,
+            over_shroud,
+        } => (
+            SPOT_MARKER,
+            u32::from(colour),
+            u32::from(over_shroud),
+            (0, 0),
+        ),
     };
     SpotInstance {
         place: [
@@ -1846,10 +1865,10 @@ impl SpotInstance {
         ((w << 16) >> 24, (w << 8) >> 24)
     }
 
-    /// Whether the spot reads the target (S-0518 F7 and F8); a blended
-    /// spot's offset reads the light-alpha values, not the target.
+    /// Whether the spot reads the target (S-0518 F7 and F8, S-0519 F8); a
+    /// blended spot's offset reads the light-alpha values, not the target.
     fn reads(&self) -> bool {
-        matches!(self.kind(), SPOT_ADDITIVE | SPOT_BLENDED)
+        matches!(self.kind(), SPOT_ADDITIVE | SPOT_BLENDED | SPOT_STRIKE)
     }
 
     /// Whether the spot draws its pixel in the world rectangle `v` of a
@@ -1897,6 +1916,9 @@ struct SpotBatch {
     split: bool,
     /// Whether it holds a magnetic wave's spot.
     wave: bool,
+    /// Whether it is a run of a group of end markers alone, drawn with no
+    /// depth test (S-0519 claim 27).
+    ignore: bool,
 }
 
 /// The last spot at each world pixel of a group being laid out (design:
@@ -2058,6 +2080,22 @@ impl SpotLayout {
             } else {
                 self.layered(&g.spots);
             }
+            // design: render (#448): end markers come in groups of their own, drawn with no depth
+            // test (S-0519 claim 27)
+            let markers = g
+                .spots
+                .iter()
+                .filter(|s| matches!(s.kind, SpotKind::Marker { .. }))
+                .count();
+            debug_assert!(
+                markers == 0 || markers == g.spots.len(),
+                "end markers in a group of their own"
+            );
+            if markers > 0 {
+                for b in &mut self.batches[first..] {
+                    b.ignore = true;
+                }
+            }
             self.entries[gi].laid = Some(first..self.batches.len());
         }
     }
@@ -2110,6 +2148,7 @@ impl SpotLayout {
                 reads,
                 split: true,
                 wave,
+                ignore: false,
             });
         }
     }
@@ -2193,6 +2232,7 @@ impl SpotLayout {
                     reads,
                     split: false,
                     wave: false,
+                    ignore: false,
                 });
             }
             from = end;
@@ -2219,7 +2259,12 @@ impl SpotLayout {
         let mut drawn = 0;
         for b in &self.batches[range.clone()] {
             if let Some(copy) = self.frame_reads(b, &v) {
-                batches.push((Role::Spot, b.range.clone(), copy));
+                let role = if b.ignore {
+                    Role::SpotIgnore
+                } else {
+                    Role::Spot
+                };
+                batches.push((role, b.range.clone(), copy));
                 drawn += b.range.len();
             }
         }

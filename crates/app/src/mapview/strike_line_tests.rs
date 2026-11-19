@@ -416,3 +416,31 @@ fn the_strike_target_is_drawn_marked_whatever_the_laser_flag() {
         }
     }
 }
+
+/// spec: S-0519 claim 27 (no strike line, and no end marker, while the local player is in route
+/// mode, S-0213 claim 16; drawn again once route mode ends)
+#[test]
+fn no_strike_line_in_route_mode() {
+    let case = Case {
+        laser: false,
+        designator: (3, 3),
+        building: (-4, -4),
+        over_shroud: true,
+    };
+    let mut k = 0;
+    let frames = run_with(case, 8, |live| {
+        live.route_mode = k < 4;
+        k += 1;
+    });
+    for (i, f) in frames.iter().enumerate() {
+        let route = i < 4;
+        for (bg, fx) in [&f.plain, &f.dark] {
+            assert_eq!(
+                bg.color == fx.color,
+                route,
+                "tick {}: route mode {route}: the line and marker drawn only outside it",
+                f.tick
+            );
+        }
+    }
+}

@@ -52,6 +52,7 @@ pub mod sidebar;
 mod sinking_tests;
 pub mod slot_play;
 pub mod slots;
+pub mod strike_line;
 #[cfg(test)]
 mod strike_line_tests;
 #[cfg(test)]

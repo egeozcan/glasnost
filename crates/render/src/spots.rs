@@ -1,5 +1,6 @@
 //! Single-pixel drawings: the pixels of beams (S-0518 claims 20 to 23),
-//! beam flashes (S-0514 claim 25) and the magnetic wave (S-0607 claim 25).
+//! beam flashes (S-0514 claim 25), the magnetic wave (S-0607 claim 25) and
+//! the air strike's strike line (S-0519 claim 27).
 //!
 //! A [`Spot`] changes one screen pixel by an integer rule that reads the
 //! pixel already drawn there. Spots come in [`SpotGroup`]s placed in the
@@ -8,7 +9,8 @@
 //! claims 21 and 22: *C*(*O*₂(*O*₁(*d*)))). Every spot reads depth and never
 //! writes it; it passes where its depth, the view row's depth plus its bias,
 //! is strictly less than the stored depth (S-0518 claim 20, S-0514 F8,
-//! S-0607 claim 25).
+//! S-0607 claim 25, S-0519 F8). The one exception is the strike line's end
+//! marker, which has no depth test at all (S-0519 claim 27).
 //!
 //! The CPU reference ([`apply`]) and the GPU path (`map_gpu`'s spot
 //! pipeline) compute the same pixels.
@@ -53,6 +55,22 @@ pub enum SpotKind {
         shift: (i8, i8),
         /// The boost factor *k*.
         k: u16,
+    },
+    /// An air strike's strike line pixel (S-0519 claim 27, F8).
+    Strike {
+        /// The line colour *C*, 8 bits per channel.
+        rgb: [u8; 3],
+        /// The part's intensity α.
+        alpha: u8,
+    },
+    /// A strike line's end marker pixel (S-0519 claim 27, F8): opaque, with
+    /// no depth test and no light-alpha shading.
+    Marker {
+        /// The colour, 5-6-5.
+        colour: u16,
+        /// `quirks.airstrike_line_marker_over_shroud`: off, not drawn
+        /// where the light-alpha value is 0.
+        over_shroud: bool,
     },
 }
 
@@ -173,6 +191,31 @@ pub fn flash(c: [u8; 3], a: u8) -> Option<u16> {
     Some(pack(v))
 }
 
+/// S-0519 F8: the screen pixel `d` with the strike line colour `c` mixed in
+/// at intensity `alpha`, at light-alpha `v`, or `None` where it is left as
+/// it is (`v` = 0).
+pub fn strike(d: u16, c: [u8; 3], alpha: u8, v: u8) -> Option<u16> {
+    // spec: S-0519 F8 (pixels with v = 0 are left as they are)
+    if v == 0 {
+        return None;
+    }
+    let (al, v) = (u32::from(alpha), u32::from(v));
+    // spec: S-0519 F8 (d widened to 8 bits by appending zero bits; the result narrowed by dropping its low bits)
+    let d = widen(d);
+    // spec: S-0519 F8 (p = ⌊(⌊d(256 − α)/256⌋ + ⌊cα/256⌋) × v/128⌋) and claim 27 (our engine caps p at 255)
+    let p: [u32; 3] = std::array::from_fn(|i| {
+        ((d[i] * (256 - al) / 256 + u32::from(c[i]) * al / 256) * v / ALPHA_SCALE).min(255)
+    });
+    Some(pack(p))
+}
+
+/// S-0519 claim 27: the end marker pixel `colour` at light-alpha `v`, or
+/// `None` where it is not drawn (with `over_shroud` off, `v` = 0).
+pub fn marker(colour: u16, over_shroud: bool, v: u8) -> Option<u16> {
+    // spec: S-0519 claim 27 (quirks.airstrike_line_marker_over_shroud off: not drawn at pixels whose light-alpha value is 0; on: no light-alpha shading)
+    (over_shroud || v != 0).then_some(colour)
+}
+
 /// S-0607 F5: the band pixel made from source pixel `src` with boost `k`.
 pub fn wave(src: u16, k: u16) -> u16 {
     let [r, g, b] = widen(src);
@@ -254,8 +297,10 @@ pub fn apply(frame: &mut Frame, group: &SpotGroup, origin: (i32, i32)) {
             _ => None,
         };
         let i = (y * w + x) as usize;
+        // spec: S-0519 claim 27 (the end marker has no depth test)
+        let tested = !matches!(s.kind, SpotKind::Marker { .. });
         // spec: S-0518 claim 20 (a sample contributes only where its depth is strictly less than the stored depth; no depth write)
-        if spot_depth(frame, y, s) >= i32::from(frame.depth[i]) {
+        if tested && spot_depth(frame, y, s) >= i32::from(frame.depth[i]) {
             continue;
         }
         let a = frame.alpha[i];
@@ -282,6 +327,17 @@ pub fn apply(frame: &mut Frame, group: &SpotGroup, origin: (i32, i32)) {
                 None => continue,
             },
             SpotKind::Wave { k, .. } => wave(source.unwrap_or(d), k),
+            SpotKind::Strike { rgb, alpha } => match strike(d, rgb, alpha, a) {
+                Some(c) => c,
+                None => continue,
+            },
+            SpotKind::Marker {
+                colour,
+                over_shroud,
+            } => match marker(colour, over_shroud, a) {
+                Some(c) => c,
+                None => continue,
+            },
         };
     }
 }
@@ -478,5 +534,44 @@ mod tests {
         assert_eq!(f.color[3 * 8 + 4], wave(before[3 * 8 + 7], k));
         assert_eq!(f.color[4 * 8 + 3], wave(before[7 * 8 + 3], k));
         assert_eq!(f.color[4 * 8 + 4], wave(before[0], k));
+    }
+
+    /// spec: S-0519 F8 (p = ⌊(⌊d(256 − α)/256⌋ + ⌊cα/256⌋) × v/128⌋, d widened by zero bits,
+    /// narrowed by dropping low bits; v = 0 leaves the pixel; claim 27: capped at 255)
+    #[test]
+    fn strike_pixels_follow_f8() {
+        let d = pack([160, 64, 32]);
+        // α = 128, v = 128: half and half.
+        assert_eq!(strike(d, [240, 0, 0], 128, 128), Some(pack([200, 32, 16])));
+        // v = 64 halves the result.
+        assert_eq!(strike(d, [240, 0, 0], 128, 64), Some(pack([100, 16, 8])));
+        assert_eq!(strike(d, [240, 0, 0], 128, 0), None);
+        // v = 255 nearly doubles it, capped at 255.
+        assert_eq!(strike(d, [240, 0, 0], 128, 255), Some(pack([255, 63, 31])));
+    }
+
+    /// spec: S-0519 claim 27 (the end marker has no depth test and no light-alpha shading; with
+    /// quirks.airstrike_line_marker_over_shroud off it is not drawn at v = 0)
+    #[test]
+    fn markers_ignore_depth_and_light_alpha() {
+        let mut f = frame(3, 1);
+        f.depth = vec![0; 3];
+        f.alpha = vec![0, 64, 0];
+        let marker = |x, over_shroud| {
+            spot(
+                x,
+                0,
+                SpotKind::Marker {
+                    colour: 0xF800,
+                    over_shroud,
+                },
+            )
+        };
+        apply(
+            &mut f,
+            &group(vec![marker(0, true), marker(1, false), marker(2, false)]),
+            (0, 0),
+        );
+        assert_eq!(f.color, vec![0xF800, 0xF800, 0]);
     }
 }

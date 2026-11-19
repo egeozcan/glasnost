@@ -385,11 +385,16 @@ pub struct InputReport {
 }
 
 /// The line effects of one drawn frame (#93): the beams, bolts and beam
-/// flashes, in drawing order, of shown tick `tick` at detail `detail`.
+/// flashes, in drawing order, of shown tick `tick` at detail `detail`, and
+/// the strike lines' end markers and lines (#448).
 struct DrawnLines {
     tick: i32,
     detail: u8,
     spots: [Vec<glasnost_render::spots::Spot>; 3],
+    strikes: Vec<(
+        Vec<glasnost_render::spots::Spot>,
+        Vec<glasnost_render::spots::Spot>,
+    )>,
 }
 
 /// One changed overlay cell's drawings, kept with the cell they were drawn
@@ -592,6 +597,10 @@ pub struct Live {
     /// electric bolts' view test (S-0316 claim 5); `None` (no view known):
     /// every bolt counts as in view.
     pub battlefield: Option<((i32, i32), (u32, u32))>,
+    /// Whether the local player is in route mode, holding the route-mode
+    /// key (S-0213 claim 16): no strike line is drawn then (S-0519 claim
+    /// 27). The game session sets it; the viewer has no route mode.
+    pub route_mode: bool,
     /// The battlefield view the status extras were last culled against
     /// (S-0111 claim 1).
     status_view: Option<((i32, i32), (u32, u32))>,
@@ -1483,6 +1492,7 @@ impl Live {
             relight_owed: false,
             joined_overlays: BTreeSet::new(),
             battlefield: None,
+            route_mode: false,
             status_view: None,
             debug_markers: true,
             move_flash,
@@ -4320,7 +4330,8 @@ impl Live {
 
     /// The beams and beam flashes of the shown tick (S-0518 claims 19 to
     /// 23, S-0514 claims 24 to 26), after all layers and the status extras
-    /// (S-0102 claim 2): lasers first, then beam flashes (S-0514 claim 26).
+    /// (S-0102 claim 2): lasers first, then beam flashes (S-0514 claim 26),
+    /// then the strike lines (S-0519 claim 27).
     fn draw_lines(&mut self, inputs: &Inputs, scene: &mut Scene) {
         use glasnost_render::spots::SpotGroup;
         self.take_line_draws(inputs);
@@ -4338,6 +4349,23 @@ impl Live {
                     provisional: false,
                     spots,
                 });
+            }
+        }
+        if self.route_mode {
+            // spec: S-0519 claim 27 (no strike line while the local player is in route mode)
+            return;
+        }
+        // spec: S-0519 claim 27 (strike lines after all the effects of S-0102 claim 2; each end marker before its line)
+        for (marker, line) in drawn.strikes.iter().cloned() {
+            for spots in [marker, line] {
+                if !spots.is_empty() {
+                    scene.spots.push(SpotGroup {
+                        at: usize::MAX,
+                        group: glasnost_render::scene::Group::Effects,
+                        provisional: false,
+                        spots,
+                    });
+                }
             }
         }
     }
@@ -4373,10 +4401,25 @@ impl Live {
                 self.rules.mode,
                 &mut draw,
             );
+            // spec: S-0519 claim 27 (not drawn while the local player is in route mode; design: render (#448): no colour draw then either, as no line is drawn)
+            let strikes = if self.route_mode {
+                Vec::new()
+            } else {
+                let over = self.rules.quirks.airstrike_line_marker_over_shroud;
+                super::strike_line::lines(&self.world, now)
+                    .into_iter()
+                    .map(|(from, to)| {
+                        // spec: S-0519 claim 27 and F8 (one inclusive ranged draw on the unsynchronised stream per line in each drawn frame, wherever the line lies)
+                        let r = draw(super::strike_line::DRAW.0, super::strike_line::DRAW.1);
+                        super::strike_line::spots(from, to, super::strike_line::colour(r), over)
+                    })
+                    .collect()
+            };
             self.drawn_lines = Some(DrawnLines {
                 tick: now,
                 detail,
                 spots: [beams, bolts, flashes],
+                strikes,
             });
         }
     }
