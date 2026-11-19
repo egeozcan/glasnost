@@ -402,10 +402,11 @@ pub struct AiSeat {
 
 impl AiSeat {
     /// The stable id of the default script, script 1 of the AI's registry.
-    // design: own AI (#449): the registry's ids start at 1, the default script's
+    // nocite: design: own AI (#449): the registry's ids start at 1, the default script's
     pub const DEFAULT_SCRIPT: u8 = 1;
 
     /// The default script at normal: today's AI.
+    // nocite: design: own AI (#449): the choice of a setup that names none
     pub const DEFAULT: Self = Self {
         script: Self::DEFAULT_SCRIPT,
         difficulty: AiDifficulty::Normal,
@@ -441,6 +442,7 @@ pub enum AiDifficulty {
 
 impl AiDifficulty {
     /// Every difficulty, easiest first.
+    // nocite: design: own AI (#449): the list of our own AI's levels
     pub const ALL: [Self; 3] = [Self::Easy, Self::Normal, Self::Hard];
 
     /// The name the setup screen and the tools show.

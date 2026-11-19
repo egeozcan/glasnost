@@ -166,12 +166,12 @@ pub fn plan_for(level: AiDifficulty) -> Plan {
     let mut plan = default_plan();
     match level {
         AiDifficulty::Easy => {
-            plan.harvesters = 1; // design: own AI (#449): easy earns from one harvester
-            plan.wave = 3; // design: own AI (#449): easy attacks in small waves, easily held
+            plan.harvesters = 1; // nocite: design: own AI (#449): easy earns from one harvester
+            plan.wave = 3; // nocite: design: own AI (#449): easy attacks in small waves, easily held
         }
         AiDifficulty::Normal => {}
         AiDifficulty::Hard => {
-            plan.harvesters = 3; // design: own AI (#449): hard earns from a third harvester
+            plan.harvesters = 3; // nocite: design: own AI (#449): hard earns from a third harvester
         }
     }
     plan

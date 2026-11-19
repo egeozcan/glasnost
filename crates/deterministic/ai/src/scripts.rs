@@ -165,6 +165,7 @@ pub struct Entry {
 }
 
 /// The scripts compiled in, in the order the setup screen offers them.
+// nocite: design: own AI (#449): the registry of our own scripts
 pub const REGISTRY: &[Entry] = &[Entry {
     id: AiSeat::DEFAULT_SCRIPT,
     key: "default",
