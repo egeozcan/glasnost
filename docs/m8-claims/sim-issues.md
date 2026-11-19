@@ -1666,3 +1666,52 @@ Seams left:
 - The client's viewer test for the marker (#441) is not built here.
 
 The P3 census rule: the marker reads `World::projectiles` and no census back-reference, so the batch makes or moves no back-reference of `World::census`.
+
+## Batch S36: a hovering jumpjet vehicle and its target (#447, S-0502)
+
+Base main ad2b14f, not rebased. The batch builds S-0502 r27, which answers Q-3252 (#447). The design text came first (19aa738), in *Simulation (sim issues S36 …)* in `docs/dev/simulation.md`. The switch came next (5543c43), then the failing tests (11f06bb), then the fix (2564382). No fix commit changes a test. The red was shown in a separate base worktree checked out at the test commit (`red-11f06bb.txt`). No request is filed. Logs are in `local-lane/sim-issues/s36/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #447 | S-0502 claim 10 (r27): a jumpjet vehicle that keeps a movement commitment takes a physics step every tick, and each step sets its body facing to the movement heading. For the reply to *not facing* without a turret (S-0206 claim 9, S-0310 claim 9), its locomotor is moving it while it is *moving*. On base, `occupancy::in_progress` reads `jump::moving_now`, which is false in *hovering*. So a committed hovering vehicle with no turret and a non-omni weapon started a body turn toward its target every tick, and the next physics step put the body back: its body never settled on the heading | fixed (2564382; switch 5543c43; test 11f06bb, 4 red; rustfmt 5eafbbd) | `jump::moves_for_facing_reply` counts the commitment (`JumpState::moving`) as moving, for `combat::behave::vehicle_reply`'s no-turret branch. The new switch `quirks.hovering_jumpjet_body_on_heading` (default on) gives S-0502's Edge cases. Off, in *hovering* a vehicle's physics steps leave its body alone (`jump::fly::physics`), and its commitment does not count as moving. Its body then turns to the target at the body turn rate and it fires within the tolerance. The heading is unchanged, and the first physics step outside *hovering* sets the body again | `claims_s0502_r27_hover_target.rs` (7 tests). Four fail on base: the committed vehicle holding its fire with the body on the heading, the switch-off turn and shot, the switch-off return to the heading, and the omni-fire vehicle's body (failing in its switch-off half). The guards for no commitment, a turret and a jumpjet-turn infantry unit pass on base |
+
+Formats (84cbdd4): no saved field changes, but replays change, so save goes to 185 and AI game to 163 on the branch, renumbered to 158 and 136 at the merge. Wire stays 12. The switch adds one field to the rules schema (`data/schema/ruleset.schema.json`, refreshed in 5543c43). The sim-gate goldens were regenerated once, with the ignored tests (3d5d19a). Only `duel-m7b.txt` moves, from its line 522 (ticks 5220 to 5229) to its end: 278 of 800 lines. The fixture's DISC is the M7b duel's one jumpjet vehicle type, balloon-hovering with the non-omni gun as its primary. A watch of the three discs every 10 ticks on both builds (`watch-m7b-*`, `GLASNOST_WATCH=duel-m7b,11,10`, `GLASNOST_WATCH_TYPE=DISC`) shows them attacking object 17 from ticks 5220 and 5230, two with a destination cell. Every printed field (cell, behaviour, target, destination) stays equal until the tick 5770 snapshot, where DISC#5's attack starts a tick earlier (5760, against 5761). The watch does not print the body facing. The hash move falls in state the watch does not print, which fits the fix but was not observed directly.
+
+Lanes compare base ad2b14f with the batch at 2564382. The commits after it bump the formats, regenerate the golden and run rustfmt. The AI suite and the sim gate ran again on the final commit.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). `diff -r` of the two output directories is empty. These rows fail, on base and after:
+- M-0001: 10 of 96;
+- M-0002: 4 of 24;
+- M-0003: 3 of 35;
+- M-0019: 0 of 6;
+- M-0020: 0 of 25 checked;
+- M-0021: 10 of 50.
+
+**Sweeps** (`m6c-*`, `m7a-*`, `m7b-*`). M6c, M7a and M7b over seeds 1 to 16 pass, before and after. M6c and M7a print the same lines as base apart from timings. M7b moves: every seed still plays its 8000 ticks with no result and no drain counter below 3, but the per-seed counters change on seeds 2, 3, 5, 6, 7, 12, 14 and 16. In the summary:
+- drain orders: max 10 → 8;
+- credits drained: min 1080 → 1240, median 1680 → 1720;
+- drained-building ticks: min 4304 → 4276, median 4632 → 4640;
+- mutator launches: median 11 → 10;
+- infantry mutated: min 21 → 22, max 31 → 29;
+- objects taken over: median 21 → 20, max 24 → 28;
+- berserk weapon orders: min 14 → 21, median 35 → 32;
+- takeover orders: median 1 → 2, max 5 → 7;
+- infantry absorbed: min 2 → 5, max 10 → 8;
+- bunker exit orders: max 1 → 0.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt` and `quick-after-7.txt` to `quick-after-10.txt`). Apart from timings, every line of every seed's output equals base, so all 36 games end on the same tick with the same winner. No winner changes, so there is no flip to trace.
+
+**Suites.** The AI suite with its ignored tests passes 366 on base, after the fix and on the final commit (`ai-base.txt`, `ai-after.txt`, `final-ai.txt`). The sim gate with its ignored tests passes 17 on base (`gate-base.txt`). After the fix, `full_run_matches_golden` fails at duel-m7b's line 522 (`gate-after.txt`), as above. With the regenerated golden it passes 17 (`gate-after-2.txt`). On the final commit these also pass:
+- `cargo test --workspace --no-fail-fast`, apart from two known failures that name only S35's `buildup_twice_without_break_off`: `quirks::tests::every_spec_quirk_has_a_switch` (S-0406, S-0524) and app `every_rendering_spec_quirk_has_a_switch` (S-0108);
+- `cargo clippy --workspace --all-targets -- -D warnings`;
+- `cargo fmt --check`;
+- the wasm32 build of glasnost-app;
+- `cargo xtask check`, apart from the 8 known stock-guard problems in M-0027;
+- `cargo xtask gate`.
+
+Seams left:
+- S-0502's *Changes for other specs* (S-0206 Terms and S-0310 claim 9) are not yet revised in those specs. The fix reads them through S-0502 claim 10.
+- S-0310 claim 7's balloon *moving now* and S-0206 claim 16's track-class stop are left as they were.
+- The client needs no change: it draws `body.value`, which the sim now keeps on the heading.
+
+The P3 census rule: the fix reads a vehicle's jumpjet state and changes when its body facing is set. It makes or moves no back-reference of `World::census`.

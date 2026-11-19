@@ -116,12 +116,16 @@ fn physics(w: &mut World, id: ObjectId) {
         j.heading = Turning::at(d);
     }
     let keeps = w.rules().quirks.set_facing_keeps_target;
+    // spec: S-0502 Edge cases (r27, quirks.hovering_jumpjet_body_on_heading off: in hovering, a jumpjet vehicle's physics steps do not set its body facing from the movement heading; the first physics step outside hovering sets it again, at once)
+    let hover_free = !w.rules().quirks.hovering_jumpjet_body_on_heading
+        && j.phase == Phase::Hovering
+        && vehicle(w, id);
     // The ordinary step ends at the height before the crash drop.
     let step_z = dropped.map_or(z, |(before, _)| before);
     if let Some(o) = w.obj_mut(id) {
         o.jump = Some(j);
         o.pos.z = step_z;
-        if !snap && !held {
+        if !snap && !held && !hover_free {
             // spec: S-0502 claim 10 (the body facing is set to the movement heading in each physics step; a seized unit keeps its body facing, S-0607 claim 7)
             o.body.set(heading, tick, keeps);
         }

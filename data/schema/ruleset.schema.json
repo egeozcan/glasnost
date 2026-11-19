@@ -9829,6 +9829,11 @@
           "type": "boolean",
           "default": true
         },
+        "hovering_jumpjet_body_on_heading": {
+          "description": "A jumpjet vehicle that hovers with a target and keeps a movement commitment, not held by magnetic lift, keeps its body on its movement heading, and with a weapon that is not omni-fire and no turret it does not fire at a target outside the aiming tolerance of that heading; off: in *hovering* a jumpjet vehicle's physics steps do not set its body facing from the heading, and for the reply to *not facing* without a turret its locomotor does not count as moving it, so with no destination its body turns towards its target at its body turn rate and it fires once the target lies within the tolerance. A hovering vehicle without a commitment turns its body under either setting.",
+          "type": "boolean",
+          "default": true
+        },
         "hunt_distance_in_leptons": {
           "description": "The map-wide search measures ground-layer distance in leptons.",
           "type": "boolean",
