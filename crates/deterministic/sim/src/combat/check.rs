@@ -441,14 +441,18 @@ fn answer(
     // type has the keep-acting flag, against a vehicle target melee-linked
     // to another object) is asked here, before the materialising rearming;
     // it needs S-0214's melee link, which no topic of our engine sets yet.
-    // spec: S-0301 r69 claim 9 (A materialising firer within rank 4: rearming for every target and weapon; it yields only to the slave-bound firer's illegal, not in our engine, for vehicles to ranks 1 to 3 and the tube transit, and for infantry to the answers an infantry firer is asked first, above; it outranks every other rank-4 answer, among them the projectile refusals of S-0306 claim 23, the hidden-target impossible, the parasite warhead's illegal against a protected object, the empty slot's impossible and the own-gripped-unit rearming) and S-0207 claim 20 (f) (phasing in)
+    // spec: S-0301 r78 claim 9 (A firer bound to a slave master within rank 4, Q-3275: a slave bound to its master, from its creation until it is destroyed or its group ends, inside the master or outside it, gets illegal for every target and every weapon slot, with or without force-fire; the first reason of the general part, after the infantry firer's first answers above; it outranks every other reason of ranks 4 to 16)
+    if crate::econ::slaves::is_slave(w, firer) {
+        return Answer::Illegal;
+    }
+    // spec: S-0301 r69 claim 9 (A materialising firer within rank 4: rearming for every target and weapon; it yields only to the slave-bound firer's illegal, asked above, for vehicles to ranks 1 to 3 and the tube transit, and for infantry to the answers an infantry firer is asked first, above; it outranks every other rank-4 answer, among them the projectile refusals of S-0306 claim 23, the hidden-target impossible, the parasite warhead's illegal against a protected object, the empty slot's impossible and the own-gripped-unit rearming) and S-0207 claim 20 (f) (phasing in)
     // The own AI's lasting test passes over it as a reason of the moment
     // (our design). The attack rule asks it (S-0214 r78 claim 6 (e), Q-2356
     // answered), unless quirks.moment_reason_attack_cursor is off.
     if moment && crate::teleport::phasing_in(w, firer) {
         return Answer::Rearming;
     }
-    // spec: S-0301 r69 claim 9 (Grip refusals within rank 4) and S-0607 r38 claim 11 (a firing check by the lifter against its own gripped unit answers rearming, with any weapon, ahead of every test of the target's layer, height, kind or armour and of every projectile test; of S-0301 claim 9's rank-4 answers only the materialising firer's rearming, the refusal of a firer bound to a slave master, which our engine does not have, and for an infantry lifter the answers an infantry firer is asked first precede it, all asked above)
+    // spec: S-0301 r69 claim 9 (Grip refusals within rank 4) and S-0607 r38 claim 11 (a firing check by the lifter against its own gripped unit answers rearming, with any weapon, ahead of every test of the target's layer, height, kind or armour and of every projectile test; of S-0301 claim 9's rank-4 answers only the materialising firer's rearming, the refusal of a firer bound to a slave master, and for an infantry lifter the answers an infantry firer is asked first precede it, all asked above)
     if !pass
         && weapon.is_some()
         && let Some(Target::Object(x)) = target
@@ -456,7 +460,7 @@ fn answer(
     {
         return Answer::Rearming;
     }
-    // spec: S-0301 claim 9 (Deactivated firers within rank 4) and S-0405 claim 20: a deactivated vehicle gets illegal for every target and weapon, a force-fire target included; the refusal yields to the slave-bound firer's illegal (not in our engine), the materialising firer's rearming and the own-gripped-target rearming (both above), and outranks every other rank-4 answer
+    // spec: S-0301 claim 9 (Deactivated firers within rank 4) and S-0405 claim 20: a deactivated vehicle gets illegal for every target and weapon, a force-fire target included; the refusal yields to the slave-bound firer's illegal, the materialising firer's rearming and the own-gripped-target rearming (both above), and outranks every other rank-4 answer
     if kind == Kind::Vehicle && crate::econ::power::unit_disabled(w, firer) {
         return Answer::Illegal;
     }

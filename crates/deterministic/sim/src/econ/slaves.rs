@@ -977,7 +977,7 @@ fn building_update(w: &mut World, id: ObjectId) -> bool {
 /// (S-0402 claims 22, 24 and 25, F7). Returns whether packing was
 /// requested.
 fn check_field(w: &mut World, id: ObjectId) -> bool {
-    let Some(a) = w.obj(id).map(|o| o.pos.cell()) else {
+    let Some((a, size)) = w.obj(id).map(|o| (o.pos.cell(), o.foundation)) else {
         return false;
     };
     let (short, long, correction) = {
@@ -1009,9 +1009,15 @@ fn check_field(w: &mut World, id: ObjectId) -> bool {
     };
     // spec: S-0402 F7 and claim 25 (packing-up is requested exactly when c + d(S, F) < d(A, F); equality does not)
     if f7_packs_up(correction, s, a, f, table, mode) && super::deploy::packs_up(w, id) {
+        // spec: S-0402 r90 claim 25 (quirks.slave_auto_pack_old_top_left off: the vehicle's return cell of S-0415 claim 10, where it appears, instead of A)
+        let remembered = if w.rules().quirks.slave_auto_pack_old_top_left {
+            a
+        } else {
+            super::deploy::return_cell(a, size)
+        };
         if let Some(ob) = w.obj_mut(id) {
             // spec: S-0402 claims 22, 25 and 28 (the remembered cell of an automatic pack-up is the building's own top-left cell A; it is the building's one remembered destination, its guard spot, and replaces any earlier guard spot)
-            ob.guard_spot = Some(Target::Cell(a));
+            ob.guard_spot = Some(Target::Cell(remembered));
         }
         // spec: S-0402 claim 27 (the group packs)
         set_group(w, id, |g| g.state = GroupState::Packing);
@@ -1196,13 +1202,21 @@ fn emerge(w: &mut World, id: ObjectId) {
             x.phase = SlavePhase::Seeking;
             x.recalled = false;
         });
+        // spec: S-0402 r90 claim 21 (a successful emergence gives the slave no target; it is sent a forced, move-anywhere scatter request with the master's reference point, S-0204 claim 4, as threat point, which S-0208 claims 11 and 12 answer; an accepted request's draw follows this slave's placement draw and comes before the next slave's offer)
+        let threat = w.reference_point(id);
+        crate::scatter::request(
+            w,
+            s,
+            crate::scatter::ScatterRequest {
+                threat: Some(threat),
+                forced: true,
+                anywhere: true,
+            },
+        );
         if let Some(so) = w.obj_mut(s) {
-            // spec: S-0402 claim 21 (on emergence its target is the master and it starts claim 14's resource search)
-            so.target = Some(Target::Object(id));
+            // spec: S-0402 r90 claim 21 (the slave then starts claim 14's resource search; the destination the request gave stays until the search gives another)
             so.beh.force(Behaviour::Harvest, t, stale);
         }
-        // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
-        crate::emitters::retarget_let_go(w, s);
     }
 }
 

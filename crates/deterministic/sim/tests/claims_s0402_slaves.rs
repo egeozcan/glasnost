@@ -13,7 +13,10 @@ use std::sync::Arc;
 use glasnost_map::CellXY;
 use glasnost_map::triggers::{Event, TagDef, TriggerDef, Triggers};
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{Country, Decimal, LocomotionClass, Locomotor, UnitType, WarheadType};
+use glasnost_rules::sim::{
+    Country, Decimal, LocomotionClass, Locomotor, ProjectileType, UnitType, WarheadType, WeaponType,
+};
+use glasnost_sim::combat::check::{self, Answer};
 use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::econ::slaves::{self, GroupState, SlaveGroup, SlavePhase};
 use glasnost_sim::econ::{TypeRef, stats, tech};
@@ -295,7 +298,8 @@ fn claim_21_building_emergence() {
     let unloading = at(3, 0);
     for &s in &out {
         assert_eq!(w.obj(s).unwrap().pos.cell(), unloading);
-        assert_eq!(w.obj(s).unwrap().target, Some(Target::Object(b)));
+        // spec: S-0402 r90 claim 21 (a successful emergence gives the slave no target)
+        assert_eq!(w.obj(s).unwrap().target, None);
         // spec: S-0402 claim 21 (facing 0, map north)
         assert_eq!(w.body_facing(s), 0);
     }
@@ -1057,8 +1061,8 @@ fn claim_26_slave_processing_capacity() {
         let mut w = game_on(&r, &field(5, -1, 5), false);
         let b = working_building(&mut w);
         let s = on_map(&w, b)[0];
+        stand_still(&mut w, s);
         if let Some(o) = w.obj_mut(s) {
-            o.dest = None;
             // A slave in harvest (the emerged slave's queued guard may already be current through the late start, S-0215 claim 11 revision 57, and queuing the current behaviour changes nothing, claim 7).
             o.beh.current = Some(Behaviour::Harvest);
             o.beh.queued = None;
@@ -2608,13 +2612,24 @@ fn shovel_rules() -> Ruleset {
     r
 }
 
+/// Test set-up only: stops a just-emerged slave where it stands, with no
+/// destination, walk or stored path (S-0402 r90 claim 21's scatter request
+/// gives it a walk to a neighbouring cell).
+fn stand_still(w: &mut World, s: ObjectId) {
+    if let Some(o) = w.obj_mut(s) {
+        o.dest = None;
+        o.walk = None;
+        o.path.steps.clear();
+    }
+}
+
 /// A working building's first slave at rest in *harvest*, and its cell.
 fn harvesting_slave(r: &Ruleset) -> (World, ObjectId, CellXY) {
     let mut w = game_on(r, &field(5, -1, 5), false);
     let b = working_building(&mut w);
     let s = on_map(&w, b)[0];
+    stand_still(&mut w, s);
     if let Some(o) = w.obj_mut(s) {
-        o.dest = None;
         o.beh.current = Some(Behaviour::Harvest);
         o.beh.queued = None;
     }
@@ -2868,9 +2883,189 @@ fn claim_25_issue_451_automatic_pack_up_redeploys_one_cell_on() {
     );
 }
 
-// spec: S-0402 claim 21 (#450: on successful emergence a slave's target is its master). With the unarmed synthetic slave the held master target is never shot at; whether an armed slave bound to its master may fire at it is Q-3275
+/// The scene of #451 (S-0402 H30 part b1's layout on a synthetic map): a
+/// near field of 1 bale a cell used up, a far field of stage 5 beyond the
+/// short scan and within the long scan towards +x and +y, and the miner SMV
+/// (deploying into the 3 × 3 SMB) ordered to harvest next to the near
+/// field. Returns the world, the first building and its top-left cell.
+fn issue_451_scene(r: &Ruleset) -> (World, ObjectId, CellXY) {
+    issue_451_scene_with(r, "SMV")
+}
+
+/// As [`issue_451_scene`], with the miner `miner` (SMV2 deploys into the
+/// 2 × 2 SMB2).
+fn issue_451_scene_with(r: &Ruleset, miner: &str) -> (World, ObjectId, CellXY) {
+    let mut ore = field(5, -1, 0);
+    ore.extend(field(10, 8, 5));
+    let mut w = game_on(r, &ore, false);
+    let m = place_vehicle(&mut w, miner, 0, at(-8, 6), 0);
+    unblock(&mut w);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: m,
+            behaviour: Behaviour::Harvest,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(6, 0))),
+        }
+    ));
+    let b = next_building(&mut w, None, 1500);
+    let a = w.obj(b).unwrap().pos.cell();
+    (w, b, a)
+}
+
+// spec: S-0402 r90 claim 25 (quirks.slave_auto_pack_old_top_left off: automatic packing stores the vehicle's return cell, so a foundation larger than 2 × 2 behaves as case (a): the vehicle stands, its destination is cleared, the second vehicle group update seeks a field with the long scan and the miner deploys near the far field) and H30 (on our engine only, parts b1 and c1 with the switch off behave as parts a and c2); #451
 #[test]
-fn claim_21_issue_450_an_emerged_slave_targets_its_master() {
+fn claim_25_issue_451_old_top_left_off_reaches_the_far_field() {
+    let mut r = rules();
+    r.globals.quirks.slave_auto_pack_old_top_left = false;
+    let (mut w, b, a) = issue_451_scene(&r);
+    until(&mut w, 3000, |w| group(w, b).state == GroupState::Packing).expect("packing");
+    assert_eq!(left_in(&w, 10, 8), 9, "the far field is untouched");
+    // spec: S-0402 claim 25 (switch off: the remembered cell is the return cell of S-0415 claim 10, x + 1, y + 1 for a 3 × 3 foundation)
+    let ret = CellXY::new(a.x + 1, a.y + 1);
+    assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(ret)));
+    until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    let o = w.obj(v).unwrap();
+    // spec: S-0415 claim 10 (the vehicle appears at the return cell, now also its destination) and S-0402 claim 25 case (a) (with no active track that cell destination goes at the vehicle's first update, which can fall in the conversion tick)
+    assert_eq!(o.pos.cell(), ret);
+    assert!(
+        o.dest.is_none() || o.dest == Some(Target::Cell(ret)),
+        "{:?}",
+        o.dest
+    );
+    // spec: S-0402 claim 25 case (a) (the vehicle never leaves the cell before its redeployment near the far field) and claim 22 (it deploys there)
+    let next = next_building(&mut w, Some(b), 1500);
+    let n = w.obj(next).unwrap().pos.cell();
+    let f = at(10, 8);
+    assert!(
+        (n.x - f.x).abs() <= 4 && (n.y - f.y).abs() <= 4 && n.x > ret.x && n.y > ret.y,
+        "redeployed at {n:?}, from {a:?}"
+    );
+    until(&mut w, 1500, |w| left_in(w, 10, 8) < 9).expect("the far field is mined");
+}
+
+/// Whether the redeployment at `n` lies near the far field of
+/// [`issue_451_scene`] and onwards from the return cell `ret`.
+fn near_far_field(n: CellXY, ret: CellXY) -> bool {
+    let f = at(10, 8);
+    (n.x - f.x).abs() <= 4 && (n.y - f.y).abs() <= 4 && n.x > ret.x && n.y > ret.y
+}
+
+// spec: S-0402 r90 claim 25 case (a) and H30 part a (a foundation of at most 2 × 2: the vehicle appears on A with A as its destination and does not leave it; the cleanup removes the destination, the second vehicle group update seeks with the long scan and the miner deploys near the far field); quirks.slave_auto_pack_old_top_left changes nothing there (the return cell is A)
+#[test]
+fn claim_25_h30_a_two_by_two_reaches_the_far_field_either_way() {
+    for quirk in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.slave_auto_pack_old_top_left = quirk;
+        let (mut w, b, a) = issue_451_scene_with(&r, "SMV2");
+        until(&mut w, 3000, |w| group(w, b).state == GroupState::Packing).expect("packing");
+        assert_eq!(left_in(&w, 10, 8), 9, "the far field is untouched");
+        assert_eq!(
+            w.obj(b).unwrap().guard_spot,
+            Some(Target::Cell(a)),
+            "{quirk}"
+        );
+        until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
+        let v = vehicle_master(&w);
+        // spec: S-0415 claim 10 and F3 (the return cell of a 2 × 2 foundation is its top-left cell)
+        assert_eq!(w.obj(v).unwrap().pos.cell(), a);
+        let next = next_building(&mut w, Some(b), 1500);
+        let n = w.obj(next).unwrap().pos.cell();
+        assert!(
+            near_far_field(n, a),
+            "{quirk}: redeployed at {n:?}, from {a:?}"
+        );
+    }
+}
+
+// spec: S-0402 r90 claim 25 case (b) and H30 part b2 (a larger foundation whose one-cell drive to A ends before the second vehicle group update: no destination there, so case (a)'s seeking follows and the miner deploys near the far field), with the switch on
+#[test]
+fn claim_25_h30_b2_quick_drive_reaches_the_far_field() {
+    let mut r = rules();
+    assert!(r.globals.quirks.slave_auto_pack_old_top_left);
+    let smv = r.sim.vehicles.get_mut("SMV").unwrap();
+    // Invented: fast enough for the diagonal cell and the turn to end within a few ticks.
+    smv.speed = Some(60);
+    smv.rot = Some(60);
+    let (mut w, b, a) = issue_451_scene(&r);
+    until(&mut w, 3000, |w| group(w, b).state == GroupState::Packing).expect("packing");
+    assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(a)));
+    until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Cell(a)));
+    let next = next_building(&mut w, Some(b), 1500);
+    let n = w.obj(next).unwrap().pos.cell();
+    assert!(near_far_field(n, a), "redeployed at {n:?}, from {a:?}");
+}
+
+/// A deployed `building` at top-left `at(0, −1)` with no resource anywhere
+/// and the switch at `quirk`, run until its first automatic pack-up has
+/// finished; the world, the vehicle and the old top-left cell A.
+fn no_field_pack_up(building: &str, quirk: bool) -> (World, ObjectId, CellXY) {
+    let mut r = rules();
+    r.globals.quirks.slave_auto_pack_old_top_left = quirk;
+    let mut w = game_on(&r, &[], false);
+    let b = place_building(&mut w, building, 0, at(0, -1));
+    let a = w.obj(b).unwrap().pos.cell();
+    until(&mut w, 300, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    (w, v, a)
+}
+
+/// The deployments of the game's slave master over `ticks` ticks: the
+/// top-left cell of each new building.
+fn deployments(w: &mut World, ticks: i32) -> Vec<CellXY> {
+    let mut seen: Option<ObjectId> = None;
+    let mut cells = Vec::new();
+    for _ in 0..ticks {
+        testkit::run(w, 1);
+        let m = the_master(w).filter(|&m| w.obj(m).is_some_and(|o| o.kind == Kind::Building));
+        if let Some(m) = m
+            && seen != Some(m)
+        {
+            seen = Some(m);
+            cells.push(w.obj(m).unwrap().pos.cell());
+        }
+    }
+    cells
+}
+
+// spec: S-0402 r90 claim 25 case (c) and H30 part c1 (no field left, a larger foundation, the comparison with (0, 0) requesting packing: case (b)'s cycle runs on, each redeployment one cell along −x and −y)
+#[test]
+fn claim_25_h30_c1_no_field_cycle_runs_on() {
+    let (mut w, _, a) = no_field_pack_up("SMB", true);
+    let cells = deployments(&mut w, 1500);
+    assert!(cells.len() >= 3, "{cells:?}");
+    let mut last = a;
+    for &c in &cells {
+        assert_eq!(
+            c,
+            CellXY::new(last.x - 1, last.y - 1),
+            "{cells:?} from {a:?}"
+        );
+        last = c;
+    }
+}
+
+// spec: S-0402 r90 claim 25 case (c) and H30 parts c2 and c1 (a foundation of at most 2 × 2 with no field left packs up once, then seeks without a field and rests, with no further deployment; on our engine with quirks.slave_auto_pack_old_top_left off, a larger foundation does the same)
+#[test]
+fn claim_25_h30_c2_no_field_packs_up_once() {
+    for (building, quirk) in [("SMB2", true), ("SMB2", false), ("SMB", false)] {
+        let (mut w, v, _) = no_field_pack_up(building, quirk);
+        let cells = deployments(&mut w, 1500);
+        assert!(cells.is_empty(), "{building} {quirk}: {cells:?}");
+        assert!(w.obj(v).is_some_and(|o| o.kind == Kind::Vehicle));
+        assert_eq!(group(&w, v).state, GroupState::AtRest, "{building} {quirk}");
+    }
+}
+
+// spec: S-0402 r90 claim 21 (#450, Q-3275 answered: a successful emergence gives the slave no target) and scenario H16 (the absence of a target); an unarmed slave never hurts its master
+#[test]
+fn claim_21_issue_450_an_emerged_slave_has_no_target() {
     let r = rules();
     let mut w = game_on(&r, &field(5, -1, 5), false);
     let m = place_vehicle(&mut w, "SMV", 0, at(-8, 6), 0);
@@ -2896,11 +3091,7 @@ fn claim_21_issue_450_an_emerged_slave_targets_its_master() {
     };
     until(&mut w, 300, |w| out(w).len() == SLAVES as usize).expect("all slaves out");
     for s in out(&w) {
-        assert_eq!(
-            w.obj(s).unwrap().target,
-            Some(Target::Object(b)),
-            "slave {s:?}"
-        );
+        assert_eq!(w.obj(s).unwrap().target, None, "slave {s:?}");
     }
     testkit::run(&mut w, 600);
     assert_eq!(
@@ -2908,4 +3099,162 @@ fn claim_21_issue_450_an_emerged_slave_targets_its_master() {
         strength,
         "an unarmed slave never hurts its master"
     );
+}
+
+// spec: S-0402 r90 claim 21 (a successful emergence sends the slave a forced, move-anywhere scatter request with the master's reference point as threat point; S-0208 claim 11 accepts it, as only a forced request is accepted by a slave type that is not a fraidycat; S-0208 claim 12 gives a neighbouring cell away from the threat point; the slave then starts claim 14's resource search) and scenario H18
+#[test]
+fn claim_21_emergence_sends_a_scatter_request() {
+    let r = rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = place_building(&mut w, "SMB", 0, at(1, -1));
+    glasnost_sim::trace::switch_on(&mut w);
+    until(&mut w, 40, |w| !on_map(w, b).is_empty()).expect("emerged");
+    let events = glasnost_sim::trace::take(&w);
+    let out = on_map(&w, b);
+    assert_eq!(out.len(), SLAVES as usize);
+    // spec: S-0402 claim 21 (the offered foundation cell (W − 1, ⌊H/2⌋))
+    let unloading = at(3, 0);
+    for &s in &out {
+        let asked: Vec<_> = events
+            .iter()
+            .filter(|e| e.unit == s)
+            .filter_map(|e| match e.what {
+                glasnost_sim::trace::What::Asked { accepted, dest } => Some((accepted, dest)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(asked.len(), 1, "slave {s:?}: {asked:?}");
+        let (accepted, dest) = asked[0];
+        assert!(accepted, "slave {s:?}");
+        let c = dest.expect("a destination");
+        // spec: S-0208 claim 12 (one of the eight neighbours, d = (d₀ + j − 2) mod 8 with d₀ pointing away from the master's foundation centre, so never towards its west side)
+        assert!(
+            (c.x - unloading.x).abs() <= 1 && (c.y - unloading.y).abs() <= 1 && c != unloading,
+            "slave {s:?}: {c:?}"
+        );
+        assert!(c.x >= unloading.x, "slave {s:?}: {c:?}");
+        let o = w.obj(s).unwrap();
+        assert_eq!(o.target, None);
+        assert_eq!(o.dest, Some(Target::Cell(c)));
+        // spec: S-0402 claim 21 (the slave then starts claim 14's resource search)
+        assert_eq!(o.beh.current, Some(Behaviour::Harvest));
+    }
+}
+
+/// [`rules`] with the slave type armed: an invented weapon ZAP (range 3
+/// cells, the DEMO warhead, which every armour takes in full) in its primary
+/// and secondary slots.
+fn armed_rules() -> Ruleset {
+    let mut r = rules();
+    r.sim.projectiles.insert(
+        "ZIP".into(),
+        ProjectileType {
+            inviso: Some(true),
+            ..Default::default()
+        },
+    );
+    r.sim.weapons.insert(
+        "ZAP".into(),
+        WeaponType {
+            damage: Some(10),
+            rof: Some(20),
+            range: Some(Decimal("3".into())),
+            speed: Some(100),
+            projectile: Some("ZIP".into()),
+            warhead: Some("DEMO".into()),
+            ..Default::default()
+        },
+    );
+    let s = r.sim.infantry.get_mut("SLAVE").unwrap();
+    s.primary = Some("ZAP".into());
+    s.secondary = Some("ZAP".into());
+    r
+}
+
+// spec: S-0301 r78 claim 9 (A firer bound to a slave master within rank 4, Q-3275: a bound firer never makes a shot) and scenario F23 parts a and b (no shot while the slaves work); #450
+#[test]
+fn s0301_issue_450_an_armed_slave_never_shoots_its_master() {
+    let r = armed_rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    // SMH does not pack up when the field is used up.
+    let b = place_building(&mut w, "SMH", 0, at(0, -1));
+    until(&mut w, 40, |w| on_map(w, b).len() == SLAVES as usize).expect("emerged");
+    let strength = w.obj(b).unwrap().health;
+    testkit::run(&mut w, 1500);
+    assert_eq!(w.obj(b).map(|o| o.health), Some(strength));
+    assert!(
+        slaves::slaves_of(&w, b)
+            .iter()
+            .all(|&s| w.obj(s).is_none_or(|o| o.target.is_none())),
+        "no slave holds a target"
+    );
+}
+
+// spec: S-0301 r78 claim 9 (A firer bound to a slave master within rank 4: illegal for every target and every weapon slot, its own master, an object of its own house, an enemy and a cell, with or without the range test, inside the master and outside it); a free infantry unit of the same type as the control
+#[test]
+fn s0301_bound_firer_is_illegal_for_every_target_and_slot() {
+    let r = armed_rules();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let own = place_vehicle(&mut w, "HARV", 0, at(4, 2), 0);
+    let enemy = place_vehicle(&mut w, "HARV", 1, at(5, 3), 0);
+    let free = testkit::spawn(&mut w, Kind::Infantry, "SLAVE", 0, at(4, 3), 0);
+    let targets = [
+        Target::Object(b),
+        Target::Object(own),
+        Target::Object(enemy),
+        Target::Cell(at(4, 4)),
+    ];
+    let mut ids = on_map(&w, b);
+    assert_eq!(ids.len(), SLAVES as usize);
+    // A replacement slave still inside its master is bound as well.
+    let lost = ids.pop().unwrap();
+    glasnost_sim::objects::remove(&mut w, lost);
+    until(&mut w, 200, |w| {
+        group(w, b)
+            .members
+            .iter()
+            .any(|m| m.id.is_some_and(|s| m.inside && s != lost))
+    })
+    .expect("a replacement inside");
+    ids.extend(
+        group(&w, b)
+            .members
+            .iter()
+            .filter(|m| m.inside)
+            .filter_map(|m| m.id),
+    );
+    for &s in &ids {
+        for t in targets {
+            for slot in [0, 1] {
+                for range in [false, true] {
+                    assert_eq!(
+                        check::check(&w, s, Some(t), slot, range),
+                        Answer::Illegal,
+                        "slave {s:?}, {t:?}, slot {slot}, range {range}"
+                    );
+                }
+            }
+        }
+    }
+    // The control: a free unit of the slave type may fire at the enemy.
+    assert_ne!(
+        check::check(&w, free, Some(Target::Object(enemy)), 0, false),
+        Answer::Illegal
+    );
+}
+
+// spec: S-0301 r78 claim 9 (a slave freed when its group ends is no longer bound) and scenario F23 part d (the freed slave can fire again); S-0408 claim 10a (a true sale gives the on-map slaves to the first civilian-side house)
+#[test]
+fn s0301_freed_slave_is_not_bound() {
+    let (mut w, out) = sold_on(&armed_rules(), true);
+    let enemy = place_vehicle(&mut w, "HARV", 0, at(3, 3), 0);
+    for &s in &out {
+        assert!(!slaves::is_slave(&w, s));
+        assert_ne!(
+            check::check(&w, s, Some(Target::Object(enemy)), 0, false),
+            Answer::Illegal,
+            "freed slave {s:?}"
+        );
+    }
 }

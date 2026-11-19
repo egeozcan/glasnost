@@ -2080,3 +2080,109 @@ Seams left:
 - The quick lane's moves and any winner trace are handed back.
 
 The P3 census rule: the batch adds no saved field and no object-table reference, so it makes or moves no back-reference of `World::census`.
+
+## Batch S41: the slave miner's pack-up cell, bound slaves, a building's experience, a chrono legionnaire's own grinder and a target taken over (#451, #450, #452, #455, #453)
+
+Base main 43eaa36, not rebased. The batch builds three answers:
+- Q-3274's, in S-0402 r90 claim 25 (#451);
+- Q-3275's, in S-0301 r78 claim 9 and S-0402 r90 claim 21 (#450);
+- Q-3273's, in S-0311 r14 claim 16 (#452).
+
+It also checks two issues against the claims, #455 and #453. Both match them, so each gets a request and guard tests, not a fix.
+
+The work went in this order:
+1. The new switch and its schema entry (c263b46).
+2. The design text, in *Simulation (sim issues S41 …)* in `docs/dev/simulation.md` (ce8207c).
+3. For each item, the failing tests, then the fix. No fix commit changes a test. Item 1's test was corrected once, before its fix (eb5c503, then 950d8a2).
+4. The requests, each in its own commit: Q-3297 (f4e92d7) and Q-3298 (ebebce6).
+5. A rustfmt commit (4c12521), the format bump (1d11931) and the goldens (b8dd5d4).
+
+Each red was shown in a separate base worktree checked out at the test commit (`red-1.txt`, `red-2.txt`, `red-3.txt`, `red-3b.txt`). Logs are in `local-lane/sim-issues/s41/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #451, the pack-up cell (S-0402 r90 claim 25, Q-3274; H30) | An automatic pack-up remembered the old top-left cell *A* as the guard spot, so a 3 × 3 master's vehicle drove one diagonal cell back and redeployed one cell on, again and again. r90 keeps that as the original and names a switch for it | fixed (c263b46, 69b218e; tests eb5c503 and 950d8a2, red at 950d8a2: guard spot (36, 32) against (37, 33)) | New switch `quirks.slave_auto_pack_old_top_left`, on by default (the original), in the rules schema. `econ::slaves::check_field`: with the switch off the guard spot is the return cell of S-0415 claim 10 (`econ::deploy::return_cell`), where the vehicle appears. So a foundation larger than 2 × 2 behaves as case (a), and its miner reaches the far field. Manual packing is untouched | `claims_s0402_slaves.rs`: `claim_25_issue_451_old_top_left_off_reaches_the_far_field` (red). Guards, 4e2db3a, as built: `claim_25_h30_a_two_by_two_reaches_the_far_field_either_way`, `claim_25_h30_b2_quick_drive_reaches_the_far_field`, `claim_25_h30_c1_no_field_cycle_runs_on`, `claim_25_h30_c2_no_field_packs_up_once` |
+| #450, the bound firer (S-0301 r78 claim 9, Q-3275; F23) | A firer bound to a slave master had no *illegal*, so an armed slave shot its master | fixed (4d76f62; tests e65545b, red there) | `combat::check::answer` asks the bound firer's *illegal* after the infantry healer's *illegal* and before the materialising firer's *rearming*. It is asked in every mode, for every target, every slot and no target. A firer is bound while `econ::slaves::is_slave` holds | `s0301_bound_firer_is_illegal_for_every_target_and_slot` (red: *rearming* against *illegal*), `s0301_issue_450_an_armed_slave_never_shoots_its_master` (red: master health 150 against 480), `s0301_freed_slave_is_not_bound` (guard) |
+| #450, emergence (S-0402 r90 claim 21, H16, H18) | An emerged slave was given its master as target | fixed (4d76f62; tests e65545b, red there) | `econ::slaves::emerge` gives no target. It sends a forced, move-anywhere scatter request (`scatter::request`) with the master's reference point as threat point, right after the slave's placement draw, then forces *harvest* current. The force drops the queued *move*, and the destination stays | `claim_21_emergence_sends_a_scatter_request`, `claim_21_issue_450_an_emerged_slave_has_no_target`, and `claim_21_building_emergence`, which now expects no target (all red). The `stand_still` helper is set-up only |
+| #452, a building's experience (S-0311 r14 claim 16 and Import mapping, Q-3273) | A building type without the trainable key took the shared default (yes), so a tower gained experience and could rank | fixed (2c8f91f; tests 9b8efd6, red there) | `rules::building_rules`: `trainable` is `bt.combat.trainable.unwrap_or(false)`. The kill recipient of claim 8, the veteran crate (S-0520 claim 22) and claim 11 follow from it. No client change | `claims_s0311.rs`: `claim_16_issue_452_building_without_the_key_is_untrainable`, `claim_16_issue_452_armed_building_kills_without_promotion` (both red). `claims_s0311_building_crate.rs`: `claim_16_issue_452_veteran_crate_raises_only_a_trainable_building` (red: 1.0 against 0) |
+| #455, a chrono legionnaire and its own grinder (S-0603, S-0213, S-0215, S-0207, S-0208, S-0214) | The claims give the *recycle* cursor (I26) for an armed, self-teleporting infantry type at rest, and also while it phases in. A click while phasing in gives no order, because table M needs *movable*. After phasing, the click gives the eaten order with the own grinder as destination. The landing point is chosen when the order is applied, with *guard* current. No occupant is ignored, and WP19 blocks the foundation, so the nearby search lands the unit beside the building. *Eaten* falls back to rest, and the unit is never consumed | as built; request Q-3297 (f4e92d7) | none | `claims_s0603.rs` (c94e1ad): `claim_1_issue_455_a_self_teleporting_infantry_gets_recycle`, `claims_3_5_issue_455_a_self_teleporting_entrant_lands_beside_and_stays` |
+| #453, a target that mind control makes the attacker's own (S-0309 claims 25 k, 29, 30, 31, S-0301 claim 9, S-0601 claim 6) | Claim 30 drops a target only when the holder's own owner changes. Claim 29 drops it only on *illegal* or *impossible*. Claim 25 part k's allied drop covers only the neutral and special houses. So a player's tank keeps attacking a vehicle that its house's controller takes over. That holds whether the attack was ordered or set as a search would set it | as built; request Q-3298 (ebebce6) | none | `claims_s0601.rs` (85bbe36): `s0309_issue_453_a_player_attacker_keeps_a_target_its_house_took_over`. Claim 25 k's neutral drop stays guarded by `claims_s0309_r94.rs` |
+
+**Formats** (1d11931):
+- Item 2's new draws and item 3's experience change saved state. Save goes from 162 to 197 and AI game from 140 to 175 on the branch (renumbered to 165 and 143 at the merge).
+- The AI game bump in `crates/deterministic/ai/src/game.rs` is forced by the sim change.
+- Wire stays 13.
+- The rules schema gains `slave_auto_pack_old_top_left` (c263b46). With it, the quirk-switch test no longer names it (on base it named it with S40's and R16's switches).
+
+**Goldens** (b8dd5d4): six of the nine sim-gate goldens move: duel, duel-diagonal, duel-naval, duel-m6c, duel-m7a and duel-m7b. Combat, scripted and skirmish stay, and line counts are unchanged.
+- At 9b8efd6 (items 1 and 2 in, item 3 not), the golden test with its ignored run passed duel, duel-diagonal, duel-naval and duel-m6c, then failed at duel-m7a ("state hash differs after tick 467"; `golden-at-9b8efd6-full.txt`). So item 2 moves duel-m7a and item 3 moves the four before it.
+- The test stops at its first failure, so duel-m7b's mover is not split.
+
+Lanes compare base 43eaa36, built in the base worktree, with the batch at b8dd5d4.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). The failing rows of every measurement stay as base:
+- M-0001: 10 of 96;
+- M-0002: 4 of 24;
+- M-0003: 3 of 35;
+- M-0019: 0 of 6;
+- M-0020: 0 of 25 checked;
+- M-0021: 10 of 50.
+
+Within those rows:
+- M-0001's win-test failures go from 3 to 2. LTNK against E1 goes from 4/8/0 to 4/7/1. CAOS against E2 goes from 6/6/0 (p 0.0047) to 4/6/2 (p 0.0285), which now fails on side outcome only.
+- M-0002's win-test failures go from 0 to 1. YURI against E1 goes from 5/7/0 (p 0.0120) to 6/6/0 (p 0.0047).
+- In M-0019 only the sample counts of infantry pairings change.
+- M-0003, M-0020 and M-0021 are identical to base.
+
+Only infantry pairings move, and the arena has no slaves. So these moves are put down to item 3 by elimination. The arena's maps hold the neutral house's buildings, some of them garrisonable. Item 3 changes where a kill made from inside a building puts its experience: claim 8's occupant fallback, as in the quick lane's seed 8 game 4 below. These moves are not traced.
+
+**Sweeps** (`m6c-*`, `m7a-*`, `m7b-*`, seeds 1 to 16):
+- All three pass, before and after.
+- M6c prints the same lines as base, apart from build and timing lines.
+- M7a: every seed runs 12000 ticks with smallest minimum 0, and every seed's counters move (slave miners: item 2).
+- M7b: every seed runs 8000 ticks, with results none.
+  - First link, base: 6107 6137 5942 5897 6032 5927 5957 6139 5942 6236 6062 5937 6453 5935 5479 5972.
+  - First link, after: 5897 5429 6202 6157 5961 5368 6077 6186 6156 5917 6107 5987 6178 5972 5368 6146.
+  - Links ended, base: 0 1 0 0 0 1 0 0 0 0 0 0 0 0 1 0. After: 0 2 0 0 0 1 0 0 0 0 0 0 0 0 4 0.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt`, `quick-after-7.txt` to `quick-after-10.txt`). Each seed's games are numbered 1 to 9: map 0 with sides 0v1, 0v2 and 1v2, then map 2, then map 8. Six games end on the same tick with the same winner as base: seed 7 games 1 and 7, seed 8 games 1 and 7, seed 9 game 1, and seed 10 game 7. 30 games move, and 11 of them change their winner:
+
+| Seed | Game | Base | Batch | First difference | Item |
+|---|---|---|---|---|---|
+| 7 | 3 | 48653, house 0 | 72781, house 1 | tick 1687, house 1 slaves 1149 to 1151 (placed at tick 1686): target their master on base, none after | 2 |
+| 7 | 4 | 44158, house 1 | 56325, house 0 | tick 7998, house 1 buildings 491 and 492 (type 71, health 0): experience 2.0 on base, 0 after | 3 |
+| 7 | 8 | 32942, house 1 | 28879, house 0 | tick 2013, house 1 slaves 176 to 178 | 2 |
+| 7 | 9 | 36129, house 1 | 46536, house 0 | tick 2012, house 1 slaves 176 to 178 | 2 |
+| 8 | 2 | 41018, house 0 | 74028, house 1 | tick 1687, house 1 slaves 1154 to 1156 | 2 |
+| 8 | 3 | 113616, house 0 | 37935, house 1 | tick 1687, house 1 slaves 1154 to 1156 | 2 |
+| 8 | 4 | 36113, house 0 | 110316, house 1 | tick 8616, house 0 building 610 (type 162): experience 2.0 on base, 0 after; house 0 infantry 710, off the map inside it: 0 on base, above 0 after | 3 |
+| 8 | 8 | 34690, house 0 | 31706, house 1 | tick 2198, house 1 slaves 178 to 180 | 2 |
+| 8 | 9 | 65194, house 1 | 45735, house 0 | tick 2197, house 1 slaves 178 to 180 | 2 |
+| 9 | 6 | 75631, house 1 | 38470, house 0 | tick 1687, house 1 slaves 635 to 637; a house 0 building's last record follows | 2 |
+| 10 | 6 | 67566, house 1 | 68233, house 0 | tick 1687, house 1 slaves 637 to 639 | 2 |
+
+Each winner change was traced as a single pair (`GLASNOST_AI_SIDES`):
+1. State hashes (`GLASNOST_AI_HASH=1`) of the base binary and the batch binary, capped at 20000 ticks (60000 for the map 2 games of sides 0v1), gave the first differing tick.
+2. An object dump of that tick and the one before (`GLASNOST_AI_OBJS`) named the objects.
+
+The pair runs were not played to the end. Nine winner changes first differ at a just-emerged slave of type 61, item 2's emergence. Two first differ at a building's experience, item 3. The large dumps were deleted after reading.
+
+**Suites.** The AI suite with its ignored tests passes 387 on base and after (`ai-base.txt`, `ai-after.txt`). The sim gate with its ignored tests passes 17 on both (`gate-base.txt`, `gate-after.txt`), after the goldens were regenerated.
+
+Final checks on b8dd5d4:
+- `cargo test --workspace --no-fail-fast` (`ws-after.txt`): 9402 tests pass, against 9387 on base. The only failure is the known `quirks::tests::every_spec_quirk_has_a_switch`. It now names only `balloon_hover_mobile_fire_by_destination` and `airstrike_line_marker_over_shroud`, other batches' switches, as on base;
+- `cargo clippy --workspace --all-targets -- -D warnings` (`final-clippy.txt`);
+- `cargo fmt --all -- --check`;
+- the wasm32 build of glasnost-app (`final-wasm.txt`);
+- `cargo xtask gate` (`final-xgate.txt`): native 17 pass, and all nine goldens match under wasm32.
+
+These ran on dd7a935, the commit that adds this section:
+- `cargo xtask check` (`final-xcheck-2.txt`): fails only on the 8 known stock-guard problems in M-0027;
+- the AI suite with its ignored tests (`final-ai.txt`): 387 pass.
+
+Seams left:
+- Q-3297 (#455: whether a self-teleporting infantry unit's own grinder should take it in) and Q-3298 (#453: whether attackers drop a target that an owner change makes their own) wait for answers.
+- Item 2's order of the scatter request and the search, *harvest* forced after the request, is our reading of claim 21's "then" (design text).
+- The client: no change. The cursor and the insignia already read the simulation's answers.
+
+The P3 census rule: the batch adds no object-table reference, so it makes or moves no back-reference of `World::census`.

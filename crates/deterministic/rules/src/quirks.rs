@@ -1193,6 +1193,14 @@ pub struct Quirks {
     // spec: S-0402 claim 25
     #[serde(default = "on")]
     pub slave_relocation_failed_search_origin: bool,
+    /// An automatic pack-up of a deployed slave miner remembers the
+    /// building's old top-left cell as the vehicle's destination, so a
+    /// vehicle that appears at the return cell of a foundation larger than
+    /// 2 × 2 drives one diagonal cell back to it; off: it remembers the
+    /// return cell, where the vehicle appears.
+    // spec: S-0402 claim 25
+    #[serde(default = "on")]
+    pub slave_auto_pack_old_top_left: bool,
     /// A slave of negative storage stays in *harvest* on its resource cell
     /// without loading; off: it is treated as a slave of storage 0.
     // spec: S-0402 claim 26
@@ -2684,6 +2692,8 @@ impl Default for Quirks {
             unload_without_contact_stalls: true,
             slave_kick_delay_wraps: true,
             slave_relocation_failed_search_origin: true,
+            // spec: S-0402 claim 25 (default on, the original)
+            slave_auto_pack_old_top_left: true,
             slave_negative_capacity_stalls: true,
             multiple_factory_counts_all: true,
             build_step_period_cap: true,
@@ -3687,6 +3697,10 @@ impl Quirks {
             (
                 "slave_relocation_failed_search_origin",
                 self.slave_relocation_failed_search_origin,
+            ),
+            (
+                "slave_auto_pack_old_top_left",
+                self.slave_auto_pack_old_top_left,
             ),
             (
                 "slave_negative_capacity_stalls",

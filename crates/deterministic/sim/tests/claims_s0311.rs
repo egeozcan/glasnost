@@ -426,6 +426,58 @@ fn claim_8_untrainable_credited_object() {
     assert_eq!(score(&w, 0), 500);
 }
 
+/// [`ruleset`] with the armed building TOWER given cost 1000 and its
+/// trainable key `trainable` (absent when `None`).
+fn tower_rules(trainable: Option<bool>) -> Ruleset {
+    let mut r = ruleset("4", Some("2.5"));
+    let t = r.sim.buildings.get_mut("TOWER").unwrap();
+    t.cost = Some(1000);
+    t.combat.trainable = trainable;
+    r
+}
+
+// spec: S-0311 r14 claim 16 and Import mapping (Trainable absent: no for a building type, Q-3273): a building whose type gives no trainable key gains no experience from a kill credited to it, and its house still adds the kill value to its score (claim 7); with the key set it gains as any trainable object (claim 8); #452
+#[test]
+fn claim_16_issue_452_building_without_the_key_is_untrainable() {
+    for (key, gains) in [(None, false), (Some(false), false), (Some(true), true)] {
+        let r = tower_rules(key);
+        let mut w = game(&r);
+        let b = spawn(&mut w, Kind::Building, "TOWER", 0, -4);
+        kill_one(&mut w, b, 1, "TARGET");
+        assert_eq!(exp(&w, b) != F32::ZERO, gains, "key {key:?}");
+        assert_eq!(score(&w, 0), 500, "key {key:?}");
+    }
+}
+
+// spec: S-0311 r14 claim 16 (#452: an armed building of a type without the trainable key that kills by its own fire stays a rookie; with the key set it is promoted) and claim 1 (rank by experience)
+#[test]
+fn claim_16_issue_452_armed_building_kills_without_promotion() {
+    for (key, promoted) in [(None, false), (Some(true), true)] {
+        let r = tower_rules(key);
+        let mut w = game(&r);
+        let b = spawn(&mut w, Kind::Building, "TOWER", 0, -2);
+        let mut kills = 0;
+        // Ten kills of cost 500 at ratio 4 give a trainable killer of cost 1000 experience 1.25 (F3).
+        for _ in 0..10 {
+            let t = spawn(&mut w, Kind::Vehicle, "TARGET", 1, 2);
+            for _ in 0..600 {
+                testkit::run(&mut w, 1);
+                if w.obj(t).is_none_or(|o| o.health == 0) {
+                    kills += 1;
+                    break;
+                }
+            }
+        }
+        assert_eq!(kills, 10, "key {key:?}: the tower kills its targets");
+        assert_eq!(
+            veterancy::rank(&w, b) > Rank::Rookie,
+            promoted,
+            "key {key:?}: experience {:?}",
+            exp(&w, b)
+        );
+    }
+}
+
 // spec: S-0311 claim 9 (only a credited attacker object leads to experience: a kill credited to a house alone gives none)
 #[test]
 fn claim_9_house_credit_gives_no_experience() {
