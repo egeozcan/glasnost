@@ -613,7 +613,10 @@ fn claim_11_r86_payment_only_art_starts_keeps_restarts_and_removes() {
         if !ends {
             assert_eq!(log[fin - 1].1, Some(first), "{pay}: still playing before");
         }
-        assert_eq!(log[fin].1, None, "{pay}: removed by the empty-load row {log:?}");
+        assert_eq!(
+            log[fin].1, None,
+            "{pay}: removed by the empty-load row {log:?}"
+        );
         let broken = log.iter().position(|x| !x.5).expect("contact broken");
         assert_eq!(
             log[broken].0,

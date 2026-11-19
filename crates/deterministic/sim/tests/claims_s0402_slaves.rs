@@ -2771,9 +2771,8 @@ fn left_in(w: &World, x: i32, y: i32) -> usize {
 /// returning it.
 fn next_building(w: &mut World, not: Option<ObjectId>, max: i32) -> ObjectId {
     until(w, max, |w| {
-        the_master(w).is_some_and(|m| {
-            Some(m) != not && w.obj(m).is_some_and(|o| o.kind == Kind::Building)
-        })
+        the_master(w)
+            .is_some_and(|m| Some(m) != not && w.obj(m).is_some_and(|o| o.kind == Kind::Building))
     })
     .expect("a deployed master");
     the_master(w).unwrap()
@@ -2815,8 +2814,14 @@ fn claim_25_issue_451_automatic_pack_up_redeploys_one_cell_on() {
     // spec: S-0415 claim 10 (the return cell of a 3 × 3 foundation: x + 1, y + 1; A as the destination, move queued)
     assert_eq!(o.pos.cell(), CellXY::new(a.x + 1, a.y + 1));
     assert_eq!(o.dest, Some(Target::Cell(a)));
-    until(&mut w, 20, |w| group(w, v).state == GroupState::FieldSeeking).expect("seeking");
-    until(&mut w, 20, |w| group(w, v).state != GroupState::FieldSeeking).expect("updated");
+    until(&mut w, 20, |w| {
+        group(w, v).state == GroupState::FieldSeeking
+    })
+    .expect("seeking");
+    until(&mut w, 20, |w| {
+        group(w, v).state != GroupState::FieldSeeking
+    })
+    .expect("updated");
     // spec: S-0402 claim 25 (at the following update an existing destination is kept and makes the group travelling)
     assert_eq!(group(&w, v).state, GroupState::Travelling);
     assert_eq!(w.obj(v).unwrap().dest, Some(Target::Cell(a)));
@@ -2833,7 +2838,11 @@ fn claim_25_issue_451_automatic_pack_up_redeploys_one_cell_on() {
     for p in cells.windows(2) {
         assert_eq!(p[1], CellXY::new(p[0].x - 1, p[0].y - 1), "{cells:?}");
     }
-    assert_eq!(left_in(&w, far.0, far.1), 9, "the far field is still untouched");
+    assert_eq!(
+        left_in(&w, far.0, far.1),
+        9,
+        "the far field is still untouched"
+    );
 }
 
 // spec: S-0402 claim 21 (#450: on successful emergence a slave's target is its master). With the unarmed synthetic slave the held master target is never shot at; whether an armed slave bound to its master may fire at it is Q-3275
@@ -2864,9 +2873,16 @@ fn claim_21_issue_450_an_emerged_slave_targets_its_master() {
     };
     until(&mut w, 300, |w| out(w).len() == SLAVES as usize).expect("all slaves out");
     for s in out(&w) {
-        assert_eq!(w.obj(s).unwrap().target, Some(Target::Object(b)), "slave {s:?}");
+        assert_eq!(
+            w.obj(s).unwrap().target,
+            Some(Target::Object(b)),
+            "slave {s:?}"
+        );
     }
     testkit::run(&mut w, 600);
-    assert_eq!(w.obj(b).unwrap().health, strength, "an unarmed slave never hurts its master");
+    assert_eq!(
+        w.obj(b).unwrap().health,
+        strength,
+        "an unarmed slave never hurts its master"
+    );
 }
-

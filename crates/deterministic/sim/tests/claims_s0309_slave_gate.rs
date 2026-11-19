@@ -82,9 +82,17 @@ fn claim_18_issue_450_a_harvesting_slave_does_not_retaliate() {
         let enemy = acquire::retaliate(&mut w, v, e);
         got.push((own, enemy, w.obj(v).unwrap().target));
     }
-    assert_eq!(got[0].0, Retaliation::MayNot, "control against its own house");
+    assert_eq!(
+        got[0].0,
+        Retaliation::MayNot,
+        "control against its own house"
+    );
     assert_ne!(got[0].1, Retaliation::MayNot, "control against the enemy");
-    assert_eq!(got[1].0, Retaliation::MayNot, "slave against its own master");
+    assert_eq!(
+        got[1].0,
+        Retaliation::MayNot,
+        "slave against its own master"
+    );
     assert_eq!(got[1].1, Retaliation::MayNot, "slave against the enemy");
     assert_eq!(got[1].2, None, "the slave holds no target");
 }
