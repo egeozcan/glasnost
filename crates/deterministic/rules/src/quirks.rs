@@ -1036,6 +1036,10 @@ pub struct Quirks {
     // spec: S-0310 claim 4
     #[serde(default = "on")]
     pub voxel_turret_exact_aim: bool,
+    /// The first *moving* condition of a vehicle, a type without the mobile-fire flag that has a destination, reads the destination for every vehicle, balloon-hover types included, so a balloon-hover vehicle without that flag attacking with a vertical projectile never fires at its target, which is its destination; off: for a balloon-hover type that condition reads *its locomotor is moving it* (for a jumpjet locomotor, *moving now*), as the fire-while-moving condition does, so it gets no *moving* from it while it hovers or stands. Every other vehicle is unchanged.
+    // spec: S-0310 claim 7 and Edge cases (r13, Q-3257, *A balloon-hover type without the mobile-fire flag*); S-0502 claim 10 (r34)
+    #[serde(default = "on")]
+    pub balloon_hover_mobile_fire_by_destination: bool,
     /// The recipient's actual cost is computed for the destroyed object's house.
     // spec: S-0311 claim 10
     #[serde(default = "on")]
@@ -2639,6 +2643,8 @@ impl Default for Quirks {
             hunt_ground_layer_only: true,
             wall_cell_over_same_ring_object: true,
             voxel_turret_exact_aim: true,
+            // spec: S-0310 Edge cases (r13: default on = YR behaviour)
+            balloon_hover_mobile_fire_by_destination: true,
             experience_cost_victim_house: true,
             occupant_experience_untrained: true,
             occupant_experience_next_in_turn: true,
@@ -3566,6 +3572,10 @@ impl Quirks {
                 self.wall_cell_over_same_ring_object,
             ),
             ("voxel_turret_exact_aim", self.voxel_turret_exact_aim),
+            (
+                "balloon_hover_mobile_fire_by_destination",
+                self.balloon_hover_mobile_fire_by_destination,
+            ),
             (
                 "experience_cost_victim_house",
                 self.experience_cost_victim_house,
