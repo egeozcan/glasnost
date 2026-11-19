@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 84
+revision: 87
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-16
+approved-on: 2026-11-19
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356, Q-2426, Q-3131, Q-3164]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356, Q-2426, Q-3131, Q-3164, Q-3250]
 supersedes: []
 ---
 
@@ -22,7 +22,8 @@ which of the selected objects decides the cursor, how each selected object then 
 click for itself, and which order of S-0213 each action produces. The rules depend on the kind of
 the acting object, its type's abilities, the relation of the target to it and the modifier keys
 held. These are input rules. They decide which orders are created, never how an order is applied
-(S-0213). This spec also covers battlefield pointer images, ordinary band-box selection,
+(S-0213). This spec also covers how the object under the cursor is found, battlefield pointer
+images, ordinary band-box selection,
 mouse-button gestures (a held press when the pointer leaves the window included), the
 type-select role, control groups and the distinction between a right click and right-drag
 scrolling.
@@ -129,10 +130,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   responses accompany selection (S-0701 claim 17); special-attack responses acknowledge order
   kinds without their own response kind (claim 14; S-0701 claim 18). Each list is ordered as its
   entries appear in the user's data, possibly empty. Formulas F5 numbers entries from 0.
-- **Clicked object.** The object that the game finds under the cursor at the moment of a click,
-  from the cursor's position on the battlefield. It is the *target* of the claims when the target
-  is an object. Whether a click finds an invisible building at all is an open question (Open
-  questions).
+- **Clicked object.** The object that the game finds under the cursor, from the cursor's pixel on
+  the battlefield, by claim 35: at the moment of a click, and while the pointer hovers, for what
+  the cursor shows (claim 1). It is the *target* of the claims when the target is an object. When
+  claim 35 finds no object, the target is the cell under the cursor (S-0101 claim 10). A building
+  whose type is invisible in the game is never the clicked object of a viewer that does not own it
+  (claim 35 (d)).
 - **Disabled.** For these input rules: paralysed, or, for a vehicle, playing its death sequence.
 - **Being erased, phasing in.** An object that an erasing weapon (a temporal weapon) has locked
   onto is *being erased* (glossary), from the first lock until the last lets go or the object is
@@ -1451,6 +1454,93 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
       follows the original wherever the host reports what the original's window receives, and
       leaves no press held that no release can end.
 
+35. **The object under the cursor (Q-3250).** The game finds the clicked object (Terms) among the
+    screen candidates of the frame on screen (claims 20, 24 and 25), each tested at one point. It
+    does not look at the pixels drawn. A candidate's point is its box point (Terms) for an
+    infantry unit, vehicle or aircraft, under claim 19's qualification for transient drawing
+    states, and its height-lifted projected position for a building (claim 24). An object in the
+    air, a flying jumpjet unit included, is tested at its lifted drawing origin. So its point
+    rises and falls with its height lift (S-0101 claim 3) from one drawn frame to the next,
+    together with its image.
+    (a) *Region.* For the pointer's pixel, F10 gives each candidate a pointing distance *d* to
+    its point. The clicked object is the candidate with the smallest *d* below 200. Between
+    candidates with equal *d* the one that comes first in claim 25's order is kept, so a building
+    is kept over a mobile object at the same *d*. A candidate's region is therefore the same
+    ellipse around its point for every kind of object and every image: up to 14 pixels to either
+    side of the point and up to 19 rows above or below it (F10). The image's outline, its
+    transparent pixels, its frame and whatever is drawn over it play no part. A pointer inside a
+    flying unit's region finds the unit where a tree, a building or the terrain hides it, or where
+    its image shows a gap. A pointer on a pixel of its image outside its region does not find it
+    by the region.
+    (b) *Skipped candidates.* A candidate that has left play since the frame was drawn, and a
+    fully cloaked candidate that the viewer neither owns nor senses (S-0516 claim 26), are passed
+    over, so the region of another candidate can still find that other candidate.
+    (c) *No candidate in reach.* When no candidate has *d* below 200, the clicked object is the
+    first occupant of the cell under the cursor (S-0101 claim 10), among the objects on its
+    ground, not on a bridge deck over it. The first occupant is the one that entered the cell
+    last, except that a building comes after every other occupant. This is how a tree or other
+    terrain object, a building at a foundation cell away from its point, and an object that has
+    no candidate (claim 24) are found. With no occupant there is no clicked object.
+    (d) *Exclusions.* Before any candidate is tested, a pointer that is not over the map, or a
+    shrouded cell under the cursor, gives no clicked object, even when a candidate's region holds
+    the pointer. With fog of war on, so does a fogged cell under the cursor that holds no
+    building; a cell that holds a building gives none while that building is shown under fog.
+    After (a) or (c) has chosen an object that the viewer does not own, there is no clicked object
+    when the object is fully cloaked and not sensed by the viewer (S-0516 claim 26), when it is a
+    building at fade level 15 (S-0516 claim 18) that the viewer does not sense, when its type has
+    the flag that the Import mapping calls *invisible type*, or when it is a building whose type
+    has the flag that the Import mapping calls *invisible in the game*. No other candidate or
+    occupant is then tried in its place. None of these exclusions applies to an object that the
+    viewer owns. They concern finding the clicked object only; whether a found object can be
+    selected is the Terms entry *can be selected*. The viewer can hover, click and pick its own
+    building at fade level 15 where it
+    does not sense it, since such a building stays a candidate (claim 24).
+    (e) *When it is found.* While the pointer is over the battlefield view, the cursor's object
+    is found again once for every drawn frame, before that frame is drawn, against the candidates
+    of the frame on screen, whether the pointer has moved or not. An object that moves into or out
+    of the region at a still pointer, or into or out of the cell under it, changes the cursor
+    without any pointer motion. Changes of a hovering unit's height change it when they carry the
+    region's edge across the pointer, and, at a pointer that the regions of two candidates hold,
+    when they change which candidate is nearest by (a). For example, if the unit's point swings up
+    to 6 rows either way of a middle position, a pointer straight above or below that middle and
+    within 13 rows of it, which no other candidate's region holds, stays on the unit throughout.
+    A press and a release are resolved the same way
+    at their own pixel (claim 26), against the same candidates. While a left press is held, and
+    while the game takes no player input, the hover is not looked up again.
+    Our engine follows (a) to (e). It does not use the pixel drawn at the pointer, or the depth
+    rules of S-0102, to find the clicked object.
+    - Backing: `measurable` (Scenario T27) for the region of an infantry unit and of a vehicle,
+      the kinds of candidate that T27 plays, the nearest candidate winning, the
+      point rising and falling with the height lift, (c) for a cell with one occupant, and the
+      search of (e) being made again for every drawn frame with or without pointer motion; the
+      cloak part of (d) by S-0516 CS9 part e. `unmeasured` for the tie rule, (b), the occupant
+      order and the bridge-deck exception of (c), a terrain object being found only by (c), the
+      off-map, shroud, fog, invisible-type and fade parts of (d), the owner's exemption (which
+      S-0516 scenario CS9 part e can measure once changed as Changes for other specs asks), the
+      region of an aircraft and of a building, which T27 places no candidate of, the box point of
+      an aircraft, that (e)
+      reads the frame on screen and not the positions of the current tick, and the press and
+      release, held-press and no-input parts of (e). T27 decides no tie: part (d)'s midpoint can
+      give J and E the same truncated distance, but its expectation leaves those ticks out. T27
+      places no cell with two occupants, no cloaked, invisible or fading object, no bridge, no
+      shrouded cell and no pointer off the map. Its tree is in front of J only inside J's region,
+      so J wins whether or not the tree is a candidate. Its parts (b), (d) and (e) leave out
+      every tick in which the points of that tick and of the tick before put the pointer on
+      different sides, and only in such a tick can the frame on screen and the current positions
+      give different cursors. It presses no button, and no setting that turns fog of war on in a
+      skirmish is known (Open questions).
+    - Confidence: high for the region (F10) of an infantry unit and of a vehicle, the nearest
+      candidate winning, the box point of an infantry unit and of a vehicle and
+      its rising and falling with the height lift, that pixels, depth and covering drawings play
+      no part, (c) for a cell with one occupant, and that the object is found again for every
+      drawn frame, with or without pointer motion. Medium for the tie rule, (b), the occupant
+      order and the bridge-deck exception of (c), a terrain object being found only by (c), the
+      off-map, shroud, cloak, invisible-type and fade parts of (d), the owner's exemption, the
+      region of an aircraft and of a building, the box point of an aircraft, that (e) reads the
+      frame on screen and not the positions of the current tick, and the press and
+      release, held-press and no-input parts of (e). Low for the fog part of (d). In the
+      transient drawing states of claim 19, the point keeps claim 19's rating (low).
+
 ## Formulas
 
 > **F1 (representative distance).** *d* = ⌊*r*(*n*)⌋, *n* = (*x*ₒ − *x*ₜ)² + (*y*ₒ − *y*ₜ)² +
@@ -1537,6 +1627,18 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 > *d*ᵢ is 0, the centre point is *m*. Claim 33 centres the view on the centre point; how the view
 > maps a point to its screen position is S-0101's.
 
+> **F10 (pointing distance, claim 35).** Let a candidate's point be (*x*ₚ, *y*ₚ) and the
+> pointer's pixel (*x*, *y*), integer pixels in the same screen coordinates, and let
+> Δ*x* = *x*ₚ − *x*, Δ*y* = *y*ₚ − *y*. Then *d* = ⌊Δ*x*² + Δ*y*²/2⌋ = Δ*x*² + ⌊Δ*y*²/2⌋.
+> A candidate is in reach exactly when *d* < 200, which is the same as 2Δ*x*² + Δ*y*² < 400. It
+> is nearer than another exactly when its *d* is smaller, and claim 35 (a)'s tie rule decides
+> between equal values. So at Δ*y* = 0 the
+> reach is |Δ*x*| ≤ 14, and at Δ*x* = 0 it is |Δ*y*| ≤ 19. The original forms the sum in double
+> precision, multiplying Δ*y*² by one half, and truncates it toward zero. Every value is exact
+> there, so the integer form above gives the same results. The truncation matters only between
+> candidates: two values of Δ*y*² that differ by 1 can give the same *d*, for example Δ*y* = 0
+> and Δ*y* = 1 at the same Δ*x*.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -1546,6 +1648,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 | Right-drag metric (ours) | 4 | pixels per axis | Claim 27, F8; fixed by lead decision in place of the host setting |
 | Screen candidates | 500 | objects per drawn frame | Claims 20, 24 and 25; not the selected-object limit |
 | Mobile candidate margin | 32 | pixels on each axis | F7; independent of image dimensions |
+| Pointing reach | 200 | truncated pointing distance (F10) | Claim 35; a candidate strictly below it can be the clicked object |
+| Pointing vertical weight | 1/2 | dimensionless | F10; multiplies the squared vertical difference |
 | Cursor frame interval | 4 | 16-millisecond presentation-clock units | Claim 22; nominally 64 milliseconds per advance, checked only on updates |
 | Control groups | 10 | groups per player | Claim 33; digit keys 1 to 9 and 0 for group 10 (S-0213 claim 22) |
 | Group repeat interval | 800 | milliseconds of real time | Claim 33; a *select group* press less than 800 after the last one that selected the group can be a repeat, 800 cannot. Not ticks and not a host setting. Input only. |
@@ -2351,7 +2455,8 @@ Ordering consequences:
 | Building type `Factory` | imported category (claim 17): factory-marked for rows B3, B5 and table M's deploy row; only the corresponding producing kinds for rows B9 to B12 and the kind-specific rally rules | named value, S-0003 claim 21 and Import mapping row C19, including recognised non-producing categories | no factory; missing or empty in a later layer keeps the value in force |
 | Building type `WeaponsFactory` | vehicle factory (row AC2) | boolean (S-0003) | no |
 | Building type `ConstructionYard` | construction yard (Terms, *movable*; deploy readiness) | boolean (S-0003) | no |
-| Building type `InvisibleInGame` | invisible in the game (rows B1, BC1, I16, I18); excludes the building from frame candidates (claim 24) | boolean (S-0003) | no |
+| Building type `InvisibleInGame` | invisible in the game (rows B1, BC1, I16, I18; claim 35 (d)); excludes the building from frame candidates (claim 24) | boolean (S-0003) | no |
+| Infantry, vehicle, aircraft or building type `Invisible` | invisible type (claim 35 (d)) | boolean (S-0003) | no |
 | Building type `TogglePower` | can be switched off (claim 13) | boolean (S-0003) | yes |
 | Building type `Powered` | the needs-power flag (claim 13; S-0405, Terms) | boolean (S-0003) | no |
 | Building type `Cloning` | rally-capable (Terms) | boolean (S-0003) | no |
@@ -2992,7 +3097,7 @@ action or order.
 | AC7, AC9, AC11 | A transport aircraft holding a passenger, clicked on itself, and then one holding none; an armed aircraft over an enemy object whose type is immune; an armed aircraft over an enemy tank | deploy (an unload order); nothing, no order; no-move, no order; attack (an attack order) |
 | refusing building | A second plain infantry unit over an allied armory, and over an allied hospital (a hurt unit), while the first unit is still entering it | the cursor is recorded, with the rows it matches (no-enter for e3 and e6, enter for e2 and e5); this records the refusing state if there is one and is not a claim |
 | empty first slot | A test building type of the weapon-switching kind with nothing in its first slot and a weapon in a later one, force-fire held, over a cell; the same with a test aircraft type if it can be given that behaviour; control: the first slot filled | attack (row BC3, quirk on), an attack order for the building if it can fire; for the aircraft *nothing* (table ACC) and for an object target *nothing* (row AC8); control: attack from the building (row BC4). If the type cannot fire at all, the record says so |
-| B1 | An own armed tower (a ground weapon, the target in range) over a building of a test type with the invisible flag (the script puts the cursor on its cell); control: over a visible enemy building | nothing, no order; attack, an attack order. If the click never finds the invisible building as the clicked object, the record says so and this half of B1 stays open |
+| B1 | An own armed tower (a ground weapon, the target in range) over an enemy building of a test type with the invisible flag (the script puts the cursor on its cell); control: over a visible enemy building | nothing, no order; attack, an attack order. By claim 35 (d) the click finds no object over this building, which the human does not own, so the first result is the tower's action on its cell (table BC) and this half of B1 stays open (Open questions) |
 | B4 | A gap generator clicked on itself with spare power above the extra drain of its type; with less; with the radius already boosted | deploy (an unload order); nothing; deploy |
 | B5, B6 | A building holding garrison occupants, clicked on itself; a power plant, clicked on itself | deploy (an unload order); nothing |
 | B7, B8 | A building armed only with an anti-air weapon, force-fire held, over an enemy tank; a building with a ground weapon over an enemy object whose type is immune | nothing; no-move, no order |
@@ -3259,7 +3364,7 @@ and T9 part C.
 Rows with no step, `unmeasured`, each for a reason.
 - B1 (its actor half) and BC1: a building whose type is invisible in the game is believed not
   to be selectable (low), so no click makes it the acting building. The target half of B1 has a
-  step.
+  step, but by claim 35 (d) its click finds no object, so that half stays open (Open questions).
 - AC4: it needs an own selected unit that is disguised as an overlay, standing on a cell where the
   aircraft's own cell action is *no-move* (a shrouded cell, for an aircraft type that may not move
   into shroud). No disguise as an overlay type is known in the setup (Open questions).
@@ -3728,6 +3833,72 @@ readiness*, and Edge cases).**
   Falsified if U is selected, A4 is not, or the original gives A4's response.
 - *Runs:* 3 of each part; part e as stated. The record logs the responses as heard.
 
+**Scenario T27: the object under the cursor (claim 35, Q-3250).**
+- *Setup:* a skirmish on a small flat purpose-made map at height level 0, stock data, no fog of
+  war, the whole map revealed, one fixed game speed. The human has a tank S, selected throughout,
+  a tank V and a unit J of a stock jumpjet infantry type, and the enemy has a tank E. Each part
+  says where they stand.
+  Every other cell is open and empty, and a tall stock tree stands on one cell for part (c). The
+  script places the pointer at the view pixels given below and keeps it there, and presses no
+  button or key. Each tick the recorder logs the cursor image shown, the pointer pixel, the view
+  position, the position and height in leptons of V, J and E, and the cell under the pointer; it
+  saves a screenshot of the battlefield view in each tick of parts (a) to (c). A unit's point is
+  its box point, computed from its position and height by S-0101 claims 3 and 5. S-0101 claim
+  3's height lift is our engine's and may differ from the original's for an object above the
+  ground. For scale, the original's simulation lift (S-0409 F2) differs from S-0101 F2 by 1 row at
+  1000 leptons, 2 rows at 3500 and 6 rows at 10000, and up to 20000 leptons it never differs by more
+  than the margin below. So a unit at recorded height *z* > 0 leptons has a margin of *m* =
+  1 + ⌊*z*/1000⌋ rows, and a unit at height 0, which neither lift raises, has *m* = 0. F10 gives a
+  unit's point a *side* in a tick only when every point from *m* rows above to *m* rows below the
+  computed one gives the same answer, *d* < 200 or *d* ≥ 200, and a nearer candidate only when the
+  same candidate is nearer for every such pair of points. A pointer place
+  (*o*ₓ, *o*ᵧ) is the pointer's position relative to that point, in pixels, negative to the left
+  and upward; F10's Δ*x* and Δ*y* are −*o*ₓ and −*o*ᵧ. With S selected the cursor is the select
+  cursor over V or J (claim 3), the attack cursor over E, and the move cursor over an empty open
+  cell.
+- *(a) Region edge and image pixels.* V stands still at the centre of its cell. The pointer is
+  held for 30 ticks at each of the pointer places (0, −19), (0, −20), (4, −19), (5, −19), (8, −16),
+  (9, −16), (−8, −16) and (−9, −16) from V's point. All of them lie outside V's cell, so only V's
+  region can find V there. Expected: the select cursor at (0, −19), (4, −19), (8, −16) and (−8, −16),
+  the move cursor at the other four, in every tick. At the places (20, 0) and (−20, 0), inside V's
+  cell but outside its region, expected: the select cursor, as V is the cell's only occupant
+  (claim 35 (c)). Then the pointer is held for 30 ticks on a pixel that the screenshot shows on
+  V's image but that lies outside V's cell and outside its region by F10, if V's image covers such
+  a pixel (for example 12 pixels or more to the side at 12 rows above the point). Expected: the
+  move cursor. Falsified if any of these places shows the other cursor in any tick, in particular
+  the select cursor on the image pixel outside the region.
+- *(b) A hovering unit.* J is held in the air over open ground with E in reach of its weapon, so
+  that it hovers and fires, and E's region and cell are far from the pointer. Named test data may
+  raise E's strength so that it outlives the run; if E dies, the run is restarted. In four runs of 600
+  ticks the pointer is fixed: at J's point in its first hover tick; on the topmost row of J's image
+  inside its outline; on a pixel inside J's outline that shows the ground (a gap in its image); one
+  pixel outside its outline. Each is picked from the screenshot of the first hover tick, and the
+  cell under the pointer must hold no occupant. Expected, in every tick: the select cursor when
+  J's point has the side *d* < 200 both in that tick and in the tick before, the move cursor when
+  it has the side *d* ≥ 200 in both, whatever image frame J shows. Falsified if a tick in which
+  both points have the same side shows the other cursor.
+- *(c) Hidden by a tree.* As (b), with J hovering over the tree's cell and the pointer on a pixel
+  within J's region at which the screenshot shows the tree in front of J, in a cell other than
+  the tree's. The part is run only with a stock tree whose image reaches that pixel. Expected and
+  falsified as in (b): the cursor follows J's point by F10 and not the pixels shown.
+- *(d) The nearer candidate.* J hovers with its point within 38 rows straight below or above E's
+  point, so that their regions overlap. The pointer is held for 300 ticks at each of three pixels
+  on the line between the two points: one nearer J's, the midpoint and one nearer E's. Expected:
+  in each tick for which both candidates have the side *d* < 200 and the same one of them is the
+  nearer candidate, with the margin above, for the points of that tick and of the tick before,
+  the cursor of that one: the select cursor for J, the attack cursor for E, also where the pointer
+  lies in E's cell. Falsified if such a tick shows the cursor of the farther one.
+- *(e) A still pointer and a moving unit.* The pointer is fixed over an empty open cell. V is
+  ordered to drive along a straight line of cells through that cell and on beyond it. Expected:
+  the cursor changes with no pointer motion: the select cursor in each tick for which V's point
+  gives *d* < 200 both in that tick and in the one before, and the move cursor in each tick for
+  which, in that tick and in the one before, V's point gives *d* ≥ 200 and V's position lies
+  neither in the cell under the pointer nor in a cell next to it. Falsified if the cursor stays
+  the same throughout, or if a tick of either kind shows the other cursor.
+- *Runs:* 3 of each part, each held as stated. A tick is left out of a part's comparison only
+  when the recorder lacks a position or the pointer pixel for it, never because of the cursor it
+  shows.
+
 ## Open questions
 
 - The state-specific transient box points of claim 19 stay `unmeasured` beyond T14 part B.
@@ -3765,7 +3936,9 @@ readiness*, and Edge cases).**
   (claim 32). Our engine has none of them.
 - Whether a selected object that changes owner (for example one that an enemy captures) stays
   selected, which decides whether the fallback of *toggle select* (claim 12) can be reached.
-- Whether a click finds a building whose type is invisible in the game as the clicked object (row B1, target half).
+- Row B1's target half. By claim 35 a click finds a building whose type is invisible in the game
+  only for a viewer that owns it, as the first occupant of the cell under the cursor (claim 35 (c)).
+  No step here tells row B1's *nothing* apart from the actor's action on that cell.
 - Whether a ground object can stand on a destroyable-cliff cell or on a cell with a live veinhole
   monster (row AC5).
 - Whether the recorder can log a vehicle as inside a tunnel for long enough to click (Scenario T9
@@ -3812,6 +3985,16 @@ readiness*, and Edge cases).**
   S-0408 claim 12a keeps claim 13's cursor-cell and object-versus-wall-sale distinction.
 
 ## Changes for other specs
+
+- **S-0516, claim 26 and scenario CS9 part e, the owner's own building at fade level 15.** The
+  owner can hover, click and pick its own building at fade level 15 where it does not sense it
+  (S-0214 claim 35 (d)): the building stays a frame candidate, and only a viewer that does not own
+  it is refused. In claim 26 the second item, "a building at fade level 15 that *V* does not
+  sense.", becomes "a building at fade level 15 that *V* does not own and does not sense." In CS9
+  part e the sentence "Repeat on buildings: level 15 without sensing cannot be picked even by the
+  owner." becomes "Repeat on buildings: at level 15 without sensing the owner can pick it, and a
+  non-owner cannot, allies included." Level: medium, as claim 26 is rated. Backing: `measurable`
+  (CS9 part e, as changed).
 
 - **S-0304, claim 2 and its State table, attack cursor at a versus value of zero.** The row for
   an actor given an attack order on an object without force-fire at a versus value of zero says
