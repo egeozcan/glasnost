@@ -8,11 +8,15 @@
 //! - **Alpha** (the Yuri-style side) only: DISC, a balloon-hovering
 //!   jumpjet vehicle built at the war factory. Its primary is the
 //!   fixture's gun, its secondary SUCK, a draining weapon with the
-//!   vertical projectile DROP, fired in any direction and of a reach
-//!   short enough (a tenth of a cell) that the disc fires it only once it
-//!   is over the building (S-0608 claim 2: an attempt from a neighbouring
-//!   cell forms no link). Alpha starts with [`DISCS`] of them, north of
-//!   its start.
+//!   vertical projectile DROP, fired in any direction, of a reach of a
+//!   tenth of a cell and not while moving, so that the disc fires it only
+//!   once it is over the building (S-0608 claim 2: an attempt from a
+//!   neighbouring cell forms no link). The disc flies to the building's
+//!   reference point (S-0502 claim 16, r34), and the reach with the
+//!   building lengthening (S-0307 claim 9) is met on the way there, about
+//!   a cell short of the foundation; not firing while moving keeps the
+//!   shot for the hover over that point, a corner of the foundation's
+//!   cells. Alpha starts with [`DISCS`] of them, north of its start.
 //! - **Beta**'s power plant POWR, refinery PROC and construction yard
 //!   YARD are drainable; PROC is a resource destination, so a link to it
 //!   takes credits, and one to POWR blacks out Beta's power.
@@ -135,6 +139,10 @@ pub fn ruleset() -> Ruleset {
             warhead,
             drain_weapon: Some(true),
             omni_fire: Some(true),
+            // spec: S-0502 claim 16 (r34) (the disc's movement point is the building's reference point)
+            // spec: S-0307 claim 9 (the reach is lengthened for a building, so it would be met on the way in)
+            // nocite: the value is a synthetic fixture choice, not a spec number
+            fire_while_moving: Some(false),
             ..Default::default()
         },
     );

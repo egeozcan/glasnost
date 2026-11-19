@@ -527,7 +527,8 @@ fn an_anti_air_unit_near_home_answers() {
 fn an_anti_air_unit_standing_off_the_drainer_does_not_answer() {
     let mut w = bench(defence_rules());
     let proc_ = spawn(&mut w, "PROC", Kind::Building, 1, -14, -4);
-    let flak = spawn(&mut w, "FLAKT", Kind::Vehicle, 1, -1, 3);
+    // spec: S-0502 claim 16 (r34): the disc drains from over PROC's reference point, 128 × (W − 1, H − 1) leptons from the old hover point at its top-left cell, and holds its fire until it hovers there; the unit, which drives at the drainer meanwhile, starts further off (from (3, 3) on it stands out of reach when the link forms; one cell more as a margin)
+    let flak = spawn(&mut w, "FLAKT", Kind::Vehicle, 1, 4, 3);
     let d = spawn(&mut w, "DISC", Kind::Vehicle, 0, -18, -4);
     let mut br = Brain::new(&w, &kit::map(), BETA);
     drain_it(&mut w, &mut br, d, proc_);
