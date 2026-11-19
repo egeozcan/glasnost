@@ -2,13 +2,13 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-31
+approved-on: 2026-11-19
 measurements: []
-requests: [Q-0660]
+requests: [Q-0660, Q-3273]
 supersedes: []
 ---
 
@@ -24,6 +24,9 @@ on the veterancy abilities that the object's type lists for it, and the elite ra
 weapon slot to its elite weapon where the type has one. This spec owns the experience value, the
 gain from kills, the cap, the ranks, which abilities a rank grants, the rule that only the elite
 rank uses elite weapons, the ways an object starts with experience and the armory's promotion.
+A building type is untrainable unless its data says otherwise, so a building gains experience
+from kills, crates or an infiltrated factory only when its type is made trainable; a deployment
+passes experience to it whatever its type says (claim 16).
 What each ability does is owned by the spec named for it in claim 4, and which weapon each slot
 holds at the elite rank (with its exceptions) by S-0308 (claim 6 here); this spec gives an effect
 only where no other spec does. This spec covers skirmish; network games and campaigns are out of scope.
@@ -50,7 +53,8 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
 - **Ability lists.** Each type has a *veteran list* and an *elite list* of veterancy abilities.
 - **Trainable.** A type flag (Import mapping). Claim 8 tests it for transport, credited-object
   and launcher recipients, but not for the selected garrison occupant. The infiltrated-factory
-  rules of claim 11 test it too.
+  rules of claim 11 test it too. A building type whose data gives no trainable key is
+  untrainable, and a type of any other kind without the key is trainable (claim 16).
 - **Naval.** A type flag (Import mapping), tested by the infiltrated-factory rules of claim 11.
 - **Unscored.** A type flag (Import mapping): destruction of such an object gives no ordinary
   kill experience (claim 7). Erasure's separate direct gain is exempt (claim 9).
@@ -103,7 +107,8 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
    1, veteran from 1 up to but not including 2, elite from 2 on. Ranks have no other state: an
    object whose experience is lowered below a threshold (by the cap of claim 10, for example)
    loses the rank at once.
-   Experience never decays with time.
+   Experience never decays with time. Which ways can change a building's experience depends on
+   its type's trainable flag (claim 16).
    - Backing: `measurable` for rank thresholds and losses (X1) and negative rookie rank (X8).
      No decay is measurable for X1's wait intervals; the unrestricted no-decay assertion is
      `unmeasured`: finite waits cannot test every duration or interaction.
@@ -217,7 +222,8 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
    occupants fire gives the experience to its firing occupant at destruction time (Terms),
    regardless of the occupant's trainability (`quirks.occupant_experience_untrained`,
    `quirks.occupant_experience_next_in_turn`). Any credited object not covered by these rules
-   gives experience to nobody.
+   gives experience to nobody. A building is a trainable credited object only when its type's
+   data makes it trainable (claim 16).
 
    A trainable garrisoned building therefore takes the experience itself, not through an occupant.
    A trainable passenger firing from an untrainable open-topped transport gains it itself.
@@ -345,17 +351,20 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
       infiltrated factory never promotes aircraft.
     - A building is created as a veteran when its own house has the infiltrated-vehicle-factory
       flag and its type is trainable, not naval, and undeploys into a vehicle (a construction yard,
-      for example).
-    - An object placed by the map takes its experience from the map's veterancy value *n* (Import
-      mapping): *e* = *n* × 0.01 (Formulas F5). This replaces whatever the rules above gave, so a
-      map value of 0 makes even a type of the country list a rookie, and it is not limited by the
-      cap: a map value of 200 makes an elite object even when the cap is 1.0.
+      for example). A building type whose data gives no trainable key is not trainable (claim 16).
+    - An infantry unit, vehicle or aircraft placed by the map takes its experience from the map's
+      veterancy value *n* (Import mapping): *e* = *n* × 0.01 (Formulas F5). This replaces
+      whatever the rules above gave, so a map value of 0 makes even a type of the country list a
+      rookie, and it is not limited by the cap: a map value of 200 makes an elite object even
+      when the cap is 1.0. A map entry that places a building has no veterancy value (S-0009
+      claim 35), so a building placed by the map keeps what the rules above give it.
     - Starting units of a skirmish are created as elites when a game-mode setting of the original
       is on (low: which setting this is was not identified; it is believed not to be reachable from
       the stock lobby).
     - Backing: `measurable` (X7) for country lists, map values and infiltrated-factory branches
       (also S-0510 scenario I4). The observer builds for the infiltrating house, whose flags
-      supply the starting experience, not for the enemy victim house. Starting-unit elites are
+      supply the starting experience, not for the enemy victim house. A map-placed building
+      starting at 0 is `measurable` (X17 part a). Starting-unit elites are
       `unmeasured`: their enabling setting is unidentified, so no setup can be given
       (Open questions)
     - Confidence: high (country lists, the factory flags and the map value); medium (that the map
@@ -373,14 +382,21 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
       of the entry)
 
 13. **Deploying keeps experience.** A vehicle that deploys into a building passes its experience to
-    the building, and a building that undeploys into a vehicle passes its experience to the
-    vehicle. Objects that change owner without being replaced (mind control, a vehicle thief, a
-    capture) keep their experience because they stay the same object. No other passing of
-    experience between objects is known.
-    - Backing: `measurable` for deploy and undeploy (X9). Ownership changes are `unmeasured`
-      here: X9 has no mind-control, thief or capture part. The assertion that no other transfer
-      exists is `unmeasured`: a finite test cannot exclude every interaction.
-    - Confidence: high (deploy and undeploy); medium (ownership changes and exhaustiveness)
+    the building, and a building that undeploys into a vehicle passes its experience to the vehicle.
+    Neither passing tests the trainable flag of either type, and the passed value replaces the
+    experience that claim 11 gave the new object. So when nothing changes the building's experience
+    in between, the experience of a vehicle that deploys into an untrainable building comes back
+    unchanged to the vehicle that the building undeploys into. Objects that change owner without
+    being replaced (mind control, a vehicle thief, a capture) keep their experience because they
+    stay the same object. No other passing of experience between objects is known.
+    - Backing: `measurable` for deploy and undeploy, with an untrainable building type and an
+      untrainable vehicle type (X9). Replacing the experience that claim 11 gave the new object
+      is `unmeasured`: X9's house has no infiltrated factory and its types are in no country
+      list. Ownership changes are `unmeasured` here: X9 has no mind-control, thief or capture
+      part. The assertion that no other transfer exists is `unmeasured`: a finite test cannot
+      exclude every interaction.
+    - Confidence: high (deploy and undeploy, with either type untrainable); medium (the
+      replacement of claim 11's experience, ownership changes and exhaustiveness)
 
 14. **Promotion feedback.** When an object's rank changes to veteran or to elite, the local player
     hears the matching promotion sound and announcement if the object is theirs; an object that
@@ -453,6 +469,48 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
     - Confidence: high for whole-building actions, defeat's off-map inclusion and the engine
       safety rule; medium for individual set-up removal, mixed-house selective death and
       the retained dead choice
+
+### Buildings
+
+16. **Experience of a building (Q-3273).** A building type whose data gives no trainable key is
+    untrainable, while a type of any other kind is trainable without the key (Import mapping).
+    A building of an untrainable type:
+    - gains no experience from a kill credited to it (claim 8). When it is a garrisoned building
+      whose occupants fire, its firing occupant gains the experience instead; otherwise nobody
+      does. Its house still adds the kill value to its score total (claim 7). A building that
+      undeploys into a vehicle follows the same rules.
+    - is not raised by the veteran crate (S-0520 claim 22), and is never created as a veteran by
+      claim 11's building rule.
+    - still holds the experience that a deployment passes to it (claim 13), since that passing
+      tests no trainable flag.
+
+    A building whose type is made trainable by its data is treated as any trainable object: it
+    gains its own kill experience, also when it is garrisoned (claim 8), it is raised by the
+    veteran crate, and claim 11's building rule creates it as a veteran when it also undeploys
+    into a vehicle and is not naval. A map entry that places a building gives it no experience
+    (claim 11). So when no building type of the data is trainable, a building's experience comes
+    only from a deployment.
+
+    A building that holds experience has a rank as any other object does (claim 1). It shows the
+    insignia of S-0111 claim 18 when its experience is outside the rookie band, it has the
+    abilities of claim 3 at its rank, it uses its elite weapons at the elite rank (claim 6), and
+    a kill or a crate that changes its rank gives the promotion feedback of claim 14. An ability
+    has an effect on a building only where the rule of its owner (claim 4) acts on buildings: for
+    example, *faster* acts only through movement. Untrainable building types are the original's
+    design, not a bug, so no quirk switch applies.
+    - Backing: `measurable` for the absent-key default and the kill gains, insignia and promotion
+      feedback with the key absent, set and cleared (X17 parts a to c), for the start of a
+      map-placed building at 0 (X17 part a), for the garrison occupant of a building without the
+      key (X17 part d), for the veteran crate (X17 part e), for the experience held and shown
+      after a deployment into a building without the key (X9) and for claim 11's building rule
+      (X7 part c). The score total without a recipient is `unmeasured`, as in claim 7. The
+      abilities and elite weapons of a building are `unmeasured`: no part gives a building type
+      ability lists or an elite weapon. That a deployment is then the only source is
+      `unmeasured`: a finite set of scenarios cannot exclude every interaction (claim 2).
+    - Confidence: high for the absent-key default, the kill, garrison, crate and creation
+      consequences, the map-placed start, the deployment and the insignia; medium for the score
+      total without a recipient, the promotion feedback of a building, its abilities and elite
+      weapons, and a deployment being the only source when no building type is trainable
 
 ## Formulas
 
@@ -528,6 +586,7 @@ so 112 ticks.
 | Veteran combat, armour, speed, rate-of-fire and sight factors, absent-key default | 1.0 | factor | Claims 4 and 5 |
 | Veterancy abilities | 18 | abilities | Terms |
 | Armory count advanced per processing of its *repair* behaviour | 1 | counts per processing | Claim 12, F6 |
+| Trainable flag, absent-key default | no for a building type, yes for the other kinds | flag | Claim 16 |
 
 ## State and ordering
 
@@ -536,7 +595,7 @@ so 112 ticks.
 | any | a credited kill changes experience (claim 10) | rank re-derived; feedback when the rank changes to veteran or elite (claim 14) |
 | rookie or veteran | experience reaches 2 | elite: elite list abilities added, elite weapons used from the next shot |
 | inside an armory | *K* × *D* ticks have passed (F6) | elite (veteran from negative experience), put out |
-| any | vehicle deploys into a building, or building undeploys | the new object has the same experience |
+| any | vehicle deploys into a building, or building undeploys | the new object has the same experience, whatever either type's trainable flag (claims 13 and 16) |
 | garrison occupant in our engine | dies inside | place removed that update, survivor order kept; index retained when below new count, otherwise 0; later occupant credit uses the remaining occupant at that index (claims 8 and 15) |
 
 Ordering: the kill value uses the destroyed object's rank at its destruction, so killing an elite
@@ -594,7 +653,7 @@ one tick that credit the same recipient add their gains one after another, each 
 | Rules, `[General]`, `VeteranSight` | veteran sight factor *f* (F4) | decimal, double | 1.0; keeps |
 | Rules, `[General]`, `VeteranCombat`, `VeteranArmor`, `VeteranSpeed`, `VeteranROF` | the factors of claim 4 (owned by S-0302, S-0207, S-0208, S-0301) | decimal, double | 1.0; keeps |
 | Rules, type section, `VeteranAbilities`, `EliteAbilities` | veteran list and elite list (claim 3) | text cut to the list text limit of S-0003 claim 1, split at commas with empty items skipped, each item compared ignoring letter case and without trimming while `quirks.list_items_untrimmed` is on (trimmed as S-0003 claim 12 when off) with the names `faster`, `stronger`, `firepower`, `scatter`, `rof`, `sight`, `cloak`, `tiberium_proof`, `vein_proof`, `self_heal`, `explodes`, `radar_invisible`, `sensors`, `fearless`, `c4`, `tiberium_heal`, `guard_area`, `crusher` (written here in lower case, since case does not matter; our names in Terms, same order); a non-empty value replaces the whole list | empty list; an empty or missing value keeps the list in force |
-| Rules, type section, `Trainable` | trainable flag | boolean (S-0003) | yes |
+| Rules, type section, `Trainable` | trainable flag (claims 8, 11 and 16) | boolean (S-0003) | no for a building type, yes for an infantry, vehicle or aircraft type; a layer without the key keeps the value in force |
 | Rules, type section, `DontScore` | unscored flag | boolean | no |
 | Rules, type section, `MissileSpawn` | missile-spawn flag | boolean | no |
 | Rules, type section, `Naval` | naval (claim 11) | boolean | no |
@@ -686,8 +745,8 @@ are explicitly 1 unless a part names another value.
 - *Part c (garrison):* a garrisoned building whose type is made not trainable in the test map,
   with one infantry occupant whose type is also made not trainable. *Expected:* the occupant, once
   it leaves the building, shows a raised rank after enough kills. *Falsified if:* it does not (that
-  would falsify the quirk's default). Sub-run: the building's type trainable (its absent-key
-  default). *Expected:* the building's insignia rises and the occupant's does not (the
+  would falsify the quirk's default). Sub-run: the building's type made trainable in the test
+  map. *Expected:* the building's insignia rises and the occupant's does not (the
   building's own trainability takes priority over its occupant).
 - *Part c2 (next occupant in turn):* the not-trainable garrisoned building of part c with two
   infantry occupants of not-trainable types: *A* of cost 100, which enters first, and *B* of cost
@@ -791,12 +850,14 @@ are explicitly 1 unless a part names another value.
   infiltration; after the barracks entry, infantry experience 1 and vehicles 0; after the naval-yard
   entry, ground vehicles 1 and aircraft 0. These are our units, not the enemy victim's.
   In separate fresh runs of that setup, named test-map overrides add untrainable infantry,
-  untrainable ground vehicles, trainable naval vehicles and two trainable non-naval building
-  types, one that undeploys into a vehicle and one that does not. Build and place the buildings
-  normally, not as map-placed objects; keep all objects out of combat. After both entries,
+  untrainable ground vehicles, trainable naval vehicles and two non-naval building types made
+  trainable by the override, one that undeploys into a vehicle and one that does not. Build and
+  place the buildings normally, not as map-placed objects; keep all objects out of combat. After
+  both entries,
   expected experience: 0 for the untrainable infantry, untrainable ground vehicles and naval
   vehicles; 1 for the building that undeploys and 0 for the other. Repeat the undeployable
-  building variant with its trainable flag off, then with its naval flag on: both start at 0.
+  building variant with its trainable key removed, then with its trainable flag off, then with
+  its naval flag on: each starts at 0.
   Perform one valid fresh-game run per variant at game speed 2 with no engine add-on and no mods (the named test files of a scenario excepted),
   using the read-only recorder for experience where insignia is insufficient.
   *Falsified if:* any experience or rank differs from these predictions.
@@ -815,10 +876,13 @@ are explicitly 1 unless a part names another value.
   112 ticks in the first run or 224 in the second. For example 21 ticks would match the
   hospital's tick count instead (14 + 8 − 1).
 
-**X9: deploying (claim 13).** A map-placed vehicle that deploys into a building (a construction
-vehicle) with veterancy 150. Deploy it, then undeploy the building. Record experience before
-and after both changes. *Expected:* experience 1.5 throughout and veteran insignia on both
-forms. *Falsified if:* either experience changes or either form has another rank.
+**X9: deploying (claims 13 and 16).** A map-placed vehicle with veterancy 150, of a test vehicle
+type that deploys into a test building type that undeploys into it, both defined in the test map's
+override sections: the building type gives no trainable key, and the vehicle type is made
+untrainable. Deploy it, then undeploy the building. Record experience before and after both changes,
+and whether the insignia is drawn over the building. *Expected:* experience 1.5 throughout and
+veteran insignia on both forms, the building included. *Falsified if:* either experience changes or
+either form has another rank or no insignia.
 
 **X10: sight factor (claim 5).** A ground infantry type with sight field 4 and the sight ability
 on its veteran list, placed at veterancy 0 and 100, veteran sight factor 2, on level-0 ground
@@ -894,12 +958,50 @@ order U, W; index 1 in the first run, 0 in the second (not 1 from modulo reducti
 Before another launch, resolve one enemy rookie destruction credited to the untrainable
 building. Use invented test costs 100 for both survivors and the victim, ratio 1, cap 2,
 and all cost factors 1. Expected: W alone gains 1 in the first run, U alone gains 1 in the
-second. Repeat with a trainable cost-100 building: the building alone gains 1 in both runs.
+second. Repeat with a cost-100 building made trainable by the fixture: the building alone
+gains 1 in both runs.
 In fresh empty-list variants kill all occupants before that credited destruction: the
 untrainable building supplies no recipient, while the trainable building still gains 1.
 Perform three runs per case. A removed-place award, wrong survivor recipient, incorrect
 index/count/order, or loss of building self-credit falsifies the engine rule. G18 separately
 checks weapon/muzzle selection, eviction of survivors only and abandonment after the last death.
+
+**X17: building experience (claims 8, 11 and 16; Import mapping).**
+- *Setup:* X1's game-wide fields (ratio 4, cap 2.5) and X1's target type (an unarmed vehicle type
+  of cost 500, all cost factors 1), with its speed set to 0 in the test map. The targets are
+  rookies placed by the map for the enemy computer house, in a group within range of a marked
+  build site and of a marked cell. Building *B*: a test building type of cost 1000, defined in
+  the test map's override section without a trainable key, with a weapon that kills each target
+  with one shot. The human house builds *B* and places it on the build site, and *B* then fires
+  on the targets by itself. A skirmish drops a map-placed building owned by a human house (S-0009
+  claim 27), so *B* is never placed by the map. Record *B*'s experience with the read-only
+  recorder from its placement and after each kill, take a screenshot of *B* after each kill, and
+  record every promotion announcement.
+- *Part a (no key):* *B* kills 20 targets. In the same run, an unarmed copy *B*₀ of *B*'s type is
+  placed by the map for the neutral house, out of range of the targets. *Expected:* *B*'s
+  experience 0 from its placement to the end, no insignia over *B* and no promotion
+  announcement, and *B*₀'s experience 0 from the first tick. *Falsified if:* the experience of
+  *B* or *B*₀ changes or is not 0, or an insignia or an announcement for *B* appears.
+- *Part b (key set):* as part a with *B*'s type made trainable in the test map. *Expected:* as X1
+  part a: the veteran insignia over *B* and the announcement after the 8th kill, the elite
+  insignia after the 16th, experience 2.5 after the 20th. *Falsified if:* other counts, no
+  insignia over *B* at either rank, or no announcement at the 8th kill.
+- *Part c (key cleared):* as part a with *B*'s type made untrainable in the test map. Expected
+  result and falsifier as part a.
+- *Part d (garrison):* a test building type *G* that can be garrisoned and whose occupants fire,
+  without a trainable key and without a weapon of its own, placed by the map for the neutral
+  house on the marked cell. One human infantry unit of a trainable type of cost 1000 enters *G*,
+  fires from it and kills 8 targets. Then it is unloaded. *Expected:* *G*'s experience stays 0,
+  and the occupant's is exactly 1 (veteran) after it leaves. *Falsified if:* *G*'s experience
+  changes, or the occupant's differs from 1.
+- *Part e (veteran crate):* reuse S-0520 scenario CR16's crate procedure with the named argument
+  1.0, and crates on only as CR16 places them. *B* and *B*′, both built by the human house, stand
+  inside the crate area as rookies. *B*′'s type is a copy of *B*'s type made trainable in the test
+  map. *Expected:* *B* stays at 0 and *B*′ ends at exactly 1. *Falsified if:* *B*'s experience
+  changes, or *B*′'s differs from 1.
+- *Runs:* one valid fresh-game run per part. A run is void, and repeated, only when *B*, *B*₀,
+  *G* or the occupant is damaged or destroyed, or when the general void rule above applies. A
+  gain of experience by *B*, *B*₀ or *G* is never a reason to void a run.
 
 **Coverage outside numbered claims.** Import parsing and warning predictions are inherited from
 the referenced import specs where applicable. Ability-list whitespace, case matching, empty and
@@ -944,3 +1046,10 @@ these remaining companion changes:
   for muzzle selection and successful-shot advancement; remove the pending-lead question
   and include S-0508 G18's engine check. S-0508 claim 14 supplies reverse assault
   credit/removal order and list-position animation points, independently of this firing index.
+- **S-0520 Import mapping, the `Trainable` row:** its absent-key default must read "no for a
+  building type, yes for the other kinds" (claim 16 and Import mapping here). Claim 22's
+  wording stands. CR16 can use a building whose type gives no trainable key as one of its
+  untrainable actors (X17 part e here).
+- **S-0007 Import mapping, the `Trainable` row (claim 25):** the same per-kind absent-key
+  default. So a building type that undeploys into a vehicle and gives no trainable key always
+  shows its main icon. A18 part (e) sets the flag explicitly and stands.
