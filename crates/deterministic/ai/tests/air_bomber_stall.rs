@@ -136,7 +136,9 @@ fn play(w: &mut World, b: ObjectId, ticks: i32) -> (Vec<(i32, Order)>, bool, Str
     }
     if let Some(x) = w.obj(b) {
         let t = x.target.and_then(|t| match t {
-            Target::Object(t) => w.obj(t).map(|o| (o.kind, o.type_index, o.owner, o.pos.cell())),
+            Target::Object(t) => w
+                .obj(t)
+                .map(|o| (o.kind, o.type_index, o.owner, o.pos.cell())),
             Target::Cell(_) => None,
         });
         trace.push(format!(
@@ -194,7 +196,9 @@ fn an_ai_bomber_that_never_fires_over_its_target_is_moved_on() {
     assert!(!fired, "{trace}");
     let moved = moves(&given);
     assert!(
-        moved.first().is_some_and(|&(t, _)| t - start <= MOVED_WITHIN),
+        moved
+            .first()
+            .is_some_and(|&(t, _)| t - start <= MOVED_WITHIN),
         "moved on: {trace}"
     );
     assert!(attacks_on(&given, p) <= 2, "{trace}");
@@ -206,7 +210,10 @@ fn an_ai_bomber_that_never_fires_over_its_target_is_moved_on() {
         "the move home is its last order: {trace}"
     );
     let at = w.obj(b).unwrap().pos.cell();
-    assert!(dist2(at, plant) > 4 * 4, "not left over the plant: {at:?} {trace}");
+    assert!(
+        dist2(at, plant) > 4 * 4,
+        "not left over the plant: {at:?} {trace}"
+    );
 }
 
 // design: own AI (#445) and S-0502 claim 10 (Q-3257: over the plant's reference point the plant lies straight below the bomber, a direction of map east, so a bomb without the fire-while-moving flag falls only after an approach flown towards map east): a bomber that holds over the plant from the north without a shot is sent round to the west and in again, and bombs it.
