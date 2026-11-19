@@ -33,7 +33,18 @@ use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 mod fly;
 
-pub use fly::{crash_end_fires, impact, start_crash, tick};
+pub use fly::{crash_end_fires, impact, tick};
+
+/// [`fly::start_crash`], then the end of the jumpjet's attached animations
+/// when a crash started. Returns whether a crash started.
+pub fn start_crash(w: &mut World, id: ObjectId, hit: Option<&Hit>) -> bool {
+    let started = fly::start_crash(w, id, hit);
+    if started {
+        // spec: S-0109 claim 22 (End with the owner: it starts to crash)
+        crate::anims::owner_ended(w, id);
+    }
+    started
+}
 
 /// The arrival radius: a cruising jumpjet arrives when ρ is below it.
 // spec: S-0502 claim 11 and Constants (arrival radius 20 leptons)

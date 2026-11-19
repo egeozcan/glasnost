@@ -161,6 +161,8 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
             crate::objects::remove(w, x);
             // spec: S-0210 claim 5 and S-0414 claim 4 (a change of owner with every change-of-owner consumer, whatever its cause)
             crate::mind::set_owner(w, id, ob.owner);
+            // spec: S-0109 claim 22 (End with the owner: a vehicle taken over by a vehicle thief)
+            crate::anims::owner_ended(w, id);
             continue;
         }
         if ob.kind == Kind::Vehicle {

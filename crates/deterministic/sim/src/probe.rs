@@ -150,7 +150,7 @@ pub fn classify(w: &World, id: ObjectId) -> TurnClass {
     if w.projectiles.contains_key(&id) {
         return TurnClass::Projectile;
     }
-    if w.anims.anims.contains_key(&id) {
+    if crate::anims::takes_turn(w, id) {
         return TurnClass::Anim;
     }
     if w.gas.systems.contains_key(&id) {

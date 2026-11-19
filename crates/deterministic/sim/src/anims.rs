@@ -10,8 +10,9 @@
 //! time (claim 17, F5), the start event at the end of a loop delay and at a
 //! follow-up switch (claims 11, 13 and 15), and its removal at its end
 //! (claim 16), a removal from the update order (S-0203 claim 10). An
-//! attached animation follows its owner and is deleted at its next update
-//! once the owner has left the game (claim 22).
+//! attached animation follows its owner; at each event of claim 22's *End
+//! with the owner* list ([`owner_ended`]) it leaves the drawn animations
+//! for [`AnimWorld::ended`] and is deleted at its next update.
 //!
 //! An animation whose type is a bouncing type at its creation also carries
 //! a flight (S-0319, [`crate::bounce`]): its creation places it, and each
@@ -36,11 +37,29 @@ use crate::world::{HouseId, ObjectId, Pos, World};
 pub struct AnimWorld {
     /// The animations, by number in the update order.
     pub anims: BTreeMap<ObjectId, Anim>,
+    /// The attached animations that have ended with their owner (S-0109
+    /// claim 22, *End with the owner*), with their roles: no longer drawn,
+    /// still in the update order until their next turn deletes them.
+    #[serde(default)]
+    pub ended: BTreeMap<ObjectId, Role>,
     /// The animation taking its turn, while its playback runs (it is out of
-    /// [`AnimWorld::anims`] then), its role, and whether something removed
-    /// it during that turn. Never set between turns.
+    /// [`AnimWorld::anims`] then). Never set between turns.
     #[serde(skip)]
-    current: Option<(ObjectId, Role, bool)>,
+    current: Option<Current>,
+}
+
+/// The animation taking its turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Current {
+    id: ObjectId,
+    role: Role,
+    /// Its owner, when attached.
+    owner: Option<ObjectId>,
+    /// Something removed it during that turn.
+    gone: bool,
+    /// Its owner met an event of S-0109 claim 22's *End with the owner*
+    /// list during that turn.
+    owner_ended: bool,
 }
 
 /// What an animation is to the rest of the game, beyond its playback.
@@ -275,14 +294,16 @@ pub fn remove(w: &mut World, id: ObjectId) {
         // spec: S-0611 claim 15 (a removal by another rule makes no infantry; what it frees follows quirks.infantry_animation_stale_marks)
         crate::mutation::release(w, id, &m);
     }
+    // spec: S-0109 claim 22 and S-0614 claim 25 (one that ended with its owner, not yet deleted: another rule's removal still takes it out of the update order at once; its end's effects were taken at the event)
+    let ended = w.anims.ended.remove(&id).is_some();
     let current = match &mut w.anims.current {
-        Some((c, _, gone)) if *c == id => {
-            *gone = true;
+        Some(c) if c.id == id => {
+            c.gone = true;
             true
         }
         _ => false,
     };
-    if present || current {
+    if present || ended || current {
         let skip = w.rules().quirks.update_order_removal_skip;
         w.update.leave(id, skip);
     }
@@ -290,7 +311,9 @@ pub fn remove(w: &mut World, id: ObjectId) {
 
 /// The animations of role `role` in play, in update-order number order,
 /// the one taking its turn included (a drain link that its own damage ends
-/// removes it, S-0608 claim 14).
+/// removes it, S-0608 claim 14), and those that ended with their owner and
+/// wait for their deleting turn, which another rule's removal takes out at
+/// once (S-0109 claim 22).
 pub fn with_role(w: &World, role: Role) -> Vec<ObjectId> {
     let mut ids: Vec<ObjectId> = w
         .anims
@@ -298,14 +321,72 @@ pub fn with_role(w: &World, role: Role) -> Vec<ObjectId> {
         .iter()
         .filter(|(_, a)| a.role == role)
         .map(|(&id, _)| id)
+        .chain(
+            w.anims
+                .ended
+                .iter()
+                .filter(|&(_, &r)| r == role)
+                .map(|(&id, _)| id),
+        )
         .collect();
-    if let Some((id, r, false)) = w.anims.current
-        && r == role
+    if let Some(c) = w.anims.current
+        && !c.gone
+        && c.role == role
     {
-        ids.push(id);
-        ids.sort_unstable();
+        ids.push(c.id);
     }
+    ids.sort_unstable();
     ids
+}
+
+/// Whether `id` is an ordinary animation that takes a turn: one playing,
+/// or one that ended with its owner and waits for its deleting turn
+/// (S-0109 claim 22).
+pub fn takes_turn(w: &World, id: ObjectId) -> bool {
+    w.anims.anims.contains_key(&id) || w.anims.ended.contains_key(&id)
+}
+
+/// Owner `owner` meets an event of S-0109 claim 22's *End with the owner*
+/// list (destroyed at the killing hit, starts to sink or crash, goes off
+/// the map other than at a superweapon warp's departure or is removed,
+/// starts to cloak or becomes fully cloaked unless it is a building, a
+/// vehicle thief's or a vehicle-like building's takeover): each animation
+/// attached to it disappears at once and is deleted at its next turn,
+/// which does nothing else.
+pub fn owner_ended(w: &mut World, owner: ObjectId) {
+    let ids: Vec<ObjectId> = w
+        .anims
+        .anims
+        .iter()
+        .filter(|(_, a)| a.owner.is_some_and(|(o, _)| o == owner))
+        .map(|(&id, _)| id)
+        .collect();
+    for id in ids {
+        let Some(a) = w.anims.anims.remove(&id) else {
+            continue;
+        };
+        // spec: S-0109 claim 22 (it disappears inside the action that causes it: not drawn after it; deleted at its next update)
+        w.anims.ended.insert(id, a.role);
+        finish(w, id, &a);
+    }
+    if let Some(c) = w.anims.current.as_mut()
+        && c.owner == Some(owner)
+        && !c.gone
+    {
+        // spec: S-0109 claim 22 (the event in the animation's own turn: it ends when its playback returns)
+        c.owner_ended = true;
+    }
+}
+
+/// The effects of an attached animation's end with its owner, at the
+/// event: what S-0611 claim 15 frees for an infantry-making one, and what
+/// its end tells the rest of the game.
+fn finish(w: &mut World, id: ObjectId, a: &Anim) {
+    if let Some(m) = &a.making {
+        // spec: S-0611 claim 15 (Removal by another rule: the end of an attachment at an event of S-0109 claim 22's End with the owner list makes no infantry; what it frees follows quirks.infantry_animation_stale_marks)
+        crate::mutation::release(w, id, m);
+    }
+    ended(w, id, a);
 }
 
 /// The warhead of a delivery of S-0109 claim 17 by an animation of current
@@ -461,7 +542,7 @@ impl Env for AnimEnv<'_> {
     }
 
     fn left_play(&self) -> bool {
-        matches!(self.w.anims.current, Some((_, _, true)))
+        self.w.anims.current.is_some_and(|c| c.gone)
     }
 
     fn switched(&mut self, _name: &[u8]) {
@@ -488,10 +569,15 @@ impl Env for AnimEnv<'_> {
 /// An ordinary animation's turn (S-0109 claims 5, 11 and 13 to 22; the
 /// state table).
 pub fn turn(w: &mut World, id: ObjectId) {
+    let skip = w.rules().quirks.update_order_removal_skip;
+    if w.anims.ended.remove(&id).is_some() {
+        // spec: S-0109 claim 22 (ended with its owner: deleted at its next update, which does nothing else: no advance, damage, event, loop-delay count, follow-up switch or infantry); S-0203 claim 10 (a removal from the update order)
+        w.update.leave(id, skip);
+        return;
+    }
     let Some(mut a) = w.anims.anims.remove(&id) else {
         return;
     };
-    let skip = w.rules().quirks.update_order_removal_skip;
     if let Some(m) = a.warning
         && !w.projectiles.contains_key(&m.missile)
     {
@@ -565,7 +651,13 @@ pub fn turn(w: &mut World, id: ObjectId) {
         // spec: S-0319 claim 12 (every animation whose type names a trailer, after its motion step and before its stage update, at its position in play, with S-0109 claim 29's trailer settings)
         crate::combat::effects::trailer_marked(w, &name, p, looped);
     }
-    w.anims.current = Some((id, a.role, false));
+    w.anims.current = Some(Current {
+        id,
+        role: a.role,
+        owner: a.owner.map(|(o, _)| o),
+        gone: false,
+        owner_ended: false,
+    });
     let aq = AnimQuirks::from(&w.rules().quirks);
     let t = w.tick;
     let mut env = AnimEnv {
@@ -578,7 +670,16 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let playing = a.player.update(t, &mut env, &aq);
     a.anim = env.anim;
     a.acc = env.acc;
-    let gone = w.anims.current.take().is_some_and(|(_, _, g)| g);
+    let cur = w.anims.current.take();
+    let gone = cur.is_some_and(|c| c.gone);
+    let owner_ended = cur.is_some_and(|c| c.owner_ended);
+    if owner_ended && !gone && playing {
+        // spec: S-0109 claim 22 (its owner's event came inside its own turn: it is not drawn from then on and is deleted at its next update)
+        // spec: S-0109 Open questions (an own detonation that removes or destroys the owner: our engine ends the attachment there as at any other event of the list)
+        w.anims.ended.insert(id, a.role);
+        finish(w, id, &a);
+        return;
+    }
     if gone {
         // Removed by another rule during its own turn (a drain link ended by its damage, say): its
         // playback stopped there (S-0109 State and ordering).

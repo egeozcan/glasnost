@@ -2171,6 +2171,8 @@ pub fn start_crash_hit(
         // A crashing aircraft descends toward the landing height (claim 3).
         a.held = 0;
     }
+    // spec: S-0109 claim 22 (End with the owner: it starts to crash)
+    crate::anims::owner_ended(w, id);
     true
 }
 

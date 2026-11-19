@@ -154,6 +154,8 @@ pub fn start_sinking(w: &mut World, id: ObjectId) {
         // spec: S-0504 Terms (sinking: the vessel goes down while it stays in play) and S-0614 claim 11 (whatever its type's weight; no hit)
         o.naval.get_or_insert_with(Default::default).sinking = true;
     }
+    // spec: S-0109 claim 22 (End with the owner: it starts to sink)
+    crate::anims::owner_ended(w, id);
 }
 
 /// Whether a vessel is sinking (S-0504 Terms).

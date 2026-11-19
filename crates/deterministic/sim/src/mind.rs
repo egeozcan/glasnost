@@ -1057,6 +1057,20 @@ pub struct Ring {
 /// The control ring of an object, if it carries one (claim 18).
 pub fn ring(w: &World, id: ObjectId) -> Option<Ring> {
     let o = w.obj(id)?;
+    // spec: S-0109 Changes for other specs (the S-0601 claim 18 entry: the ring ends at each event of S-0109 claim 22's End with the owner list, and our engine shows it again, with no switch, whenever the controlled object is on the map, not destroyed, not sinking or crashing and neither cloaking nor cloaked; underground is a seam). Our ring is drawn from this state by the view, so it changes no game state and takes no draw.
+    let hidden = matches!(
+        o.cloak.state,
+        crate::cloak::CloakState::Cloaking | crate::cloak::CloakState::Cloaked
+    );
+    if !o.on_map
+        || o.combat.killed
+        || hidden
+        || crate::naval::sinking(w, id)
+        || crate::air::crashing(w, id)
+        || crate::jump::crashing(w, id)
+    {
+        return None;
+    }
     let m = &w.rules().combat.general.mind;
     // spec: S-0601 claim 18 (the controlled-animation type on a controlled object, the permanent one on a permanently controlled object)
     let (anim, permanent) = if permanent(w, id) {

@@ -650,6 +650,8 @@ fn off_the_map(w: &mut World, id: ObjectId, how: crate::combat::held::Leaving) {
     if !o.on_map {
         return;
     }
+    // spec: S-0109 claim 22 (End with the owner: it goes off the map other than at a superweapon warp's departure, which does not come here)
+    crate::anims::owner_ended(w, id);
     // spec: S-0309 claim 27 and S-0501 claim 32 (every holder drops as its target an object that goes off the map, a transport or a building entered, at that moment); S-0507 claim 6a (going inside: the destination loss)
     crate::combat::held::holders_drop(w, id, how);
     // spec: S-0306 claim 17 (a projectile whose target goes inside: the cell it stood in when not airborne, else nothing)
@@ -779,6 +781,8 @@ fn remove_with(w: &mut World, id: ObjectId, recalc: bool) {
         // spec: S-0208 Open questions (a warp member of claim 19 removed before it appears: our engine releases the standing position it reserved while its warp was pending, a provisional rule) and claim 19 (Appearance of a teleporting infantry warp member: the entries it holds off the map are the ones its appearance would free, #363)
         crate::teleport::warp_appear_free(w, id);
     }
+    // spec: S-0109 claim 22 (End with the owner: it is removed)
+    crate::anims::owner_ended(w, id);
     // spec: S-0309 claim 27 and S-0501 claim 32 (every holder drops as its target an object that is removed, a crush included, at that moment); S-0415 r22 claim 13 (before the foundation cells are recalculated)
     crate::combat::held::holders_drop(w, id, crate::combat::held::Leaving::Removed);
     // spec: S-0306 claim 17 (a projectile whose target is removed from the map: the cell it stood in when not airborne, else nothing; a killed target was dealt with at the kill)
