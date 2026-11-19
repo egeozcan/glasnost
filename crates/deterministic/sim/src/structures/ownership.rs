@@ -255,12 +255,18 @@ fn opening(w: &mut World, id: ObjectId) {
     if !c.building_up || c.opened {
         return;
     }
+    let window = crate::econ::placement::in_break_off_window(ob);
+    let c = &mut ob.econ.construction;
     // spec: S-0309 claim 31 (its slot animations start, S-0108 claim 11, shown by the app from this mark; it gets no free unit now or later, S-0402 claim 18)
     c.opened = true;
     // spec: S-0309 claim 31 (its ready mark is set, S-0215 claim 11)
     ob.beh.ready_mark = true;
     // spec: S-0516 claim 23 (r20, Q-3060: an array whose owner changes during its build-up has its grand opening inside the change, for its new owner, after the change's guard request: it adds its disc if guard is the behaviour read and every other condition of in operation holds)
     crate::cloak::sensor::grand_opening(w, id);
+    if window {
+        // spec: S-0309 claim 31 (r145: the change ends the factory break-off window) and S-0406 claim 17 (r20)
+        crate::econ::placement::end_break_off_window(w, id);
+    }
     // design: S-0309 Open questions (claim 31: which other effects of the grand opening, owned by other specs, act at such a change is not established; none are made)
 }
 
