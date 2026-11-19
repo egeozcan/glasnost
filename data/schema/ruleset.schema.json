@@ -10804,6 +10804,11 @@
           "type": "boolean",
           "default": true
         },
+        "slave_auto_pack_old_top_left": {
+          "description": "An automatic pack-up of a deployed slave miner remembers the\nbuilding's old top-left cell as the vehicle's destination, so a\nvehicle that appears at the return cell of a foundation larger than\n2 × 2 drives one diagonal cell back to it; off: it remembers the\nreturn cell, where the vehicle appears.",
+          "type": "boolean",
+          "default": true
+        },
         "slave_kick_delay_wraps": {
           "description": "The slave miner's kick delay wraps when added to the tick number.",
           "type": "boolean",
