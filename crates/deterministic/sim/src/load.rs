@@ -977,6 +977,7 @@ pub fn sandbox_setup(map: &Map, rules: &SimRules, seed: u32) -> (GameSetup, Vec<
             unit_count: 0,
             bases: false,
             skirmish: Default::default(),
+            ai: Vec::new(),
         },
         substituted,
     )

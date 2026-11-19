@@ -371,6 +371,7 @@ pub fn skirmish_setup(map: &glasnost_map::Map, rules: &SimRules, seed: u32) -> G
         unit_count: SMOKE_UNIT_COUNT,
         bases: true,
         skirmish: Default::default(),
+        ai: Vec::new(),
     }
 }
 

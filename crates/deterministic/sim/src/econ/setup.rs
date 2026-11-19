@@ -520,6 +520,8 @@ pub fn skirmish(
         unit_count,
         bases: rules.econ.setup.bases,
         skirmish: settings,
+        // design: own AI (#449): every AI house plays the default script at normal unless the client chooses otherwise
+        ai: Vec::new(),
     }
 }
 

@@ -172,6 +172,7 @@ fn game(rules: &Arc<SimRules>) -> World {
         unit_count: 0,
         bases: false,
         skirmish: Default::default(),
+        ai: Vec::new(),
     };
     let map = testkit::empty_map(SIZE);
     glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)

@@ -452,6 +452,7 @@ pub fn setup_trial(rules: Arc<SimRules>, sc: &Scenario, seed: u32) -> Result<Are
         unit_count: 0,
         bases: false,
         skirmish: Default::default(),
+        ai: Vec::new(),
     };
     let map = testkit::empty_map(sc.map_size);
     let mut w = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
