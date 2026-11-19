@@ -762,7 +762,7 @@ fn break_contact(w: &mut World, x: ObjectId) {
 
 /// The dropped unit breaks off any contact (S-0607 claim 13): a contact
 /// with a building as claim 5 breaks it, any other on both sides.
-fn break_any_contact(w: &mut World, x: ObjectId) {
+pub(crate) fn break_any_contact(w: &mut World, x: ObjectId) {
     let Some(k) = w.obj(x).and_then(|o| o.contact) else {
         return;
     };

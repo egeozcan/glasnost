@@ -75,11 +75,11 @@ fn claim_18_crash_start() {
     let before = w.rng.taken();
     kill(&mut w, i);
     assert!(w.obj(i).is_some() && jump::crashing(&w, i));
-    // spec: S-0502 claim 18 (r24, Q-3042: no tumbling draw for infantry; the crash start's empty assignment reroutes infantry with a commitment under claim 17, with its one draw over 0 to 3)
+    // spec: S-0502 claim 18 (r30, Q-3255, scenario J31 part (a): no tumbling draw for infantry; the crash start's stop reroutes infantry with a commitment three times, at the first assignment, the direct stop and the second assignment, each with its one draw over 0 to 3)
     assert_eq!(
         w.rng.taken(),
-        before + 1,
-        "no tumbling draw for infantry, only the reroute's draw"
+        before + 3,
+        "no tumbling draw for infantry, only the three reroutes' draws"
     );
     // On the ground, or without the crash flag, it leaves play at once.
     let mut w = game();

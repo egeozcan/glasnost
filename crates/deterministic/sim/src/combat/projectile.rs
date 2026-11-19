@@ -2364,6 +2364,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     w.projectiles.remove(&id);
     let skip = w.rules().quirks.update_order_removal_skip;
     w.update.leave(id, skip);
+    // spec: S-0513 claim 11 (r129: a nuclear warning marker tied to it leaves play at once, inside this removal)
+    crate::anims::missile_left(w, id);
 }
 
 /// The kind of a projectile type, for the drawing.

@@ -303,7 +303,7 @@ fn markers(w: &World) -> Vec<Option<glasnost_sim::world::Pos>> {
 
 #[test]
 fn claim11_a_one_time_launch_marker_ends_when_its_falling_missile_leaves_play() {
-    // spec: S-0513 claim 11 (in a one-time launch the marker is attached to the falling missile and ends when that missile leaves play) and S-0109 claim 22 (an attached animation whose owner is removed is deleted at its next update)
+    // spec: S-0513 claim 11 (r129: in a one-time launch the marker is tied to the falling missile, a link of lifetime only, not an S-0109 claim 22 attachment, and ends when that missile leaves play)
     let r = endless_marker_rules();
     let mut w = game(&r);
     let target = at(1, 1);
@@ -327,7 +327,7 @@ fn claim11_a_one_time_launch_marker_ends_when_its_falling_missile_leaves_play() 
 
 #[test]
 fn claim11_a_silo_launch_marker_ends_at_the_upward_missiles_burst() {
-    // spec: S-0513 claim 11 (in a silo launch the marker is attached to the upward missile from the silo's first update; it disappears at that missile's burst and the falling missile has none)
+    // spec: S-0513 claim 11 (r129: in a silo launch the marker is tied to the upward missile, made in the silo's update in which that missile leaves; it disappears at that missile's burst and the falling missile has none)
     let r = endless_marker_rules();
     let mut w = game(&r);
     let silo = spawn(&mut w, "SILO", ALPHA, -6, -6);

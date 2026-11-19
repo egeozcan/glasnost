@@ -1832,3 +1832,99 @@ Seams left:
 - S-0107 claim 17a's early exit for a tunnel is not built, as our engine builds no tunnels.
 
 The P3 census rule: the batch makes or moves no back-reference of `World::census`.
+
+## Batch S39: the nuclear warning marker's tie and the stop at a jumpjet's crash start (#441, #446, S-0513, S-0502)
+
+Base main 2a4d7db, not rebased. The batch builds two answers. S-0513 r129 claim 11 answers Q-3253 (#441), with scenario SW4 parts (b) and (c) and S-0513's change for S-0203 claim 10. S-0502 r30 claim 18 answers Q-3255 (#446), with S-0113 r21 and S-0312 r93. For each item the design text came first, in *Simulation (sim issues S39 …)* in `docs/dev/simulation.md` (5883a70, add20e8), then the failing tests (7d68fae, f5e4ec9), then the fix (ec59e15, 22da0c6). No fix commit changes a test. Each red was shown in a separate base worktree checked out at the test commit (`red-1.txt`, `red-3.txt`). Two requests are filed from item 2 (2b8076d): Q-3281 and Q-3282. A rustfmt commit (87b6491) and a clippy fix (3f5898f) close the code. Logs are in `local-lane/sim-issues/s39/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #441, the order (S-0513 claim 11 r129, S-0203 claim 3) | The marker was made after its missile: `nuke::one_time` and `nuke::silo_turn` made the missile first, and in a silo launch the take-off animation came between them. So the marker stood after the missile in the update order | fixed (ec59e15; tests 7d68fae, red at 7d68fae: marker index 2, expected 0) | `nuke::marker` makes the marker untied, just before `missile`, and `nuke::tie` then ties it through `anims::tie_warning`. In a silo launch the order is the marker, the upward missile, then the take-off animation. The marker is made only after every check that can stop the missile has passed | `claims_s0513_r129.rs`: `claim11_r129_the_marker_enters_play_just_before_its_missile` |
+| #441, the tie and the removal (claim 11 r129, SW4 (b) and (c), S-0203 claim 10) | The marker's end was lazy. `anims::turn` deleted a marker whose missile had gone at the marker's next turn, citing S-0109 claim 22, which treats the tie as an attachment. A missile that left in its own turn cost the marker after it its turn (one counting removal), and the marker went in the next tick. r129: the tie is a link of lifetime only, and the marker leaves at once inside the missile's removal, both removals counting | fixed (ec59e15) | `AnimWorld::markers`, an ordered map from a missile to its marker, saved and hashed. `combat::projectile::remove`, the one way a projectile leaves play, calls `anims::missile_left` after its own leave, which removes the marker through `anims::remove`. That removal reads `quirks.update_order_removal_skip`. The lazy branch of `anims::turn` is gone. A marker ended by its own playback leaves a stale entry, which the missile's removal drops | `sw4_b_the_marker_keeps_its_place_and_is_gone_with_its_missile`; `sw4_c_both_removals_count_with_the_switch_on` (three vehicles after the missile, the first two miss their turn and the third takes it; a one-time and a silo strike); `sw4_c_neither_removal_costs_a_turn_with_the_switch_off`; `claim11_r129_the_tie_survives_a_save_and_load`. `claims_s0513_nuke.rs`'s two marker tests keep their assertions and now cite r129 |
+| #441, the place (SW4 (b) runs (i) to (iii)) | `cell_point(w, cell, false)` already gave the cell centre at the terrain surface height with no bridge lift. The marker had no owner, so it never followed its missile | as built | none | `sw4_b_the_marker_keeps_its_place_and_is_gone_with_its_missile` (open ground, a silo five cells away), `sw4_b_iii_on_a_high_bridge_the_marker_stands_below_the_deck`. Their position checks hold on base. Both fail there only at their last check, that the marker is gone at the end of its missile's tick (`red-1.txt`: all six tests of the file fail on base) |
+| #441, the silo's tick (claim 11 r129, claim 8) | `silo_turn` runs in the silo's update in which the upward missile leaves, so the marker is made in that update | as built | none | `claim11_r129_the_marker_enters_play_just_before_its_missile` (the silo run) |
+| #446, the crash-start stop (S-0502 claim 18 r30, S-0312 claim 16 r93) | `jump::fly::start_crash` made one empty destination assignment at the hit (r24). A balloon-hover vehicle that held a destination and a target could reject it under claim 28, and then kept its order-level destination and its movement point through the fall. r30: the crash start is S-0607 claim 13's stop on dropping | fixed (22da0c6; tests f5e4ec9, red at f5e4ec9: 4 tests) | `jump::crash_start_stop`, called by `start_crash` in place of the one assignment. In order: the first empty assignment unless `clear_rejected` rejects it; the target cleared, with the burst counter (S-0301 claim 4); `lift::break_any_contact` (now `pub(crate)`); the direct stop `jump::lift_release_stop(w, id, false)`; the second empty assignment, which claim 28 can no longer reject. Infantry with a commitment reroutes three times, so it takes three draws over 0 to 3. The drop's deselection is left out, as S-0502 does not list it | `claims_s0502_r30.rs`: `j12_c_a_retained_destination_ends_empty_and_the_point_is_rerouted`, `j31_a_infantry_takes_three_reroute_draws_at_the_crash_start`, `claim18_r30_the_crash_start_breaks_off_contact` (red at f5e4ec9), `claim18_r30_without_a_commitment_the_stop_changes_no_point` (a guard, passes at f5e4ec9). `claims_s0502_crash.rs`'s `claim_18_crash_start` now expects three draws, not one (red at f5e4ec9: 4 against 6). `claims_s0502_r24_crash.rs` keeps its assertions and cites r30 |
+| #446, the path of the fall (claim 18 r30 *Path of the fall*, J12 (a) and (b)) | Every crashing jumpjet falls this way, balloon-hover type or not. The body facing follows the heading, claim 10. One killed while cruising steps along its spinning heading and leaves an open arc. One killed hovering with no order keeps current and maximum speed 0 and falls straight down | as built; guard test | none | `j12_r30_the_path_of_the_fall_as_built` (passes at f5e4ec9) |
+| #446, the maximum speed at the first crash update | The update that enters *crashing* still runs the preceding state's outcome against the movement point. A unit killed while cruising, now rerouted to a point near it, can have F6's bands lower its maximum speed in that update (a temporary measurement: 14 at the hit, 7 from the first crash update on). J12 (a) does not expect this | request Q-3281 (2b8076d) | none | none asserts J12 (a)'s or (d)'s maximum speed |
+| #446, the no-cell switch off | With `quirks.jumpjet_no_cell_self_destruct` off, a failed search in the stop still gives a killed unit the switch-off outcome | request Q-3282 (2b8076d) | none | — |
+| #446, the client (S-0113 r21 claim 18) | The tilt-crash flag decides how a jumpjet body is drawn, which is presentation. The simulation's fire points already ignore rocking (claim 19's existing seam), which is exact for an unflagged jumpjet | handed back (client) | none in the simulation | — |
+
+Formats (ec59e15): `AnimWorld::markers` is saved and hashed, so save goes from 158 to 191 and AI game from 136 to 169 on the branch (renumbered to 162 and 140 at the merge). The AI game bump in `crates/deterministic/ai/src/game.rs` is forced by the sim change. Wire stays 12. No claim built here names a new quirk switch: item 1 reads the existing `quirks.update_order_removal_skip` and item 2 the existing `quirks.jumpjet_no_cell_self_destruct`, so the rules schema does not change.
+
+Goldens (ec59e15): all nine sim-gate goldens move, and every hash line in each file changes, as the new saved field enters every state hash from the first tick. The line counts are unchanged. The goldens were made with both fixes in the tree. The golden test then passed at f5e4ec9 (item 1's fix, item 2's tests only; `golden-at-f5e4ec9.txt`), so item 2 does not move them.
+
+Lanes compare base 2a4d7db with the batch at 87b6491. The later clippy fix changes no behaviour, and the gate and the AI suite ran again on it. The quick lane was also run on an item-1-only build (f5e4ec9) to split its moves by item.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). `diff -r --brief` of the two output directories is empty. The text outputs differ only in load and play times and the output directory names (`arena-diff.txt`). These rows fail, on base and after:
+- M-0001: 10 of 96;
+- M-0002: 4 of 24;
+- M-0003: 3 of 35;
+- M-0019: 0 of 6;
+- M-0020: 0 of 25 checked;
+- M-0021: 10 of 50.
+
+**Sweeps** (`m6c-*`, `m7a-*`, `m7b-*`). M6c, M7a and M7b over seeds 1 to 16 pass, before and after. Apart from build lines and timings they print the same lines as base (`m6c-diff.txt`, `m7a-diff.txt`, `m7b-diff.txt`).
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt`, `quick-item1-7.txt` to `quick-item1-10.txt`, `quick-after-7.txt` to `quick-after-10.txt`). Each seed's games are numbered 1 to 9: map 0 with sides 0v1, 0v2 and 1v2, then map 2, then map 8. Ten games end on the same tick with the same winner as base. 26 games move, and eight of them change their winner:
+
+| Seed | Game | Base | Item 1 only | Batch | Moved by |
+|---|---|---|---|---|---|
+| 7 | 1 | 79563, house 1 | 56117, house 1 | 70483, house 0 | items 1 and 2; winner by item 2 |
+| 7 | 2 | 52281, house 1 | 52281, house 1 | 112001, house 0 | item 2; winner |
+| 7 | 4 | 46497, house 0 | 46497, house 0 | 47333, house 0 | item 2 |
+| 7 | 5 | 75466, house 1 | 75466, house 1 | 47207, house 1 | item 2 |
+| 7 | 6 | 84712, house 0 | 58684, house 1 | 58684, house 1 | item 1; winner |
+| 7 | 7 | 32400, house 0 | 32400, house 0 | 29114, house 0 | item 2 |
+| 7 | 8 | 35923, house 1 | 35923, house 1 | 29849, house 1 | item 2 |
+| 8 | 1 | 50672, house 1 | 70051, house 1 | 36009, house 0 | items 1 and 2; winner by item 2 |
+| 8 | 2 | 52268, house 0 | 52268, house 0 | 27301, house 0 | item 2 |
+| 8 | 3 | 88039, house 0 | 87326, house 0 | 70610, house 0 | items 1 and 2 |
+| 8 | 6 | 39971, house 0 | 42776, house 0 | 42776, house 0 | item 1 |
+| 8 | 7 | 53668, house 0 | 68305, house 0 | 72911, house 1 | items 1 and 2; winner by item 2 |
+| 8 | 8 | 66645, house 1 | 66645, house 1 | 31517, house 0 | item 2; winner |
+| 8 | 9 | 32877, house 0 | 35217, house 0 | 35217, house 0 | item 1 |
+| 9 | 1 | 34369, house 0 | 34369, house 0 | 38153, house 0 | item 2 |
+| 9 | 2 | 45639, house 0 | 45639, house 0 | not over at 120000, no winner | item 2; winner |
+| 9 | 3 | 39407, house 0 | 36182, house 0 | 36182, house 0 | item 1 |
+| 9 | 4 | 39101, house 0 | 39101, house 0 | 42385, house 0 | item 2 |
+| 9 | 5 | 46477, house 1 | 46477, house 1 | 45536, house 1 | item 2 |
+| 9 | 6 | 97544, house 1 | 105613, house 0 | 105613, house 0 | item 1; winner |
+| 9 | 7 | 28583, house 0 | 28583, house 0 | 20486, house 0 | item 2 |
+| 9 | 8 | 30405, house 0 | 30405, house 0 | 31518, house 0 | item 2 |
+| 10 | 3 | 54257, house 0 | 60747, house 0 | 60747, house 0 | item 1 |
+| 10 | 4 | 34558, house 0 | 34558, house 0 | 26976, house 0 | item 2 |
+| 10 | 5 | 33708, house 0 | 33708, house 0 | 31935, house 0 | item 2 |
+| 10 | 8 | 40656, house 1 | 40656, house 1 | 40405, house 1 | item 2 |
+
+Each winner change was traced as a single pair (`GLASNOST_AI_SIDES`), which reproduced the full set's result in every case. The six item-2 winner changes were traced from the item-1-only build to the batch, by state hashes (`GLASNOST_AI_HASH=1`) and then an object dump of the first differing tick (`GLASNOST_AI_OBJS`). Each first differs at one tick in one object: a house 0 jumpjet infantry unit of type 4, health 0, at its crash start. Its target goes from an object to none and its target epoch goes up by one, which is r30's stop. Where its point was its own position it is rerouted, with draws (`tr-s<seed>g<game>-objs-diff.txt`):
+- seed 7 game 1, tick 15126, object 1239 (*hovering*): target object 1462 → none; jump destination (18752, 15552) → (18880, 15424); draws taken 271115 → 271116;
+- seed 7 game 2, tick 10609, object 1486 (*hovering*): target object 1337 → none; destination unchanged; draws 225018 → 225019;
+- seed 8 game 1, tick 9760, object 1244 (*hovering*): target object 1218 → none; destination (12608, 17088) → (12736, 16960); draws 160240 → 160242;
+- seed 8 game 7, tick 8686, object 268 (*hovering*): target object 169 → none; destination and draws unchanged;
+- seed 8 game 8, tick 11188, object 790 (*cruising*): target object 538 → none; destination (9024, 20416) → (9152, 20288); draws 212974 → 212975;
+- seed 9 game 2, tick 10600, object 1523 (*cruising*): target object 1414 → none; destination unchanged; draws 215330 → 215333.
+
+The two item-1 winner changes were traced from base (rebuilt at 2a4d7db) to the item-1-only build. State hashes are not comparable across the format change, so house timelines (`GLASNOST_AI_TRACE=10`) and single-tick object dumps bisected the window first, then a dump of every tick in it:
+- seed 7 game 6 (`tr-s7g6-w-diff.txt`): ticks 34131 to 34146 are equal. At tick 34147 object 8439 (house 0 vehicle, type 17) has damage smoke animation 8739 on base and 8740 with item 1, and the draws taken are 597771 on base and 597770 with item 1. House 0's silo (object 1968) has a missile in flight (busy until tick 34014).
+- seed 9 game 6 (`tr-s9g6-w-diff.txt`): ticks 33451 to 33478 are equal. From tick 33479 to the window's end at 33500 only object 11293 differs, a house 0 spy plane (aircraft type 10, placed at tick 33439). At tick 33479 its position is (17479, 1930, 2124) on base and (17514, 1942, 2124) with item 1, with no difference in draws or spawns. A silo had launched earlier (busy until tick 33311).
+
+Both fit a turn that a marker's removal now costs, or no longer costs, a nearby object. The dump has no animations or projectiles, so the removal itself is not observed directly.
+
+**Suites.** The AI suite with its ignored tests passes 381 on base and after, with every test binary's result line equal (`ai-base.txt`, `ai-after.txt`). The sim gate with its ignored tests passes 17 on both (`gate-base.txt`, `gate-after.txt`), after the goldens were regenerated.
+
+Final checks. Clippy found one `question_mark` lint in `nuke::marker`. It is fixed with no behaviour change (3f5898f), and these ran on that commit:
+- `cargo test --workspace --no-fail-fast` (`final-ws-2.txt`): 9329 tests pass, against 9318 on base. The only failures are the two known ones, which name the same quirks as on base: `quirks::tests::every_spec_quirk_has_a_switch` and app `every_rendering_spec_quirk_has_a_switch`;
+- `cargo clippy --workspace --all-targets -- -D warnings` (`final-clippy-2.txt`);
+- `cargo fmt --check`;
+- the wasm32 build of glasnost-app (`final-wasm.txt`);
+- `cargo xtask check` (`final-xcheck.txt`): fails only on the 8 known stock-guard problems in M-0027;
+- `cargo xtask gate` (`final-xgate.txt`): native 17 pass, and all nine goldens match under wasm32;
+- the AI suite with its ignored tests (`final-ai.txt`): 381 pass.
+
+Seams left:
+- Q-3281 (the maximum speed at the first crash update) and Q-3282 (the no-cell switch off at the crash start) wait for answers.
+- The client, item 1: nothing new. The marker is an ordinary animation with no owner, at the target cell's centre, and leaves play with its missile. The viewer test (#441, S34's seam) reads `Anim::warning` as before.
+- The client, item 2 (S-0113 r21 claim 18): the tilt-crash flag (`TiltCrashJumpjet` on an object type, off by default, S-0113 *Import mapping*) is not imported yet; no crate reads it. The jumpjet locomotor's body is drawn with its pitch and roll only when its type has the flag and the pitch or the roll is at least 0.005 radians in magnitude. Otherwise it is drawn turned to its body facing only, with no pitch, roll or slope tilt, in every flight state, crashing included. A crash's spin is drawn through the body facing, which the simulation already keeps on the spinning heading.
+- Claim 19's flagged fire point (a flagged jumpjet's fire point through its rocking angles) stays the existing seam: the simulation's fire points ignore rocking.
+
+The P3 census rule: `AnimWorld::markers` maps projectile numbers to animation numbers. It is not an object-table reference, so the batch makes or moves no back-reference of `World::census`.

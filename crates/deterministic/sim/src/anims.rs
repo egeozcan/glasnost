@@ -41,6 +41,12 @@ pub struct AnimWorld {
     /// it during that turn. Never set between turns.
     #[serde(skip)]
     current: Option<(ObjectId, Role, bool)>,
+    /// Each nuclear strike missile's warning marker, by the missile's
+    /// number (S-0513 claim 11): the marker leaves play inside its
+    /// missile's removal ([`missile_left`]). An entry whose marker has
+    /// ended by its own playback stays until its missile leaves.
+    #[serde(default)]
+    pub markers: BTreeMap<ObjectId, ObjectId>,
 }
 
 /// What an animation is to the rest of the game, beyond its playback.
@@ -73,12 +79,13 @@ pub enum Role {
 }
 
 /// What ties a nuclear strike's warning marker to its missile (S-0513
-/// claim 11): the marker ends when that missile leaves play. It stays at
-/// the target cell's centre (Q-3253's interim rule), so it has no owner
-/// object.
+/// claim 11): a link of lifetime only, so the marker leaves play inside
+/// that missile's removal ([`missile_left`]). It is not attached in the
+/// sense of S-0109 claim 22: it keeps its place at the target cell's
+/// centre and has no owner object.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WarningMarker {
-    /// The missile it is attached to (a projectile).
+    /// The missile it is tied to (a projectile).
     pub missile: ObjectId,
     /// The launching house, which the marker's viewer test reads
     /// (presentation); `None` for a strike with no house.
@@ -288,6 +295,27 @@ pub fn remove(w: &mut World, id: ObjectId) {
     }
 }
 
+/// Ties warning marker `marker` to `missile` of house `house` (S-0513
+/// claim 11): the marker made just before the missile.
+pub fn tie_warning(w: &mut World, marker: ObjectId, missile: ObjectId, house: Option<HouseId>) {
+    let Some(a) = w.anims.anims.get_mut(&marker) else {
+        return;
+    };
+    // spec: S-0513 claim 11 (r129, Q-3253: the tie is a link of lifetime only, not an attachment of S-0109 claim 22)
+    a.warning = Some(WarningMarker { missile, house });
+    w.anims.markers.insert(missile, marker);
+}
+
+/// Projectile `missile` has just left play: the warning marker tied to
+/// it, if any, leaves play at once, inside that removal (S-0513 claim 11).
+pub fn missile_left(w: &mut World, missile: ObjectId) {
+    let Some(m) = w.anims.markers.remove(&missile) else {
+        return;
+    };
+    // spec: S-0513 claim 11 (r129, Q-3253: the marker leaves play at once, inside the removal of its missile, and takes no turn after it; its leaving is a removal under S-0203 claim 10, so with the marker before its missile both removals count when the missile leaves in its own turn, and quirks.update_order_removal_skip governs both) and S-0203 claim 10 (S-0513's change for its list of causes)
+    remove(w, m);
+}
+
 /// The animations of role `role` in play, in update-order number order,
 /// the one taking its turn included (a drain link that its own damage ends
 /// removes it, S-0608 claim 14).
@@ -492,14 +520,6 @@ pub fn turn(w: &mut World, id: ObjectId) {
         return;
     };
     let skip = w.rules().quirks.update_order_removal_skip;
-    if let Some(m) = a.warning
-        && !w.projectiles.contains_key(&m.missile)
-    {
-        // spec: S-0513 claim 11 (the warning marker ends when its missile leaves play) and S-0109 claim 22 (deleted at its next update, which does nothing else)
-        ended(w, id, &a);
-        w.update.leave(id, skip);
-        return;
-    }
     // spec: S-0611 claim 15 (a bouncing animation's point is its position in play from its last motion step, attached to an owner or not)
     let flown = a.pos;
     let mut factor = 1;
