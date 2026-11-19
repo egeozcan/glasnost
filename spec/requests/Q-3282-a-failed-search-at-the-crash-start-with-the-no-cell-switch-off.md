@@ -1,9 +1,9 @@
 ---
 id: Q-3282
 title: A failed search at the crash start with the no-cell switch off
-status: open
+status: answered
 related: [S-0502, S-0607]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need
