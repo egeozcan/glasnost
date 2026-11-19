@@ -2,13 +2,13 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 30
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-18
+approved-on: 2026-11-19
 measurements: []
-requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504, Q-3042, Q-3043, Q-3252, Q-3255]
+requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504, Q-3042, Q-3043, Q-3252, Q-3255, Q-3257]
 supersedes: []
 ---
 
@@ -446,9 +446,36 @@ New terms:
       on the heading.
     - **The jumpjet-turn flag.** It is a field of infantry types only (S-0310 claim 8). A
       vehicle has none, and the exception above never applies to it.
-    - **Balloon-hover vehicle.** The same rules apply. Where claim 28 keeps its destination, that
-      destination bars the reply, and its heading turns towards the kept movement point, not
-      towards the target.
+    - **Balloon-hover vehicle.** The same rules apply. Where claim 28 keeps its destination, or
+      where its target is its destination (S-0307 claim 18), that destination bars the reply,
+      and its heading turns towards the movement point, not towards the target.
+    - **Balloon-hover vehicle over its target (Q-3257).** When its target is its destination, its
+      movement point is the target's own point (claim 16). For a building without the pad,
+      repair-depot or vehicle-bunker flag that is the building's reference point, and for another
+      object outside any transport with no next movement point it is the object's position. Either
+      way it is the point to which the direction of the target is measured (S-0310 claim 1), so on
+      the way in its heading, and with it its body, turns towards the target. In its arrival tick
+      the heading is given its last turn: towards the movement point from the position the vehicle
+      holds before claim 12 moves it onto that point. On a straight approach that is close to the
+      direction it flew in. Over the point nothing turns the heading again (claim 13), so from
+      the end of that last turn the body keeps the facing it gives. In the two cases above, while
+      the target is still at the point it gave at the assignment (claim 16), it lies straight
+      below the vehicle, and the direction between two points with no horizontal difference is
+      map east (S-0204 claim 8, F3 with both differences 0: 16383 facing units with
+      `quirks.table_direction` on, the original, and 16384 with it off). So:
+      - without a turret, a weapon that is not omni-fire fires from the hover only while that
+        kept facing lies within the aiming tolerance of map east (S-0310 claim 2), as after an
+        approach flown towards map east. Otherwise it does not fire from the hover while the
+        target stays at that point and stays its destination (Edge cases,
+        `quirks.hovering_jumpjet_body_on_heading`). A target that has moved away from that
+        point lies in the direction that S-0310 claim 1 gives from the vehicle, and the vehicle
+        fires from the hover only while its kept facing lies within the tolerance of that
+        direction.
+      - on the way in, a weapon without the fire-while-moving flag does not fire at all: a
+        balloon-hover vehicle gets *moving* while it is *moving now* (S-0310 claim 7).
+      - a type without the mobile-fire flag gets *moving* while it has a destination, also
+        while it hovers, so with its target as its destination it never fires at it (S-0310
+        claim 7).
     - **Without a commitment.** A hovering jumpjet vehicle without a movement commitment takes no
       physics step (claim 3), so nothing sets its body from the heading. The reply without a
       turret then applies as on the ground: with no destination and a *not facing* answer, it
@@ -458,13 +485,25 @@ New terms:
       turn. No ordinary input is known to give a hovering vehicle that state (claim 3).
     - Backing: `measurable` (scenario J33: parts a and b for the body on the heading while
       hovering, a for the omni-fire weapon, b and c for the weapon that is not omni-fire, d for
-      the move). `unmeasured` for the turret and balloon-hover cases, which J33 does not vary,
-      for the jumpjet-turn flag, which a vehicle type cannot be given, and for the vehicle
-      without a commitment, a state that no ordinary input reaches (claim 3).
+      the move). `measurable` (scenario J34) for the balloon-hover vehicle over its target: parts
+      a to d for the hover point, the kept facing and the shots from the hover, parts a to e for
+      the way in, part f for the mobile-fire flag, part g for a vehicle standing still.
+      `unmeasured` for the turret case, for infantry and aircraft targets, for a target that has
+      moved away from the hover point and for claim 28's kept destination, which J33 and J34 do
+      not vary, for a heading that turns again over the point after its last turn, which would
+      void J34's parts b to e and g rather than falsify them, for the jumpjet-turn flag, which a
+      vehicle type cannot be given, and for the vehicle without a commitment, a state that no
+      ordinary input reaches (claim 3).
     - Confidence: high for the body on the heading while the vehicle keeps its commitment, in
-      *hovering* and in the move, and for the omni-fire weapon; medium for the weapon that is
-      not omni-fire, for the turret and balloon-hover cases and for the jumpjet-turn flag; low
-      for the vehicle without a commitment
+      *hovering* and in the move, and for the omni-fire weapon; high for a balloon-hover vehicle's
+      hover point over a building without a docking flag or a vehicle with no next movement point
+      that it attacks, and for the direction map east of a target straight below it; medium for
+      the weapon that is not omni-fire, including the balloon-hover vehicle's shots from the hover
+      and on the way in and the mobile-fire flag, for its hover point over an infantry unit or an
+      aircraft, for its shots at a target that has moved away from the hover point, for its
+      heading not turning again over the point after its last turn, for the turret case, for
+      claim 28's kept destination and for the jumpjet-turn flag; low for the vehicle without a
+      commitment
 
 ### Cruise and arrival
 
@@ -625,6 +664,31 @@ New terms:
     - A grounded jumpjet takes off (claim 5). A hovering one leaves its hover in the next tick
       (claim 13).
     - Search settings and the infantry standing-position choice are claim 23.
+    - **The point of a destination that names an object (Q-3257).** When the destination
+      names an object, the point that this claim adjusts or keeps is the object's point at the
+      moment of the assignment, and it does not follow the object afterwards:
+      - a building gives the centre of its foundation, its reference point of S-0204 claim 4,
+        not its position or the centre of its top-left cell. A building whose type has the
+        pad flag, the repair-depot flag or the vehicle-bunker flag gives its docking point
+        instead, by S-0607 claim 7's docking-point rules with the jumpjet in place of the
+        seized unit.
+      - a vehicle, an infantry unit or an aircraft gives the point that S-0607 claim 7 gives
+        for a lifter that is not a building, its riding rule included: outside any transport,
+        its heading point (S-0607 Terms), which is its next movement point, or its position
+        when it has none.
+
+      So a balloon-hover vehicle whose destination is a building without the pad, repair-depot or
+      vehicle-bunker flag flies to the centre of its foundation, and one whose destination is a
+      vehicle with no next movement point flies to that vehicle's position.
+      - Backing: `measurable` (J34 parts a to d for a building, g for a vehicle with no next
+        movement point). `unmeasured` for the docking points, for infantry units and aircraft,
+        for an object in a transport or with a next movement point, and for the point not
+        following the object: J34's targets are a building without a docking flag and a
+        vehicle that does not move.
+      - Confidence: high for a building without those flags and for a vehicle with no next
+        movement point, and medium for the docking points, for infantry units and aircraft,
+        for an object in a transport or with a next movement point, and for the point not
+        following the object
     - A direct no-point instruction is distinct from an effective order-level destination
       clear: the latter invokes claim 17, not this claim's no-point row. Claim 24 specifies
       effective clears and redundant assignments that never reach movement.
@@ -1592,19 +1656,27 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   - On: a jumpjet vehicle that hovers with a target and keeps a movement commitment, and is not
     held by magnetic lift, keeps its body on its movement heading, and with a weapon that is not
     omni-fire and no turret it does not fire at a target outside the aiming tolerance of that
-    heading (claim 10). A hovering vehicle without a commitment follows claim 10's *Without a
-    commitment* bullet under either setting.
+    heading (claim 10). A balloon-hover vehicle without a turret, over a target that stays at the
+    point it gave, keeps the facing of its last turn, and with a weapon that is not omni-fire it
+    fires from the hover only while that facing lies within the tolerance of map east (claim
+    10). A hovering vehicle without a commitment follows claim 10's *Without a commitment*
+    bullet under either setting.
   - Off (fixed behaviour): in *hovering*, a jumpjet vehicle's physics steps do not set its body
     facing from the movement heading, and for the reply to *not facing* without a turret its
-    locomotor does not count as moving it. With no destination, its body then turns towards its
-    target at its body turn rate (S-0206 claim 7), and it fires once the target lies within the
-    tolerance, as a vehicle without a turret on the ground does. Its movement heading is
-    unchanged. The first physics step outside *hovering* sets the body facing from the heading
-    again, at once. These two changes hold for an omni-fire weapon too, but its firing check
-    never answers *not facing* (S-0310 claim 2), so the reply never turns its body and it keeps
-    the body facing it had when it entered *hovering*.
-  - Backing: `measurable` (J33 gives the original-behaviour falsifier). The off alternative is a
-    design rule, not a claim about the original.
+    locomotor does not count as moving it and its destination does not bar the reply. Its body
+    then turns towards its target at its body turn rate (S-0206 claim 7), and it fires once the
+    target lies within the tolerance, as a vehicle without a turret on the ground does with no
+    destination. A balloon-hover vehicle over its target, whose target is its destination
+    (claim 10), therefore turns to map east while the target stays at the point it gave at the
+    assignment (claim 16), since that is the direction of a target straight below it, and
+    fires unless another refusal applies, such as the mobile-fire condition of S-0310 claim 7
+    and its own switch there. Outside *hovering* its destination bars the reply as before. Its
+    movement heading is unchanged. The first physics step outside *hovering* sets the body
+    facing from the heading again, at once. These changes hold for an omni-fire weapon too, but
+    its firing check never answers *not facing* (S-0310 claim 2), so the reply never turns its
+    body and it keeps the body facing it had when it entered *hovering*.
+  - Backing: `measurable` (J33 and J34 give the original-behaviour falsifiers). The off
+    alternative is a design rule, not a claim about the original.
   - Confidence: medium (the original behaviour, as claim 10)
 - **Ion storms.** An ion storm makes every flying jumpjet of the affected house crash, and stops a
   grounded one taking off. Ion storms do not occur in skirmish, so this is out of scope.
@@ -2388,6 +2460,83 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
     direction of the tank is more than 2048 facing units from the heading.
   - In every part, a landing after the attack order voids the part.
 
+- **J34 A balloon-hover vehicle over the object it attacks (claims 10 and 16, Q-3257).** Common
+  setup, with no other jumpjet on the map, so that no hover slot is held (claim 12). Named test
+  data *jumpjet-flight-test*:
+  - an enemy building type with a 2 × 2 foundation, no weapon, and none of the pad,
+    repair-depot and vehicle-bunker flags, placed on flat land in the open area and strong
+    enough that no part destroys it.
+  - a balloon-hover jumpjet vehicle type with no turret, the mobile-fire flag and a body turn
+    rate above 0, whose only weapon has a vertical projectile that is not homing, no minimum
+    range, a range of 5 cells, and neither the omni-fire nor the fire-while-moving flag. Variant
+    (1) is as stated, variant (2) gives the weapon the fire-while-moving flag, and variant (3)
+    takes the mobile-fire flag from the type.
+
+  Recorder: each tick, the vehicle's position, flight state, body facing, movement heading, movement
+  point, order-level destination and target, and the tick of each shot; and the target's position.
+  The vehicle's *departure* is the first tick after the attack order in which it is not *hovering*.
+  The *hover window* of a part is the first unbroken run of ticks after the departure in which the
+  vehicle is *hovering* with its target; *before the hover window* means the ticks from the attack
+  order to the window's first tick. The last turn of claim 10 may still show in the first ticks of
+  the window (S-0206 claim 1), so no expectation below reads the body facing in the window's first
+  tick. The vehicle's *approach heading* is its movement heading in the last tick before the hover
+  window, and its *kept facing* is its movement heading in the last tick of the part. Both are read
+  from the heading, not the body, because the body-turning alternative of the switch's off setting
+  leaves the heading unchanged. A part with no departure, or with no tick of *hovering* after it, is
+  void. The building's reference point is its position plus (128, 128) leptons (S-0204 claim 4); its
+  position is the centre of its top-left cell.
+  - (a) Variant 1. First move it to a cell 10 cells map west of the building, in a map row of its
+    foundation, where it hovers with no target. Then order it to attack the building and record
+    until 600 ticks after the first tick of the hover window. Void unless it hovers over that cell's
+    centre with no target when the attack order is given. Expected: in every tick of the hover
+    window its horizontal position is exactly the building's reference point and its order-level
+    destination is the building; it does not fire before the hover window; from the second tick of
+    the hover window on, its body facing equals its movement heading, and once the heading has
+    stayed the same from one tick to the next it does not change again; and in the hover window it
+    fires at the weapon's rate-of-fire delay. Void unless its kept facing lies within 2048 facing
+    units of 16383 (map east with `quirks.table_direction` on, as in every part here).
+  - (b) Variant 1, as (a) but from 10 cells map east. Expected: the same hover position, the
+    expectations of (a) for the body facing and the movement heading in the hover window, and no
+    shot in the run. Void unless its approach heading is more than 4096 facing units from 16383 and
+    its kept facing is more than 2048 facing units from 16383.
+  - (c) and (d) Variant 1, as (b) but from 10 cells map north and 10 cells map south.
+  - (e) Variant 2, from 10 cells map east as (b), and void, as (b) is, unless its approach heading
+    is more than 4096 and its kept facing more than 2048 facing units from 16383. Expected: before
+    the hover window, in ticks in which the building is in range, its body facing turns to within
+    2048 facing units of the direction from its position to the building's reference point and it
+    fires, and in the hover window it does not fire. Void unless it spends at least two rate-of-fire
+    delays in range before the hover window.
+  - (f) Variant 3, as (a). Expected: the hover position of (a) and no shot in the run. Void unless
+    (a) fired in its hover window.
+  - (g) Variant 1, as (b), with an enemy vehicle of the named test data in place of the building: no
+    weapon, no order, standing on flat land. Expected: in every tick of the hover window its
+    horizontal position is exactly that vehicle's position, the expectations of (a) for its body
+    facing and movement heading hold, and no shot. Void unless the target vehicle does not move
+    during the run and the approach heading is more than 4096 and the kept facing more than 2048
+    facing units from 16383.
+  - Falsifiers: a hover position at the centre of the building's top-left cell, or anywhere other
+    than the expected point, falsifies claim 16. A shot in the hover window while the body facing is
+    more than 2048 facing units from 16383, any shot in the hover window of (b) to (e) or (g), a
+    body facing that differs from the movement heading in any tick of the hover window from its
+    second on, or a movement heading that changes again in the window after it has stayed the same
+    from one tick to the next, falsifies claim 10 and the switch's on setting. The void conditions
+    of (b) to (e) and (g) read only the movement heading, never the body facing. A build that turns
+    the body towards map east over the point, as the switch's off setting does, leaves the heading
+    unchanged, so whatever its body turn rate it fires from the hover with its target in range and
+    falsifies those parts by that shot rather than voiding them. A build that turns the heading
+    itself to map east there voids them; claim 10 leaves that case `unmeasured`. No shot in (a)'s
+    hover window, though its kept facing lies within that tolerance, falsifies the direction map
+    east of a target straight below. A shot before the hover window in (a) to (d) falsifies the
+    fire-while-moving reading of S-0310 claim 7, and a shot in (f) falsifies its mobile-fire
+    condition. In (e), no shot before the hover window, or a body facing that stays more than 2048
+    facing units from the direction of the building's reference point while the building is in
+    range, falsifies the heading's turn towards the target on the way in.
+  - Engine tests: with `quirks.hovering_jumpjet_body_on_heading` off, (b) must turn its body to
+    16383 in the hover window and then fire. With S-0310's
+    `quirks.balloon_hover_mobile_fire_by_destination` off, (f) must fire from the hover as (a) does.
+  - In every part, a landing after the attack order, or a step to a neighbouring cell at arrival
+    (claim 12), voids the part.
+
 ## Open questions
 
 - **Registration of a sinking dropped unit.** Claim 29 fixes the registration boundaries and
@@ -2417,6 +2566,19 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   it hovers, not by its flight state. Claim 9's rule without a turret then gives a hovering
   jumpjet vehicle no body turn (S-0502 claim 10). Level and backing: those of S-0502 claim 10
   for the weapon that is not omni-fire.
-- **S-0310 claim 9, the two rows for *not facing* without the turret flag.** "Being moved by its
-  locomotor" reads the movement commitment for a jumpjet locomotor (S-0502 Terms, *moving*), not
-  *moving now* as in claim 7. Level and backing: as above.
+- **S-0307 claim 18.** After "its destination becomes the target itself", add: the point its
+  locomotor then receives is the target's point of S-0502 claim 16, which for a building
+  without the pad, repair-depot or vehicle-bunker flag is the centre of its foundation, not its
+  top-left cell. Level and backing: those of S-0502 claim 16 for such a building (high,
+  `measurable` by S-0502 scenario J34).
+- **S-0503 claim 20 and S-0207 claim 25.** "That object's movement point" (S-0503) and "that
+  destination's movement point" (S-0207) are, for a destination that names an object, the
+  point that S-0502 claim 16 gives: a building's foundation centre or, with the pad,
+  repair-depot or vehicle-bunker flag, its docking point; another object's heading point.
+  Level: medium. Backing: `unmeasured` there, since S-0502 scenario J34 runs only the jumpjet
+  locomotor.
+- **S-0204 claim 4, backing.** The building direction reference point need no longer be
+  `unmeasured`: S-0502 scenario J34 part a distinguishes the foundation centre from the
+  top-left cell centre, since with the latter the direction of the building from above its
+  foundation centre would point to map north-west and part a would give no shot. Level: that
+  of S-0204 claim 4 (high).
