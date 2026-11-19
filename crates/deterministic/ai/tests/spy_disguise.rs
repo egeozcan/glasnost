@@ -253,8 +253,12 @@ fn covered(det: CellXY, c: CellXY) -> bool {
 fn a_spy_disguises_as_the_victims_infantry_first() {
     let g = ready();
     let (mut w, s, b) = scene(&g, "SPYD");
-    let p = pawn(&mut w, 4, -10);
+    // Out of the reach of DISGW, so the spy does not acquire it by itself (S-0309), but shown to house 0.
+    let p = pawn(&mut w, 2, -14);
+    let shown = at(home_of(&w), 2, -14);
+    reveal(&mut w, shown);
     run_to_think(&mut w, 2);
+    assert_eq!(w.obj(s).unwrap().cloak.disguise, None);
     let out = Brain::new(&w, &fixture::map(), ALPHA).think(&w);
     let mine = orders_to(&out, s);
     assert_eq!(mine, vec![attack(s, p)], "{out:?}");
