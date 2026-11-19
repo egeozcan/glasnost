@@ -2868,6 +2868,60 @@ fn claim_25_issue_451_automatic_pack_up_redeploys_one_cell_on() {
     );
 }
 
+/// The scene of #451 (S-0402 H30 part b1's layout on a synthetic map): a
+/// near field of 1 bale a cell used up, a far field of stage 5 beyond the
+/// short scan and within the long scan towards +x and +y, and the miner SMV
+/// (deploying into the 3 × 3 SMB) ordered to harvest next to the near
+/// field. Returns the world, the first building and its top-left cell.
+fn issue_451_scene(r: &Ruleset) -> (World, ObjectId, CellXY) {
+    let mut ore = field(5, -1, 0);
+    ore.extend(field(10, 8, 5));
+    let mut w = game_on(r, &ore, false);
+    let m = place_vehicle(&mut w, "SMV", 0, at(-8, 6), 0);
+    unblock(&mut w);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: m,
+            behaviour: Behaviour::Harvest,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(6, 0))),
+        }
+    ));
+    let b = next_building(&mut w, None, 1500);
+    let a = w.obj(b).unwrap().pos.cell();
+    (w, b, a)
+}
+
+// spec: S-0402 r90 claim 25 (quirks.slave_auto_pack_old_top_left off: automatic packing stores the vehicle's return cell, so a foundation larger than 2 × 2 behaves as case (a): the vehicle stands, its destination is cleared, the second vehicle group update seeks a field with the long scan and the miner deploys near the far field) and H30 (on our engine only, parts b1 and c1 with the switch off behave as parts a and c2); #451
+#[test]
+fn claim_25_issue_451_old_top_left_off_reaches_the_far_field() {
+    let mut r = rules();
+    r.globals.quirks.slave_auto_pack_old_top_left = false;
+    let (mut w, b, a) = issue_451_scene(&r);
+    until(&mut w, 3000, |w| group(w, b).state == GroupState::Packing).expect("packing");
+    assert_eq!(left_in(&w, 10, 8), 9, "the far field is untouched");
+    // spec: S-0402 claim 25 (switch off: the remembered cell is the return cell of S-0415 claim 10, x + 1, y + 1 for a 3 × 3 foundation)
+    let ret = CellXY::new(a.x + 1, a.y + 1);
+    assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(ret)));
+    until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
+    let v = vehicle_master(&w);
+    let o = w.obj(v).unwrap();
+    // spec: S-0415 claim 10 (the vehicle appears at the return cell, now also its destination)
+    assert_eq!(o.pos.cell(), ret);
+    assert_eq!(o.dest, Some(Target::Cell(ret)));
+    // spec: S-0402 claim 25 case (a) (the vehicle never leaves the cell before its redeployment near the far field) and claim 22 (it deploys there)
+    let next = next_building(&mut w, Some(b), 1500);
+    let n = w.obj(next).unwrap().pos.cell();
+    assert!(
+        (n.x - 10).abs() <= 4 && (n.y - 8).abs() <= 4 && n.x > ret.x && n.y > ret.y,
+        "redeployed at {n:?}, from {a:?}"
+    );
+    until(&mut w, 1500, |w| left_in(w, 10, 8) < 9).expect("the far field is mined");
+}
+
 // spec: S-0402 claim 21 (#450: on successful emergence a slave's target is its master). With the unarmed synthetic slave the held master target is never shot at; whether an armed slave bound to its master may fire at it is Q-3275
 #[test]
 fn claim_21_issue_450_an_emerged_slave_targets_its_master() {
