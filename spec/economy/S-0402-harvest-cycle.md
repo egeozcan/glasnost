@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 86
+revision: 90
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-18
+approved-on: 2026-11-19
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130, Q-1759, Q-1870, Q-1990, Q-3062, Q-3063, Q-3254]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130, Q-1759, Q-1870, Q-1990, Q-3062, Q-3063, Q-3254, Q-3274, Q-3275]
 supersedes: []
 ---
 
@@ -1685,8 +1685,14 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     master offers its own cell; a building offers the foundation cell (*W* − 1, ⌊*H*/2⌋)
     counted from its top-left cell, for positive integer width *W* and height *H* in cells.
     It seeks a free infantry standing position there. If none exists, or placement fails, the
-    slave stays ready inside until a later update, not on a neighbouring cell. On successful
-    emergence its target is the master and it starts the resource-search part of claim 14.
+    slave stays ready inside until a later update, not on a neighbouring cell. A successful
+    emergence gives the slave no target. The slave is sent a scatter request that is
+    forced and move-anywhere, with the master's reference point (S-0204 claim 4: a building's
+    foundation centre, a vehicle's position) as its threat point. S-0208 claims 11 and 12
+    decide whether it accepts the request, the draw it takes and the cell it walks to. For a
+    vehicle master the threat point lies in the slave's own cell, and S-0208 claim 12 takes
+    the direction from it to the slave's standing position there. The slave then starts the resource-search part of claim 14, whose search at a later group
+    update gives it its destination.
     When only one place accepts an emerging slave, the slave in the latest initial place emerges first. Replacements keep their places. Emergence takes no new object-creation draw.
     The desired emergence point is the offered cell's centre, at its terrain surface height.
     The standing-position choice is S-0208 claim 3's centre-class row, not its
@@ -1699,14 +1705,23 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     reverse slave-place order. Every successful emergence starts with facing 0 (map north),
     independent of the master's facing; subsequent walking can turn the slave. A vehicle master that still occupies the offered cell
     can therefore block emergence. There is no draw when the initial occupancy refusal
-    applies, and no second draw merely because the subsequent placement fails.
+    applies, and no second draw merely because the subsequent placement fails. A successful
+    emergence whose scatter request is accepted takes S-0208 claim 12's draw after that
+    slave's placement draw and before the next slave's offer.
     A replacement created, or a hidden slave made ready by reload completion, can emerge
     in that very update if the master's state permits emergence and a position accepts it.
     A slave taken inside in that update cannot finish reload until a later update, even
     with reload delay 0. Slave-place order fixes delivery and replacement ordering (claim 26).
-    - Backing: `measurable` (scenarios H15, H16 and H21)
+    - Backing: `measurable` (scenarios H15, H16 and H21; H18 for the scatter request at
+      emergence: its acceptance by a slave type that is not a fraidycat, which only a forced
+      request gets (S-0208 claim 11, third case), its draw and the cell it walks to from the
+      master's reference point; H16 for the absence of a target). `unmeasured`: that the
+      request is move-anywhere, since that changes acceptance only for a unit playing a
+      deploy kind (S-0208 claim 11, second case), and an emerging slave plays none.
     - Confidence: high for initial rest tick, periods, emergence cell, facing and slave-place
-      order; medium for placement refusal and timer boundaries
+      order; medium for placement refusal and timer boundaries; medium for the scatter request
+      at emergence, its forced and move-anywhere kind, its threat point, its draw and the
+      absence of a target
 
 22. **Harvest directs the miner (Q-0270 parts 4 and 5).** A miner with both resource-gatherer
     and resource-destination fields and a slave group processes *harvest* through its group rule,
@@ -1829,16 +1844,59 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     Automatic packing remembers *A*, the old top-left cell. Successful conversion gives
     the vehicle that cell as its immediate destination and queues *move* under S-0415
     claim 10, even before the next group update. It is not sent to the distant field or
-    tested site. A large foundation's return cell can differ from *A*, allowing movement
-    towards *A* before field seeking. The first vehicle group update only recalls slaves
-    and enters field seeking (claim 22). At the following update, an existing destination
-    is kept and makes the group travelling; otherwise the long scan and site search apply.
-    Later arrival and deployment use claim 22.
-    - Backing: `measurable` (H19)
-    - Confidence: high for zero-cell comparison inputs and strict comparison; medium for
-      conversion-to-movement timing and later group-update interaction
+    tested site. The first vehicle group update only recalls slaves and enters field seeking
+    (claim 22). At the following update, the second vehicle group update, an existing
+    destination is kept and makes the group travelling; otherwise the long scan and site
+    search apply. Later arrival and deployment use claim 22.
 
-26. **Slave work is paced by two clocks (Q-0412).** At a group update, each slave place whose loss timer has expired receives a replacement attempt; the attempt is not limited to one place per update. When effects for several places are due in the same update, the observable effects occur in increasing slave-place order: reload completions, returning deliveries, and outside slaves' searches and transitions all follow that order rather than being grouped into separate passes. Thus a delivery from an earlier place is observed before replacement creation for a later place. These effects are observed before the master's field, travel, deployment or relocation decision. Replacement-creation draws are observed in increasing place order; emergence offers and their draws are observed in reverse place order (claim 21).
+    **Where the vehicle goes (Q-3274).** The outcome depends on the foundation of the building
+    that packs, because that decides where the vehicle appears (S-0415 claim 10). The
+    redeployment of (b) is anchored by the foundation of the building that the vehicle deploys
+    into (S-0415 claim 3). The cases below take both to be the same type, as when a miner packs
+    and redeploys as the building it came from:
+    - (a) **A foundation of at most 2 × 2.** The vehicle appears on *A*, so its destination is
+      its own cell, and it does not leave that cell. With no active track it removes that cell
+      destination by S-0212 claim 20's locomotion cleanup, at its first update without an
+      active track, which needs no search. This comes before the second vehicle group update,
+      which therefore seeks a field with the long scan and searches for a
+      site near it. With a site, the vehicle moves there and the group travels, then deploys
+      there under claim 22, so the miner moves on to the field the long scan found.
+    - (b) **A larger foundation.** The vehicle appears at *A* + (1, 1) and drives the one
+      diagonal cell to *A*. Its arrival alone does not remove the destination: the completion of
+      its last track clears only its locomotor point, and the cell destination goes at its next
+      update without an active track (S-0212 claim 20). If that happens before the second
+      vehicle group update, it has no destination at that update, and (a)'s seeking follows. If
+      it still holds *A* there, the group travels to *A* without a field search. Once that
+      cleanup has removed the destination, the next group update attempts deployment from *A*,
+      so the new building's top-left cell is
+      *A* − (1, 1) (S-0415 claim 3). The new building's field checks then apply this claim from
+      that cell. So while each drive outlasts the second vehicle group update and each
+      footprint is clear, the miner packs up and redeploys one cell along map −*x* and −*y* in
+      every cycle, whatever direction the other field lies in. The cycle ends when F7 stops
+      requesting packing, or when a deployment from *A* fails twice: the group then seeks a
+      field (claim 22), and as it stands on *A*, the cleanup of S-0212 claim 20 has removed its
+      destination, so (a)'s seeking follows.
+    - (c) **No field left.** Packing is still requested whenever the comparison with (0, 0)
+      above says so. With (a)'s foundation the vehicle then seeks, finds no field and rests
+      (claim 22): it packs up once and stays a vehicle, and claim 14 decides any later waking,
+      whose seeking again finds no field. With (b)'s foundation, (b)'s cycle runs on, under
+      (b)'s own conditions (each drive outlasts the second vehicle group update and each
+      footprint is clear), while F7's comparison with (0, 0) keeps requesting packing.
+
+    `quirks.slave_auto_pack_old_top_left` (default: on, the original) covers (b)'s drive. Off,
+    automatic packing stores the vehicle's return cell, the cell where it appears, instead of
+    *A*. For a foundation of at most 2 × 2 that is *A* itself, so nothing changes there, and a
+    larger foundation then behaves as (a) does: the vehicle stands, its destination is cleared,
+    and the second vehicle group update seeks a field. Manual packing is unchanged. No importer
+    warning: a slave miner whose building is larger than 2 × 2 is valid data.
+    - Backing: `measurable` (H19; H30 for cases (a) to (c) and the switch: H30 part a backs
+      case (a), parts b1 and b2 back case (b), parts c1 and c2 back case (c))
+    - Confidence: high for zero-cell comparison inputs and strict comparison; medium for
+      conversion-to-movement timing and later group-update interaction; medium for case (a)'s
+      cleared destination and seeking, for case (b)'s travelling and redeployment at *A* −
+      (1, 1), and for case (c)'s single pack-up and continuing cycle
+
+26. **Slave work is paced by two clocks (Q-0412).** At a group update, each slave place whose loss timer has expired receives a replacement attempt; the attempt is not limited to one place per update. When effects for several places are due in the same update, the observable effects occur in increasing slave-place order: reload completions, returning deliveries, and outside slaves' searches and transitions all follow that order rather than being grouped into separate passes. Thus a delivery from an earlier place is observed before replacement creation for a later place. These effects are observed before the master's field, travel, deployment or relocation decision. Replacement-creation draws are observed in increasing place order; emergence offers and their draws are observed in reverse place order (claim 21), each accepted scatter draw right after its own slave's placement draw.
 
     Seeking, checking resource-cell arrival, detecting a full or exhausted load, and
     accepting delivery are group-update effects. A slave actually loading in *harvest*
@@ -2316,8 +2374,8 @@ select which harvester takes the earlier turn.
 - `quirks.slave_kick_delay_wraps` (claim 14), `quirks.refinery_distance_wraps` (claim 8),
   `quirks.zero_load_period_stalls` (claim 5) and `quirks.unload_without_contact_stalls` (claim 11)
   together with `quirks.harvester_failed_step_off_origin` (claim 13) and
-  `quirks.slave_relocation_failed_search_origin` (claim 25) and
-  `quirks.slave_negative_capacity_stalls` (claim 26),
+  `quirks.slave_relocation_failed_search_origin` and `quirks.slave_auto_pack_old_top_left`
+  (claim 25) and `quirks.slave_negative_capacity_stalls` (claim 26),
   `quirks.zero_capacity_harvester_cycles` (claim 1) and
   `quirks.non_unloading_refinery_accepts` (claims 8 and 10), are this spec's own switches.
 
@@ -3127,7 +3185,8 @@ is wrong). *Runs:* 3.
   17 ticks. Test both a vehicle and a deployed master. Arrange the emergence cell once free,
   once with room for only one slave, and once full of stationary friendly infantry.
 - *Procedure:* issue harvest on the field; log the master's destination, behaviour, deploy
-  attempts, group state and update ticks, slave creation/emergence ticks and occupied cells.
+  attempts, group state and update ticks, slave creation/emergence ticks and occupied cells,
+  and each slave's target at the end of every tick from its emergence on.
   Repeat with its deployment footprint obstructed just before arrival, then cleared. Damage
   a delivering slave and kill an emerged slave; log timer start and effect ticks. In another
   run empty the local field while leaving a distant field within the long scan.
@@ -3142,9 +3201,11 @@ is wrong). *Runs:* 3.
   necessarily exactly 13 or 17 ticks after their start. A found short-scan field prevents
   automatic relocation. Without one, the master can seek a long-scan field and request
   packing-up, even for the human owner; log the chosen sites and distance comparison for
-  claim 24's sites and F7's strict comparison.
-- *Falsified if:* emergence itself creates another object, an emerged slave occupies a
-  neighbouring rather than offered cell, the first ready slave wins the single-place test,
+  claim 24's sites and F7's strict comparison. An emerged slave holds no target.
+- *Falsified if:* emergence itself creates another object, an emerged slave is placed in a
+  neighbouring rather than the offered cell (its scatter walk afterwards does not count), an
+  emerged slave holds a target before any order, the first ready slave wins the single-place
+  test,
   timer effects occur between group updates, deployment retry ignores the 30-tick wait, or
   relocation occurs despite a short-scan field. Site choice is tested by H18 and relocation
   failures by H19.
@@ -3175,21 +3236,30 @@ is wrong). *Runs:* 3.
 - *Setup:* speed index 2, common remote bystander, flat isolated test area, human slave
   miner and named map overrides for 1 × 1, 2 × 2, 3 × 2, 2 × 3 and 3 × 3 conversion
   foundations. Prepare symmetric empty sites around a field or directed destination.
-  Separately prepare the emergence cell with one, several or no free side positions.
+  Separately prepare the emergence cell with one, several or no free side positions. For
+  the emergence runs, named test data gives the miner a slave type without the fraidycat
+  flag.
 - *Procedure:* order harvest, record selected site, vehicle destination and placement.
   Repeat with a resource overlay, ordinary overlay, terrain object, slope, bridge,
   infantry reservation, building or non-open passability cell in the site's rectangle.
   Compare sites tied in distance, including different rings where the visibility
   preference matters. Log emergence offers and scenario-stream draws separately from
-  ordinary behaviour-delay and object-creation draws.
-- *Expected:* the unshifted candidate sequence and distance ties follow S-0212 claim 25,
-  but only footprints passing claim 24 qualify. Each axis shifts independently only
-  when its dimension exceeds 2. No site-search draw occurs. Each centre-class emergence
-  offer not initially refused takes one ranged draw over 0 to 3, including a no-room
-  offer. S-0208 table O predicts its selected free side position, in reverse slave order.
+  ordinary behaviour-delay and object-creation draws. Make the emergence offers from a
+  deployed master and from a vehicle master, and record each emerged slave's destination at
+  the end of its emergence tick.
+- *Expected:* the unshifted candidate sequence and distance ties follow S-0212 claim 25, but
+  only footprints passing claim 24 qualify. Each axis shifts independently only when its
+  dimension exceeds 2. No site-search draw occurs. Each centre-class emergence offer not
+  initially refused takes one ranged draw over 0 to 3, including a no-room offer. S-0208
+  table O predicts its selected free side position, in reverse slave order. Each successful
+  emergence whose scatter request is accepted adds S-0208 claim 12's draw right after its
+  placement draw. Every emerged slave accepts its request. Its destination at the end of its
+  emergence tick is the cell that S-0208 claim 12 gives with that draw and the master's
+  reference point as threat point, by a building master and by a vehicle master.
 - *Falsified if:* a forbidden footprint is selected, tie order differs after visibility
   preference, either shift follows the other dimension, emergence selects centre or top,
-  or draws differ from the offer rule.
+  draws differ from the offer and scatter rules, an emerged slave refuses its request, or
+  its destination at the end of its emergence tick differs from that cell.
 - *Runs and tool:* 3 per footprint/obstruction variant and 100 emergence offers, scripted
   input and read-only position, occupancy and random-state recorder, at 800 × 600.
 
@@ -3305,8 +3375,9 @@ is wrong). *Runs:* 3.
 - *Expected:* every expired place is attempted in increasing place order; replacement
   creation draws are in that order. An earlier-place delivery precedes a later-place
   replacement. Ready replacements and completed reloads may emerge in the same update,
-  in reverse place order, facing map north. Newly accepted deliveries cannot finish even
-  zero reload until the next update. Loading uses 37-tick intervals in slave turns,
+  in reverse place order, facing map north when placed (a slave that has turned towards its
+  scatter destination by the end of the tick does not count against this). Newly accepted
+  deliveries cannot finish even zero reload until the next update. Loading uses 37-tick intervals in slave turns,
   search, fullness and delivery effects use group updates in master turns. Capacity 0
   never loads and is not full; its harvest queues guard with a 1-tick delay and the
   group subsequently re-enters searching rather than sending it back for fullness.
@@ -3652,6 +3723,56 @@ is wrong). *Runs:* 3.
 - *Runs:* 1 for each version and part, 6 in all.
 - *Tool:* tick-labelled screen capture and the read-only recorder; ordinary orders only, as in H28.
 
+**H30. Where an automatically packed slave miner goes (claim 25; Q-3274).** Its parts carry
+the letter of the claim 25 case that they back: part a backs case (a), parts b1 and b2 back
+case (b), parts c1 and c2 back case (c).
+- *Setup:* a purpose-made flat open map, speed index 2, a remote bystander and one human
+  house, stock data otherwise, with the director and mods off. Named test data
+  *slave-pack-test* gives the slave miner's deploys-into building a foundation of 2 × 2 in
+  parts a and c2, and of 3 × 3 in parts b1, b2 and c1. In parts b1 and c1 the miner's vehicle
+  speed is set low, so that the diagonal drive of one cell takes more than 30 ticks; in part
+  b2 its speed and body turn rate are set high, so that the drive, its turn included, ends
+  within 5 ticks of the conversion. As in H19, named map overrides suppress resource growth
+  and set known short scan, long scan and correction fields. The miner starts deployed with
+  its master's turns uninterrupted, next to a small field and, in parts a, b1 and b2, with a
+  second field beyond its short scan and within its long scan, lying towards map +*x* and +*y*
+  from it with clear ground between. Parts c1 and c2 have no second field, and the correction
+  is set below the master's cell distance to (0, 0).
+- *Procedure:* let the slaves use up the small field and record, until the miner has
+  deployed three times after the first pack-up, or 3000 ticks have passed.
+- *Observable:* per tick: whether the master is a building or a vehicle, its cell, the
+  building's top-left cell, the vehicle's destination and its current and queued
+  behaviours; at each group update, as that update finds them, the group state, whether the
+  vehicle holds a destination and which, and whether a field and site search was made; every
+  packing request, conversion and deployment, with its top-left cell. The destination that
+  H30's expectations, falsifiers and Timing line judge at a group update is this reading,
+  not the per-tick one.
+- *Expected:* in every part, the vehicle appears at the return cell of S-0415 claim 10 with
+  *A* as its destination, and its first group update enters field seeking without a
+  search. Part a: the vehicle never leaves *A*, it has no destination at its second group
+  update, which searches and sends it to a site near the second field, and it deploys there.
+  Part b1: the vehicle still holds *A* at its second group update, which makes the group
+  travelling without a search; it deploys from *A* with top-left *A* − (1, 1) and packs up
+  again, and each later cycle lowers both coordinates of the top-left cell by 1, with no
+  deployment near the second field. Part b2: as part a, after the drive to *A*. Part c2: one
+  pack-up, then seeking without a field and rest, with no further deployment. Part c1: as
+  part b1, with a pack-up after each deployment while F7's comparison with (0, 0) keeps
+  requesting it. On our engine only, with `quirks.slave_auto_pack_old_top_left` off, the
+  vehicle of parts b1 and c1 appears with its return cell as its destination and makes no
+  drive, so those parts behave as parts a and c2.
+- *Falsified by:* a second group update that seeks while the vehicle still holds *A*, or
+  that keeps the group travelling while the vehicle has no destination; a redeployment in
+  part b1 or c1 whose top-left is not *A* − (1, 1); in part a, movement off *A* before the
+  second group update or a destination still held there; in part a or b2, no deployment
+  near the second field; in part c2, a second deployment.
+- *Timing:* the first falsifier above applies to every run. The others of parts b1 and c1
+  apply only to a run in which the vehicle still holds *A* at its second group update, and
+  those of part b2 only to a run in which it has no destination there; a run without its
+  part's timing decides only the first falsifier and is repeated with the speed set further
+  from the limit.
+- *Runs:* 2 counting runs for each part, 10 in all.
+- *Tool:* scripted input and the read-only tick-labelled recorder, at 800 × 600.
+
 ## Open questions
 
 - (Claim 17, Q-1759.) Q-1759 questions 1 to 4 are settled in S-0207 claim 28 (its answer
@@ -3763,6 +3884,22 @@ is wrong). *Runs:* 3.
   S-0402 scenario H28 part c for the body's image, and `unmeasured` for a voxel body's frame and
   for the overlays, the selection box and health bar included, as S-0402 claim 11's backing says.
 
+- **S-0415 claim 10, the cell stored by automatic packing.** After "stores the building's old
+  top-left cell in that same guard spot", add that with `quirks.slave_auto_pack_old_top_left`
+  off (S-0402 claim 25) automatic packing stores the return cell where the vehicle appears
+  instead, which differs only for a foundation larger than 2 × 2. Its sentence "For a large
+  foundation, this destination differs from the return cell where the vehicle appears" can
+  point to S-0402 claim 25 (b) for what follows, and its backing can add S-0402 scenario
+  H30. Level and backing as S-0402 claim 25 rates (a) to (c): medium, `measurable` by H30.
+- **S-0208 claims 4 and 11, the scatter request sent at a slave's emergence (Q-3275).** In
+  claim 4, after "starts each successfully placed slave facing map north, independently of the
+  master's facing." add: "It then sends the slave a forced, move-anywhere scatter request with
+  the master's reference point as threat point, which claims 11 and 12 here handle (S-0402
+  claim 21)." In claim 11, after its first paragraph (effectively forced requests and scatter
+  permission), add: "The request that S-0402 claim 21 sends an emerging slave is forced and
+  move-anywhere and has a threat point, so claim 12 gives its destination." Level and backing:
+  those of claim 21's scatter request (medium, `measurable` by scenarios H16 and H18).
+
 ## Questions for the project lead
 
 None. This spec rests on S-0207 claim 28. S-0207's Cross-spec changes list the hand-off
@@ -3771,11 +3908,11 @@ for scenarios that expect a chrono miner to jump after a restoration (S-0215 sce
 that this spec's Terms (*chrono miner*) rely on, and its Q-1759 entry on S-0215 claim 9 carries
 the amendment that claim 17 relies on (the
 guard reset is not applied when driving is installed). The note for S-0408 claim 6 is under
-Changes for other specs. The nine quirk switches of this spec
+Changes for other specs. The ten quirk switches of this spec
 (`quirks.harvester_failed_step_off_origin`,
 `quirks.refinery_distance_wraps`,
 `quirks.slave_kick_delay_wraps`, `quirks.zero_load_period_stalls` and
-`quirks.unload_without_contact_stalls`, `quirks.slave_relocation_failed_search_origin`
-and `quirks.slave_negative_capacity_stalls`, `quirks.zero_capacity_harvester_cycles`
-and `quirks.non_unloading_refinery_accepts`, each default original) follow the project's quirk
-convention.
+`quirks.unload_without_contact_stalls`, `quirks.slave_relocation_failed_search_origin`,
+`quirks.slave_auto_pack_old_top_left` and `quirks.slave_negative_capacity_stalls`,
+`quirks.zero_capacity_harvester_cycles` and `quirks.non_unloading_refinery_accepts`, each
+default original) follow the project's quirk convention.

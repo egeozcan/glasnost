@@ -1,9 +1,9 @@
 ---
 id: Q-3264
 title: A walker's kept locomotor destination and a substitute cell
-status: open
+status: answered
 related: [S-0208, S-0212, S-0507]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need

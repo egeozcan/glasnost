@@ -1,9 +1,9 @@
 ---
 id: Q-3275
 title: When a firer bound to a slave master gets illegal
-status: open
+status: answered
 related: [S-0301, S-0402, S-0309, S-0513, S-0607]
-answered-by: []
+answered-by: [S-0301, S-0402]
 ---
 
 ## Need

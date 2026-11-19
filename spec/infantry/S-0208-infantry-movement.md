@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 68
+revision: 71
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-19
 measurements: [M-0023]
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142, Q-3236, Q-3262]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142, Q-3236, Q-3262, Q-3264]
 supersedes: []
 ---
 
@@ -54,8 +54,10 @@ and the consequence of arriving underneath its deck. S-0212 claim 7 already spec
 a successful path to a high-bridge cell ends on its deck; claim 23 already owns later search
 failure. Neither supplied the locomotor destination's numeric height. Claim 25 answers Q-3262:
 the cell that a walker's searches look for while its destination names an object that has moved,
-and what a failed search near its locomotor destination does. Skirmish only; network games and
-campaigns are out of scope.
+and what a failed search near its locomotor destination does. Claim 26 answers Q-3264 question 1:
+what a substitute cell of S-0212 claim 24 replaces, a kept locomotor destination included. Claim
+18 answers its question 2: the height of an object's point in a high-bridge cell. Skirmish only.
+Network games and campaigns are out of scope.
 
 Citations refer to the approved specs and their current correction-round drafts, including
 S-0417 (factory unloading). The other cited specs are: S-0003 (INI value forms), S-0006 (rules
@@ -186,12 +188,14 @@ used by this spec:
   the sense of S-0107 Terms. It does not mean S-0107's narrower *is moving now*.
 - **Locomotor destination.** The point the unit's locomotor is currently taking it to as the end of
   its walk: while a unit walks under a move, the point that its destination gave when it was last
-  assigned (for a cell destination, the centre and height defined by claim 18). A destination
-  that names an object gives the object's movement point at that assignment. The point does not
+  assigned. For a cell destination it is the centre and height defined by claim 18. A destination
+  that names an object gives the object's movement point at that assignment, raised as claim 18
+  says when that point's cell carries a high bridge. The point does not
   follow the object as it moves; only a new assignment gives a new point. A walker's searches look
   for this point's cell, not for the object (claim 25). The point stays when
   the destination is lost without the locomotor being told, as when the object it names goes
-  inside (S-0507 claim 6a). A unit with no movement in progress has none. It differs from the
+  inside (S-0507 claim 6a), until an assignment replaces it, such as the substitute cell of S-0212
+  claim 24 (claim 26). A unit with no movement in progress has none. It differs from the
   *destination* above, which is the cell or object the unit's orders and behaviour give it. Claim
   16 tests the locomotor destination, not the destination. It is not the walking target (Terms below), which is only the next standing
   position on the way.
@@ -636,7 +640,8 @@ used by this spec:
    A destination lost without the locomotor being told (S-0507 claim 6a) leaves the locomotor
    destination as it was: the walker goes on along its stored path, its fresh searches (S-0212
    claim 20) look for that point's cell, and claim 16 ends the walk by its second case, as for any
-   locomotor destination.
+   locomotor destination. A substitute cell that such a search adopts replaces that point
+   (claim 26).
    - Backing: `measurable` (scenario W17: part f for an enter order to a walker under *move*, part g
      for a move order to a walker under *enter*, part h for an enter order to a walker standing
      between steps with a stored path, part j for a garrison order to a walker under *move*, part k
@@ -1047,7 +1052,8 @@ used by this spec:
     - the unit has no locomotor destination (Terms), for example because claim 17 or another rule
       cleared its destination on this tick or earlier. A destination lost without the locomotor
       being told (S-0507 claim 6a) does not remove the locomotor destination, so it does not end
-      the walk by this case; or
+      the walk by this case. A substitute cell adopted later replaces that locomotor destination
+      (claim 26); or
     - the walker's new position is in the same cell as its locomotor destination, and the two heights
       differ by less than two height levels (|Δ*z*| < 208 leptons, strict).
 
@@ -1121,7 +1127,7 @@ used by this spec:
       the target cell's centre; low for the exception, which was found by reading and not traced
       through a whole approach (Open questions)
 
-18. **Cell-destination height and arrival under a high bridge (Q-0201).** When an ordinary
+18. **Destination height and arrival under a high bridge (Q-0201, Q-3264).** When an ordinary
     walking infantry unit receives a cell destination *C*, its locomotor destination has the
     map position of *C*'s centre, not one of the standing positions. Its height is the terrain
     surface height at that centre, plus **414 leptons when C carries a high bridge**, and no
@@ -1150,10 +1156,45 @@ used by this spec:
     (Edge cases); no ground-height cell destination is produced merely by ordering from the
     ground. The reverse height mismatch requires some other source of a destination point,
     not an ordinary cell destination while that cell carries its deck.
+
+    **An object's point in a high-bridge cell (Q-3264 question 2).** The addition belongs to the
+    point, not to the kind of destination. When a destination that names an object is assigned,
+    the locomotor destination is the object's movement point at that moment (Terms), with the
+    object's own height, plus 414 leptons when the cell of that point carries a high bridge. No
+    other test is made: not the object's layer, not the walker's, and not whether the object
+    already stands on the deck. So:
+    - an object standing on the deck of a flat high-bridge cell with centre terrain height *H* is
+      at *H* + 416, and the walker's locomotor destination is at *H* + 830. A walker that arrives
+      on that deck in that cell is 414 leptons below it, so claim 16 does not end its walk on that
+      arrival, and the walker keeps its destination. If no path steps remain, its speed fraction is
+      0 on that tick. Its next fresh search looks for its own cell, from the same search layer,
+      so it finds no path (S-0212 claim 12). Claim 25's failed-search rule then takes away its
+      destination when its distance *D*, with the 414 leptons of height included, is less than
+      the close-enough distance and it is not held by a tether link. Otherwise S-0212 claim 23
+      decides, and its third row keeps the destination with no movement in progress.
+    - an object standing on the ground under that deck is at *H*, and the locomotor destination is
+      at *H* + 414, as for a cell destination of that cell. The walker's search for that cell ends
+      on the deck (S-0212 claim 7), and its walk ends there, above the object, as in the second
+      paragraph of this claim.
+    - the substitute cell of S-0212 claim 24 is a cell destination, so the first paragraph of this
+      claim gives its height (claim 26).
+
+    With `quirks.walker_bridge_destination_deck` off (Edge cases), an object's point in a
+    high-bridge cell takes, for the arrival test, the terrain height at its map position on the
+    walker's arrival layer instead, as a cell destination does; this does more than leave out the
+    414 leptons.
     - Backing: `measurable` (scenario W10, part e; the subsequent failed-search outcome also
-      has S-0212 claim 23's backing)
+      has S-0212 claim 23's backing). `measurable` (scenario W19, parts a and a2) for the
+      addition to the point of an infantry unit standing on a deck and its consequences.
+      `unmeasured` for an object standing under the deck and for a vehicle or aircraft as the
+      object: W19 places only an infantry object, on the deck
     - Confidence: high for the destination point, height and layer independence; medium for
-      the path-exhaustion consequences, which depend on the subsequent search
+      the path-exhaustion consequences, which depend on the subsequent search. High for the
+      addition to the point of an infantry unit standing on a deck, and for that point being its
+      position at deck height. Medium for an object under the
+      deck and for a vehicle or aircraft as the object, whose movement points on a bridge were not
+      traced here. Medium for what follows a deck arrival with an object's point: claim 25's
+      clearing and S-0212 claim 23 decide it
 
 ### Infantry landing with the teleporting locomotor
 
@@ -1516,11 +1557,10 @@ used by this spec:
     for the re-paths of S-0209 claim 10. It holds whatever the object is: an infantry unit, a
     vehicle, an aircraft or a building. The kind of object matters only for the point it gives at
     the assignment (Terms). So a walker whose object moves away after the assignment walks to the
-    cell of that point, and claim 16 decides there whether its walk ends. It heads for the object's
+    cell of that point, and claim 16 decides there whether its walk ends, unless a search adopts a
+    substitute cell for that cell (claim 26). It heads for the object's
     new place only when a later assignment gives it a new point, as S-0215 claim 26's leash can do
-    for *area guard* once the walker has no destination. Where S-0212 claim 24 substitutes a
-    nearby cell for the cell that a search looks for, that claim decides what the substitute
-    replaces.
+    for *area guard* once the walker has no destination.
 
     **A failed search near the locomotor destination.** When a walker's fresh search finds no path
     and the reachability gate has passed (S-0212 claim 23, the rows after the gate's row), the
@@ -1562,6 +1602,47 @@ used by this spec:
       walker standing in its locomotor destination's cell that does not end its move. Medium for
       the searches of S-0209 claims 7 and 10, for an aircraft or a building as the object, for the
       clearing near the locomotor destination and for its tether condition.
+
+26. **A substitute cell replaces the locomotor destination (Q-3264 question 1).** When S-0212
+    claim 24 adopts a substitute cell for the cell that a walker's search looks for, the walker is
+    given that cell as its destination, by an assignment like any other. The assignment replaces
+    what the walker held, whatever that was:
+    - a cell destination.
+    - a destination that names an object, which the walker then no longer holds as its destination.
+    - no destination, with a kept locomotor destination after a loss of S-0507 claim 6a. The walker
+      has a destination again from that search on: the substitute cell.
+
+    Its locomotor destination becomes the substitute's point by claim 18: the centre of the
+    substitute cell, at the centre's terrain height, plus 414 leptons when that cell carries a high
+    bridge (F9). The point it held before, kept or not, is gone. The search goes on to the
+    substitute, and claim 16 tests the new point: the walk ends on the arrival tick on which the
+    walker's position is in the substitute cell within two height levels of that point, and the
+    walker then loses the substitute as its destination, as with any cell destination. It does not
+    walk on towards the point it held before. It heads there again only when a later assignment
+    gives it that cell or that object again, as a behaviour can at its processing (S-0215 claim 26's
+    leash for *area guard*, or the processing of *enter* in S-0212 claim 24's last bullet). Such an
+    assignment gives the walker a new point by the Terms and claim 18.
+
+    Where S-0212 claim 24 finds no substitute for a cell that holds a building, the original gives
+    the walker a destination that names no cell, and what follows is undefined (S-0212 departure
+    D3). Our engine changes nothing then: a walker with no destination keeps none, and it keeps its
+    locomotor destination.
+    - Backing: `measurable` (scenario W19, part b) for a walker whose destination names an infantry
+      unit, with the substitute found by S-0212 claim 24's *stationary friendly* case on open
+      ground. `unmeasured` for other kinds of object and for claim 24's building case, which W19
+      does not reach. `unmeasured` for a walker with a kept locomotor destination and no
+      destination: S-0507 claim 6a gives why no run here isolates an infantry holder. `unmeasured`
+      for a substitute that carries a high bridge, which no scenario here arranges, for a walker
+      with a cell destination, for which S-0212 claim 24 gives the substitution itself, and for the
+      D3 case, whose outcome in the original is undefined
+    - Confidence: high for a walker whose destination names an infantry unit, with the substitute
+      found by claim 24's *stationary friendly* case on open ground: the substitute becomes its
+      destination and its locomotor destination, and its walk ends in the substitute cell. Medium
+      for other kinds of object and for claim 24's building case. Medium for a walker with a kept
+      locomotor destination and no destination: it gets the same assignment, but no run here shows
+      it. Medium for a walker with a cell destination, for the same reason. Medium for a substitute
+      that carries a high bridge. Medium for the D3 case, which is our engine's rule, not a claim
+      about the original
 
 ## Formulas
 
@@ -1633,7 +1714,8 @@ on, for integer arguments *V* ≥ 0: trunc(√̃(*V*)) never exceeds ⌊√*V*�
 16641 on it can fall short of ⌊√*V*⌋ (for example trunc(√̃(129²)) = 128). Every distance in S-0208,
 S-0209 and S-0210 is taken with √̃.
 
-**F9. Cell locomotor destination.** For cell coordinates (*c*ₓ, *c*ᵧ),
+**F9. Locomotor destination and the high-bridge addition.** For a cell destination with cell
+coordinates (*c*ₓ, *c*ᵧ),
 
 > *x*ᴅ = 256*c*ₓ + 128, *y*ᴅ = 256*c*ᵧ + 128
 > *z*ᴅ = *H*(*c*ₓ, *c*ᵧ, 128, 128) + *a*
@@ -1641,6 +1723,9 @@ S-0209 and S-0210 is taken with √̃.
 *a* is 414 leptons when the cell carries a high bridge at destination assignment, and 0
 otherwise. Coordinates and addition are exact integers, with no additional rounding.
 *H* and its floating-point calculation and truncation are S-0106 claim 2 and F1's.
+For a destination that names an object, (*x*ᴅ, *y*ᴅ) is the map position of the object's movement
+point at the assignment and *z*ᴅ is that point's height plus *a*, with *a* taken for the cell that
+holds that point (claim 18).
 The 414-lepton addition is an engine constant, distinct from the deck's 416-lepton height.
 Units: leptons.
 
@@ -1684,7 +1769,7 @@ positions are never taken, as claim 3 says).
 | Screen-cover high-bridge raise | 4 | height levels | Terms, *screen-cover check* (applied whenever *C*ᵢ is a high-bridge cell) |
 | Level of a cell outside the map, for the screen-cover check | 0 | height level | Terms, *screen-cover check* |
 | Walk-end height threshold | 208 | leptons; the absolute height difference must be strictly less than this value (two height levels) | claim 16 |
-| High-bridge addition to a cell locomotor destination | 414 | leptons | claim 18; independent of the walker's layer |
+| High-bridge addition to a locomotor destination | 414 | leptons | claim 18, F9; for a cell's point and an object's point alike; independent of the walker's layer and the object's |
 | Height above destination terrain surface needed for teleport standing-position deck mode | more than 312 | leptons | claim 19; strict integer comparison |
 | Height above chosen-point terrain surface needed for an infantry deck reservation | at least 416 | leptons | claim 19; high-bridge cell required |
 
@@ -1703,6 +1788,7 @@ positions are never taken, as claim 3 says).
 | Walking, arrival tick | no locomotor destination, or arrived in the locomotor destination's cell within two height levels (claim 16) | walk ends: no destination, speed fraction 0, stands at the position reached |
 | Walking, arrival tick | neither of the above; path steps remain | destination kept; asks for its next walking target on the next tick (claim 6) |
 | Walking, arrival tick | destination height test fails; no path steps remain | destination kept, speed fraction 0; subsequent path computation and give-up follow S-0212 (claim 18) |
+| Walking, search | S-0212 claim 24 adopts a substitute cell | the substitute becomes the destination, with its claim 18 point as the locomotor destination; any earlier destination or kept point is replaced (claim 26) |
 | Walking, destination is its target object | firing check answers *can fire* (claim 17, exception) | loses its destination and stops as its firing sequence starts |
 | Teleporting infantry without warp-pending immobilization, destination supplied | first landing choice succeeds | reserves the chosen standing position; jump follows S-0207 claim 20 |
 | Teleporting infantry with warp-pending immobilization (S-0207 Terms) | landing choice succeeds | reserves the chosen standing position; no jump to it; released when the unit appears at the warp's landing point, whose standing position is then taken (claim 19) |
@@ -1865,14 +1951,19 @@ position stops on that same tick and does not ask for a next walking target (sce
   standing position short and then be moved again by S-0215 claim 37. It is the original's
   behaviour, not a defect we fix, and has no switch; a variant measuring to the target's own
   position would differ only within half a cell of the boundary (scenario W10, part b2).
-- **A cell destination under a deck still aims at deck height**
-  (`quirks.walker_bridge_destination_deck`, default: original). Claim 18 sets its height to
-  the centre's terrain height plus 414 leptons, even for a walker travelling under the deck.
-  Arrival there can leave a destination present despite a speed fraction of 0, until a later
-  search or behaviour clears it (W10 e). With the switch off, the cell destination's height
-  for the arrival test is the terrain height at the cell centre on the walker's arrival layer:
-  that height plus 416 leptons on the deck, or without an addition on the ground. Its map
-  position stays the centre, and pathfinding and object destinations are unchanged.
+- **A destination point in a high-bridge cell is raised by a fixed amount**
+  (`quirks.walker_bridge_destination_deck`, default: original). Claim 18 sets a cell
+  destination's height to the centre's terrain height plus 414 leptons, even for a walker
+  travelling under the deck, and adds the same 414 leptons to an object's point in such a cell,
+  even when the object already stands on the deck. Arrival can then leave a destination present
+  despite a speed fraction of 0, until a later search or behaviour clears it (W10 e, W19 a).
+  With the switch off, the height of a locomotor destination whose cell carries a high bridge,
+  for the arrival test, is the terrain height at the point's map position on the walker's
+  arrival layer: that height plus 416 leptons on the deck, or without an addition on the
+  ground. This holds for a cell destination and for an object's point alike, so a walker that
+  arrives on a deck in the cell of an object standing on that deck ends its walk there. The map
+  position stays as claim 18 gives it, and pathfinding is unchanged. A point in a cell without a
+  high bridge is unchanged.
 - **No early stop against non-mobile targets** (claim 17). A walker approaching a building or a
   cell always walks to its approach cell, even when it came into range earlier. It has no switch.
 
@@ -1914,7 +2005,7 @@ position stops on that same tick and does not ask for a next walking target (sce
 | Rules, land-type sections, `Foot` | the walker speed percentage; only zero matters (claim 9) | percent | owned by S-0211 |
 | Map, `[CellTags]`, `[Tags]`, `[Triggers]`, `[Events]`, `[Actions]` | cell-tag attachment and entered-by event/action eligibility at claim 22's arrival | map records and event/action parameters parsed by S-0009 and S-0011 | no attached tag or trigger when absent, as those specs give; arrival timing is an engine rule, not an imported delay |
 | Map, `[Infantry]` entries, the sub-cell value | standing position number (claim 5) | integer, 0 to 4 | values outside 0 to 4: centre, importer warning |
-| Map terrain and overlay blocks, `[IsoMapPack5]`, `[OverlayPack]`, `[OverlayDataPack]`, with theater tile and overlay definitions | destination cell's centre terrain height and whether it carries a high bridge (claim 18, F9), and landing surface heights, bridge recognition and occupancy-record selection (claim 19) | block encodings and terrain import owned by S-0012, S-0009 and S-0010; high-bridge recognition owned by S-0211 | the cited specs' empty-cell and absent-overlay rules; the 414-lepton addition and 208-lepton tolerance are engine constants, not imported settings |
+| Map terrain and overlay blocks, `[IsoMapPack5]`, `[OverlayPack]`, `[OverlayDataPack]`, with theater tile and overlay definitions | destination cell's centre terrain height and whether it, or the cell of an object's movement point, carries a high bridge (claim 18, F9), and landing surface heights, bridge recognition and occupancy-record selection (claim 19) | block encodings and terrain import owned by S-0012, S-0009 and S-0010; high-bridge recognition owned by S-0211 | the cited specs' empty-cell and absent-overlay rules; the 414-lepton addition and 208-lepton tolerance are engine constants, not imported settings |
 
 | Rules, infantry type section, `Locomotor`; rules, factory type section, `ExitCoord`; art, factory image section, `Foundation` | locomotion and release geometry for claim 23's factory walk | locomotor identifier owned by S-0207 claim 14; integer lepton triple for release displacement and foundation form owned by S-0404 and S-0417 | those specs' defaults and layering rules; claim 23's arrival event and report timing have no imported delay or foundation-clearance setting |
 
@@ -3106,6 +3197,70 @@ cases).**
   every tick until *B* is farther than *L*, or by a change of *A*'s position before *A* first has no
   destination. Remove the test files afterwards.
 
+**Scenario W19: an object's point on a deck and a substitute cell (claims 18 and 26; Q-3264).**
+- *Setup:* stock data except the test files named below, game speed index 2, director off and
+  mods off. Walker *A* is an ordinary walking infantry unit of the human-controlled house, of a
+  type with a weapon or a guard range that gives a leash *L* (S-0215 Formulas F5) of at least 3
+  cells. Object *B* is an infantry unit of the same house. No enemy unit or building is within 30
+  cells of either. The recorder reads at the end of each tick *A*'s position, height, cell,
+  layer, destination, target, locomotor destination point and speed fraction, and *B*'s position,
+  height and cell. Cells are written (*x*, *y*) in map cell coordinates.
+- *Parts a and a2 (claim 18).* A map like that of scenario W10 part e: a straight high bridge at
+  least 12 cells long over flat enterable clear ground, with approaches at deck level. *C* is the
+  deck cell 3 cells from one end, with centre terrain height *H*. Order *B* onto *C* from the deck
+  route, and *A* onto the deck cell 6 cells further along the bridge. Wait until both have stood
+  still for 30 ticks; *B* then stands on the deck in *C*, and no other unit is in *C*. At the
+  start of tick *T* give *A* an area guard order on *B* (S-0213 claim 21). Give no further order.
+  Record 600 ticks.
+  - (a) A test file sets the close-enough distance to 0.1 cells (25 leptons by S-0209 F2).
+    Expected: at the end of tick *T* (or of the first tick on which *A*'s locomotor destination
+    point is present), that point has *B*'s map position and a height 414 leptons above *B*'s
+    height. *A* walks along the deck to *C*. At the end of its first arrival tick in *C* it still
+    has a destination naming *B*, and at the end of every later tick of the run it has that
+    destination and the cell *C*. Claim 25's clearing cannot apply: *D* includes the 414 leptons
+    of height. Falsified by a locomotor destination point at *B*'s own height, by *A* having no
+    destination at the end of its first arrival tick in *C* (the walk ended by claim 16), or by
+    *A* having no destination at the end of any later tick.
+  - (a2) Part a with the test file setting the close-enough distance to 2 cells (512 leptons).
+    *A* and *B* then stand at two standing positions of *C*, at most 181 leptons apart horizontally
+    (table P), and *D* includes the 414 leptons of height of part a, so *D* is at most √(181² +
+    414²), under 452 leptons, which is less than 512. Expected: *A* still has a destination naming
+    *B* at the end of its first arrival tick in *C*, and has no destination at the end of a later
+    tick, at its failed fresh search, while its position is unchanged since that arrival. Falsified
+    by *A* having no destination at the end of its first arrival tick in *C*, or by *A*'s
+    destination naming *B* at the end of every tick of the run after that arrival. What *A* does
+    after it first has no destination (the leash may give it *B* again) is not part of this test.
+  - In both parts, a run in which *A*'s destination names a cell at the end of any tick records
+    that outcome and the cell. It is not a pass: such a run decides nothing about these parts,
+    and it is repeated with *B* on another standing position of *C*. A run decides nothing when
+    *B* moves, or when *A*'s target is ever present.
+- *Part b (claim 26).* A purpose-made flat map of open, clear ground. *A* stands at rest in cell
+  (*x*, *y*) and *B* in (*x* + 30, *y*). Vehicle *V*, of the same house and with the driving
+  locomotor, stands at rest in (*x* + 31, *y*). No other unit is within 5 cells of these cells. A
+  test file sets the close-enough distance to 1 cell (256 leptons). At the start of tick *T* give
+  *A* an area guard order on *B*. At the start of tick *T* + 1 order *B* to (*x* + 30, *y* + 20).
+  At the start of the first tick after *B* has left (*x* + 30, *y*), order *V* to (*x* + 30, *y*).
+  Record until 30 ticks after *A* first has no destination, or 3000 ticks.
+  Expected: *A*'s first path, of at most 24 steps, leads towards (*x* + 30, *y*) (claim 25). At
+  the fresh search after it, *V* stands in that cell with no movement in progress and no
+  destination, so that cell's outcome is *stationary friendly* (S-0209), and S-0212 claim 24
+  adopts a substitute *S* near it. From the end of that tick *A*'s destination names *S*, a cell
+  other than (*x* + 30, *y*), and its locomotor destination point is *S*'s centre at *S*'s centre
+  terrain height. *A* walks to *S*. Let *T* be the first tick at whose end *A*'s position is a
+  standing position of *S* (a tick on which it has only crossed into *S* does not count). *A*
+  arrives there on *T*, or on *T* + 1 when the step of *T* ended exactly on that position from 17
+  leptons or more away (claim 6), so its walk has ended by the end of *T* + 1. At the end of
+  *T* + 1, *A*'s destination does not name *S* (a destination that names *B* again, given by the
+  leash after the walk has ended, does not count against this). Falsified by *A*'s destination
+  naming *S* at the end of *T* + 1 (claim 16 tested another point), by *A*'s destination never
+  naming a cell other than (*x* + 30, *y*) before *A* first stands in a cell next to (*x* + 30,
+  *y*), or by a locomotor destination point that stays at *B*'s point after *A*'s destination names
+  *S*. What *A* does after it first has no destination is not part of this test. A run decides
+  nothing when *V* is not standing still in (*x* + 30, *y*) at the end of the tick on which *A*
+  first enters a cell of column *x* + 24, when *B* is still in (*x* + 30, *y*) at the end of that
+  tick, when *A*'s target is ever present, or when *A* is given another order. Remove the test files
+  afterwards.
+
 ## Open questions
 
 - A walker that already has a walking target and accepts a scatter whose destination comes from the
@@ -3263,3 +3418,19 @@ cases).**
   tether link whose distance to its locomotor destination is less than the close-enough distance
   loses its destination at that failure instead (S-0208 claim 25). Its movement in progress ends
   at the failure in both cases, so the bullet's conclusion about the first request is unchanged.
+- **S-0212, claim 24, last bullet.** Its first sentence "Once a substitute is adopted it is the
+  unit's destination, and later path computations apply the ordinary substitution rules to that
+  new destination" may add for the walk locomotor: the substitute is also the walker's locomotor
+  destination, at the point that S-0208 claim 18 gives a cell destination, and it replaces what
+  the walker held, a destination that names an object or no destination with a kept locomotor
+  destination included (S-0208 claim 26). The walker's walk then ends in the substitute cell by
+  S-0208 claim 16.
+- **S-0212, departure D3.** Its "Our engine keeps the destination unchanged" may add that for a
+  walker with no destination and a kept locomotor destination (S-0507 claim 6a) our engine keeps
+  both: no destination, and the kept point (S-0208 claim 26).
+- **S-0507, claim 6a.** Its "From then on the holder has no destination, unless a revert in the
+  same moment gives it one (below)" and its walking bullet's "The walker goes on along its stored
+  path, and its fresh searches look for that point's cell (S-0208 claim 6)" may add that a fresh
+  search for which S-0212 claim 24 adopts a substitute cell gives a walking holder that cell as its
+  destination and replaces the kept point by the substitute's point. The walk then ends in the
+  substitute cell, not at the kept point (S-0208 claim 26, medium, `unmeasured` for this case).

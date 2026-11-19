@@ -1,9 +1,9 @@
 ---
 id: Q-3274
 title: Where an automatically packed slave miner drives before it seeks a field
-status: open
+status: answered
 related: [S-0402, S-0415]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 76
+revision: 78
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-12
+approved-on: 2026-11-19
 measurements: [M-0004, M-0021]
-requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416, Q-1714, Q-2567, Q-3012]
+requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416, Q-1714, Q-2567, Q-3012, Q-3275]
 supersedes: []
 ---
 
@@ -513,7 +513,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | moving | the firer may not fire while it moves (S-0310) |
    | cloaked | the weapon needs the firer uncloaked and it is not |
    | out of range | the target is beyond the weapon's range (S-0307) |
-   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing tests (their feature specs), the takeover test (S-0601 claim 3), the berserk refusals (S-0610 claims 3 and 6), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), a sinking firer or target (S-0504 claim 5), a falling firer (S-0511 claim 10), a deactivated firer (S-0405 claims 13 and 20), the drain refusals of S-0608 claim 3 (rank 4 below), a target that has a superweapon warp pending, from the launch until its departure, with every weapon, a temporal weapon (Terms) included (S-0513 claim 39), or, for an infantry firer whose type has the keep-acting flag, a vehicle target that is melee-linked to an object other than the firer (S-0214, Terms, *melee-linked*). S-0214, claim 6(e), defers to these for what the check refuses |
+   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a firer bound to a slave master, for every target and weapon (*A firer bound to a slave master within rank 4* below), a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing tests (their feature specs), the takeover test (S-0601 claim 3), the berserk refusals (S-0610 claims 3 and 6), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), a sinking firer or target (S-0504 claim 5), a falling firer (S-0511 claim 10), a deactivated firer (S-0405 claims 13 and 20), the drain refusals of S-0608 claim 3 (rank 4 below), a target that has a superweapon warp pending, from the launch until its departure, with every weapon, a temporal weapon (Terms) included (S-0513 claim 39), or, for an infantry firer whose type has the keep-acting flag, a vehicle target that is melee-linked to an object other than the firer (S-0214, Terms, *melee-linked*). S-0214, claim 6(e), defers to these for what the check refuses |
    | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power, a hidden target fails the test below (S-0516 claim 24), and similar |
    | busy | the firer is launching spawned aircraft (Terms) |
    | must deploy | a vehicle whose type must deploy before it fires, when its own cell fails the deploy-to-fire cell test of S-0517 claim 14 (a slope, a building in the cell, or a land type that does not allow it) and no reason of ranks 1 to 10 below holds. It then outranks *not facing* (S-0310, claim 9), and in the rank table also *moving* and *still turning*, an order that no game state shows (see below). On a cell that passes the test none of this applies: the vehicle gets the aiming answers as usual and S-0310 deploys it on *can fire* or *not facing* |
@@ -536,7 +536,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of a deactivated firer (S-0405 claims 13 and 20), for every target and weapon, the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer of an infantry firer whose type has the keep-acting flag against a vehicle target that is melee-linked to an object other than the firer (S-0214, Terms, *melee-linked*), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer, with any weapon, for a target that has a superweapon warp pending, until its departure (S-0513 claim 39), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10); and for a building, the *rearming* of its pending delayed shot (claim 14). The specified precedence within this rank is given below |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of a firer bound to a slave master, for every target and weapon (below), the *illegal* answer of a deactivated firer (S-0405 claims 13 and 20), for every target and weapon, the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer of an infantry firer whose type has the keep-acting flag against a vehicle target that is melee-linked to an object other than the firer (S-0214, Terms, *melee-linked*), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer, with any weapon, for a target that has a superweapon warp pending, until its departure (S-0513 claim 39), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10); and for a building, the *rearming* of its pending delayed shot (claim 14). The specified precedence within this rank is given below |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | the firer's ammunition *a* is 0 |
@@ -549,6 +549,55 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 14 | still turning | |
    | 15 | not facing | |
    | 16 | a refusal of the vehicle's locomotor | a vehicle whose locomotor adds a refusal of its own gets it only when no reason above holds; which answer it gives is open (Open questions) |
+
+   **A firer bound to a slave master within rank 4 (Q-3275).** A slave of a slave master (S-0402
+   claim 14) is *bound* to its master from its creation inside the master (S-0402 claim 19) until
+   the slave is destroyed or its group ends (S-0312 claims 30 and 31, S-0408 claim 10a). It is bound
+   inside the master and outside it, in every state of its group and of its own harvesting (seeking,
+   harvesting, returning, recalled or waiting), while its group passes to the building or vehicle
+   that a deploy or a pack-up makes (S-0415 claims 6 and 10), and while its master belongs to
+   another house than the slave (S-0402 claim 23). A slave freed when its group ends is no longer
+   bound, also one that no house can receive and that is hit instead (S-0312 claim 30): the binding
+   ends before that hit. A bound firer gets *illegal* for every target and every weapon slot
+   (primary, secondary and elite): its own master, an object of its own house or of an allied house,
+   an enemy and a cell, with or without force-fire. Of the general part of the check it is the first
+   reason asked, after only the case of a check made with no target at all, which also gives
+   *illegal*. So it outranks every other reason of ranks 4 to 16, among them the materialising
+   firer's *rearming*, the own-gripped-unit *rearming*, the deactivated firer's *illegal* and the
+   warp-pending *illegal*
+   (the paragraphs below). Bound firers are always infantry, because the slave type that a slave
+   master names is an infantry type (S-0402, Import mapping). So ranks 1 to 3, which only vehicles
+   get, and the unchecked shots of the exception below, which only buildings and aircraft make,
+   never apply to one. An infantry firer is asked its own first answers before this one: the
+   infantry healer's *illegal* (S-0310 claim 11), the keep-acting *illegal* (*A materialising firer
+   within rank 4* below) and any answer that S-0310's open question on dying and falling sequences
+   settles as asked of an infantry firer before them. That place changes nothing observable for a
+   bound firer: S-0309 claim 29 drops a held target on *illegal* and on *impossible* alike, and an
+   infantry healer's reply to *illegal* (S-0310 claim 11) depends on its target, not on the reason
+   for the answer. So a bound firer never makes a shot. A target that it holds is dropped no later
+   than its next checking turn in a check tick (S-0309 claim 29), and other drops can come first. A
+   force-fire attack order can give it one: S-0214 claim 6 can offer that attack to a
+   selected armed slave whose target is in range, since a slave is not movable. A slave also gets no
+   target when it emerges (S-0402 claim 21).
+   - Backing: `measurable` (scenario F23: parts a and b for no shot while the slaves work, part c
+     for no shot after a force-fire order against the master, an own unit and an enemy, and for the
+     order and the drop of that target, part d for the freed slave, which can fire again; S-0402
+     scenario H16 for no target at emergence).
+     `unmeasured`: the answer label itself, and the place among the infantry firer's first answers
+     and the other rank-4 reasons, because no scenario records firing-check answers and every
+     candidate place gives the same shots and drops; the elite weapon, because no scenario here
+     makes a slave elite; the binding while the master belongs to another house, because no
+     scenario here captures a master while its slaves are outside.
+   - Confidence: high (no shot by a bound slave of a deployed master against its master, an own unit
+     or an enemy, with or without force-fire, with *W* in the primary slot, and in the secondary
+     slot in the runs in which the control *C2* makes its shot); medium (no shot by a slave of a
+     vehicle master, part b); medium (the drop of an ordered target by the next checking turn in a
+     check tick, since this spec does not establish which behaviour the slave is in after the
+     order); medium (that a force-fire order can give a bound slave a target, and that it gets none
+     at emergence); medium (the binding from creation to destruction or the end of the group, and
+     its end when the slave is freed); medium (the answer label, its place and the elite weapon,
+     which are `unmeasured`); medium (the binding through a pack-up, part b); medium (the binding
+     through a change of the master's house, which is `unmeasured`).
 
    **Grip refusals within rank 4 (S-0607 claim 11).** Against the firer's own gripped unit,
    *rearming* applies with any weapon and outranks every other rank-4 answer except the
@@ -761,8 +810,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    its shots (S-0501 claim 12).
    - Backing: `measurable` (scenarios F7, F8 and F15, with F15 part g for the order within
      rank 12, and `unmeasured` for its effect on a caller that acts only on *illegal*, because
-     part g gives the healer an order, not a search; S-0405 scenario W8 part j for deactivated
-     firing refusal; scenario F15a and S-0514 scenario E11 part a for inactivity during
+     part g gives the healer an order, not a search; scenario F23 for the refusal of a firer
+     bound to a slave master, as its paragraph's own lines give; S-0405 scenario W8 part j for
+     deactivated firing refusal; scenario F15a and S-0514 scenario E11 part a for inactivity during
      erasure; S-0506 scenarios R2 and R6 for spawner handoff and lockouts; S-0607 scenario L9
      parts c, d and f for the gripping lifter's conditional rearming and any-weapon refusal
      against its gripped unit; scenario F7 part f for their precedence against target-layer
@@ -856,7 +906,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      low), low for the order given for an infantry firer that heals and holds a seized unit and
      its drop at the check, and low for a materialising one's drop through its firing step's
      reply, as S-0310 claim 11 rates that the infantry answer shows through its reply. The
-     warp-pending *illegal*, its rank and the shots it prevents: medium.
+     warp-pending *illegal*, its rank and the shots it prevents: medium. The refusal of a firer
+     bound to a slave master: high for the shots it prevents in the cases of scenario F23, parts
+     a and c, with *W* in the primary slot, and in the secondary slot in the runs in which the
+     control *C2* makes its shot, and medium for every other part of its paragraph.
 
 ### Ammunition and reloading
 
@@ -2636,6 +2689,62 @@ reason is absent (the control). Part (g) checks the order of two reasons of one 
   (in part c, from the lock on), *T* misses a turn from tick *w* to *u*, *V* moves or is damaged by
   anything but *T*'s beam, or the erasure ends before *u*, judges nothing. What *T* does after the
   dropping update (its *guard* may take a target again) judges nothing.
+
+**F23. Armed slaves of a slave master (claim 9; Q-3275).**
+- Setup: tiny skirmish test map, speed index 2, 800 × 600, no engine add-on, the measurement
+  harness's in-game helper off and no mods (the named test files of a scenario and the purpose-made
+  test maps excepted), one bystander computer player outside the test area under the glossary's void
+  rule. The scenario's named test rules file (no stock file changed) gives a test slave miner type
+  *M* of the human-controlled house, a vehicle that deploys into a test building, with an enslaves
+  field naming a test infantry type *S* and a slave count of 2. *S* is armed with a test weapon *W*
+  in its primary slot: a range of at least 3 cells, a damage field above 0, a versus value above 0
+  against every armour class and a projectile that can hit ground units and buildings. A second test
+  infantry type *S2* is *S* with *W* in its secondary slot and its primary slot empty. A resource
+  field lies next to *M*'s deployment site. In *W*'s range of that field stand a weaponless test
+  infantry unit *O* of the human's house and a weaponless test vehicle *E* of a second computer
+  house. The test map gives neither an order. Map-placed control infantry *C* and *C2* of the
+  human's house are of test types identical to *S* and *S2* except that no enslaves field names
+  them, and an armed test vehicle *K* of the human's house stands outside the field. Parts, each
+  with *S* and again with *S2* as the slave type:
+  - a: deployed master. The human orders *M* to harvest the field. It deploys (S-0402 claim 22),
+    and its slaves work for 2000 ticks with no further order.
+  - b: vehicle master. In part a's fixture, once both slaves are outside, the human packs *M* up
+    (S-0415 claim 10). Only ticks from the pack-up until both slaves are back inside the vehicle
+    count for this part. A run with no slave of *M* outside while *M* is a vehicle judges nothing
+    for part b.
+  - c: force-fire. In part a's fixture, once both slaves are outside, the human selects one outside
+    slave *s* with a click and gives it a force-fire attack order (S-0214 claim 6): c1 on *M*'s
+    building, c2 on *O*, c3 on *E*, each within *W*'s range of *s* at the order. In a control run
+    the human gives *C* (with *S2*: *C2*) the same order on the same target from the same
+    distance.
+  - d: freed. In part a's fixture, once both slaves are outside, the human orders *K* to force-fire
+    at *M*'s building until it is destroyed, which frees the outside slaves to the human's house
+    (S-0312 claim 30). *K*'s weapon has no area damage, *M*'s building type has no death weapon
+    and no debris, and *E*'s strength field is large against *W*'s damage field. Within 5
+    ticks after *M* is destroyed, the human orders one freed slave to attack *E*, within *W*'s
+    range.
+- Procedure: 5 runs per part and slave type, with the order ticks of part c varied so that they
+  fall at different distances from the next check tick of S-0309 claim 29 (a tick whose number is a
+  multiple of 16). With tick-labelled capture and a read-only recorder, record per tick each slave's
+  and each control's target just after its turn, whether it took its turn (S-0203 claim 10), every
+  shot it makes, *M*'s kind and existence, and the strength of *M*, *O* and *E*. No injection or
+  state writes are permitted.
+- Expected (claim 9, *A firer bound to a slave master within rank 4*): while *M* exists, no slave
+  of *M* makes a shot in any part, and none of *M*, *O* and *E* loses strength to one. In part c, if
+  *s* holds the ordered target after the order, it holds no target just after its first turn in a
+  check tick after the order in which it took its turn. *C* and *C2* each make a shot within 100
+  ticks of their order. In part d, a freed slave makes a shot within 100 ticks after *M* is
+  destroyed, through its own search or through the order.
+- Falsified by a shot of a slave of *M* while *M* exists, in any run; in part c, by *s* still
+  holding the ordered target just after that turn; in part d, by no shot of a freed slave within 100
+  ticks after *M* is destroyed, with the slave type whose control made its shot. A control that
+  makes no shot shows that the setup's weapon arrangement cannot fire, so part d with that slave
+  type judges nothing; the no-shot expectations still judge. A part c run in which *s* cannot be
+  selected, or never holds the ordered target, judges only the no-shot expectation. A part d run in
+  which no slave is outside when *M* is destroyed, or in which every freed slave is destroyed,
+  leaves the human's house or loses *E* from its range within those 100 ticks without having made a
+  shot, judges nothing for part d. *M* exists in this scenario while it is either the building or
+  the vehicle that a pack-up makes of it.
 
 ## Changes for other specs
 
