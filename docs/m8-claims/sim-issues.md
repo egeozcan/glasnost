@@ -1957,16 +1957,37 @@ Lanes compare base 43eaa36 with the batch at 71fe5cd. The later clippy fix and d
 **Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). The text outputs differ only in timings and output paths. These rows fail, on base and after:
 - M-0001: "scored pairings failing: 10 of 96" (win test 3, side outcome 10);
 - M-0002: "4 of 24";
-- M-0003: "3 of 35".
+- M-0003: "3 of 35";
+- M-0019: "rows failing: 0 of 6";
+- M-0020: "rows failing: 0 of 25 checked (28 rows)";
+- M-0021: "rows failing: 10 of 50".
 
-`ours-M-0001.csv` differs from line 1139 (per-game records). `ours-M-0002.csv` and `ours-M-0003.csv` are identical.
+The M-0019 to M-0021 values are read from `arena-after.txt`. The diff with base shows only timings and paths, so they are the same on base. `ours-M-0001.csv` differs from line 1139 (per-game records). `ours-M-0002.csv` and `ours-M-0003.csv` are identical.
 
 **Sweeps** (`m6c-*`, `m7a-*`, `m7b-*`). M6c, M7a and M7b over seeds 1 to 16 pass, before and after. M7a and M7b differ only in timing and target-path lines. In M6c (`m6c-after.txt`) three seeds move:
 - seed 1: 11735 to 12000 ticks;
 - seed 10: 11393 to 10258;
 - seed 13: 8069 to 7675, with its smallest counter going from 3 to 0 (below 3: "jumpjet orders (S-0502) = 1", "support beams (S-0518) = 0").
 
-The summary rows move too: engineer maximum 7 to 6, jumpjet orders minimum 2 to 1, jumpjet built minimum 6 to 4, and crate orders minimum 35 to 21. The smallest minimum over 16 seeds was already 0 on base.
+These summary rows move (base `m6c-base.txt`, after `m6c-after.txt`):
+- engineer orders (S-0509): min 5 median 6 max 7, then min 5 median 6 max 6;
+- tech building income cycles (S-0515): min 1532 median 2271 max 2347, then min 1453 median 2271 max 2347;
+- jumpjet orders (S-0502): min 2 median 21 max 67, then min 1 median 22 max 67;
+- jumpjet flight (S-0502): min 5146 median 9536 max 9543, then min 4886 median 9536 max 9543;
+- jumpjet units built and flown (S-0417 claim 15): min 6 median 12 max 19, then min 4 median 11 max 18;
+- radiation exits (S-0525): min 6 median 16 max 97, then min 5 median 17 max 97;
+- radiation in the field (S-0525): min 3931 median 7167 max 11430, then min 3931 median 7172 max 11430;
+- chrono erasure orders (S-0514): min 13 median 29 max 47, then min 13 median 29 max 40;
+- erasures begun (S-0514): min 6 median 13 max 18, then min 6 median 13 max 17;
+- disarm orders (S-0519): min 10 median 12 max 18, then min 10 median 12 max 16;
+- suicide orders (S-0519): min 10 median 19 max 29, then min 9 median 19 max 26;
+- sabotage orders (S-0519): min 10 median 17 max 25, then min 9 median 16 max 23;
+- air-strike orders (S-0519): min 4 median 6 max 15, then min 4 median 6 max 17;
+- air strikes called (S-0519): min 4 median 6 max 18, then min 4 median 6 max 19;
+- crate orders (S-0520): min 35 median 93 max 150, then min 21 median 91 max 117;
+- crates picked up (S-0520): min 9 median 25 max 65, then min 6 median 25 max 62.
+
+The other summary rows are unchanged. "smallest minimum over 16 seeds: 0" holds on base and after.
 
 **AI quick lane** (seeds 7 to 10, maps 0, 2 and 8; `quick-base-7.txt` to `quick-base-10.txt`, `quick-after-7.txt` to `quick-after-10.txt`). Each seed's file differs from base by `cmp`:
 - seed 7: first at byte 366, line 4;
@@ -1984,7 +2005,8 @@ Final checks, on 88e3b8b:
 - `cargo fmt --all -- --check`;
 - the wasm32 build of glasnost-app (`wasm-after.txt`);
 - `cargo xtask check` (`xcheck-after.txt`): fails only in stock-guard. Eight problems are the known ones in M-0027. The ninth is the batch's untracked notes file, which is never staged;
-- `cargo xtask gate` (`xgate-after.txt`): ok.
+- `cargo xtask gate` (`xgate-after.txt`): ok;
+- the AI suite with its ignored tests, on 2646cbf (`ai-final.txt`): 387 pass in 42 result lines.
 
 Seams left:
 - Q-3301 (a cell destination under claim 25), Q-3302 (#457: passing damage on to the bunker) and Q-3303 (claim 26 against S-0605 claim 16) wait for answers. Claim 26 is held until Q-3303 is answered.
