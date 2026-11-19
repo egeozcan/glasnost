@@ -369,6 +369,152 @@ fn a_placed_gate_builds_up_backwards() {
     assert!(building > 2, "built up over {building} drawn frames");
 }
 
+/// A placed building with a build-up sprite that misses its turn on tick
+/// *C* + `miss` (an animation just before it in the update order leaves
+/// play in its own turn then, S-0203 claim 10), followed to its handover:
+/// per drawn frame the shown tick, the simulation's construction stage, and
+/// the look. Also the range (*n*, *d_b*) and *C*.
+fn trace_missed(miss_after_c: impl Fn(i32) -> i32) -> ((i32, i32), i32, Vec<(i32, i32, Look)>) {
+    let (mut import, catalogue, mut assets) = context_full(RULES, ART);
+    import
+        .arts
+        .get_mut(&(Kind::Buildings, 0))
+        .expect("HUTX's art")
+        .building_sprites
+        .insert("buildup", b"hutxmk.shp".to_vec());
+    assets.insert(
+        b"hutxmk.shp",
+        shp((40, 30), BUILDUP_FRAMES, (BUILDUP, BUILDUP), (6, 8)),
+    );
+    let map = testkit::empty_map(SIZE);
+    let mut r = testkit::combat_ruleset();
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("HUTX".into());
+    r.registries
+        .entry("animations".into())
+        .or_default()
+        .push("PUFF".into());
+    r.sim.animations.insert(
+        "PUFF".into(),
+        glasnost_rules::sim::AnimationType {
+            frame_count: Some(4),
+            rate: Some(900),
+            middle_frame: Some(2),
+            ..Default::default()
+        },
+    );
+    let mut t = BuildingType {
+        strength: Some(400),
+        foundation: Some([2, 2]),
+        ..Default::default()
+    };
+    // spec: S-0108 Import mapping (Buildup: the type has a build-up sprite of N_b frames)
+    t.econ.buildup = Some(true);
+    t.econ.buildup_frames = Some(BUILDUP_FRAMES as i32);
+    r.sim.buildings.insert("HUTX".into(), t);
+    let rules = Arc::new(SimRules::new(&r, "synthetic-test"));
+    let setup = testkit::setup(7);
+    let mut world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let b = testkit::spawn(
+        &mut world,
+        SimKind::Building,
+        "HUTX",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
+    // spec: S-0406 claim 17 (a building placed in play by a place order enters under construction, and its factory break-off is requested as it enters play)
+    begin_construction(&mut world, b, false);
+    break_off(&mut world, b);
+    let o = world.obj(b).expect("the building");
+    let range = buildup_range(&world, o.type_index);
+    let miss = miss_after_c(range.delay);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
+    let mut scene = built.scene;
+    let mut seen = Vec::new();
+    let mut c = None;
+    for _ in 0..400 {
+        let w = &mut live.world;
+        if let Some(c) = c
+            && w.tick == c + miss - 4
+        {
+            let at = w.obj(b).expect("the building").pos;
+            let puff = glasnost_sim::anims::spawn(w, "PUFF", Some(at), Default::default())
+                .id
+                .expect("PUFF is listed");
+            let order = &mut w.update.order;
+            order.retain(|&x| x != puff);
+            let p = order.iter().position(|&x| x == b).expect("in the order");
+            order.insert(p, puff);
+        }
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        let o = live.world.obj(b).expect("the building");
+        let con = &o.econ.construction;
+        if c.is_none() {
+            c = con.first;
+        }
+        if !con.building_up {
+            break;
+        }
+        seen.push((
+            (live.world.tick - 1).max(0),
+            con.stage,
+            look(&scene, sim_code(b)),
+        ));
+    }
+    ((range.n, range.delay), c.expect("construction starts"), seen)
+}
+
+/// #440. spec: S-0108 Terms (body stage, r111: an advance that falls due on a tick on which the
+/// building takes no turn is made at its next update, and every later stage comes one tick
+/// later) and claim 5, S-0406 claim 17 (the construction range's stage): the drawing follows the
+/// simulation's stage frame by frame, also when the building misses its turn on a stage boundary
+#[test]
+fn a_held_stage_advance_is_drawn_as_the_game_holds_it() {
+    // The first advance after C falls due on C + d_b; a missed turn there holds it.
+    let ((n, d), c, seen) = trace_missed(|d| d);
+    assert_eq!(n, 4);
+    let held = seen
+        .iter()
+        .find(|s| s.0 == c + d)
+        .expect("drawn at C + d_b");
+    assert_eq!(held.1, 0, "the advance due at C + d_b is held");
+    assert!(
+        seen.iter().any(|s| s.0 == c + d + 1 && s.1 == 1),
+        "and made at the next update"
+    );
+    for (tick, stage, l) in &seen {
+        assert_eq!(
+            *l,
+            buildup_look(stage.rem_euclid(n)),
+            "tick {tick}: the simulation's stage {stage}"
+        );
+    }
+}
+
 /// #423. spec: S-0108 claim 1 (a building in the construction state whose type has no build-up
 /// sprite draws nothing of its body: no body, bib or shadow) and S-0406 claim 17 and F7 (r19: its
 /// zero-delay range is current from its second start on T + 1, C = T + 2, and hands over at T + 3)
