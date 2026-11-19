@@ -8719,6 +8719,11 @@
           "type": "boolean",
           "default": true
         },
+        "airstrike_line_marker_over_shroud": {
+          "description": "The strike line's end marker has no depth test and no light-alpha shading, so it shows even over cells under full shroud; off: the marker is not drawn at pixels whose light-alpha value is 0 (presentation only).",
+          "type": "boolean",
+          "default": true
+        },
         "airstrike_recharge_same_target_only": {
           "description": "The recharge delay holds back only a repeat designation of the same object with no change of target in between, so a cancelled or redirected idle strike is ready at once for any object; off: an idle strike that has ended before is ready only when t ≥ e + R, whatever its target.",
           "type": "boolean",

@@ -2080,6 +2080,10 @@ pub struct Quirks {
     // spec: S-0519 claim 18
     #[serde(default = "on")]
     pub airstrike_recharge_same_target_only: bool,
+    /// The strike line's end marker has no depth test and no light-alpha shading, so it shows even over cells under full shroud; off: the marker is not drawn at pixels whose light-alpha value is 0 (presentation only).
+    // spec: S-0519 claim 27 (end marker) and Edge cases (strike-line end marker over shroud)
+    #[serde(default = "on")]
+    pub airstrike_line_marker_over_shroud: bool,
     /// A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does (`glasnost_sim::mind::owner_changing`, before the new owner is written).
     // spec: S-0601 claim 11 and Edge cases
     #[serde(default = "on")]
@@ -2895,6 +2899,7 @@ impl Default for Quirks {
             radiation_residue: true,
             airstrike_empty_strike_stuck: true,
             airstrike_recharge_same_target_only: true,
+            airstrike_line_marker_over_shroud: true,
             mind_control_owner_change_keeps_victims: true,
             dying_victim_holds_slot: true,
             deploy_makes_control_permanent: true,
@@ -4261,6 +4266,10 @@ impl Quirks {
             (
                 "airstrike_recharge_same_target_only",
                 self.airstrike_recharge_same_target_only,
+            ),
+            (
+                "airstrike_line_marker_over_shroud",
+                self.airstrike_line_marker_over_shroud,
             ),
             (
                 "mind_control_owner_change_keeps_victims",
