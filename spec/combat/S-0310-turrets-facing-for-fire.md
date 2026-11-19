@@ -2,13 +2,13 @@
 id: S-0310
 title: Turrets and facing for fire (aiming tolerance, which facing aims, omni-fire, firing while moving)
 topic: combat
-revision: 8
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-02
+approved-on: 2026-11-19
 measurements: []
-requests: [Q-0601]
+requests: [Q-0601, Q-3257]
 supersedes: []
 ---
 
@@ -170,8 +170,8 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    healer's *illegal*, which outranks the general part (claim 11). The empty passenger carrier's
    *out of ammunition* follows the general part and outranks the aircraft aim test (claim 5).
    Below the general part, a vehicle's original answers rank, from highest to lowest,
-   *must deploy* (claim 9), the healer's *illegal*
-   (claim 11), *moving* (claim 7), *still turning* (claim 3) and *not facing* (claim 2); when
+   *must deploy* (claim 9), the *impossible* of a vehicle tethered with a building as its
+   contact (S-0301 claim 9, rank 12), the healer's *illegal* (claim 11), *moving* (claim 7), *still turning* (claim 3) and *not facing* (claim 2); when
    several apply, the vehicle gets the highest-ranked one. So while its rearm countdown runs, a
    vehicle never reports *not facing*. The full rank table, with the order of *moving*, *still
    turning* and *not facing* among themselves, is S-0301's (claim 9), which also says that only the
@@ -182,7 +182,8 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    (claim 11).
    - Backing: `measurable` (S-0301 scenarios F7 and F8 for the countdown and the order; scenario
      T8 part b for *must deploy* before *not facing*; scenario T10 part e for the healer's
-     *illegal* before *moving*). The exact order among *must deploy*, *moving* and
+     *illegal* before *moving*; S-0301 scenario F15 part g for the tether's *impossible* before
+     the healer's *illegal*). The exact order among *must deploy*, *moving* and
      *still turning* is `unmeasured`: their replies are identical, so these scenarios cannot
      distinguish it.
    - Confidence: high
@@ -206,14 +207,26 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    still rolling after its destination was cleared does not. Only after these conditions and
    the aiming tests pass can its locomotor add a refusal of its own (S-0301 claim 9).
    For a jumpjet locomotor the balloon-hover test uses *moving now* (Terms; S-0502 claim 20):
-   grounded and hovering do not give this refusal, even with a destination. The jumpjet locomotor
+   grounded and hovering do not give the second condition's refusal, even with a destination. The jumpjet locomotor
    adds no separate refusal after the aiming tests (S-0502 claim 20). Other locomotors' additional
    refusals remain outside this spec.
+
+   **A balloon-hover vehicle attacking with a vertical projectile (Q-3257).** Its target is its
+   destination from its first approach step on (S-0307 claim 18), and the first condition reads
+   that destination, not its locomotor. So a balloon-hover type without the mobile-fire flag
+   gets *moving* while the target stays its destination, also while it hovers over the target,
+   and never fires at it (`quirks.balloon_hover_mobile_fire_by_destination`, Edge cases and
+   quirks). The second condition's balloon-hover reading applies to that condition alone: it
+   does not change the first condition or the replies of claim 9.
    - Backing: `measurable` (scenario T6, parts a to j, and S-0502 scenario J14) for the four
-     conditions, the living jumpjet phases and the cleared destination. The absence of a separate
-     jumpjet-locomotor refusal and its crashing/crashed cases inherit S-0502 claim 20's
-     `unmeasured` backing: other refusals mask them in those scenarios.
-   - Confidence: high
+     conditions, the living jumpjet phases and the cleared destination; `measurable` (S-0502
+     scenario J34) for the balloon-hover vehicle attacking with a vertical projectile: part f
+     for the *moving* answer while it hovers with its target as its destination, and parts a
+     to d for its shots from the hover. The absence of a separate jumpjet-locomotor refusal
+     and its crashing/crashed cases inherit S-0502 claim 20's `unmeasured` backing: other refusals mask them in those
+     scenarios.
+   - Confidence: high, except medium for the balloon-hover vehicle attacking with a vertical
+     projectile, as S-0502 claim 10 rates it
 
 8. **Infantry.** An infantry unit gets *moving* when its infantry speed fraction (Terms) is above
    0.1, or when it has a destination and its current sequence is not interruptible (S-0107, T1).
@@ -249,6 +262,15 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    | *illegal* | default weapon is a healing weapon | drops its target or keeps it, as claim 11's table gives |
    | *still turning*, *moving*, *rearming*, *must deploy* and every other answer | any | none here, apart from what other specs own |
 
+   For a jumpjet locomotor, *being moved by its locomotor* in the last two *not facing* rows
+   reads its movement commitment (S-0502 Terms, *moving*), not *moving now* as in claim 7, and
+   it does so for a balloon-hover type too. A jumpjet vehicle that hovers keeping its
+   commitment is therefore being moved by its locomotor here, and gets no reply (S-0502
+   claim 10; `quirks.hovering_jumpjet_body_on_heading` there).
+   With that switch off, a jumpjet vehicle in *hovering* counts here neither as being moved by
+   its locomotor nor as having a destination, so it takes the row with no destination (S-0502
+   Edge cases).
+
    The deploy-to-fire rows use S-0517 claim 13's rules and `quirks.deploy_to_fire_repacks`:
    with the switch on (default original), they apply even after in-place deployment, so such a
    vehicle queues *unload* again and repacks instead of firing. With it off, a deployed vehicle
@@ -266,10 +288,12 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    would otherwise fire, it queues *unload* if its cell allows it, and gets *must deploy* if not.
    The switch-off deployed exception is S-0517 claim 13's alternative above.
    - Backing: `measurable` (T1 for facing replies, T8 for deployment, and S-0301 claim 12
-     and scenario F7 for uncloaking). The combined visceroid/deploy-to-fire case and the
+     and scenario F7 for uncloaking; S-0502 scenarios J33 parts b and c and J34 parts b to d
+     for the jumpjet reading of being moved by its locomotor). The combined visceroid/deploy-to-fire case and the
      building-occupied and land-type deployment refusals are `unmeasured`: T8 isolates only
      ordinary deployment on open ground and a slope, not those combinations.
-   - Confidence: high (the facing replies); medium (deploy-to-fire)
+   - Confidence: high (the facing replies); medium (deploy-to-fire, and the jumpjet reading
+     of being moved by its locomotor, as S-0502 claim 10 rates it)
 
 10. **A visceroid's attack animation.** In each tick in which a vehicle of a visceroid type
     gets *can fire* and fires rather than queuing *unload* under claim 9 (in practice the tick of
@@ -288,8 +312,11 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
 
 11. **Healing weapons and the *illegal* answer.** A vehicle whose default weapon is a healing
     weapon (Terms) gets *illegal* from the firing check when the general part of the check and
-    the deploy test of claim 9 give no answer and its target is absent, or does not count as a
-    vehicle (S-0214, Terms), or is at full health (health ratio at least 1). The answer ranks
+    the deploy test of claim 9 give no answer, and the vehicle is not tethered with a
+    building as its contact (S-0301 claim 9, rank 12: that tether's *impossible* comes first,
+    so such a vehicle does not make this claim's drop while the tether holds), and its target
+    is absent, or does not count as a vehicle (S-0214, Terms), or is at full health (health
+    ratio at least 1). The answer ranks
     above *moving*. S-0314 claim 1 only says that a versus value of 0 makes an object an illegal
     target; this is the check's own further rule for healer vehicles. The vehicle then replies to
     *illegal* when its default weapon is a healing weapon:
@@ -317,7 +344,8 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
     nothing in that step. That keep, of an infantry target below full health that still gives
     *illegal* (for instance by a versus value of exactly 0), lasts only to S-0309 claim 29's next
     check, as for a vehicle healer.
-    - Backing: `measurable` (scenario T10: parts a to e for vehicles, f to h for infantry).
+    - Backing: `measurable` (scenario T10: parts a to e for vehicles, f to h for infantry,
+      and S-0301 scenario F15 part g for the tethered vehicle healer).
       Absent targets, aircraft and building targets, and a damaged vehicle made illegal only
       by a zero versus value are `unmeasured`: T10 provides no accepted-order case isolating
       those checks or replies. Parts c, d and g are evidence only if their orders are accepted.
@@ -329,7 +357,8 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
       sets up the wrong-kind or full-health cases with the order accepted (parts g and h are
       evidence only if their orders are accepted).
     - Confidence: medium (the vehicle rule and the infantry rule, including its rank above the
-      general part); medium (the keep row's limit at S-0309 claim 29's check); medium,
+      general part); high (the tether's *impossible* before the vehicle healer's *illegal*, as
+      S-0301 claim 9 rates it); medium (the keep row's limit at S-0309 claim 29's check); medium,
       `unmeasured` (the infantry healer's reply in its firing step and its keep's limit at that
       check)
 
@@ -386,6 +415,7 @@ division, which truncates toward zero on non-negative values:
 | infantry: healing weapon and the target absent, not infantry or at full health (claim 11) | *illegal*, above every row below, even the general part |
 | general part of the check gives an answer (S-0301, claim 9) | that answer |
 | vehicle: deploy-to-fire and its cell does not allow deploying (claim 9) | *must deploy* |
+| vehicle: tethered (glossary) with a building as its contact (S-0301 claim 9, rank 12) | *impossible* |
 | vehicle: healing weapon and the target absent, not counting as a vehicle or at full health (claim 11) | *illegal* |
 | vehicle: a condition of claim 7 holds | *moving* |
 | vehicle: turret was turning at the end of the previous tick and projectile not homing (a vehicle without the turret flag or with a spinning turret never has that state, claim 3) | *still turning* |
@@ -417,7 +447,20 @@ facing enters its tolerance, subject to the other refusals (T1 and T3).
   with the switch off the snap still happens when the aim error exceeds 2048 and is within the
   bound. The bound's wrap and its separate switch are S-0215 claim 32's, not this tolerance switch.
 - **A destination, not motion, makes a vehicle "moving"** (claim 7). This is the rule itself
-  rather than a defect of the original, so it has no switch and is not a quirk.
+  rather than a defect of the original, so it has no switch and is not a quirk, except in the
+  balloon-hover case of the next entry.
+- **A balloon-hover type without the mobile-fire flag**
+  (`quirks.balloon_hover_mobile_fire_by_destination`, default on, YR behaviour).
+  - On: claim 7's first condition reads *it has a destination* for every vehicle, balloon-hover
+    types included. Such a vehicle attacking with a vertical projectile keeps its target as its
+    destination (S-0307 claim 18), so it never fires at it.
+  - Off (fixed behaviour): for a balloon-hover type the first condition reads *its locomotor is
+    moving it* instead, as the second condition does: for a jumpjet locomotor, *moving now*.
+    Such a vehicle then gets no *moving* from that condition while it hovers or stands, with
+    its target as its destination. Every other vehicle is unchanged.
+  - Backing: `measurable` (S-0502 scenario J34 part f gives the original-behaviour falsifier).
+    The off alternative is a design rule, not a claim about the original.
+  - Confidence: medium (the original behaviour, as claim 7 rates the balloon-hover case)
 - **Deploy-to-fire repacking** (claim 9). S-0517 claim 13 owns
   `quirks.deploy_to_fire_repacks`, default original, and its alternative allowing an already
   deployed vehicle to fire normally rather than queue *unload* again.
