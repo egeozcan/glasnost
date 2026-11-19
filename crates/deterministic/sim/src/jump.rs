@@ -1157,6 +1157,31 @@ pub fn lift_release_stop(w: &mut World, id: ObjectId, lifter_ended: bool) {
     stop_with(w, id, false, lifter_ended);
 }
 
+/// The stop at a crash start (S-0502 claim 18, *Destination clear at crash
+/// start*): S-0607 claim 13's stop on dropping. An empty destination
+/// assignment, which a balloon-hover vehicle can reject under claim 28;
+/// the target cleared and any contact broken off; a direct stop, which runs
+/// claim 17 whatever the assignment did; a second empty assignment, which
+/// can no longer be rejected. The unit ends with an empty order-level
+/// destination. Called inside the hit, before the unit's next update.
+pub fn crash_start_stop(w: &mut World, id: ObjectId) {
+    // spec: S-0502 claim 18 (r30, Q-3255: the first of the two empty destination assignments, an ordinary one, so claims 24, 27 and 28 decide its effect; a balloon-hover vehicle holding its destination and a target can reject it, with claim 28's effect on its behaviour)
+    if !clear_rejected(w, id) {
+        crate::econ::assign_destination(w, id, None);
+    }
+    if let Some(o) = w.obj_mut(id) {
+        // spec: S-0502 claim 18 (r30: its target is cleared, before the second assignment)
+        crate::spawn::clear_own_target(o);
+        o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
+    // spec: S-0502 claim 18 (r30: it breaks off any contact, as S-0607 claim 13's stop on dropping does)
+    crate::lift::break_any_contact(w, id);
+    // spec: S-0502 claim 18 (r30: the direct instruction to stop between the assignments; it is not a destination assignment, so claim 24's rule for redundant assignments does not bear on it and claim 17's stopped-movement rule runs whatever the first assignment did; a unit without a commitment is not changed)
+    lift_release_stop(w, id, false);
+    // spec: S-0502 claim 18 (r30: the second empty assignment, made with no target, so claim 28 cannot reject it: every unit ends the crash start with an empty order-level destination; a vehicle's equality suppression makes it redundant once the first was effective, infantry reroutes again)
+    crate::econ::assign_destination(w, id, None);
+}
+
 /// Whether a jumpjet hovers with no movement point and no movement
 /// commitment: for a seized set-down unit with the no-cell switch off, the
 /// switch-off outcome of S-0502 claim 17 with no cell, whatever route
