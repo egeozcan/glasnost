@@ -1,9 +1,9 @@
 ---
 id: Q-3261
 title: An owner change of a building in its factory break-off window
-status: open
+status: answered
 related: [S-0406, S-0309, S-0215]
-answered-by: [S-0406]
+answered-by: [S-0406, S-0309]
 ---
 
 ## Need
