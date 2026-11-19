@@ -1669,7 +1669,7 @@ The P3 census rule: the marker reads `World::projectiles` and no census back-ref
 
 ## Batch S37: a killed infantry unit left in play, and the infantry crash end's answers (Q-3239, #252; Q-3240, #291)
 
-Base main b4e1e09, not rebased. The batch builds the lead's answer to Q-3239 (S-0107 r55 claim 17a, S-0312 r91 claim 16) with its three new switches. Q-3240's answer (S-0611 r12, S-0614 r35, S-0109 r45) is handed back untouched. The switches came first (198381a), then the design text (4d062ab), in *Simulation (sim issues S37 …)*. Each test was committed before its fix, and no fix commit changes a test. Every red was shown in a separate base worktree checked out at the test commit (`t1-red.txt`, `t2-red.txt` and `t3-red.txt` in `local-lane/sim-issues/s37/`). No request is written.
+Base main b4e1e09, not rebased. The batch builds the lead's answer to Q-3239 (S-0107 r55 claim 17a, S-0312 r91 claim 16) with its three new switches. Q-3240's answer (S-0611 r12, S-0614 r35, S-0109 r45) is handed back untouched. The design text came first (4d062ab), in *Simulation (sim issues S37 …)*, then the switches (198381a). Each test was committed before its fix, and no fix commit changes a test. Every red was shown in a separate base worktree checked out at the test commit (`t1-red.txt`, `t2-red.txt` and `t3-red.txt` in `local-lane/sim-issues/s37/`). No request is written.
 
 | Issue | Finding | Status | Fix | Tests |
 |---|---|---|---|---|
