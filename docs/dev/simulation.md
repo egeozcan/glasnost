@@ -2580,3 +2580,32 @@ The thirty-seventh batch of the game-logic audit takes the answer to Q-3239 (S-0
 - The importer warns about a crashable infantry type whose *air-death-end* entry has no image frames, in both positions of the switch (`convert::sim::infantry_art`).
 
 **Formats.** No saved field changes, but a revived unit's turns and the infantry crash end change what a saved game replays to. So the save format goes to 187 and the AI game format to 165, the numbers the main session gave this batch. Wire version 12: no order's encoding changes.
+
+## Simulation (sim issues S40: a balloon-hover bomber over its target, and what ends an attachment)
+
+The fortieth batch of the game-logic audit takes two answers: Q-3257 (#445), answered by S-0502 r34 and S-0310 r13, and Q-3240 (#291), answered by S-0109 r45, S-0611 r12 and S-0614 r35. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S40*.
+
+**The point of an object destination (S-0502 claim 16, r34).** When a jumpjet's destination names an object, claim 16 now adjusts or keeps that object's point at the assignment, not its position. `jump::object_point` gives it:
+
+- an object riding in an open-topped transport gives its own position (S-0607 claim 7's riding rule);
+- any other object gives `lift::lifter_point` with the jumpjet in place of the seized unit. For a building that is its reference point (S-0204 claim 4), or its docking point when its type has the pad, repair-depot or vehicle-bunker flag. For a vehicle or infantry unit it is the heading point: its next movement point, or its position when it has none.
+
+`jump::order_point` reads it once, at the assignment, and stores the result as the movement point, so the point does not follow the object. A balloon-hover vehicle keeps that exact point, so it hovers over a building's reference point, not over the centre of its top-left cell. Every other jumpjet searches from that point's cell, as before.
+
+- *Seam.* `lift::lifter_point` reads no next movement point for an aircraft, so an aircraft gives its position. Claim 16 rates aircraft `unmeasured`.
+- *Left as it was.* Claim 23's own-cell filter compares the cell of the destination with the unit's cell. For an object that is still the object's cell (its position's cell): r34 revised the point that claim 16 adjusts, not the filter.
+
+**Firing from over the target (S-0502 claim 10, r34).** The rest of the claim is as built:
+
+- the heading's last turn in the arrival tick;
+- no heading turn over the point (claim 13);
+- the direction map east for two points with no horizontal difference (S-0204 F3: 16383 with `quirks.table_direction` on);
+- *moving* on the way in for a weapon without the fire-while-moving flag (S-0310 claim 7).
+
+Tests on S-0502 scenario J34's parts guard them.
+
+**The mobile-fire condition (`quirks.balloon_hover_mobile_fire_by_destination`, S-0310 r13).** The switch is new, default on (the original). On, `combat::check::vehicle_moving`'s first condition reads the destination for every vehicle, so a balloon-hover type without the mobile-fire flag never fires at a target that is its destination. Off, for a balloon-hover type that condition reads `occupancy::in_progress` (for a jumpjet, *moving now*), as the second condition does. Every other vehicle is unchanged.
+
+**The reply with the hover switch off (S-0310 claim 9, r13).** With `quirks.hovering_jumpjet_body_on_heading` off, a jumpjet vehicle in *hovering* now counts as having no destination for the reply to *not facing* without a turret, as well as not being moved by its locomotor (`jump::hover_reply_ignores_destination`, read by `combat::behave::vehicle_reply`). So a bomber over its target with the target as its destination turns its body to the target (map east, 16383) and fires. With the switch on, nothing changes.
+
+**What the AI can rely on.** A balloon-hover bomber of a type with the mobile-fire flag and no turret, whose weapon has neither the fire-while-moving nor the omni-fire flag, sent at a building, does not fire on the way in and hovers over the building's reference point. From there it fires only when its approach left its heading within the aiming tolerance of map east, as after an approach flown towards map east. From other sides it hovers there without firing while the building stays its target and destination. A type without the mobile-fire flag never fires at its destination target with the default setting.
