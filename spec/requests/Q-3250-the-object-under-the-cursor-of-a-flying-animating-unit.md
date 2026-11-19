@@ -1,9 +1,9 @@
 ---
 id: Q-3250
 title: How the game finds the object under the cursor for a flying, animating unit
-status: open
+status: answered
 related: [S-0214, S-0102, S-0101]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need
