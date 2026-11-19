@@ -570,7 +570,9 @@ fn an_unchanged_assignment_leaves_d_and_a_new_one_takes_the_later_position() {
     assert_eq!(hover::destination_point(&w, a), Some(d), "ignored");
     econ::assign_destination(&mut w, a, None);
     econ::assign_destination(&mut w, a, Some(Target::Object(i)));
-    let p = w.obj(i).unwrap().pos;
+    // spec: S-0503 claim 20 (r30: a walking infantry unit gives its heading point, its next movement point, or its position when it has none)
+    let o = w.obj(i).unwrap();
+    let p = o.walk.as_ref().and_then(|s| s.target).unwrap_or(o.pos);
     // spec: S-0503 Terms (unless held, D's height is the surface height, plus 416 leptons on a high-bridge cell; none here)
     let later = Pos::new(p.x, p.y, w.surface_at(p.x, p.y));
     assert_eq!(
