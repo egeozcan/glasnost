@@ -1105,6 +1105,20 @@ pub fn in_break_off_window(o: &crate::world::Object) -> bool {
     o.econ.construction.building_up && o.econ.construction.break_off == BreakOff::Window
 }
 
+/// Ends the factory break-off window at an owner change (S-0309 claim 31,
+/// S-0406 claim 17): the building is construction-completed from the
+/// change. Only the opening mark is kept, so the slot animations still
+/// start; the idle body is kept apart from this record.
+pub fn end_break_off_window(w: &mut World, id: ObjectId) {
+    if let Some(o) = w.obj_mut(id) {
+        // spec: S-0309 claim 31 (r145: the change ends the window, from it the building is construction-completed, its idle body kept with its stage and delay) and S-0406 claim 17 (r20)
+        o.econ.construction = Construction {
+            opened: true,
+            ..Construction::default()
+        };
+    }
+}
+
 /// Whether a rule that refuses a building in its construction state
 /// refuses it (S-0402 claim 10, S-0213 claims 8 and 10): its seen
 /// behaviour is *construction*; in the factory break-off window only while

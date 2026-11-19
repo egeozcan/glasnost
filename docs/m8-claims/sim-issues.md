@@ -1995,3 +1995,88 @@ Seams left:
 - The client needs no change for either item. It draws `world.anims.anims`, which no longer holds an ended animation. Its control-ring marker follows `mind::ring`. When the ring's art is drawn, each return of the ring should start a new playback, with draws from the cosmetic random stream (S-0202 claim 11).
 
 The P3 census rule: the batch makes or moves no back-reference of `World::census`.
+
+## Batch S42: the break-off window's owner change, a walker's object point, a hovering vehicle's repeated assignment and a bunkered vehicle's damage (Q-3261 to Q-3264, #457)
+
+Base main 43eaa36, not rebased. The batch builds four answers: Q-3261 (S-0406 r20 claim 17, S-0309 r145 claim 31), Q-3262 (S-0208 r68 claim 25), Q-3263 (S-0503 r30 claim 20) and Q-3264 (S-0208 r71 claims 18 and 26). It also checks issue #457 against S-0302. The design text came first, in *Simulation (sim issues S42 …)* in `docs/dev/simulation.md` (f14458f), and was corrected for the claim 26 hold (53be82c). For each item the failing tests came before the fix: 91d4ab4 then 6699244, d1e89fd then 7335015, 31bef03 then 61a24a9, and f66b778 then aff744e. No fix commit changes a test. Each red was shown in a separate base worktree checked out at the test commit (`red-q3261.txt` to `red-q3264.txt`). Three requests are filed:
+- Q-3301 (9274a34): a cell destination under claim 25;
+- Q-3303 (2a598e4): claim 26 against S-0605 claim 16;
+- Q-3302 (38e9b76): #457.
+
+The #457 guard tests are 7ebcd89. A rustfmt commit (1f7abd9) and a clippy fix (88e3b8b) close the code. Logs are in `local-lane/sim-issues/s42/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| Q-3261 (S-0406 claim 17 r20, S-0309 claim 31 r145) | `ownership::opening` set the opening and ready marks but left `building_up`. A building whose owner changed in the factory break-off window stayed under construction until its next turn's end. r145: the change ends the window | fixed (6699244; tests 91d4ab4, red at 91d4ab4: 3 tests) | `opening` notes `placement::in_break_off_window` before it acts. After the grand opening it calls `placement::end_break_off_window`, which leaves a completed record keeping only the opening mark. The idle body (`econ.idle_body`) is kept | `claims_s0406_r20.rs`: `r20_construction_current_in_the_window_the_change_ends_it`, `r20_construction_queued_in_the_window_the_change_ends_it`. `claims_s0605_build_up.rs` (#347): its rows were moved to the construction state (window ended by hand), and `r20_an_owner_change_in_the_break_off_window_finishes_the_build_up` was added (red at 91d4ab4) |
+| Q-3262 (S-0208 claim 25 r68) | A walker's searches looked for the cell of `path::heading_point`, the object's position at the search, not the locomotor point given at the last assignment. A failed fresh search near the point did not clear the destination | fixed (7335015; tests d1e89fd, red at d1e89fd: 2 tests) | `walk::object_locomotor_point` and `path::search_goal` give the point's cell to `compute_once`, `search_gives_up` and the standing walker. `walk::cleared_near_point` in `path::failed` clears an untethered walker's destination within the close-enough distance. Where row 3 keeps the destination, the locomotor point is cleared and no further search is made | `claims_s0208_r68.rs`: `r68_the_fresh_search_looks_for_the_points_cell`, `r68_a_walker_in_the_points_cell_keeps_its_destination_beyond_close_enough` (both red at d1e89fd), `r68_a_walker_in_the_points_cell_within_close_enough_loses_its_destination` (a guard, passes at d1e89fd) |
+| Q-3262, a cell destination | Whether the clearing, the no-further-search rule and the standing rule hold for a cell destination | request Q-3301 (9274a34) | none; cell destinations unchanged | — |
+| Q-3263 (S-0503 claim 20 r30) | `hover::object_point` took a depot or bunker heading point only in contact, else the object's position. Contact taken later moved *D*. An unchanged object destination after a stop request, or an unchanged cell, was not ignored | fixed (61a24a9; tests 31bef03, red at 31bef03: 7 of 8) | `hover::object_point` follows S-0502 claim 16: a building's foundation centre, or its docking point for the pad, repair-depot and vehicle-bunker flags; a mobile object's heading point (`lift::lifter_point`); an open-topped rider's own position. `take` no longer reads `stopped`. `hover::assignment_ignored` keeps a repeated order's stored path. Only `depot::order_entered` calls `hover::contact_taken` | `claims_s0503_r30.rs`: the building centre, the walking infantry's next point, the bunker's quadrant point without contact, a later contact, the depot enter order (a guard, passes at 31bef03), a stop then the same cell, a stop then the same object, and the repeated order's path. The 31bef03 message says six fail on base; seven do, because the bunker test (with its bunker moved off its quadrant point) fails too. `claims_s0507_r11.rs`'s `an_unchanged_assignment_leaves_d_and_a_new_one_takes_the_later_position` now expects a walker's next movement point (red at 31bef03) |
+| Q-3264, claim 18 r71 | An object's point in a high-bridge cell had no 414-lepton addition. With the switch off, `end_of_walk` tested an object point without the deck height | fixed (aff744e; tests f66b778, red at f66b778: 3 tests) | `walk::raised_point` in `take_destination` adds 414 under `quirks.walker_bridge_destination_deck` (default on, unchanged). With it off, `walk::object_point_height` tests the terrain height at the point, plus 416 on the deck. Switch description and schema refreshed in the same commit | `claims_s0208_r71.rs`: `r71_an_object_under_the_deck_gives_h_plus_414_and_the_walk_ends_on_the_deck`, `r71_an_object_on_the_deck_gives_h_plus_830_and_claim_25_clears_it`, `r71_switch_off_an_objects_point_is_tested_on_the_arrival_layer` |
+| Q-3264, claim 26 r71 | Built as written, the substitute replaces a queued enter's building. In `claims_s0605.rs` `claim_16_back_in_after_release_both_positions`, the released walker never gets back in: guard gives the building with *enter* queued, a substitute replaces it, and the enter never gives the building again (`q3264-trace.txt`) | request Q-3303 (2a598e4); held | none; the cell-only rewrite and `walk::kept_out`'s interim branch stay | none for claim 26 |
+| #457 (S-0302 claim 8, *Hits without a warhead*) | Every damage path reaches `damage::apply_hit`, whose stage 2 bunker rows match claim 8. Area damage reaches them through `area::detonate` for each object hit. A bunkered vehicle takes a penetrating warhead's damage and nothing else. The bunker takes splash at its own point. A hit without a warhead does nothing unless it ignores defences | as built; guard tests; request Q-3302 (38e9b76) | none | `claims_issue_457.rs`: `a_direct_non_penetrating_hit_hurts_neither_the_vehicle_nor_the_bunker`, `a_direct_penetrating_hit_hurts_the_vehicle_and_not_the_bunker`, `splash_on_the_vehicle_and_on_the_bunker_follows_the_two_rows`, `a_hit_without_a_warhead_on_the_bunkered_vehicle`, `a_hit_that_ignores_defences_passes_both_rows` (all pass, `i457.txt`) |
+
+Formats (71fe5cd): no saved field is added, but the replays change, so save goes from 162 to 199 and AI game from 140 to 177 (renumbered to 164 and 142 at the merge). The AI game bump in `crates/deterministic/ai/src/game.rs` is forced by the sim change. Wire stays 13. Item 4 changes the description of `quirks.walker_bridge_destination_deck`, and the rules schema is refreshed in aff744e. No new switch is added.
+
+Goldens (71fe5cd): `golden/duel-diagonal.txt` and `golden/duel-m6c.txt` move (`golden-regen.txt`); the other goldens are unchanged.
+
+Lanes compare base 43eaa36 with the batch at 71fe5cd. The later clippy fix and design correction change no behaviour.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). The text outputs differ only in timings and output paths. These rows fail, on base and after:
+- M-0001: "scored pairings failing: 10 of 96" (win test 3, side outcome 10);
+- M-0002: "4 of 24";
+- M-0003: "3 of 35";
+- M-0019: "rows failing: 0 of 6";
+- M-0020: "rows failing: 0 of 25 checked (28 rows)";
+- M-0021: "rows failing: 10 of 50".
+
+The M-0019 to M-0021 values are read from `arena-after.txt`. The diff with base shows only timings and paths, so they are the same on base. `ours-M-0001.csv` differs from line 1139 (per-game records). `ours-M-0002.csv` and `ours-M-0003.csv` are identical.
+
+**Sweeps** (`m6c-*`, `m7a-*`, `m7b-*`). M6c, M7a and M7b over seeds 1 to 16 pass, before and after. M7a and M7b differ only in timing and target-path lines. In M6c (`m6c-after.txt`) three seeds move:
+- seed 1: 11735 to 12000 ticks;
+- seed 10: 11393 to 10258;
+- seed 13: 8069 to 7675, with its smallest counter going from 3 to 0 (below 3: "jumpjet orders (S-0502) = 1", "support beams (S-0518) = 0").
+
+These summary rows move (base `m6c-base.txt`, after `m6c-after.txt`):
+- engineer orders (S-0509): min 5 median 6 max 7, then min 5 median 6 max 6;
+- tech building income cycles (S-0515): min 1532 median 2271 max 2347, then min 1453 median 2271 max 2347;
+- jumpjet orders (S-0502): min 2 median 21 max 67, then min 1 median 22 max 67;
+- jumpjet flight (S-0502): min 5146 median 9536 max 9543, then min 4886 median 9536 max 9543;
+- jumpjet units built and flown (S-0417 claim 15): min 6 median 12 max 19, then min 4 median 11 max 18;
+- radiation exits (S-0525): min 6 median 16 max 97, then min 5 median 17 max 97;
+- radiation in the field (S-0525): min 3931 median 7167 max 11430, then min 3931 median 7172 max 11430;
+- chrono erasure orders (S-0514): min 13 median 29 max 47, then min 13 median 29 max 40;
+- erasures begun (S-0514): min 6 median 13 max 18, then min 6 median 13 max 17;
+- disarm orders (S-0519): min 10 median 12 max 18, then min 10 median 12 max 16;
+- suicide orders (S-0519): min 10 median 19 max 29, then min 9 median 19 max 26;
+- sabotage orders (S-0519): min 10 median 17 max 25, then min 9 median 16 max 23;
+- air-strike orders (S-0519): min 4 median 6 max 15, then min 4 median 6 max 17;
+- air strikes called (S-0519): min 4 median 6 max 18, then min 4 median 6 max 19;
+- crate orders (S-0520): min 35 median 93 max 150, then min 21 median 91 max 117;
+- crates picked up (S-0520): min 9 median 25 max 65, then min 6 median 25 max 62.
+
+The other summary rows are unchanged. "smallest minimum over 16 seeds: 0" holds on base and after.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8; `quick-base-7.txt` to `quick-base-10.txt`, `quick-after-7.txt` to `quick-after-10.txt`). Each seed's file differs from base by `cmp`:
+- seed 7: first at byte 366, line 4;
+- seed 8: byte 361, line 4;
+- seed 9: byte 1358, line 13;
+- seed 10: byte 23, line 1.
+
+Their contents were not read: a read of `quick-base-7.txt` was refused by the permission check and not repeated another way. Which games and winners move, and the trace of any winner change, are handed back.
+
+**Suites.** The AI suite with its ignored tests passes 387 on base and after, in 42 result lines (`ai-base.txt`, `ai-after.txt`). The sim gate with its ignored tests passes 17 on both (`gate-base.txt`, `gate-after.txt`), after the goldens were regenerated.
+
+Final checks, on 88e3b8b:
+- `cargo test --workspace --no-fail-fast` (`ws-after.txt`): 9409 tests pass, against 9387 on base (`ws-base.txt`). The only failure is the known `quirks::tests::every_spec_quirk_has_a_switch`. It names the same three quirks as on base: `balloon_hover_mobile_fire_by_destination`, `airstrike_line_marker_over_shroud` and `slave_auto_pack_old_top_left`;
+- `cargo clippy --workspace --all-targets -- -D warnings` (`clippy.txt` was the first run; it found two `clone_on_copy` in `claims_s0406_r20.rs`, fixed in 88e3b8b; the rerun is clean);
+- `cargo fmt --all -- --check`;
+- the wasm32 build of glasnost-app (`wasm-after.txt`);
+- `cargo xtask check` (`xcheck-after.txt`): fails only in stock-guard. Eight problems are the known ones in M-0027. The ninth is the batch's untracked notes file, which is never staged;
+- `cargo xtask gate` (`xgate-after.txt`): ok;
+- the AI suite with its ignored tests, on 2646cbf (`ai-final.txt`): 387 pass in 42 result lines.
+
+Seams left:
+- Q-3301 (a cell destination under claim 25), Q-3302 (#457: passing damage on to the bunker) and Q-3303 (claim 26 against S-0605 claim 16) wait for answers. Claim 26 is held until Q-3303 is answered.
+- The quick lane's moves and any winner trace are handed back.
+
+The P3 census rule: the batch adds no saved field and no object-table reference, so it makes or moves no back-reference of `World::census`.

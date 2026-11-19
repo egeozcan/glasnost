@@ -276,7 +276,7 @@ fn kept_out(w: &mut World, id: ObjectId, lent: Option<Pos>) {
     let kept = match dest {
         // spec: S-0208 claim 16 (the walk goes on: the destination stays none, the locomotor destination the kept point)
         Some(Target::Cell(c)) if c == k.cell() => Some(k),
-        // Q-3264 (interim: S-0212 claim 24's substitute replaced the cell searched for, so the walk goes on to the substitute's centre at claim 18's height)
+        // Q-3264, Q-3303 (interim, S-0208 claim 26 held: S-0212 claim 24's substitute replaced the cell searched for, so the walk goes on to the substitute's centre at claim 18's height)
         Some(Target::Cell(_)) => moved_to,
         // spec: S-0208 claim 16 (the walk ended, or a failed search gave it up: no locomotor destination is left)
         None => None,
@@ -430,13 +430,20 @@ fn standing(w: &mut World, id: ObjectId) {
         return;
     }
     if no_path {
+        let point = object_locomotor_point(w, id);
+        if no_object_locomotor_destination(w, id) {
+            // spec: S-0208 claim 25 (r68: with no movement in progress it has no locomotor destination; its walking makes no search and tests no cell, so the destination it keeps stays until a rule assigns or clears it)
+            stopped(w, id);
+            return;
+        }
         let goal = path::goal_cell(w, id);
         // spec: S-0208 claims 16 and 18 (a cell destination is complete only within two height levels of its height: on the ground under a high-bridge deck it is not, and an exhausted path needs another path computation under S-0212)
         let height_met = match dest {
             Some(Target::Cell(c)) => (cell_destination_height(w, id, c) - z).abs() < 208,
             _ => true,
         };
-        if (goal == Some(here) && height_met) || goal.is_none() {
+        // spec: S-0208 claim 25 (r68: with a locomotor point the cell the object is in decides nothing; the fresh search for the point's cell decides, failing in that cell by S-0212 claim 12)
+        if point.is_none() && ((goal == Some(here) && height_met) || goal.is_none()) {
             // A standing walker given a destination in its own cell (no
             // arrival tick ends that walk under claim 16): the move is
             // finished.
@@ -466,6 +473,18 @@ fn standing(w: &mut World, id: ObjectId) {
     {
         stopped(w, id);
     }
+}
+
+/// Whether a walker holds an object destination with no locomotor
+/// destination (S-0208 claim 25, r68): a failed fresh search kept the
+/// destination by S-0212 claim 23's third row and dropped the point
+/// ([`locomotor_point_lost`]), and no assignment has come since.
+fn no_object_locomotor_destination(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        matches!(o.dest, Some(Target::Object(_)))
+            && o.path.failed_for == o.dest
+            && o.walk.as_ref().is_some_and(|s| s.object_point.is_none())
+    })
 }
 
 /// Whether walker `id` given a new destination now keeps its stored path
@@ -670,8 +689,8 @@ fn end_of_walk(w: &mut World, id: ObjectId) {
                 Target::Object(t) => {
                     let Some(x) = w.obj(t) else { return };
                     match o.walk.as_ref().and_then(|s| s.object_point) {
-                        // spec: S-0208 claim 16 and Terms (r67, Q-3236: the locomotor destination is the object's movement point at the assignment; it does not follow the object); Q-3264 (interim: its height unadjusted)
-                        Some((r, p)) if r == t => (p.cell(), p.z),
+                        // spec: S-0208 claim 16 and Terms (r67, Q-3236: the locomotor destination is the object's movement point at the assignment; it does not follow the object)
+                        Some((r, p)) if r == t => (p.cell(), object_point_height(w, id, p)),
                         // A destination written without the assignment hook: the object's position now.
                         _ => (x.pos.cell(), x.pos.z),
                     }
@@ -713,7 +732,7 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
     };
     // spec: S-0208 Terms (r67, Q-3236: a destination that names an object gives the object's movement point at that assignment; only a new assignment gives a new point)
     let point = match o.dest {
-        Some(Target::Object(t)) => path::heading_point(w, id).map(|p| (t, p)),
+        Some(Target::Object(t)) => path::heading_point(w, id).map(|p| (t, raised_point(w, p))),
         _ => None,
     };
     if let Some(s) = w.obj_mut(id).and_then(|o| o.walk.as_mut()) {
@@ -721,6 +740,86 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
         s.object_point = point;
         // spec: S-0208 Terms (r67: a new assignment gives a new locomotor destination, ending a kept one)
         s.kept = None;
+    }
+}
+
+/// An object's movement point as a walker's locomotor destination (S-0208
+/// claim 18, r71): 414 leptons up when the point's cell carries a high
+/// bridge, whatever the layers, with `quirks.walker_bridge_destination_deck`
+/// on; unchanged with it off ([`object_point_height`]).
+fn raised_point(w: &World, p: Pos) -> Pos {
+    if w.rules().quirks.walker_bridge_destination_deck && w.high_bridge(p.cell()) {
+        // spec: S-0208 claim 18 and F9 (r71: the addition belongs to the point: the object's own height plus 414 leptons in a high-bridge cell, no other test)
+        Pos::new(p.x, p.y, p.z + 414)
+    } else {
+        p
+    }
+}
+
+/// The height claim 16's arrival test reads for an object's point `p`
+/// (S-0208 claim 18, r71): the point's own; with
+/// `quirks.walker_bridge_destination_deck` off and a high bridge in the
+/// point's cell, the terrain height at its map position on the walker's
+/// arrival layer.
+fn object_point_height(w: &World, id: ObjectId, p: Pos) -> i32 {
+    if w.rules().quirks.walker_bridge_destination_deck || !w.high_bridge(p.cell()) {
+        return p.z;
+    }
+    let deck = w.obj(id).is_some_and(|o| o.layer == Layer::Deck);
+    // spec: S-0208 claim 18 and Edge cases (r71: switch off: the terrain height at the point's map position on the arrival layer, 416 leptons up on the deck, as for a cell destination)
+    w.surface_at(p.x, p.y) + if deck { 416 } else { 0 }
+}
+
+/// A walker's locomotor destination for an object destination (S-0208
+/// Terms and claim 25): the point the object gave at the last assignment,
+/// while the walk locomotor is current and that point belongs to the
+/// destination; none otherwise.
+pub fn object_locomotor_point(w: &World, id: ObjectId) -> Option<Pos> {
+    let o = w.obj(id)?;
+    if crate::lift::current_locomotor(w, id) != Some(Locomotor::Walk) {
+        return None;
+    }
+    let Some(Target::Object(t)) = o.dest else {
+        return None;
+    };
+    match o.walk.as_ref()?.object_point {
+        // spec: S-0208 claim 25 (r68: each search of the walk looks for the cell of the point the object gave at the last assignment, not for the object's place at the time)
+        Some((r, p)) if r == t => Some(p),
+        _ => None,
+    }
+}
+
+/// Whether a walker's failed fresh search for an object destination clears
+/// that destination (S-0208 claim 25, r68): its distance *D* of S-0209 F1
+/// to its locomotor destination, heights included, is less than the
+/// close-enough distance, and it is not held by a tether link.
+pub fn cleared_near_point(w: &World, id: ObjectId) -> bool {
+    let (Some(o), Some(p)) = (w.obj(id), object_locomotor_point(w, id)) else {
+        return false;
+    };
+    let r = w.rules();
+    let dx = i64::from(p.x - o.pos.x);
+    let dy = i64::from(p.y - o.pos.y);
+    let dz = i64::from(p.z - o.pos.z);
+    // spec: S-0209 F1 (D = trunc(√̃(Δx² + Δy² + Δz²))) and S-0208 claim 25 (r68: with heights included)
+    let d = root_floor(
+        (dx * dx + dy * dy + dz * dz) as u64,
+        r.quirks.table_root_distance,
+        r.mode,
+    ) as i64;
+    // spec: S-0208 claim 25 (r68: D less than the close-enough distance, strict, and no tether link; no other test, not S-0209 claim 8's contact, height or land-type test)
+    d < i64::from(r.general.close_enough) && !crate::econ::tethered(w, id)
+}
+
+/// After a walker's failed fresh search that S-0212 claim 23's third row
+/// decides while its destination names an object (S-0208 claim 25, r68):
+/// it keeps the destination and has no locomotor destination from then on.
+/// The point is dropped; with `failed_for` equal to the destination this
+/// is the mark [`standing`] reads.
+pub fn locomotor_point_lost(w: &mut World, id: ObjectId) {
+    if let Some(s) = w.obj_mut(id).and_then(|o| o.walk.as_mut()) {
+        // spec: S-0208 claim 25 (r68: it has no locomotor destination from then on, so it makes no further search until its destination is assigned again)
+        s.object_point = None;
     }
 }
 

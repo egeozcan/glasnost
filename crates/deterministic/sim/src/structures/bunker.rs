@@ -324,8 +324,7 @@ pub fn request(w: &mut World, id: ObjectId, k: ObjectId) -> bool {
         if to_bunker {
             // spec: S-0606 claim 4 and S-0207 claim 25 (the bunker as destination supplies its docking point once contact holds)
             crate::drive::take_destination(w, id);
-            // spec: S-0606 claim 4 and S-0503 claim 20 (a hovering vehicle's D is the docking point); Q-3263 (interim: contact taken in the same order sets it)
-            crate::hover::contact_taken(w, id);
+            // spec: S-0503 claim 20 (r30: a hovering vehicle's D at a bunker is the quadrant point from its position at the assignment, which does not depend on the contact)
         }
         return true;
     }
