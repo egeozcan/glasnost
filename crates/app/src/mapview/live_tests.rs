@@ -2546,6 +2546,216 @@ fn animation_events_play_their_art_and_end() {
     assert_eq!(effect_items(&scene, true), 0);
 }
 
+/// The target cell of the warning-marker tests (invented).
+const WARNED: (i32, i32) = (12, 10);
+/// A sensor cell of the warning-marker tests at which the sensor is placed
+/// switched off (invented; 2 cells from [`WARNED`], in reach).
+const OFF: (i32, i32) = (10, 11);
+
+/// One warning-marker run (S-0513 claim 11, #441) on the synthetic combat
+/// ruleset with an invented sensor building EYEX of psychic-detection
+/// radius 4 cells (S-0610 claim 9) and the endless animation BOOMX as the
+/// marker: Alpha (0) launches at [`WARNED`]; Beta (1) allies Alpha when
+/// `ally`; `sensor` places an EYEX of that house at that cell, switched off
+/// at [`OFF`]. Returns the
+/// animations drawn for `viewer` after the marker's creation, and after
+/// `then` has changed the game (the test is made again in every update).
+fn warning_marker_drawn(
+    viewer: Option<HouseId>,
+    ally: bool,
+    sensor: Option<(u8, (i32, i32))>,
+    then: impl FnOnce(&mut glasnost_sim::world::World, Option<ObjectId>),
+) -> (usize, usize) {
+    use glasnost_rules::sim::{AnimationType, BuildingType};
+    use glasnost_sim::anims::{Spawn, WarningMarker};
+    use glasnost_sim::world::Pos;
+    let (import, catalogue, assets) = anim_context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let mut r = testkit::combat_ruleset();
+    r.registries
+        .entry("animations".into())
+        .or_default()
+        .push("BOOMX".into());
+    r.sim.animations.insert(
+        "BOOMX".into(),
+        AnimationType {
+            frame_count: Some(3),
+            // spec: S-0109 Import mapping (LoopCount −1: endless)
+            loop_count: Some(-1),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("EYEX".into());
+    let mut eye = BuildingType {
+        strength: Some(400),
+        foundation: Some([1, 1]),
+        ..Default::default()
+    };
+    // spec: S-0610 claim 9 (a building type with a psychic-detection radius above 0 is a sensor)
+    eye.econ.psychic_detection_radius = Some(4);
+    r.sim.buildings.insert("EYEX".into(), eye);
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-test"));
+    let world = glasnost_sim::load::new_game(
+        rules.clone(),
+        &map,
+        testkit::catalogue(),
+        &testkit::setup(5),
+    )
+    .expect("the synthetic game loads");
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(5), Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    live.set_viewer(viewer);
+    live.step();
+    if ally {
+        live.world.houses[1].allies.push(HouseId(0));
+        live.world.houses[1].allies.sort();
+    }
+    let eye = sensor.map(|(house, (x, y))| {
+        let b = testkit::spawn(
+            &mut live.world,
+            glasnost_sim::rules::Kind::Building,
+            "EYEX",
+            house,
+            glasnost_map::CellXY::new(x, y),
+            0,
+        );
+        if (x, y) == OFF {
+            live.world.obj_mut(b).unwrap().econ.building.switched_off = true;
+        }
+        b
+    });
+    let centre = Pos::centre(glasnost_map::CellXY::new(WARNED.0, WARNED.1), 0);
+    glasnost_sim::combat::effects::anim_spawn(
+        &mut live.world,
+        "BOOMX",
+        centre,
+        Spawn {
+            warning: Some(WarningMarker {
+                missile: ObjectId(u32::MAX),
+                house: Some(HouseId(0)),
+            }),
+            ..Default::default()
+        },
+    )
+    .expect("the marker is in play");
+    live.after_tick();
+    live.redraw(&inputs, &mut scene);
+    let first = live.counts.anims_drawn;
+    then(&mut live.world, eye);
+    live.redraw(&inputs, &mut scene);
+    (first, live.counts.anims_drawn)
+}
+
+/// spec: S-0513 claim 11 and scenario SW4 (the warning marker is shown to a
+/// viewer only while the viewer's house is not allied with the launching
+/// house, a house being allied with itself, and owns a psychic sensor in
+/// operation, S-0610 claim 9, whose reach, S-0610 claim 10, covers the
+/// target cell's centre): the launching house, an ally with a sensor in
+/// reach, an enemy without a sensor and an enemy whose sensor is out of
+/// reach see nothing; an enemy whose sensor is in reach sees it.
+#[test]
+fn the_nuclear_warning_marker_needs_an_enemy_sensor_in_reach() {
+    let none = |_: &mut glasnost_sim::world::World, _: Option<ObjectId>| {};
+    let near = (10, 10); // 2 cells from the target: in reach of 4
+    let far = (17, 10); // 5 cells from the target: out of reach of 4
+    assert_eq!(
+        warning_marker_drawn(Some(HouseId(1)), false, Some((1, near)), none),
+        (1, 1),
+        "an enemy with a sensor in reach sees the marker"
+    );
+    assert_eq!(
+        warning_marker_drawn(Some(HouseId(0)), false, Some((0, near)), none).0,
+        0,
+        "the launching house is allied with itself"
+    );
+    assert_eq!(
+        warning_marker_drawn(Some(HouseId(1)), true, Some((1, near)), none).0,
+        0,
+        "an ally of the launching house sees nothing"
+    );
+    assert_eq!(
+        warning_marker_drawn(Some(HouseId(1)), false, None, none).0,
+        0,
+        "an enemy without a sensor sees nothing"
+    );
+    assert_eq!(
+        warning_marker_drawn(Some(HouseId(1)), false, Some((0, near)), none).0,
+        0,
+        "another house's sensor does not count"
+    );
+    assert_eq!(
+        warning_marker_drawn(Some(HouseId(1)), false, Some((1, far)), none).0,
+        0,
+        "an enemy whose sensor is out of reach sees nothing"
+    );
+    // design: watch mode (lead request 2026-11-02, as for the intent lines): no house's sensors are a watcher's
+    assert_eq!(
+        warning_marker_drawn(None, false, Some((1, near)), none).0,
+        0,
+        "a watcher sees no marker"
+    );
+}
+
+/// spec: S-0513 claim 11 (the operating and reach tests are made again in
+/// every update of the marker) and S-0610 claim 9 (a sensor counts only
+/// while in operation, S-0405; a captured one is its new owner's): an
+/// enemy's sensor switched off hides the marker; one switched on shows
+/// it; a sensor taken by the launching house hides it.
+#[test]
+fn the_nuclear_warning_marker_follows_its_sensor_in_every_update() {
+    let off = |w: &mut glasnost_sim::world::World, eye: Option<ObjectId>| {
+        w.obj_mut(eye.unwrap()).unwrap().econ.building.switched_off = true;
+    };
+    assert_eq!(
+        warning_marker_drawn(Some(HouseId(1)), false, Some((1, (10, 10))), off),
+        (1, 0),
+        "a sensor not in operation does not count"
+    );
+    let on = |w: &mut glasnost_sim::world::World, eye: Option<ObjectId>| {
+        w.obj_mut(eye.unwrap()).unwrap().econ.building.switched_off = false;
+    };
+    assert_eq!(
+        warning_marker_drawn(Some(HouseId(1)), false, Some((1, OFF)), on),
+        (0, 1),
+        "a sensor switched on counts from then on"
+    );
+    let taken = |w: &mut glasnost_sim::world::World, eye: Option<ObjectId>| {
+        glasnost_sim::structures::ownership::change(
+            w,
+            eye.unwrap(),
+            Some(HouseId(0)),
+            glasnost_sim::structures::ownership::Cause::Trigger,
+        );
+    };
+    assert_eq!(
+        warning_marker_drawn(Some(HouseId(1)), false, Some((1, (10, 10))), taken),
+        (1, 0),
+        "a captured sensor is its new owner's at once"
+    );
+}
+
 /// spec: S-0513 claims 33 and 34 (the source marker is shown to the
 /// launching player only, a new pick replaces it, and the launch ends it)
 #[test]
