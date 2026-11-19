@@ -2,13 +2,13 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 45
+revision: 51
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-15
+approved-on: 2026-11-20
 measurements: []
-requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648, Q-2626, Q-3146]
+requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648, Q-2626, Q-3146, Q-3302]
 supersedes: []
 ---
 
@@ -26,6 +26,11 @@ A voxel-model debris piece's hits have no attacker and no attacking house (claim
 a warhead is covered by claims 6 to 8: no row of claim 8 that reads the warhead holds for it, it
 can cause readiness loss (claim 10) but no berserk effect, and one that does not ignore defences
 takes no health except the 1 that claim 7 takes from an undemolishable building.
+
+A detonation that reaches a bunkered unit, a shot aimed at the unit included, also scans the
+unit's tank bunker, which takes one hit for each scanned foundation cell within reach that S-0303
+claim 9's tests admit, unless S-0303 claim 15 nullifies the detonation; claim 8 says how the two
+bunker rows share such a detonation between the unit and the bunker.
 
 ## Terms
 
@@ -60,7 +65,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
   this height test, not the airborne-state test.
 - **Demolition warhead.** The one warhead that the rules name in their combat-damage section as the
   warhead of destruction (Import mapping; S-0011, claim 27 and S-0303, claim 19 give its
-  uses). It is the warhead of the trigger kill and of the ore burst of claim 20.
+  uses). It is the warhead of the trigger kill, of the ore burst of claim 20 and of the hit on a
+  landing aircraft that finds no free cell (S-0501 claim 7).
 - **Trigger kill.** The trigger action of S-0011 (claim 27) that damages every object carrying the
   firing trigger's tag by its whole current health, with defences ignored and with no attacker
   and no attacking house (claim 1).
@@ -168,6 +174,7 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | The detonation of the demolition warhead when a destroyed ore-spawning terrain object bursts (claim 20) | no | no | none | none |
    | A detonation set off by the lightning-storm bolt of the weather superweapon (superweapon specs) | no | no | none | the superweapon's owner |
    | The trigger action that destroys attached objects (S-0011, claim 27) | yes | no | none | none |
+   | The hit on a landing aircraft whose check of its flight point's cell refuses that cell when no free cell is found (S-0501 claim 7), with the aircraft's current health, the demolition warhead and a distance of 0 leptons | yes | yes | none | none |
    | Expiry of a building's delayed-kill countdown (claim 16) | yes | no | a recorded demolition-charge planter, if present, otherwise none; not the attacker of the delayed-kill hit | none |
    | The destruction of the objects in contact with a destroyed building (S-0312, claim 17) | yes | yes | none | none |
    | The impact of an object that crashes while alive (S-0312, claim 16) | yes | yes | none | none |
@@ -211,7 +218,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    between the shot and the detonation the object was *killed* (Terms: at the hit that takes its
    last health, however long it then stays in play for a death sequence or a delayed kill), was
    removed from the game by any other means or, believed, started to cloak. In those cases the
-   detonation carries neither attacker nor attacking house. An object that is out of play but not
+   detonation carries neither attacker nor attacking house. A kamikaze removed from the game at
+   the end of its firing pass (S-0501 claim 20) is one such removal. An object that is out of play but not
    killed, for example one loaded into a closed transport since the shot, is not known to stop
    being carried (low: loading a passenger is not known to end this). So a firer that is a vehicle that neither sinks nor crashes and is killed while the
    projectile flies (S-0203, claim 6a: it is gone at once) leaves its projectile ownerless, as does an infantry unit playing
@@ -246,14 +254,15 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      markers and parts f and g for the house, the house part holding once the check of the
      S-0414 claim 21 kill-tally amendment (S-0317 V5 part f) has run, as S-0317 claim 1 notes,
      and S-0317 scenario V8's no-source-object and own-house parts for the area damage of the
-     piece's end),
+     piece's end; a firer removed from the game in flight without a killing hit, a kamikaze's
+     removal at the end of its firing pass, through S-0501 scenario AC36 part c, whose kill is
+     credited to no house),
      `unmeasured` (a voxel-model debris piece's absent attacker, which S-0317 claims 7 and 11
      leave `unmeasured`; the disc laser's absent explicit attacking house: ordinary kill credit falls
      back to its attacker and no discriminating house-only effect is identified (S-0615 claim 16),
      and mutation's unset no-escape marker in cell mode: only infantry receive it, so vehicle crew
-     escape cannot distinguish the marker; a firer removed
-     from the game in flight by some means other than a killing hit or a cloak: no such means is
-     identified, so no scenario can set it up; the wave's
+     escape cannot distinguish the marker; the landing aircraft's
+     hit where no free cell is found, which S-0501 claim 7 leaves `unmeasured`; the wave's
      attacking house column, and the absent attacking house of a planted-bomb detonation:
      ordinary kill credit alone cannot distinguish an absent house from the attacker's house.
      S-0519 claim 5 retains this limitation. A wave kill credits the attacker whether the wave carries its
@@ -269,7 +278,9 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      medium (a voxel-model debris piece's hits, as S-0317 claims 7 and 11 rate them; planted-bomb
      metadata; a
      detonation of a firer that has been killed carries neither, and the same for a firer that
-     stays in play after its killing hit; the death weapon's attacker; the markers and attacker of
+     stays in play after its killing hit; the death weapon's attacker; a kamikaze's
+     removal, as S-0501 claim 20 rates it; the landing aircraft's hit where no free cell is
+     found, as S-0501 claim 7 rates it; the markers and attacker of
      the trigger kill, the contact destruction, the crash impact and the wave; the ore burst's
      no-escape marker, like other detonations; the elimination row, owned by S-0414 claim 5,
      the parasite-delivery row and the bridge-destruction row),
@@ -584,6 +595,39 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      claim 7 raises it to 1 on an undemolishable building. A hit without a warhead that ignores
      defences keeps its delivered amount (claim 9). On a terrain object such a hit is stopped
      (claim 20).
+   - *A bunkered unit and its bunker in one detonation.* A bunkered unit stands inside its
+     bunker's foundation, so a detonation that reaches the unit also scans at least one of the
+     bunker's foundation cells. A shot aimed at the unit is no exception: a projectile's ordinary
+     detonation, an invisible one included, is area damage like any other (S-0306 claim 21), and
+     no separate hit goes to the object it was aimed at. The bunker is then hit once for each
+     scanned foundation cell within reach, at that cell's distance (S-0303 claims 7 and 8), with
+     S-0303 claim 9's tests applying to each, and the unit at its own distance. In a detonation that
+     S-0303 claim 15 does not nullify, each of those hits is judged by its own row at the moment it
+     is dealt:
+     - With a warhead that does not penetrate bunkers, the unit takes nothing and the bunker takes
+       exactly the hits that the same detonation would deal it if it were empty.
+     - With a warhead that penetrates bunkers, the unit takes what it would take at that distance
+       outside a bunker, and the bunker takes nothing while it holds the unit.
+     - A nullified detonation is the exception to both. A curtain-protected bunkered unit in the
+       detonation's centre cell, closer to the epicentre than S-0303 claim 15's distance, nullifies
+       a small detonation, also where the same detonation with the bunker empty would not be
+       nullified, unless S-0303 claim 9 leaves the unit out for being the source object, a listed
+       harvester or not alive, which claim 15 bars from triggering it. Every object that is not under the invulnerability effect then takes nothing from
+       it, the bunker included, and the unit's protection cancels its own hit (S-0303 claim 15).
+
+     Nothing stopped at one of the two objects passes to the other: each takes only its own hits.
+     The unit's hit comes before the bunker's hits in the same cell (S-0303 claim 11; a building is
+     listed after the other objects of a cell, S-0209 claim 13). When the unit's hit destroys it,
+     the bunker link ends with that death (S-0606 claim 14), so the bunker's later hits of the same
+     detonation find an empty bunker and damage it by the ordinary rules. In the same way, when a
+     hit of the detonation destroys the bunker before the unit's hit comes, which can happen only
+     when a foundation cell scanned before the unit's cell holds that hit, the link ends within
+     that hit (S-0606 claim 13), and the unit's later hit is judged as that of an object that is
+     not bunkered. A hit that ignores
+     defences is not stopped by the bunkered-unit row (column I), so the unit takes it, and a hit
+     without a warhead follows the bullet above. Which attackers have their target moved from the
+     unit to the bunker is S-0309 claim 24's: every other attacker keeps the unit as its target,
+     and the bunker is damaged only through the detonations that reach it.
    - Backing: `measurable` (scenario D6 for invulnerability, D8 for the allies rule (with an
      attacker; D17, part g, for a hit with none), the immune
      and type-immune rows and the bunker rows, D16 for the building, vehicle-factory, bridge-repair-hut,
@@ -616,7 +660,20 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      for such a hit is the one departure (Edge cases). For the warp member that is not being
      erased: `measurable` (S-0513 SW12 part l, variant l1) for hits after the hold, and variant l5
      for the protection from a later lock; `unmeasured` while it phases in, since the hold in
-     part l lasts one update
+     part l lasts one update. For the *bunkered unit and its bunker* bullet: `measurable` through
+     D35, parts a and c for a non-penetrating shot aimed at the unit (a projectile in flight and
+     an invisible one), part b for a penetrating one and for the killing hit, whose effect on the
+     bunker also shows that the unit's hit comes first, and part d for detonations at the unit's
+     position and elsewhere in the foundation, with and without penetration, and part e for a
+     hit that ignores defences passing the bunkered-unit row; parts a to d record that the
+     attacker keeps the unit as its target. `unmeasured` for the other producers of
+     detonations (death weapons, damaging animations, superweapons and the others of S-0303's
+     Terms): they reach objects by the same area damage, but D35 sets none of them off at a
+     bunkered unit; for the kept target of attackers of kinds that D35 does not use: S-0309
+     claim 24 gives the only redirections, and D35 tries two kinds of attacker; and for a bunker
+     destroyed by a hit that comes before the unit's in the same detonation: D35 keeps the bunker
+     alive; and for a nullified detonation: D35 uses no invulnerability effect, and S-0303 claim 15
+     and its scenario A9 back the nullification itself
    - Confidence: high for the + column except the no-health rows and for the − and I entries that D6, D8, D16,
      D17 and D26 test; medium for the stages of the rows that only D16 and D17 test, and for the
      vehicle-factory, laser-fence and bridge-repair-hut rows (the conditions are clear; D16 is
@@ -624,7 +681,14 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      the self-damage row and other entries without a scenario; medium for a hit without a
      warhead, until D34 parts a to e run, and medium for the rows that no scenario can tell
      apart (`unmeasured`, above); medium for the warp member that is not being erased: hits
-     after the hold, hits while it phases in, and the protection from a later lock
+     after the hold, hits while it phases in, and the protection from a later lock; for the
+     *bunkered unit and its bunker* bullet, high for the projectile detonations and test
+     detonations that D35 sets up (the split between the two objects, the bunker's hits being those
+     of an empty bunker, the order of the hits, the kept target of its two attackers and part e's
+     hit that ignores defences), and medium for the other producers of detonations, for the kept
+     target of other kinds of attacker, for a bunker destroyed before the unit's hit and for a
+     nullified detonation, which follows S-0303 claim 15 at that claim's medium (`unmeasured`,
+     above)
 
 9. **What ignoring defences skips.** A hit that ignores defences skips the defences of claim 5
    (including the minimum of 1 and the prone factor), every part of claim 6 (inert map, falloff,
@@ -2248,9 +2312,93 @@ parts use their stated replay checks and rejection thresholds instead.
   control run the bunker loses nothing (the tank-bunker row stops the hit); without a warhead it
   loses exactly 1 at the impact, since that row does not hold. *Falsified if:* without a warhead
   it loses none or more than 1; a control run in which it loses health is void.
+- **D35 (claim 8: a bunkered unit and its bunker in one detonation).** *Setup:* a small test map,
+  game speed 2, the measurement setup, no engine add-on and no mods (the named test files excepted).
+  The human builds a stock tank bunker type at the start of the run (the map cannot give it one:
+  S-0009 claim 27 drops a pre-placed structure of a human house in a skirmish) and owns a stock
+  vehicle type that can enter it and, under the rules of parts a to d, is not exploding (S-0312
+  Terms), ordered into the bunker; it
+  must stand bunkered at the bunker's reference point before the first attack, or the run is void.
+  An enemy computer house supplies one attacker per run, placed 6 cells away and out of reach of
+  every other object: in parts a and b a stock vehicle type with a single weapon, which fires a
+  projectile that flies (not invisible), in part c a stock infantry type with a single weapon,
+  whose projectile is invisible, so that each attacker fires the same weapon at the bunkered
+  vehicle and at the empty bunker of control (ii) (S-0308 claim 3); both with warheads that do not
+  penetrate bunkers, each of a type whose shots leave the empty bunker of control (ii) alive for at
+  least the part's minimum number of impacts, and neither of a type that S-0309 claim 24's
+  first row covers (no temporal weapon, no locomotor warhead on its primary weapon, no airstrike
+  team). The named test file *bunker-pen* is a copy of the stock rules in which those warheads and
+  the test detonation's warhead penetrate bunkers, and in which the bunkered vehicle's type has no
+  death weapon (S-0312 claim 6) and a maximum debris count of 0, so its death throws no debris
+  (S-0312 claim 4). The *test detonation* is a detonation with a fixed damage amount,
+  no source object and no source house, made by the measurement harness as S-0113 scenario RK1 makes
+  its detonations with no source object, with an area warhead whose spread radius reaches the
+  centres of all the bunker's foundation cells from the bunker's reference point. Its amount is
+  chosen so that the vehicle of control (i) and the empty bunker of control (ii) each survive three
+  of them. Two controls repeat each part: (i) the vehicle is ordered to a free cell instead and is
+  attacked there in the same way; (ii) the vehicle is parked at a free cell out of reach, the bunker
+  is empty, and the same attacker attacks the bunker or the same test detonations go off at the same
+  points. *Record:* the health of the vehicle and the bunker per tick; every detonation with its
+  tick and point; the attacker's target at each of its shots; and per tick, which of the bunker's
+  foundation cells lists the vehicle among its objects and in what order that cell lists the vehicle
+  and the bunker. The bunkered vehicle may fire back at the attacker. *Void:* in parts a to d, a run
+  in which an object other than the attacker, the vehicle and the bunker loses health; in every
+  part, a run in which any object is under an invulnerability effect. An impact's
+  amount is compared with a control (ii) impact of the same attacker whose recorded detonation point
+  is the same (parts a to c) or with the test detonation at the same point (part d).
+  Part a: the vehicle attacker is ordered to attack the bunkered vehicle, stock rules, two seeds.
+  The run ends at its tenth impact, at tick 3000, or with the last impact before the one that
+  destroys the bunker or ends the vehicle's bunkering, whichever comes first; that impact itself
+  is not judged; a run with fewer than 5
+  impacts is void unless it meets a falsifier. *Expected:* the vehicle's health never changes; each
+  impact takes health from the bunker in its tick, exactly the amount of the control (ii) impact at
+  the same point where one is recorded; every shot names the bunkered vehicle as its target.
+  *Falsified if:* the vehicle loses any health, an impact leaves the bunker's health unchanged, a
+  compared impact takes a different amount, or a shot names the bunker.
+  Part b: as part a, with *bunker-pen*, ending when the vehicle dies or at tick 3000; a run with
+  fewer than 3 impacts is void unless it meets a falsifier. Let *K* be the cell that lists the
+  vehicle at the end of the tick before the killing shot's impact. A run in which the vehicle does
+  not die by 3000, or dies by a shot whose recorded detonation point does not lie in *K*, is void
+  unless it meets one of the first two falsifiers below: the order of the hits does not move the
+  point where a shot detonates, so this void does not depend on that order. *Expected:* at each
+  impact the vehicle loses what the control (i) impact at the vehicle's position takes from that
+  vehicle, and the bunker's health does not change while the vehicle lives. In the tick of the
+  killing shot the bunker loses the amount that the control (ii) impact at the same point takes
+  under *bunker-pen*, and at the end of the tick before, *K* lists the vehicle before the bunker
+  (S-0209 claim 13). *Falsified if:* the vehicle's loss per shot differs from control (i), the
+  bunker loses health before the killing shot, the bunker loses none or less than that amount in
+  the tick of the killing shot (no loss there would mean that the bunker's hit came before the
+  vehicle's), or *K* lists the bunker first.
+  Part c: as part a, with the infantry attacker, stock rules, one seed, for 25 impacts or until the
+  attacker dies, ending early as part a does when the bunker is destroyed or the vehicle stops being
+  bunkered; a run with fewer than 10 impacts is void unless it meets a falsifier.
+  Expected and falsified as in part a, with this attacker's amounts in control (ii).
+  Part d: no attacker; test detonations at ticks 200, 260 and 320, at the bunkered vehicle's
+  position in one run and 128 leptons along map +*x* from it in another, each with stock rules and
+  with *bunker-pen*. *Expected:* stock rules: the vehicle's health never changes, and each
+  detonation takes from the bunker exactly what the same detonation takes from the empty bunker in
+  control (ii); *bunker-pen*: each detonation takes from the vehicle what the same detonation at the
+  same distance from it takes in control (i), and the bunker's health does not change; both objects
+  survive. *Falsified if:* any of these amounts differs, the object that should lose nothing loses
+  health, or either object is destroyed (each control object survives the three).
+  Part e: the named test file *bunker-suicide*, a copy of the stock rules in which the bunkered
+  vehicle's type has a suicide weapon as its only weapon (S-0519 claim 11) and the game-wide
+  demolition warhead does not penetrate bunkers; an enemy test target in its range, nothing else in
+  reach. The first void, that of parts a to d, does not apply, since with that weapon the vehicle's
+  death may damage the test target and the bunker; the invulnerability void does. *Expected:* at its
+  first shot the bunkered vehicle takes the suicide hit and is destroyed, since a hit that ignores
+  defences passes the bunkered-unit row. *Falsified if:* it fires and keeps its health. A run in
+  which it never fires is void.
 
 ## Changes for other specs
 
+- **S-0301 claim 9, rank 4.** Rank 4 should also list the *illegal* answer for any
+  weapon whose range field is below 384 leptons (1.5 cells) against a target vehicle that is
+  bunkered, whatever its warhead. It is one of rank 4's target tests and is not moved to the
+  bunker: no attacker has its target changed by being refused (S-0309 claim 24 alone moves a
+  target to the bunker). Level: medium, `unmeasured`: a bunkered vehicle
+  stands at its bunker's reference point, inside the foundation, so an attacker outside the
+  foundation is seldom within so short a range of it, and no scenario here places one there.
 - **Glossary, *hit*.** "A *hit* is one delivery of an amount of damage, with a warhead, to one
   object." becomes "A *hit* is one delivery of an amount of damage, with a warhead or, for some
   sources (S-0302 claim 1), none, to one object." Reason: a debris piece of a type with no warhead
