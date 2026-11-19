@@ -42,6 +42,7 @@ use super::cursor::{self, Offer};
 use super::name_tip;
 use super::paint::Painter;
 use super::play::{Button, GROUPS, Play, Reach, Tool};
+use super::pointing;
 use super::scroll::{self, EdgeScroll};
 use super::sidebar_art::{self, SidebarArt};
 use super::sidebar_tip::{self, Control, Looked};
@@ -162,6 +163,12 @@ pub struct Session {
     /// drawing. `None` outside a frame, where every pick is made afresh.
     // design: render (#120)
     picks: Option<Vec<(Pick, Picked)>>,
+    /// The screen candidates the frame's picks test (S-0214 claim 35 (e):
+    /// against the candidates of the frame on screen), with the view centre
+    /// and window size they were made for; `None` until a pick in the frame
+    /// needs them, and outside a frame.
+    // design: render (#435) (made once per drawn frame, as the picks are)
+    pick_candidates: Option<((i32, i32), (i32, i32), Vec<(ObjectId, Point)>)>,
     /// The tips' rest and the tip that shows: the name tip (S-0111 claims
     /// 20 to 26) or a sidebar tip (S-0411 claims 20 to 22).
     name_tip: name_tip::NameTip,
@@ -572,6 +579,7 @@ impl Session {
             buttons: hud::ButtonArt::default(),
             pointer: None,
             picks: None,
+            pick_candidates: None,
             name_tip: name_tip::NameTip::default(),
             focus_tip: None,
             // spec: S-0111 claim 20 and Import mapping (the tooltip option is on unless the player's settings turn it off)
@@ -1390,6 +1398,7 @@ impl Session {
         // design: render (#138) (the frame shows the ticks whose frames were put off)
         self.draw_owed_frame();
         self.picks = Some(Vec::new());
+        self.pick_candidates = None;
     }
 
     /// Ends the drawn frame's pointer picks: from here on every pick is
@@ -1397,6 +1406,7 @@ impl Session {
     // design: render (#120)
     pub fn end_frame(&mut self) {
         self.picks = None;
+        self.pick_candidates = None;
     }
 
     /// Drops the frame's pointer picks made so far, for a scene that may
@@ -1405,6 +1415,7 @@ impl Session {
         if let Some(p) = self.picks.as_mut() {
             p.clear();
         }
+        self.pick_candidates = None;
     }
 
     /// The cell and the selectable object under a screen point of the
@@ -1455,13 +1466,71 @@ impl Session {
             max_level,
             &q,
         );
-        // The object drawn at the point (S-0102 claims 10 and 31; #68).
-        let view = self.view();
-        let code = self
-            .scene
-            .object_at(qx, qy, &view, &self.filter, &ComposeQuirks::default());
-        let id = code.and_then(|c| self.live_only(|live, _| live.object_of_code(c)).flatten());
-        (CellXY::new(cell.0, cell.1), id)
+        let cell = CellXY::new(cell.0, cell.1);
+        // spec: S-0214 claim 35 (the clicked object is found among the screen candidates of the frame on screen, each tested at one point; our engine does not use the pixel drawn at the pointer or S-0102's depth rules) and F7 (points relative to the battlefield view's top-left corner)
+        let m = self.map_rect();
+        let pointer = Point::new(p.x - m.x, p.y - m.y);
+        let candidates = self.frame_candidates();
+        (cell, self.clicked_object(pointer, cell, &candidates))
+    }
+
+    /// The screen candidates of the frame on screen (S-0214 claims 20, 24
+    /// and 25), made once in a drawn frame for its view (claim 35 (e)).
+    fn frame_candidates(&mut self) -> Vec<(ObjectId, Point)> {
+        let key = (self.centre, self.screen);
+        if let Some((c, s, v)) = &self.pick_candidates
+            && (*c, *s) == key
+        {
+            return v.clone();
+        }
+        // design: render (#138) (the scene a redraw after every tick would have left: the positions of the frame on screen are the current tick's, so S-0214 claim 35 (b)'s objects that left play since the frame was drawn are not among them)
+        let v = self.screen_candidates();
+        if self.picks.is_some() {
+            self.pick_candidates = Some((key.0, key.1, v.clone()));
+        }
+        v
+    }
+
+    /// The clicked object at `pointer` (relative to the battlefield view's
+    /// top-left corner) over `cell`, the cell under the cursor, among
+    /// `candidates` in candidate order (S-0214 claim 35 (a) to (d)).
+    fn clicked_object(
+        &self,
+        pointer: Point,
+        cell: CellXY,
+        candidates: &[(ObjectId, Point)],
+    ) -> Option<ObjectId> {
+        let w = &self.play.game.world;
+        let viewer = self.play.local;
+        // spec: S-0214 claim 35 (d) (before any candidate is tested: a pointer not over the map, or a shrouded cell under the cursor, gives no clicked object)
+        // design: render (#435) (no fog of war in our engine, so the fogged-cell part does not arise; in a watch game nothing is shrouded)
+        if w.cells.cell(cell).is_none()
+            || viewer.is_some_and(|h| !glasnost_sim::econ::shroud::explored(w, h, cell))
+        {
+            return None;
+        }
+        // design: watch mode (lead request 2026-11-02, an extra not in the original): each object as its own house sees it, so its owner views it
+        let owns =
+            |id: ObjectId| viewer.is_none_or(|h| w.obj(id).is_some_and(|o| o.owner == Some(h)));
+        // spec: S-0214 claim 35 (b) (passed over: a candidate that has left play, and a fully cloaked one the viewer neither owns nor senses, S-0516 claim 26)
+        let skipped = |id: ObjectId| match w.obj(id) {
+            None => true,
+            Some(o) => {
+                !o.on_map
+                    || (o.cloak.state == glasnost_sim::cloak::CloakState::Cloaked
+                        && !owns(id)
+                        && !glasnost_sim::cloak::senses(w, viewer, id))
+            }
+        };
+        // spec: S-0214 claim 35 (a) (the candidate with the smallest d below the reach, the first in candidate order on a tie) and (c) (else the first occupant of the cell under the cursor on its ground, not a bridge deck: S-0209 claim 13's listing puts the one that entered last first and the buildings after every other occupant; no occupant, no object)
+        let found = pointing::nearest(candidates, pointer, skipped).or_else(|| {
+            w.cells
+                .list(cell, glasnost_sim::world::Layer::Ground)
+                .first()
+                .copied()
+        })?;
+        // spec: S-0214 claim 35 (d) (after (a) or (c) has chosen an object the viewer does not own: none when it cannot be found, and no other is tried; none of this for the viewer's own objects)
+        (owns(found) || pointing::findable(w, found, viewer)).then_some(found)
     }
 
     /// Debug diagnostic: every drawn item covering the screen point `p`

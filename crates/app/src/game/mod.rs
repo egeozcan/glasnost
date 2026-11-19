@@ -40,6 +40,7 @@ pub mod music_share;
 pub mod name_tip;
 pub mod paint;
 pub mod play;
+pub mod pointing;
 pub mod pump;
 pub mod report;
 pub mod scroll;
