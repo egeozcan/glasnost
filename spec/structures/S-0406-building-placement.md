@@ -2,13 +2,13 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 19
+revision: 20
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-18
+approved-on: 2026-11-19
 measurements: [M-0027]
-requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282, Q-0798, Q-3087, Q-3128, Q-3243]
+requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282, Q-0798, Q-3087, Q-3128, Q-3243, Q-3261]
 supersedes: []
 ---
 
@@ -61,8 +61,8 @@ names the top-left cell of the foundation. In addition:
   that made a building and the building a place order names, in the order that puts that
   building on the map (claim 17). Filling buildings, restored replacements and deployed buildings
   have none. Its **factory break-off window** runs from the end of that building's first turn to
-  its first construction processing: the building is then out of its construction state and not
-  construction-completed (claim 17).
+  its first construction processing, or to an owner change before it (S-0309 claim 31): the
+  building is then out of its construction state and not construction-completed (claim 17).
 - **Foundation cells.** The cells a building covers for placement and occupancy: its foundation's
   cell list (claim 2), each cell taken relative to the top-left cell. A building is "in" a cell
   only when the cell is one of its foundation cells.
@@ -700,9 +700,10 @@ names the top-left cell of the foundation. In addition:
     construction range sets the mark on that turn, *construction* becomes current at its second
     start, as above; otherwise it is still queued. The change takes effect in either case.
 
-    From then until *C* the building is in its **factory break-off window**. Its body is in the
-    *idle* state, so it is out of its construction state, but it is still not
-    construction-completed, and it counts as under construction for every rule that asks whether
+    From then until *C*, or until an owner change (below), the building is in its **factory
+    break-off window**. Its body is in the *idle* state, so it is out of its construction state,
+    but it is still not construction-completed, and it counts as under construction for every
+    rule that asks whether
     it is constructed (S-0408 claim 3 a). Its stage and delay in the window are those that S-0108
     claim 6's table gives for a deferred change into *idle*: the idle range's first stage (0 for
     the absent-key default range), and the idle delay as the building runs it. With a positive
@@ -710,8 +711,9 @@ names the top-left cell of the foundation. In addition:
     building draws in the window is S-0108's (claim 5). The window ends on *C*: the first
     construction processing starts the construction range again at stage 0 (claim 14). That puts
     the building back in its construction state until the handover of claim 15, and from then on
-    its construction range sets the mark. A filling building, a restored replacement and a
-    deployed building get no break-off.
+    its construction range sets the mark. An owner change in the window also ends it, with the
+    building's grand opening, and *construction* is then never processed (S-0309 claim 31). A
+    filling building, a restored replacement and a deployed building get no break-off.
 
     The results, for uninterrupted play (F7):
     - **The building a place order names.** The place order is applied in the orders part of tick
@@ -770,7 +772,8 @@ names the top-left cell of the foundation. In addition:
       after *T* + 1, *C* and the single run in every run; *H* in every run but the refinery run in which a due stage advance was held one tick on a tick without a processing-timer
       restart, and the delay that follows a held advance), `unmeasured` for a missed
       turn as what holds the advance (no stock scenario makes a building miss its turn on
-      demand), and
+      demand), and for the owner change that ends the window (S-0309 claim 31, whose backing
+      gives the reason), and
       `measurable` for the placed cases whose construction range sets the mark on *T* + 1
       (PL11 c and h), the idle ranges of positive delay (PL11 g), a filling building (PL8 r) and
       a restored replacement (S-0524 claim 15, scenario C17)
@@ -781,7 +784,8 @@ names the top-left cell of the foundation. In addition:
       restored replacement, including missing art; the deploy's mark at entry, *C* = *U* + 1 and
       one run); medium (the placed cases whose construction range sets the mark on *T* + 1; the
       delay that follows a held stage advance, seen once; a missed turn as its cause; the two build-up runs and the
-      resulting *R*, *C* and *H* of a restored replacement); low (the idle ranges of positive
+      resulting *R*, *C* and *H* of a restored replacement; the owner change that ends the
+      window); low (the idle ranges of positive
       delay; a filling building's entry and results, claim 11, scenario PL8 r)
 
 18. **Ranges that never report completion.** The ready mark of claim 17 (a) needs the stage to
@@ -797,7 +801,9 @@ names the top-left cell of the foundation. In addition:
       turn; neither ever hands over.
 
     In both cases it gets no opening effects, never counts as constructed (S-0408 claim 3 a) and
-    never takes *guard*. The ranges that do this are, by S-0108 claim 5:
+    never takes *guard*. These results, and claim 17's for a building that never completes, hold
+    while the building's owner does not change: an owner change gives it its grand opening and
+    *guard* (S-0309 claim 31). The ranges that do this are, by S-0108 claim 5:
     - a build-up sprite of 2 or 3 image frames (*n* = 1) when the build-up time gives a
       positive delay, or one of 0 or 1 image frames (*n* = 0, *d_b* = 1),
     - a gate with *G* = 0 when the build-up time gives a positive delay,
@@ -807,8 +813,9 @@ names the top-left cell of the foundation. In addition:
     The importer warns about such types in both states of the switch. This switch is shared
     with selling: S-0408 claim 17 owns the same failure to complete for a positive-delay
     build-down with 1 stage or fewer, and the resulting absence of a sale refund or removal.
-    - Backing: `measurable` (PL11 e; S-0408 S10 for the selling effect)
-    - Confidence: medium
+    - Backing: `measurable` (PL11 e; S-0408 S10 for the selling effect), `unmeasured` for the
+      owner change: no scenario here or in S-0309 gives a building with such a range a new owner
+    - Confidence: medium (the owner change included)
 
 ### Placement display and refusal messages
 
@@ -968,6 +975,7 @@ names the top-left cell of the foundation. In addition:
 | Place order issued | order applied (order application of S-0213) | The order is applied only when the item is done and a factory building could make the type; without such a factory building it does nothing and no sound plays (claim 1). When it is applied, the cell test (claims 3 and 8), or for an upgrade type the upgrade rule (claim 12), decides the outcome; claims 4 and 5 are not judged again. If that test fails, nothing is placed and, for a local player's house, the placement refusal announcement is requested, without the game-wide refusal sound |
 | The building a place order names, under construction, *construction* queued (or current from the second per-tick start of that turn, when its construction range set the mark) | end of its update on its first turn | The factory break-off's deferred *idle* body takes effect and its factory break-off window begins: it is out of its construction state and still not construction-completed (claim 17) |
 | The building a place order names, in its factory break-off window, *construction* current | its next turn | First construction processing *C*, starting the construction range at stage 0: the window ends and the construction state resumes (claims 14 and 17) |
+| The building a place order names, in its factory break-off window, *construction* current or queued | owner change | Grand opening, *guard* queued in place of a queued *construction*: the window ends with the building construction-completed and its idle body kept; *guard* becomes current at the first per-tick start of its next turn, and *construction* is never processed (S-0309 claim 31) |
 | The building a place order names, in its factory break-off window, *construction* queued | building turn whose idle body sets the ready mark (its second turn with a zero-delay idle range) | *construction* becomes current at the first per-tick start and is processed in that turn (*C*), starting the construction range at stage 0: the window ends and the construction state resumes (claims 14 and 17) |
 | Filling building or restored replacement under construction, *construction* queued, no current behaviour | building turn lands on the last build-up stage, or any turn of a zero-delay range | Ready mark set; *construction* becomes current at the second per-tick start of that tick; first construction processing on the next tick, restarting at stage 0 (claims 14 and 17) |
 | Deployed under construction, ready mark set at entry | the building's first turn | *construction* becomes current at its second per-tick start; first processing on the next tick (claim 17) |
@@ -1798,7 +1806,8 @@ Each scenario names its observed area, the cells in which the void rule applies.
    acceptance of a harvester (S-0402 claim 10) and the stop and deploy orders (S-0213 claims 8
    and 10) are known to treat it as out of that state there while *construction* is queued. The
    last three refuse it while *construction* is current there, as Changes for other specs
-   gives, rated medium and `unmeasured` there. What it draws there is S-0108's (claim 5). Whether any other rule that names the
+   gives, rated medium and `unmeasured` there. What it draws there is S-0108's (claim 5), and an
+   owner change there is S-0309's (claim 31). Whether any other rule that names the
    construction state treats the building differently in that window was not established. With
    a zero-delay idle range the window covers the turns after the building's own in *T* + 1, that
    tick's house update and orders part, and the turns of *T* + 2 before the building's own.
@@ -1816,14 +1825,18 @@ Each scenario names its observed area, the cells in which the void rule applies.
   completion".
 - Glossary, *construction state*: add that the building a place order names leaves the state at
   the end of its first turn and enters it again at its first construction processing (its
-  factory break-off window, S-0406 claim 17), and that it draws its build-up sprite in that window
+  factory break-off window, S-0406 claim 17), unless its owner changes in that window, when it
+  does not enter the state again (S-0309 claim 31), and that it draws its build-up sprite in
+  that window
   too (S-0108 claim 5). For that window only, being in the state and drawing the build-up sprite
   differ.
 - S-0402 claim 10 and S-0213 claims 8 and 10: a building in the factory break-off window of
   S-0406 claim 17 that has *construction* current (a construction range that sets the ready mark
   on the first turn, claim 17 there) refuses a harvester's contact and the stop and deploy
-  orders, as in its construction state. With *construction* queued in that window the claims
-  apply as they read, with the building outside its construction state. S-0402 scenario H4
+  orders, as in its construction state. So does such a building after an owner change in the
+  window, until its next turn, since *construction* stays current until then (S-0309 claim 31).
+  With *construction* queued in that window the claims apply as they read, with the building
+  outside its construction state. S-0402 scenario H4
   part g (i): its expectation and falsifier read "before construction completion, outside the
   factory break-off window of S-0406 claim 17", since a harvester's request in that window can take
   contact. Backing: `unmeasured`. With stock data the window lasts from the end of the building's
