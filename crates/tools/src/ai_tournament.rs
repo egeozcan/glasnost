@@ -34,9 +34,9 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use glasnost_ai::fixture;
 use glasnost_ai::game::Game;
 use glasnost_ai::scripts;
-use glasnost_ai::fixture;
 use glasnost_map::Map;
 use glasnost_map::terrain::TileCatalogue;
 use glasnost_sim::econ::setup::{self, Player, Settings};
@@ -114,7 +114,8 @@ pub fn entrant_name(s: AiSeat) -> String {
 pub fn parse_entrant(w: &str) -> Result<AiSeat, String> {
     let (key, level) = w.split_once(':').unwrap_or((w, "normal"));
     let e = scripts::by_key(key).ok_or_else(|| format!("unknown script {key}"))?;
-    let difficulty = AiDifficulty::parse(level).ok_or_else(|| format!("unknown difficulty {level}"))?;
+    let difficulty =
+        AiDifficulty::parse(level).ok_or_else(|| format!("unknown difficulty {level}"))?;
     Ok(AiSeat {
         script: e.id,
         difficulty,
@@ -144,7 +145,8 @@ impl Options {
                 "seeds" => {
                     o.seeds = match v.split_once('-') {
                         Some((a, b)) => {
-                            let (a, b): (u32, u32) = (a.parse().map_err(bad)?, b.parse().map_err(bad)?);
+                            let (a, b): (u32, u32) =
+                                (a.parse().map_err(bad)?, b.parse().map_err(bad)?);
                             (a..=b).collect()
                         }
                         None => parse_list(v)?,
@@ -337,7 +339,10 @@ pub fn play(o: &Options, g: &Ground, job: Job) -> Result<Played, String> {
         game.step();
         game.world.effects.clear();
     }
-    let worth = [worth(&game.world, HouseId(0)), worth(&game.world, HouseId(1))];
+    let worth = [
+        worth(&game.world, HouseId(0)),
+        worth(&game.world, HouseId(1)),
+    ];
     let (result, over) = match game.outcome() {
         Some(out) => {
             let winner = out
@@ -391,7 +396,12 @@ pub fn play_all(o: &Options, grounds: &[Ground], jobs: &[Job]) -> Vec<Result<Pla
     });
     results
         .into_iter()
-        .map(|m| m.into_inner().ok().flatten().unwrap_or_else(|| Err("not run".into())))
+        .map(|m| {
+            m.into_inner()
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| Err("not run".into()))
+        })
         .collect()
 }
 
@@ -416,13 +426,20 @@ pub fn ratings(entrants: usize, games: &[Played]) -> Vec<f64> {
 /// the same text).
 pub fn report(o: &Options, grounds: &[Ground], results: &[Result<Played, String>]) -> String {
     let mut s = String::new();
-    let games: Vec<Played> = results.iter().filter_map(|r| r.as_ref().ok().cloned()).collect();
+    let games: Vec<Played> = results
+        .iter()
+        .filter_map(|r| r.as_ref().ok().cloned())
+        .collect();
     let _ = writeln!(s, "Glasnost AI tournament (#449)");
     let _ = writeln!(
         s,
         "game {}; grounds {}; seeds {:?}; tick cap {}; games {} ({} failed)",
         o.game,
-        grounds.iter().map(|g| g.name.as_str()).collect::<Vec<_>>().join(", "),
+        grounds
+            .iter()
+            .map(|g| g.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", "),
         o.seeds,
         o.ticks,
         results.len(),

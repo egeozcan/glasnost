@@ -319,12 +319,15 @@ mod tests {
             }
         }
         assert_eq!(by_key("DEFAULT").map(|e| e.id), Some(1));
-        assert_eq!(known(AiSeat {
-            script: 200,
-            difficulty: AiDifficulty::Hard
-        }), AiSeat {
-            script: AiSeat::DEFAULT_SCRIPT,
-            difficulty: AiDifficulty::Hard
-        });
+        assert_eq!(
+            known(AiSeat {
+                script: 200,
+                difficulty: AiDifficulty::Hard
+            }),
+            AiSeat {
+                script: AiSeat::DEFAULT_SCRIPT,
+                difficulty: AiDifficulty::Hard
+            }
+        );
     }
 }

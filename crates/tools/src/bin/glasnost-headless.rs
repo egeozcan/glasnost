@@ -99,8 +99,8 @@ use std::process::ExitCode;
 use glasnost_sim::save::Replay;
 use glasnost_tools::local_lane::GAME_DIR_VAR;
 use glasnost_tools::{
-    ai_bench, ai_tournament, arena, desync, headless, net_client, oracle, path_report, skirmish_lane, soak,
-    tick_bench, trigger_lane,
+    ai_bench, ai_tournament, arena, desync, headless, net_client, oracle, path_report,
+    skirmish_lane, soak, tick_bench, trigger_lane,
 };
 
 fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {

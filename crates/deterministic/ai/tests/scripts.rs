@@ -52,7 +52,10 @@ fn armed(seat: AiSeat) -> Game {
             o.owner == Some(HouseId(h))
                 && o.on_map
                 && o.kind == Kind::Vehicle
-                && w.rules().vehicles.get(o.type_index as usize).map(|t| t.name.as_str())
+                && w.rules()
+                    .vehicles
+                    .get(o.type_index as usize)
+                    .map(|t| t.name.as_str())
                     == Some("GUNR")
         })
     };
@@ -132,8 +135,14 @@ fn the_difficulty_row_is_a_persons_at_every_ai_difficulty() {
         let w = new_game(rules.clone(), &map, fixture::catalogue(), &s).expect("it loads");
         let (person, ai) = (&w.houses[0], &w.houses[1]);
         assert!(ai.econ.setup.ai && !person.econ.setup.ai);
-        assert_eq!(ai.econ.setup.difficulty, person.econ.setup.difficulty, "{level:?}");
-        assert_eq!(ai.econ.setup.handicap, person.econ.setup.handicap, "{level:?}");
+        assert_eq!(
+            ai.econ.setup.difficulty, person.econ.setup.difficulty,
+            "{level:?}"
+        );
+        assert_eq!(
+            ai.econ.setup.handicap, person.econ.setup.handicap,
+            "{level:?}"
+        );
         assert_eq!(ai.combat.rof_factor, person.combat.rof_factor, "{level:?}");
         assert_eq!(ai.combat.firepower, person.combat.firepower, "{level:?}");
         for &t in &types {

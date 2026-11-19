@@ -5,7 +5,7 @@
 use glasnost_ai::game::Game;
 use glasnost_sim::save::Replay;
 use glasnost_sim::world::{AiDifficulty, AiSeat};
-use glasnost_tools::ai_tournament::{self, Options, GameResult};
+use glasnost_tools::ai_tournament::{self, GameResult, Options};
 
 fn options(threads: usize, out: &std::path::Path) -> Options {
     Options {
@@ -62,7 +62,10 @@ fn the_same_options_give_the_same_report() {
 #[test]
 fn the_ratings_follow_the_games_in_order() {
     // Nothing played: everyone at the start.
-    assert_eq!(ai_tournament::ratings(3, &[]), vec![ai_tournament::START_RATING; 3]);
+    assert_eq!(
+        ai_tournament::ratings(3, &[]),
+        vec![ai_tournament::START_RATING; 3]
+    );
     assert_eq!(ai_tournament::by_worth([300, 200]), GameResult::A);
     assert_eq!(ai_tournament::by_worth([299, 200]), GameResult::Draw);
     assert_eq!(ai_tournament::by_worth([200, 300]), GameResult::B);
@@ -72,10 +75,15 @@ fn the_ratings_follow_the_games_in_order() {
 
 #[test]
 fn the_options_parse() {
-    let words: Vec<String> = ["entrants=default:easy,default", "seeds=2-4", "maps=0,1", "ticks=90"]
-        .into_iter()
-        .map(String::from)
-        .collect();
+    let words: Vec<String> = [
+        "entrants=default:easy,default",
+        "seeds=2-4",
+        "maps=0,1",
+        "ticks=90",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
     let o = Options::parse(&words).expect("parses");
     assert_eq!(o.entrants.len(), 2);
     assert_eq!(o.entrants[1], AiSeat::DEFAULT);

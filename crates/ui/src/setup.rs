@@ -9,10 +9,10 @@
 //! for a room, so the model serializes; there a [`SlotKind::Human`] row is a
 //! person's row, taken by one member of the room or open.
 
+use glasnost_ai::scripts::{self, REGISTRY};
 use glasnost_rules::layers::{Layers, PLAY_FIXES_NAME};
 use glasnost_sim::econ::setup::{self, HouseValues, LobbyChoice, Player, Settings};
 use glasnost_sim::rules::SimRules;
-use glasnost_ai::scripts::{self, REGISTRY};
 use glasnost_sim::world::{AiDifficulty, AiSeat, GameSetup};
 use serde::{Deserialize, Serialize};
 
@@ -1147,7 +1147,10 @@ mod tests {
         let (_, t) = s.view((640, 480), &r, &maps(), None);
         assert!(t.rect_of(&SetupHit::Difficulty(1, 1)).is_some());
         assert!(t.rect_of(&SetupHit::Script(1, 1)).is_some());
-        assert!(t.rect_of(&SetupHit::Difficulty(0, 1)).is_none(), "the person's row");
+        assert!(
+            t.rect_of(&SetupHit::Difficulty(0, 1)).is_none(),
+            "the person's row"
+        );
         assert_eq!(s.slots[1].ai, AiSeat::DEFAULT);
         let rules_sim = glasnost_ai::fixture::rules();
         let offered = vec!["Alphaland".to_owned(), "Betaland".to_owned()];
