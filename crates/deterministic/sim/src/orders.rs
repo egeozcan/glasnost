@@ -1001,7 +1001,9 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     let ignored_here = w
         .obj(actor)
         .and_then(|m| m.dest)
-        .is_some_and(|d| crate::jump::own_cell_filtered(w, actor, d));
+        .is_some_and(|d| crate::jump::own_cell_filtered(w, actor, d))
+        // spec: S-0503 claim 20 (r30: an unchanged destination a hovering vehicle ignores sets nothing, its stored path included)
+        || crate::hover::assignment_ignored(w, actor, ob.dest);
     if mobile && !retained && !keeps_path && !ignored_here {
         // A new destination starts a new path search (S-0212 claim 20).
         // spec: S-0207 claim 11 (revision 39: a cancelled destination need not erase the old path steps, which are inert without a locomotor destination; ours are dropped with it, so no stored path keeps S-0206's in-progress test true)

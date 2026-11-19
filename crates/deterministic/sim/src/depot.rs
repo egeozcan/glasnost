@@ -317,8 +317,7 @@ fn take(w: &mut World, id: ObjectId, k: ObjectId, place: u32) {
     if fresh && to_depot {
         // spec: S-0314 claim 18 and S-0207 claim 25 (the depot assigned as destination supplies its docking point, not its position, to driving or ship locomotion; our contact follows the destination's assignment within the same order)
         crate::drive::take_destination(w, id);
-        // spec: S-0314 claim 18 and S-0503 claim 20 (a hovering vehicle's D is the docking point); Q-3263 (interim: contact taken in the same order sets it)
-        crate::hover::contact_taken(w, id);
+        // spec: S-0503 claim 20 (r30: for a hovering vehicle a contact taken after D is set does not change D; the enter order's own request does, order_entered)
     }
 }
 
@@ -1284,7 +1283,10 @@ pub fn order_entered(w: &mut World, id: ObjectId, b: Behaviour, dest: Option<Tar
         return;
     }
     // spec: S-0314 claim 23 (an enter order on a depot that holds no contact asks for entry at once)
-    let _ = request(w, id, k, true);
+    if request(w, id, k, true) {
+        // spec: S-0503 claim 20 (r30, Contact taken by the assignment: the request comes before D is set, so D is the docking point with the contact it has taken, using that place's displacement)
+        crate::hover::contact_taken(w, id);
+    }
 }
 
 /// Whether an object is at full health (S-0314 Terms: a health ratio of

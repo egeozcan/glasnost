@@ -313,27 +313,46 @@ pub fn taken_object_point(w: &World, id: ObjectId, t: ObjectId) -> Option<Pos> {
     h.held.or(h.taken_point)
 }
 
-/// The point an object destination `t` supplies now (claim 20): its
-/// movement point (S-0314 claim 18 and S-0606 claim 4: the docking point of
-/// a depot or tank bunker in contact, otherwise its position), with the
-/// height of Terms unless `held` (claim 18: the supplied point unadjusted).
+/// The point an object destination `t` supplies now (claim 20): S-0502
+/// claim 16's point with the hovering vehicle in place of the jumpjet (a
+/// building's foundation centre or docking point, a mobile object's heading
+/// point, a rider's own position), with the height of Terms unless `held`
+/// (claim 18: the supplied point unadjusted).
 fn object_point(w: &World, id: ObjectId, t: ObjectId, held: bool) -> Option<Pos> {
-    // spec: S-0314 claim 18 (a vehicle in depot contact: the supplied docking point is the destination position, not the building's) and S-0606 claim 4 (a vehicle approaching a bunker heads for the docking point)
-    let p = crate::depot::heading_point(w, id, t)
-        .or_else(|| crate::structures::bunker::heading_point(w, id, t))
-        .or_else(|| w.obj(t).map(|x| x.pos))?;
+    let x = w.obj(t)?;
+    let p = if crate::transport::open_topped_passenger(w, t) {
+        // spec: S-0503 claim 20 (r30: S-0607 claim 7's riding rule: a passenger of an open-topped transport gives its own position)
+        x.pos
+    } else {
+        // spec: S-0503 claim 20 (r30: a building gives its foundation centre, or its docking point for the pad, repair-depot and vehicle-bunker flags by S-0607 claim 7's rules with the hovering vehicle in place of the seized unit; a vehicle, infantry unit or aircraft gives its heading point, its next movement point or its position)
+        crate::lift::lifter_point(w, t, id)
+    };
     if held {
         // spec: S-0503 claims 18 and 20 (while held: the supplied point, without the height adjustment)
         return Some(p);
     }
     let deck = if w.high_bridge(p.cell()) { DECK } else { 0 };
-    // spec: S-0503 Terms and claim 20 (unless held, D's height is the surface height of its cell, plus 416 leptons on a high-bridge cell); Q-3263 (interim: the surface height at the movement point itself)
+    // spec: S-0503 Terms and claim 20 (r30: unless held, D's height is the surface height at the point itself, plus 416 leptons when the cell that contains it is a high-bridge cell; the object's own height plays no part)
     Some(Pos::new(p.x, p.y, w.surface_at(p.x, p.y) + deck))
 }
 
-/// Depot or tank bunker contact taken in the same order as the assignment
-/// of that building as the destination (S-0314 claim 18, S-0606 claim 4):
-/// *D* becomes the docking point, as the driving locomotor's point does.
+/// Whether an assignment of the order-level destination a hovering vehicle
+/// already holds is ignored (claim 20, *An unchanged destination*, r30):
+/// the same cell or object as `before`, the destination-refresh state off,
+/// and that destination the one the locomotor last took. The ignored
+/// assignment sets nothing, the stored path included.
+pub fn assignment_ignored(w: &World, id: ObjectId, before: Option<Target>) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let Some(h) = o.hover.as_ref() else {
+        return false;
+    };
+    // spec: S-0503 claim 20 (r30: a vehicle ignores an assignment of the order-level destination it already holds, the same cell or the same object, unless its destination-refresh state is on, S-0502 claims 24 and 27; the test reads the order-level destination, not D)
+    o.dest.is_some() && o.dest == before && h.for_dest == o.dest && !crate::refresh::pending(w, id)
+}
+
+/// Depot contact taken by an enter order's own entry request (claim 20,
+/// *Contact taken by the assignment*, r30): *D* is the docking point with
+/// that contact, as if the request came before *D* was set.
 pub fn contact_taken(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let (Some(h), Some(Target::Object(t))) = (o.hover.as_ref(), o.dest) else {
@@ -344,7 +363,7 @@ pub fn contact_taken(w: &mut World, id: ObjectId) {
     }
     let held = h.held.is_some();
     let p = object_point(w, id, t, held);
-    // spec: S-0314 claim 18 and S-0606 claim 4 (the docking point once contact holds); Q-3263 (interim: contact taken in the same order sets D to the docking point)
+    // spec: S-0503 claim 20 (r30: the entry request of S-0314 claim 23 comes before D is set; D is the docking point with the contact it took, S-0314 claim 18)
     with(w, id, |h| {
         h.taken_point = p;
         if held {
@@ -412,13 +431,8 @@ fn take(w: &mut World, id: ObjectId, given: bool, effective: bool) {
         return;
     }
     let dest = o.dest;
-    if given
-        && !effective
-        && matches!(dest, Some(Target::Object(_)))
-        && h.for_dest == dest
-        && h.stopped != dest
-    {
-        // spec: S-0503 claim 20 (r29, Q-3235: a vehicle ignores an unchanged order-level destination unless its destination-refresh state is on, S-0502 claims 24 and 27; the ignored assignment leaves D as it was; equality is the same object, S-0502 claim 24); Q-3263 (interim: only an object destination is ignored, and not after claim 10's stop request)
+    if given && !effective && dest.is_some() && h.for_dest == dest {
+        // spec: S-0503 claim 20 (r30: a vehicle ignores an unchanged order-level destination unless its destination-refresh state is on, S-0502 claims 24 and 27; the ignored assignment leaves D as it was; equality is the same cell or the same object, and a cell is ignored as an object is; after claim 10's stop request D stays cleared)
         return;
     }
     let no_point = h.point.is_none();
