@@ -673,8 +673,11 @@ impl Session {
         let view = self.view();
         let scene = &mut self.scene;
         let stamp = &mut self.scene_stamp;
+        let route = self.route.held;
         Self::live_parts(&mut self.loaded, &mut self.play, view, |live, inputs| {
             *stamp = next_stamp();
+            // spec: S-0519 claim 27 (no strike line while the local player is in route mode, S-0213 claim 16)
+            live.route_mode = route;
             f(live, inputs, scene)
         })
     }

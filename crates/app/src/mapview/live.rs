@@ -385,11 +385,16 @@ pub struct InputReport {
 }
 
 /// The line effects of one drawn frame (#93): the beams, bolts and beam
-/// flashes, in drawing order, of shown tick `tick` at detail `detail`.
+/// flashes, in drawing order, of shown tick `tick` at detail `detail`, and
+/// the strike lines' end markers and lines (#448).
 struct DrawnLines {
     tick: i32,
     detail: u8,
     spots: [Vec<glasnost_render::spots::Spot>; 3],
+    strikes: Vec<(
+        Vec<glasnost_render::spots::Spot>,
+        Vec<glasnost_render::spots::Spot>,
+    )>,
 }
 
 /// One changed overlay cell's drawings, kept with the cell they were drawn
@@ -592,6 +597,10 @@ pub struct Live {
     /// electric bolts' view test (S-0316 claim 5); `None` (no view known):
     /// every bolt counts as in view.
     pub battlefield: Option<((i32, i32), (u32, u32))>,
+    /// Whether the local player is in route mode, holding the route-mode
+    /// key (S-0213 claim 16): no strike line is drawn then (S-0519 claim
+    /// 27). The game session sets it; the viewer has no route mode.
+    pub route_mode: bool,
     /// The battlefield view the status extras were last culled against
     /// (S-0111 claim 1).
     status_view: Option<((i32, i32), (u32, u32))>,
@@ -1483,6 +1492,7 @@ impl Live {
             relight_owed: false,
             joined_overlays: BTreeSet::new(),
             battlefield: None,
+            route_mode: false,
             status_view: None,
             debug_markers: true,
             move_flash,
@@ -3407,32 +3417,24 @@ impl Live {
     /// until its handover, or in the build-down of a sale; `None` outside
     /// it.
     ///
-    /// The simulation keeps the stage's timing (the entry tick, the first
-    /// construction processing *C* and the build-down's start) but not the
-    /// stage itself, so the drawing derives it from those ticks as
-    /// uninterrupted play runs it (S-0406 claims 14 and 17, F7; S-0408
-    /// claim 6). A tick without the building's update, which S-0406 claim
-    /// 17 says delays the processing steps, is not followed (our seam).
+    /// While the building builds up, the stage is the simulation's own
+    /// construction stage, which its updates advance (S-0108 Terms, *body
+    /// stage*, r111; S-0406 claims 14 and 17): an advance held by a missed
+    /// turn is drawn held (#440). The build-down of a sale derives its stage
+    /// from the build-down's start, as uninterrupted play runs it (S-0408
+    /// claim 6).
     pub(super) fn buildup_of(&self, o: &Object) -> Option<Buildup> {
         use glasnost_sim::econ::sell::{Stage, buildup_range};
         let t = self.shown_tick();
         let c = &o.econ.construction;
+        // `None` for the simulation's construction stage, else the build-down's start.
         let (start, selling) = match o.econ.sale.as_ref().map(|s| s.stage) {
             // spec: S-0309 claim 31 (an owner change's idle range takes the place of the build-down: the building is no longer in the construction state)
             Some(Stage::BuildDown(_)) if o.econ.idle_body.is_some() => return None,
             // spec: S-0408 claim 6 and S-0108 claim 2 (the build-down from its first tick, backwards)
-            Some(Stage::BuildDown(since)) => (since, true),
-            _ if c.building_up => {
-                // spec: S-0406 claim 17 (stage timing counts from the entry tick) and claim 14 (the
-                // first construction processing C starts the range again at stage 0)
-                let start = match (c.first, c.entry) {
-                    (Some(first), _) if t >= first => first,
-                    (_, Some(entry)) => entry,
-                    (Some(first), None) => first,
-                    (None, None) => t,
-                };
-                (start, false)
-            }
+            Some(Stage::BuildDown(since)) => (Some(since), true),
+            // spec: S-0406 claim 17 (stage timing counts from the entry tick) and claim 14 (the first construction processing C starts the range again at stage 0): the simulation's stage
+            _ if c.building_up => (None, false),
             _ => return None,
         };
         let range = buildup_range(&self.world, o.type_index);
@@ -3452,7 +3454,11 @@ impl Live {
         let stage = if range.delay <= 0 || range.n <= 1 {
             0
         } else {
-            (t.saturating_sub(start).max(0) / range.delay).rem_euclid(range.n)
+            match start {
+                Some(start) => (t.saturating_sub(start).max(0) / range.delay).rem_euclid(range.n),
+                // spec: S-0108 Terms (body stage, r111: it advances only in the building's update; an advance due on a missed turn is made at the next update)
+                None => c.stage.rem_euclid(range.n),
+            }
         };
         Some(Buildup {
             stage,
@@ -4320,7 +4326,8 @@ impl Live {
 
     /// The beams and beam flashes of the shown tick (S-0518 claims 19 to
     /// 23, S-0514 claims 24 to 26), after all layers and the status extras
-    /// (S-0102 claim 2): lasers first, then beam flashes (S-0514 claim 26).
+    /// (S-0102 claim 2): lasers first, then beam flashes (S-0514 claim 26),
+    /// then the strike lines (S-0519 claim 27).
     fn draw_lines(&mut self, inputs: &Inputs, scene: &mut Scene) {
         use glasnost_render::spots::SpotGroup;
         self.take_line_draws(inputs);
@@ -4338,6 +4345,23 @@ impl Live {
                     provisional: false,
                     spots,
                 });
+            }
+        }
+        if self.route_mode {
+            // spec: S-0519 claim 27 (no strike line while the local player is in route mode)
+            return;
+        }
+        // spec: S-0519 claim 27 (strike lines after all the effects of S-0102 claim 2; each end marker before its line)
+        for (marker, line) in drawn.strikes.iter().cloned() {
+            for spots in [marker, line] {
+                if !spots.is_empty() {
+                    scene.spots.push(SpotGroup {
+                        at: usize::MAX,
+                        group: glasnost_render::scene::Group::Effects,
+                        provisional: false,
+                        spots,
+                    });
+                }
             }
         }
     }
@@ -4373,10 +4397,25 @@ impl Live {
                 self.rules.mode,
                 &mut draw,
             );
+            // spec: S-0519 claim 27 (not drawn while the local player is in route mode; design: render (#448): no colour draw then either, as no line is drawn)
+            let strikes = if self.route_mode {
+                Vec::new()
+            } else {
+                let over = self.rules.quirks.airstrike_line_marker_over_shroud;
+                super::strike_line::lines(&self.world, now)
+                    .into_iter()
+                    .map(|(from, to)| {
+                        // spec: S-0519 claim 27 and F8 (one inclusive ranged draw on the unsynchronised stream per line in each drawn frame, wherever the line lies)
+                        let r = draw(super::strike_line::DRAW.0, super::strike_line::DRAW.1);
+                        super::strike_line::spots(from, to, super::strike_line::colour(r), over)
+                    })
+                    .collect()
+            };
             self.drawn_lines = Some(DrawnLines {
                 tick: now,
                 detail,
                 spots: [beams, bolts, flashes],
+                strikes,
             });
         }
     }

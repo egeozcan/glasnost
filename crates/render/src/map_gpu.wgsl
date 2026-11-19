@@ -347,10 +347,12 @@ fn unpack_rgb(w: u32) -> vec3<u32> {
 }
 
 // Single-pixel drawings (spots.rs): paint.x the kind (0 opaque, 1 additive,
-// 2 blended, 3 beam flash, 4 magnetic wave), paint.y the colour (5-6-5 for
-// opaque, else 8-bit channels red lowest), paint.z the blended weights
-// T[w] | T[256 − w] << 16 or the wave's k, companion.xy the alpha or
-// source offset, place.z the depth bias.
+// 2 blended, 3 beam flash, 4 magnetic wave, 5 strike line, 6 strike line
+// end marker), paint.y the colour (5-6-5 for opaque and the marker, else
+// 8-bit channels red lowest), paint.z the blended weights
+// T[w] | T[256 − w] << 16, the wave's k, the strike line's α or the
+// marker's over-shroud switch, companion.xy the alpha or source offset,
+// place.z the depth bias.
 @fragment
 fn fs_spot(in: Varyings) -> Fragment {
     let px = vec2<i32>(floor(in.position.xy));
@@ -415,6 +417,25 @@ fn fs_spot(in: Varyings) -> Fragment {
                 c[i] = min(((d[i] * tr + l[i] * tw) * a2) >> 15u, 255u);
             }
         }
+    } else if kind == 5u {
+        // S-0519 F8: not drawn where v = 0; capped at 255 (claim 27).
+        if a == 0u {
+            discard;
+        }
+        let l = unpack_rgb(in.paint.y);
+        let al = in.paint.z;
+        c = min((((d * (256u - al)) / 256u + (l * al) / 256u) * a) / 128u, vec3<u32>(255u));
+    } else if kind == 6u {
+        // S-0519 claim 27: the end marker, opaque, no light-alpha shading;
+        // with the over-shroud switch off (paint.z 0), not drawn at v = 0.
+        // Its pipeline has no depth test.
+        if in.paint.z == 0u && a == 0u {
+            discard;
+        }
+        var out6: Fragment;
+        out6.color = colour565(in.paint.y);
+        out6.depth = 0.0;
+        return out6;
     } else if kind == 3u {
         // S-0514 claim 25.
         if a == 0u {
