@@ -352,7 +352,8 @@ fn claim11_r129_the_tie_survives_a_save_and_load() {
     let fall = one_time(&mut w, cell(3, 2));
     sw_common::run(&mut w, 3);
     let bytes = glasnost_sim::save::save(&w);
-    let mut back = glasnost_sim::save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("loads");
+    let mut back =
+        glasnost_sim::save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("loads");
     assert_eq!(
         glasnost_sim::save::state_hash(&w),
         glasnost_sim::save::state_hash(&back)

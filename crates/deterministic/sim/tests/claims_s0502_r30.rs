@@ -249,6 +249,10 @@ fn claim18_r30_without_a_commitment_the_stop_changes_no_point() {
     kill(&mut w, u);
     assert!(jump::crashing(&w, u));
     assert_eq!(j(&w, u).dest, point, "the point is unchanged");
-    assert_eq!(phase(&w, u), Phase::Hovering, "the flight state is unchanged");
+    assert_eq!(
+        phase(&w, u),
+        Phase::Hovering,
+        "the flight state is unchanged"
+    );
     assert_eq!(w.obj(u).unwrap().dest, None);
 }
