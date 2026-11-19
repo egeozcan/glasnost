@@ -116,10 +116,17 @@ fn r20_construction_current_in_the_window_the_change_ends_it() {
     let o = w.obj(b).unwrap();
     assert!(o.econ.construction.opened, "the grand opening");
     assert!(o.beh.ready_mark, "its ready mark is set");
-    assert!(!building_up(&w, b), "construction-completed from the change");
+    assert!(
+        !building_up(&w, b),
+        "construction-completed from the change"
+    );
     assert!(!placement::in_break_off_window(o), "the window has ended");
     assert_eq!(o.econ.idle_body, idle, "the idle body is kept unchanged");
-    assert_eq!(o.beh.current, Some(Behaviour::Construction), "still current");
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Construction),
+        "still current"
+    );
     assert_eq!(o.beh.queued, Some(Behaviour::Guard), "guard queued");
     assert!(
         placement::refused_as_in_construction(o),
@@ -148,7 +155,10 @@ fn r20_construction_queued_in_the_window_the_change_ends_it() {
     ownership::change(&mut w, b, Some(B), Cause::Trigger);
     let o = w.obj(b).unwrap();
     assert_eq!(o.beh.queued, Some(Behaviour::Guard), "replaced by guard");
-    assert!(!building_up(&w, b), "construction-completed from the change");
+    assert!(
+        !building_up(&w, b),
+        "construction-completed from the change"
+    );
     assert_eq!(o.econ.idle_body, idle, "the idle body is kept unchanged");
     assert!(!placement::refused_as_in_construction(o));
     tick::step(&mut w);

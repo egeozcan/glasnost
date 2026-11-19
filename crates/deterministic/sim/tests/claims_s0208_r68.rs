@@ -63,7 +63,11 @@ fn r68_the_fresh_search_looks_for_the_points_cell() {
     econ::assign_destination(&mut w, f, Some(Target::Object(i)));
     let p = w.obj(i).unwrap().pos;
     walk_away(&mut w, i, p.cell());
-    assert_eq!(dest(&w, f), Some(Target::Object(i)), "void: F still holds I");
+    assert_eq!(
+        dest(&w, f),
+        Some(Target::Object(i)),
+        "void: F still holds I"
+    );
     w.obj_mut(f).unwrap().path.steps.clear();
     assert_eq!(
         path::compute(&mut w, f, Mode::Fresh),
@@ -83,7 +87,11 @@ fn r68_a_walker_in_the_points_cell_keeps_its_destination_beyond_close_enough() {
     let (mut w, f, i) = scene((0, 0), (0, 0), Some("0"));
     econ::assign_destination(&mut w, f, Some(Target::Object(i)));
     run(&mut w, 3);
-    assert_eq!(dest(&w, f), Some(Target::Object(i)), "the destination is kept");
+    assert_eq!(
+        dest(&w, f),
+        Some(Target::Object(i)),
+        "the destination is kept"
+    );
     assert!(!occupancy::in_progress(&w, f), "no movement in progress");
     let at = w.obj(f).unwrap().pos;
     walk_away(&mut w, i, at.cell());

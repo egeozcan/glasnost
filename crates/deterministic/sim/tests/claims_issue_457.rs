@@ -80,10 +80,31 @@ fn warhead(w: &World, name: &str) -> u32 {
 fn scene() -> (World, ObjectId, ObjectId, ObjectId) {
     let mut w = testkit::game_with(&rules(), SIZE, 7);
     testkit::run(&mut w, 2);
-    let b = testkit::spawn(&mut w, Kind::Building, "PIT", 0, testkit::mid(SIZE, 0, 0), 0);
+    let b = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "PIT",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     testkit::run(&mut w, 3);
-    let u = testkit::spawn(&mut w, Kind::Vehicle, "TANK", 0, testkit::mid(SIZE, 6, 1), 0);
-    let free = testkit::spawn(&mut w, Kind::Vehicle, "TANK", 0, testkit::mid(SIZE, -8, -8), 0);
+    let u = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "TANK",
+        0,
+        testkit::mid(SIZE, 6, 1),
+        0,
+    );
+    let free = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "TANK",
+        0,
+        testkit::mid(SIZE, -8, -8),
+        0,
+    );
     orders::issue(
         &mut w,
         HouseId(0),
@@ -101,7 +122,11 @@ fn scene() -> (World, ObjectId, ObjectId, ObjectId) {
         }
         tick::step(&mut w);
     }
-    assert_eq!(bunker::bunkered_in(&w, u), Some(b), "void: the tank is bunkered");
+    assert_eq!(
+        bunker::bunkered_in(&w, u),
+        Some(b),
+        "void: the tank is bunkered"
+    );
     (w, b, u, free)
 }
 
@@ -147,7 +172,10 @@ fn a_direct_non_penetrating_hit_hurts_neither_the_vehicle_nor_the_bunker() {
     assert_eq!(health(&w, b), hb, "the bunker takes nothing");
     let h = direct(&w, Some("FLAT"), false);
     damage::apply(&mut w, free, h);
-    assert!(health(&w, free) < hf, "void: the same hit hurts a free vehicle");
+    assert!(
+        health(&w, free) < hf,
+        "void: the same hit hurts a free vehicle"
+    );
 }
 
 // spec: S-0302 claim 8 (stage 2: no row stops a penetrating warhead on the bunkered unit; the tank-bunker row is for hits on the bunker) and S-0606 claim 9
@@ -191,7 +219,10 @@ fn a_hit_without_a_warhead_on_the_bunkered_vehicle() {
     assert_eq!(health(&w, u), hu, "stopped by the zero-amount row");
     let h = direct(&w, None, true);
     damage::apply(&mut w, u, h);
-    assert!(health(&w, u) < hu, "ignoring defences: the vehicle is damaged");
+    assert!(
+        health(&w, u) < hu,
+        "ignoring defences: the vehicle is damaged"
+    );
     assert_eq!(health(&w, b), hb, "the bunker takes nothing");
 }
 

@@ -127,7 +127,11 @@ fn r30_a_building_gives_its_foundation_centre() {
     let hut = at(&mut w, Kind::Building, "HUT2", 4, 0);
     econ::assign_destination(&mut w, v, Some(Target::Object(hut)));
     let c = w.reference_point(hut);
-    assert_ne!(c, w.obj(hut).unwrap().pos, "void: the centre is not the position");
+    assert_ne!(
+        c,
+        w.obj(hut).unwrap().pos,
+        "void: the centre is not the position"
+    );
     assert_eq!(d(&w, v), Some(on_surface(&w, c)));
 }
 
@@ -176,7 +180,10 @@ fn r30_a_later_contact_does_not_move_d() {
     econ::assign_destination(&mut w, v, Some(Target::Object(k)));
     let before = d(&w, v);
     assert_eq!(before, Some(on_surface(&w, w.reference_point(k))));
-    assert!(depot::request(&mut w, v, k, false), "void: the depot accepts");
+    assert!(
+        depot::request(&mut w, v, k, false),
+        "void: the depot accepts"
+    );
     assert!(depot::link(&w, v).is_some(), "void: contact is taken");
     assert_eq!(d(&w, v), before, "D stays");
 }
@@ -208,7 +215,11 @@ fn stopped_towards(w: &mut World, v: ObjectId, t: Target) {
     common::run(w, 60);
     assert!(d(w, v).is_some(), "void: a D before");
     glasnost_sim::econ::power::apply_disabled(w, v, true);
-    assert_eq!(w.obj(v).unwrap().dest, Some(t), "void: the destination stays");
+    assert_eq!(
+        w.obj(v).unwrap().dest,
+        Some(t),
+        "void: the destination stays"
+    );
     assert_eq!(d(w, v), None, "void: D is cleared");
 }
 

@@ -99,7 +99,11 @@ fn r71_an_object_on_the_deck_gives_h_plus_830_and_claim_25_clears_it() {
     assert_eq!(p.z, h(&w) + 416, "void: I is on the deck");
     assert_eq!(point(&w, f), Some((i, Pos::new(p.x, p.y, h(&w) + 830))));
     tick::step(&mut w);
-    assert_eq!(dest(&w, f), Some(Target::Object(i)), "kept on the arrival tick");
+    assert_eq!(
+        dest(&w, f),
+        Some(Target::Object(i)),
+        "kept on the arrival tick"
+    );
     let n = common::run_until(&mut w, 100, |w| dest(w, f).is_none());
     assert!(n < 100, "claim 25 clears the destination");
     assert_eq!(w.obj(f).unwrap().pos.cell(), cell(4, 0));
@@ -110,7 +114,11 @@ fn r71_an_object_on_the_deck_gives_h_plus_830_and_claim_25_clears_it() {
 fn r71_switch_off_an_objects_point_is_tested_on_the_arrival_layer() {
     let (mut w, f, i) = deck_pair(false, true, false);
     let p = w.obj(i).unwrap().pos;
-    assert_eq!(point(&w, f), Some((i, p)), "no 414 leptons with the switch off");
+    assert_eq!(
+        point(&w, f),
+        Some((i, p)),
+        "no 414 leptons with the switch off"
+    );
     tick::step(&mut w);
     assert_eq!(dest(&w, f), None, "the walk ends on the deck");
 }
