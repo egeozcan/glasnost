@@ -1,9 +1,9 @@
 ---
 id: Q-3262
 title: A walker's searches for an object destination that moves
-status: open
+status: answered
 related: [S-0208, S-0212, S-0209, S-0507]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
