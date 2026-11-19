@@ -41,6 +41,7 @@ pub mod bunker;
 pub mod chrono;
 pub mod crates;
 pub mod deployers;
+pub mod disguise;
 pub mod dominator;
 pub mod drain;
 pub mod fixture;
