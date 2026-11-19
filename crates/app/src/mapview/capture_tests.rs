@@ -1802,6 +1802,207 @@ fn the_trace_names_a_buildings_slot_animation() {
     );
 }
 
+/// One tick of the payment-animation run: the tick, whether the house was
+/// paid in it, whether the harvester is *finishing*, the simulation's slot
+/// animations on the refinery (slot and frame) and the drawing's (import
+/// index and frame).
+type PayRow = (i32, bool, bool, Vec<(String, i32)>, Vec<(usize, i32)>);
+
+/// spec: S-0402 r86 claim 11 (*What a docking shows*: for a refinery whose
+/// art names only the payment animation, the start row plays nothing, the
+/// payment animation enters play at the first payment row and each start
+/// is drawn from its start until it ends on its own or the empty-load row
+/// removes it, whichever comes first) and scenario H29 part a (a load of
+/// one tiberium), with S-0108 claim 20 (the drawing shows the simulation's
+/// slot) — #444: the drawing's slot draws hold the payment animation in
+/// every tick from the payment on while the simulation plays it, and
+/// nothing on the refinery before. Invented types: HUTX as a
+/// refinery-flag dock-unload building whose art names only PAYX in its
+/// payment slot, HARVX a harvester of one bale of ORE.
+#[test]
+fn a_refinery_draws_its_payment_animation_from_the_payment_on() {
+    use glasnost_rules::sim::AnimationType;
+    use glasnost_rules::sim_econ::TiberiumType;
+    use glasnost_sim::econ::harvest::{self, DockState, HarvestState};
+    use glasnost_sim::rules::Behaviour;
+    let rules_text = format!("{RULES}[Animations]\n0=PAYX\n");
+    let hut = "[HUTX]\nSpecialAnim=PAYX\n";
+    let art = format!("{}[PAYX]\n", ART.replacen("[HUTX]\n", hut, 1));
+    let (mut import, catalogue, mut assets) = context_full(&rules_text, &art);
+    import
+        .arts
+        .insert((Kind::Animations, 0), art_of("PAYX", "payx.shp"));
+    // Canvas 20 × 20, 8 image frames (4 images, 4 shadows).
+    assets.insert(
+        b"payx.shp",
+        shp((20, 20), 8, (SLOT_FRAME, SLOT_FRAME), (8, 8)),
+    );
+    let mut r = ruleset(false);
+    r.registries
+        .entry("animations".into())
+        .or_default()
+        .push("PAYX".into());
+    r.sim.animations.insert(
+        "PAYX".into(),
+        AnimationType {
+            frame_count: Some(8),
+            middle_frame: Some(4),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("tiberiums".into())
+        .or_default()
+        .push("ORE".into());
+    r.sim.tiberiums.insert(
+        "ORE".into(),
+        TiberiumType {
+            value: Some(25), // invented
+            ..Default::default()
+        },
+    );
+    let refinery = r.sim.buildings.get_mut("HUTX").unwrap();
+    refinery.econ.refinery = Some(true);
+    refinery.econ.dock_unload = Some(true);
+    // spec: S-0402 Import mapping (the payment animation from the art's payment key, its normal name only)
+    refinery.econ.slot_names = Some(std::collections::BTreeMap::from([(
+        "SpecialAnim".to_owned(),
+        ["PAYX".to_owned(), String::new()],
+    )]));
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("HARVX".into());
+    let mut harv = UnitType {
+        strength: Some(400),
+        speed: Some(7),
+        rot: Some(6),
+        locomotion_class: Some(LocomotionClass::Wheel),
+        locomotor: Some(Locomotor::Drive),
+        harvester: Some(true),
+        storage: Some(5),
+        ..Default::default()
+    };
+    harv.econ.dock = Some(vec!["HUTX".into()]);
+    r.sim.vehicles.insert("HARVX".into(), harv);
+    let rules = Arc::new(SimRules::new(&r, "synthetic-test"));
+    let map = testkit::empty_map(SIZE);
+    let setup = setup();
+    let world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
+    let mut scene = built.scene;
+    // The harvester docked as the simulation's claim tests dock one: on the
+    // cell east of the refinery's foundation, in contact, holding the dock
+    // slot, in unload.
+    let top_left = testkit::mid(SIZE, -2, -1);
+    let b = testkit::spawn(&mut live.world, SimKind::Building, "HUTX", 0, top_left, 0);
+    let h = testkit::spawn(
+        &mut live.world,
+        SimKind::Vehicle,
+        "HARVX",
+        0,
+        testkit::mid(SIZE, 0, -1),
+        16384,
+    );
+    let o = live.world.obj_mut(h).unwrap();
+    o.contact = Some(b);
+    o.econ.harvest = Some(HarvestState {
+        load: vec![1],
+        ..Default::default()
+    });
+    live.world.obj_mut(b).unwrap().econ.dock = Some(DockState { holders: vec![h] });
+    let t = live.world.tick;
+    live.world
+        .obj_mut(h)
+        .unwrap()
+        .beh
+        .force(Behaviour::Unload, t, true);
+    let type_index = live.world.obj(b).unwrap().type_index;
+    let mut rows: Vec<PayRow> = Vec::new();
+    // nocite: a test length (past the payment, the empty-load row and the contact's end)
+    for _ in 0..600 {
+        let credits = live.world.houses[0].credits;
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        let idx = live
+            .import_index(SimKind::Building, type_index)
+            .expect("the refinery is drawn");
+        rows.push((
+            live.world.tick,
+            live.world.houses[0].credits != credits,
+            harvest::state_of(&live.world, h).finishing,
+            glasnost_sim::depot_anim::draws(&live.world, b)
+                .into_iter()
+                .map(|d| (format!("{:?}={}", d.slot, d.name), d.frame))
+                .collect(),
+            live.slot_draws(b, idx)
+                .into_iter()
+                .map(|l| (l.idx, l.frame))
+                .collect(),
+        ));
+        if live.world.obj(h).is_some_and(|o| o.contact.is_none()) {
+            break;
+        }
+    }
+    let paid = rows
+        .iter()
+        .position(|r| r.1)
+        .unwrap_or_else(|| panic!("a payment: {rows:#?}"));
+    assert!(
+        rows[..paid]
+            .iter()
+            .all(|r| r.3.is_empty() && r.4.is_empty()),
+        "nothing plays on the refinery before the payment: {rows:#?}"
+    );
+    assert_eq!(
+        rows[paid].3.first().map(|(n, _)| n.as_str()),
+        Some("Special1=PAYX"),
+        "the payment animation enters play with the payment: {rows:#?}"
+    );
+    let fin = rows
+        .iter()
+        .position(|r| r.2)
+        .unwrap_or_else(|| panic!("finishing: {rows:#?}"));
+    let ended = rows[paid..]
+        .iter()
+        .position(|r| r.3.is_empty())
+        .map(|i| paid + i)
+        .unwrap_or_else(|| panic!("the payment animation ends: {rows:#?}"));
+    assert!(ended <= fin, "gone by the empty-load row: {rows:#?}");
+    for r in &rows[paid..ended] {
+        let frames: Vec<(usize, i32)> = r.3.iter().map(|(_, f)| (0, *f)).collect();
+        assert_eq!(
+            r.4, frames,
+            "tick {}: the drawing shows the payment animation as the simulation plays it: {rows:#?}",
+            r.0
+        );
+    }
+    assert!(
+        rows[ended..].iter().all(|r| r.4.is_empty()),
+        "nothing on the refinery once it has gone: {rows:#?}"
+    );
+}
+
 /// The superweapon slots of a HUTX that has the superweapon CURTX
 /// (recharge 0.1 minutes, 90 ticks, S-0512): its art starts SLOTL in
 /// *super-1* and in *super-3*; with `reads` the switch

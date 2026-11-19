@@ -2237,7 +2237,7 @@ impl Live {
     }
 
     /// A building's running slot animations as the drawing takes them.
-    fn slot_draws(&self, id: ObjectId, idx: usize) -> Vec<super::build::LiveSlot> {
+    pub(super) fn slot_draws(&self, id: ObjectId, idx: usize) -> Vec<super::build::LiveSlot> {
         let Some(defs) = self.slot_defs.get(&idx) else {
             return Vec::new();
         };
