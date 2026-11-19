@@ -1292,6 +1292,15 @@ pub fn heading_point(w: &World, id: ObjectId) -> Option<Pos> {
     }
 }
 
+/// The cell a unit's searches look for: a walker's object locomotor point's
+/// cell (S-0208 claim 25), else [`goal_cell`].
+pub fn search_goal(w: &World, id: ObjectId) -> Option<CellXY> {
+    // spec: S-0208 claim 25 (r68: a walker's searches for an object destination look for the cell of its locomotor destination, the point of the last assignment)
+    crate::walk::object_locomotor_point(w, id)
+        .map(|p| p.cell())
+        .or_else(|| goal_cell(w, id))
+}
+
 /// The locomotor destination (S-0208 Terms).
 pub fn locomotor_destination(w: &World, id: ObjectId) -> Option<Pos> {
     let o = w.obj(id)?;
@@ -3016,7 +3025,7 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>) 
     let Some(o) = w.obj(id).cloned() else {
         return Search::SearchFailed;
     };
-    let Some(mut goal) = goal_cell(w, id) else {
+    let Some(mut goal) = search_goal(w, id) else {
         return Search::SearchFailed;
     };
     crate::trace::note(w, |p| p.goal = Some(goal));
@@ -3440,7 +3449,7 @@ pub fn keep_delay(w: &mut World, id: ObjectId, held: Option<i32>) {
 /// bridge deck while the destination is a bridge cell.
 fn search_gives_up(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
-    let goal = goal_cell(w, id);
+    let goal = search_goal(w, id);
     let near = goal.is_some_and(|g| {
         let c = o.pos.cell();
         (g.x - c.x).abs().max((g.y - c.y).abs()) <= 1
@@ -3487,8 +3496,16 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 Behaviour::AreaGuard
             };
             let gives_up = search_gives_up(w, id);
-            // design: C7-P6 hold (quirks.jammed_move_dropped off: a move that would be given up while only units stand in its way is kept; the unit stops, counts as blocked from now if it was not, and searches again after the retry delay)
-            if gives_up && holds(w, id) {
+            // spec: S-0208 claim 25 (r68: a walker's failed fresh search past the gate for an object destination, not a re-path of S-0209 claim 10, clears the destination near its locomotor destination)
+            let near_clear = walker && !repath && crate::walk::cleared_near_point(w, id);
+            // spec: S-0208 claim 25 (r68: where S-0212 claim 23's third row keeps an object destination after a fresh search, the walker has no locomotor destination from then on)
+            let point_lost = walker
+                && !repath
+                && !gives_up
+                && !near_clear
+                && crate::walk::object_locomotor_point(w, id).is_some();
+            // design: C7-P6 hold (quirks.jammed_move_dropped off: a move that would be given up while only units stand in its way is kept; the unit stops, counts as blocked from now if it was not, and searches again after the retry delay); not for a walker that claim 25 has cleared
+            if gives_up && !near_clear && holds(w, id) {
                 if let Some(ob) = w.obj_mut(id) {
                     ob.path.steps.clear();
                     start_delay(ob, t, r.general.retry_delay);
@@ -3525,10 +3542,17 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                     crate::spawn::clear_own_target(ob);
                     ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 }
+                if near_clear {
+                    // spec: S-0208 claim 25 (r68: the walker loses its destination in the same locomotion)
+                    ob.dest = None;
+                }
                 if walker {
                     // spec: S-0417 claim 17 (No path: a failed search that passes the gate ends the walking unit's movement in progress in that update, whether or not it keeps its destination; S-0212 claim 23, the sentence after its table)
                     ob.path.failed_for = ob.dest;
                 }
+            }
+            if point_lost {
+                crate::walk::locomotor_point_lost(w, id);
             }
             if gives_up && !human {
                 // spec: S-0212 claim 23a (a neutral or special house's unit gets the house-selected destination on the same tick: a nearby-cell result around the house's centre)
