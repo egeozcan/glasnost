@@ -7,6 +7,8 @@
 use glasnost_ini::Document;
 use glasnost_ini::value;
 
+use super::anims::AnimQuirks;
+
 /// The art keys of the slots a building placed during the game's set-up
 /// starts: *idle* and *active-1* … *active-4*, in that order.
 // spec: S-0108 claim 11 (set-up starts idle and active-1 … active-4); Import mapping (base keys)
@@ -338,12 +340,14 @@ pub fn end_in_play(t: &AnimType, n: i32) -> i32 {
 }
 
 /// The loop end λₑ in play for a sprite of `n` image frames (F2's assumed
-/// case).
-fn loop_end_in_play(t: &AnimType, n: i32) -> i32 {
+/// case), under `quirks.anim_loop_end_from_sprite` (`from_sprite`).
+fn loop_end_in_play(t: &AnimType, n: i32, from_sprite: bool) -> i32 {
     let end = end_in_play(t, n);
     // spec: S-0109 F2 (LoopEnd: absent E_s, not End; −1 E; 0 kept except for a new-theater type)
     match t.loop_end {
-        None => sprite_end(t, n),
+        None if from_sprite => sprite_end(t, n),
+        // spec: S-0109 Edge cases (quirks.anim_loop_end_from_sprite off: an absent loop end takes the end field E)
+        None => end,
         Some(-1) => end,
         Some(0) if t.new_theater => end,
         Some(v) => v,
@@ -351,16 +355,11 @@ fn loop_end_in_play(t: &AnimType, n: i32) -> i32 {
 }
 
 /// The image frame an animation of type `t` shows when it is created, its
-/// sprite holding `n` image frames (F2's assumed case).
+/// sprite holding `n` image frames (F2's assumed case), with every switch
+/// in its default position (the original's behaviour).
 pub fn first_frame(t: &AnimType, n: i32) -> i32 {
-    if !t.reverse {
-        // spec: S-0109 claims 1 and 12, F3 (k₀ = 0: image frame a; no random start)
-        return t.start;
-    }
-    let loop_end = loop_end_in_play(t, n);
-    // spec: S-0109 claim 8, F3 (k₀ = λ_e − 1 for a reversed animation: image frame a + λ_e − 1)
-    // spec: S-0205 claim 1 (the sums wrap in the 32-bit range, as the simulation's clock does)
-    t.start.wrapping_add(loop_end.wrapping_sub(1))
+    // spec: S-0109 Edge cases and quirks (every switch defaults on)
+    first_frame_under(t, n, &AnimQuirks::default())
 }
 
 /// Whether an animation of type `t` is drawn at the player's detail level
@@ -378,18 +377,25 @@ pub fn first_translucency(t: &AnimType, detail: i32, n: i32) -> u8 {
 }
 
 /// The image frame an animation of type `t` shows when it is created, its
-/// sprite holding `n` image frames, under the rules' switch
-/// `quirks.anim_reverse_raw_loop_end` (`raw_loop_end`): with it on, as
-/// [`first_frame`]; with it off, a reversed type's first frame is λₑ − 1,
-/// as the simulation's clock gives it.
-pub fn first_frame_under(t: &AnimType, n: i32, raw_loop_end: bool) -> i32 {
-    if !t.reverse || raw_loop_end {
-        return first_frame(t, n);
+/// sprite holding `n` image frames, under the rules' switches `q`, as the
+/// simulation's clock gives it: `quirks.anim_loop_end_from_sprite` decides
+/// an absent loop end and `quirks.anim_reverse_raw_loop_end` a reversed
+/// type's first frame (a + λₑ − 1 with it on, λₑ − 1 with it off).
+pub fn first_frame_under(t: &AnimType, n: i32, q: &AnimQuirks) -> i32 {
+    if !t.reverse {
+        // spec: S-0109 claims 1 and 12, F3 (k₀ = 0: image frame a; no random start)
+        return t.start;
     }
-    let loop_end = loop_end_in_play(t, n);
-    // spec: S-0109 Edge cases (quirks.anim_reverse_raw_loop_end off: k₀ = λₑ − a − 1, so the first
-    // image frame a + k₀ is λₑ − 1); S-0205 claim 1 (wraps, as the clock's sum does)
-    loop_end.wrapping_sub(1)
+    let loop_end = loop_end_in_play(t, n, q.anim_loop_end_from_sprite);
+    if q.anim_reverse_raw_loop_end {
+        // spec: S-0109 claim 8, F3 (k₀ = λ_e − 1 for a reversed animation: image frame a + λ_e − 1)
+        // spec: S-0205 claim 1 (the sums wrap in the 32-bit range, as the simulation's clock does)
+        t.start.wrapping_add(loop_end.wrapping_sub(1))
+    } else {
+        // spec: S-0109 Edge cases (quirks.anim_reverse_raw_loop_end off: k₀ = λₑ − a − 1, so the first
+        // image frame a + k₀ is λₑ − 1); S-0205 claim 1 (wraps, as the clock's sum does)
+        loop_end.wrapping_sub(1)
+    }
 }
 
 /// The fade code of a translucent-flag type at stage `k` with end field

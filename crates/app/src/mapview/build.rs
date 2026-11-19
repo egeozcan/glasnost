@@ -3561,14 +3561,18 @@ impl<'a> Builder<'a> {
                 // spec: S-0109 claims 1 and 20 (image frame a + k; the code from stage k and end E,
                 // translucency level 0)
                 Some((frame, stage, end)) => (frame, slots::translucency(&t, detail, stage, end)),
-                // spec: S-0109 Edge cases (the rules' quirks.anim_reverse_raw_loop_end; without typed
-                // rules the original's behaviour, as every switch defaults on)
+                // spec: S-0109 Edge cases (the rules' quirks.anim_reverse_raw_loop_end and
+                // quirks.anim_loop_end_from_sprite; without typed rules the original's behaviour, as
+                // every switch defaults on)
                 None => (
                     slots::first_frame_under(
                         &t,
                         n,
-                        self.rules
-                            .is_none_or(|r| r.quirks.anim_reverse_raw_loop_end),
+                        &self
+                            .rules
+                            .map_or_else(super::anims::AnimQuirks::default, |r| {
+                                super::anims::AnimQuirks::from(&r.quirks)
+                            }),
                     ),
                     slots::first_translucency(&t, detail, n),
                 ),
