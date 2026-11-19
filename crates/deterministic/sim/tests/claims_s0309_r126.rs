@@ -364,7 +364,7 @@ fn construction_not_yet_processed_restarts_then_guard() {
     }
     assert_eq!(beh(&w, b).0, Some(Behaviour::Construction));
     assert_eq!(w.obj(b).unwrap().econ.construction.first, None);
-    // That state is in the factory break-off window, where the first start is not withheld; what an owner change does there is open (Q-3261). The row is tested in the construction state: the window ended by hand.
+    // That state is in the factory break-off window, where the first start is not withheld; an owner change there ends the window (S-0309 claim 31 r145, `claims_s0406_r20.rs`). The row is tested in the construction state: the window ended by hand.
     assert!(placement::in_break_off_window(w.obj(b).unwrap()));
     w.obj_mut(b).unwrap().econ.construction.break_off = placement::BreakOff::None;
     ownership::change(&mut w, b, Some(B), Cause::Trigger);

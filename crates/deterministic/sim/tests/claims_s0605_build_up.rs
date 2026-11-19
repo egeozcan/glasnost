@@ -99,7 +99,10 @@ struct Scene {
 
 /// The four buildings placed by Alpha and handed to Beta by a trigger
 /// during their first build-up run, with an entrant of Beta's for each.
-fn handed_over() -> Scene {
+/// They are in their factory break-off window then (S-0406 claim 17);
+/// unless `in_window`, the window is ended by hand first, so the change
+/// finds each in its construction state.
+fn handed_over_at(in_window: bool) -> Scene {
     let mut w = testkit::game_with(&rules(), SIZE, 7);
     testkit::run(&mut w, 2);
     let bio = placed(&mut w, "BIO", -8, -6);
@@ -137,6 +140,11 @@ fn handed_over() -> Scene {
             (None, Some(Behaviour::Construction), true),
             "set-up: construction queued, build-up running"
         );
+        assert!(placement::in_break_off_window(w.obj(b).unwrap()));
+        if !in_window {
+            // S-0309 claim 31 r145: an owner change in the window ends it (`claims_s0406_r20.rs`); the rows of this file are tested in the construction state.
+            w.obj_mut(b).unwrap().econ.construction.break_off = placement::BreakOff::None;
+        }
     }
     for b in [bio, grind, depot, pad] {
         ownership::change(&mut w, b, Some(B), Cause::Trigger);
@@ -144,12 +152,14 @@ fn handed_over() -> Scene {
     for b in [bio, grind, depot, pad] {
         let (cur, queued, up) = state(&w, b);
         assert!(
-            up && !matches!(
+            !matches!(
                 cur.or(queued),
                 Some(Behaviour::Construction | Behaviour::Selling)
             ),
-            "set-up: guard replaced construction, the build-up state lasts ({cur:?}, {queued:?}, {up})"
+            "set-up: guard replaced construction ({cur:?}, {queued:?})"
         );
+        // spec: S-0309 claim 31 (r145: in the window the change ends it, construction-completed from the change; in the construction state the build-up lasts until the end of the next turn)
+        assert_eq!(up, !in_window, "set-up: the build-up state lasts or ends");
     }
     Scene {
         w,
@@ -175,7 +185,7 @@ fn answers(s: &Scene) -> (Answer, Answer, bool, bool) {
 // spec: S-0605 claim 1, S-0603 claim 2, S-0314 claim 16 and S-0501 claim 22 (a building that has not finished its build-up refuses); S-0309 claim 31 (an owner change replaces the queued construction with guard)
 #[test]
 fn issue_347_unfinished_build_up_after_an_owner_change_refuses() {
-    let s = handed_over();
+    let s = handed_over_at(false);
     assert_eq!(
         answers(&s),
         (Answer::Refuses, Answer::Refuses, false, false),
@@ -183,10 +193,21 @@ fn issue_347_unfinished_build_up_after_an_owner_change_refuses() {
     );
 }
 
+// spec: S-0605 claim 1, S-0603 claim 2, S-0314 claim 16 and S-0501 claim 22 (a building whose build-up has finished accepts); S-0309 claim 31 (r145: an owner change in the factory break-off window ends it, the building construction-completed from the change) and S-0406 claim 17 (r20)
+#[test]
+fn r20_an_owner_change_in_the_break_off_window_finishes_the_build_up() {
+    let s = handed_over_at(true);
+    assert_eq!(
+        answers(&s),
+        (Answer::Accepts, Answer::Accepts, true, true),
+        "(absorber, recycler, depot, pad) from the change"
+    );
+}
+
 // spec: S-0605 claim 1, S-0603 claim 2, S-0314 claim 16 and S-0501 claim 22 (the build-up ends at the building's next turn, after which each accepts)
 #[test]
 fn issue_347_control_the_next_turn_ends_the_build_up_and_each_accepts() {
-    let mut s = handed_over();
+    let mut s = handed_over_at(false);
     tick::step(&mut s.w);
     for b in [s.bio, s.grind, s.depot, s.pad] {
         assert!(!state(&s.w, b).2, "the build-up state has ended");
