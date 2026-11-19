@@ -245,6 +245,17 @@ fn the_difficulties_change_the_plan_only_away_from_normal() {
     assert!(hard.harvesters > normal.harvesters);
 }
 
+/// A probe that keeps the names of the brain's parts it is told of.
+struct Parts(Vec<&'static str>);
+
+impl glasnost_sim::probe::Probe for Parts {
+    fn mark(&mut self, phase: glasnost_sim::probe::Phase) {
+        if let glasnost_sim::probe::Phase::Part(name) = phase {
+            self.0.push(name);
+        }
+    }
+}
+
 // design: own AI (#449, B10): at easy the default script acts on one of every three of its house's think ticks, and on the other two gives only what it gives between thinks, so it builds, sends its army and answers a raid later; normal and hard act on every think tick
 #[test]
 fn easy_acts_on_one_think_tick_in_three() {
@@ -252,6 +263,7 @@ fn easy_acts_on_one_think_tick_in_three() {
     // nocite: design: own AI (#449, B10): the easy level's rate
     const EASY_EVERY: usize = 3;
     let map = fixture::map();
+    let mut got = Vec::new();
     for level in AiDifficulty::ALL {
         let seat = AiSeat {
             script: AiSeat::DEFAULT_SCRIPT,
@@ -264,22 +276,29 @@ fn easy_acts_on_one_think_tick_in_three() {
         for _ in 0..2 * EASY_EVERY as i32 * THINK_PERIOD {
             let tick = g.world.tick;
             if glasnost_ai::scripted::thinks_at(HouseId(0), tick) {
+                // The parts of a think (the economy first, the build and
+                // the specials) mark the probe only when the house acts.
                 let view = View::new(&g.world, HouseId(0));
-                let (mut a, mut b) = (base.clone(), base.clone());
-                let on = a.think(&view, Schedule { tick, thinks: true }, level, None, &mut ());
-                let off = b.think(&view, Schedule { tick, thinks: false }, level, None, &mut ());
-                if format!("{on:?}") == format!("{off:?}") {
-                    idle += 1;
-                } else {
+                let mut p = Parts(Vec::new());
+                base.clone()
+                    .think(&view, Schedule { tick, thinks: true }, level, None, &mut p);
+                if p.0.contains(&"ai:economy_first") {
                     acted += 1;
+                } else {
+                    idle += 1;
                 }
             }
             g.step();
         }
-        if level == AiDifficulty::Easy {
-            assert_eq!((acted, idle), (2, 2 * (EASY_EVERY - 1)), "{level:?}");
-        } else {
-            assert_eq!((acted, idle), (2 * EASY_EVERY, 0), "{level:?}");
-        }
+        got.push((level, acted, idle));
     }
+    let n = 2 * EASY_EVERY;
+    assert_eq!(
+        got,
+        vec![
+            (AiDifficulty::Easy, 2, n - 2),
+            (AiDifficulty::Normal, n, 0),
+            (AiDifficulty::Hard, n, 0),
+        ]
+    );
 }
