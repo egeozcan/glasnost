@@ -244,3 +244,42 @@ fn the_difficulties_change_the_plan_only_away_from_normal() {
     assert!(easy.harvesters < normal.harvesters && easy.wave < normal.wave);
     assert!(hard.harvesters > normal.harvesters);
 }
+
+// design: own AI (#449, B10): at easy the default script acts on one of every three of its house's think ticks, and on the other two gives only what it gives between thinks, so it builds, sends its army and answers a raid later; normal and hard act on every think tick
+#[test]
+fn easy_acts_on_one_think_tick_in_three() {
+    use glasnost_ai::scripts::{AiScript, Schedule, ScriptState, View};
+    // nocite: design: own AI (#449, B10): the easy level's rate
+    const EASY_EVERY: usize = 3;
+    let map = fixture::map();
+    for level in AiDifficulty::ALL {
+        let seat = AiSeat {
+            script: AiSeat::DEFAULT_SCRIPT,
+            difficulty: level,
+        };
+        let mut g = armed(seat);
+        let base = ScriptState::start(seat, &g.world, &map, HouseId(0));
+        let (mut acted, mut idle) = (0, 0);
+        // nocite: test data of our own (two of easy's think cycles)
+        for _ in 0..2 * EASY_EVERY as i32 * THINK_PERIOD {
+            let tick = g.world.tick;
+            if glasnost_ai::scripted::thinks_at(HouseId(0), tick) {
+                let view = View::new(&g.world, HouseId(0));
+                let (mut a, mut b) = (base.clone(), base.clone());
+                let on = a.think(&view, Schedule { tick, thinks: true }, level, None, &mut ());
+                let off = b.think(&view, Schedule { tick, thinks: false }, level, None, &mut ());
+                if format!("{on:?}") == format!("{off:?}") {
+                    idle += 1;
+                } else {
+                    acted += 1;
+                }
+            }
+            g.step();
+        }
+        if level == AiDifficulty::Easy {
+            assert_eq!((acted, idle), (2, 2 * (EASY_EVERY - 1)), "{level:?}");
+        } else {
+            assert_eq!((acted, idle), (2 * EASY_EVERY, 0), "{level:?}");
+        }
+    }
+}
