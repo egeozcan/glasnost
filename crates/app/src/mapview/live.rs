@@ -1763,6 +1763,36 @@ impl Live {
         self.synced = Some(self.world.tick);
     }
 
+    /// Whether the viewer sees playing animation `a`: every animation but a
+    /// nuclear warning marker, which only a viewer whose house is not
+    /// allied with the launching house and owns a psychic sensor in
+    /// operation reaching the target cell's centre sees, tested afresh in
+    /// every redraw. `sensors` holds the viewer's sensors once worked out.
+    fn warning_shown(&self, a: &LiveAnim, sensors: &mut Option<Vec<ObjectId>>) -> bool {
+        let Some(s) = a.sim.and_then(|id| self.world.anims.anims.get(&id)) else {
+            return true;
+        };
+        let Some(m) = s.warning else {
+            return true;
+        };
+        // design: watch mode (lead request 2026-11-02, as for the hostile-intent lines): no house's sensors are a watcher's
+        let Some(v) = self.viewer else {
+            return false;
+        };
+        // spec: S-0513 claim 11 (not to a house allied with the launching house; a house is allied with itself)
+        if m.house == Some(v) || self.world.allied(Some(v), m.house) {
+            return false;
+        }
+        // spec: S-0513 claim 11 and Q-3253's interim rule (the marker stands at the target cell's centre while attached)
+        let at = s.pos.unwrap_or(a.pos);
+        // spec: S-0513 claim 11 and S-0610 claim 9 (the viewer's house owns a sensor in operation, S-0405)
+        let sensors = sensors.get_or_insert_with(|| glasnost_sim::psychic::sensors(&self.world, v));
+        // spec: S-0513 claim 11 and S-0610 claim 10 (that sensor's reach covers the target cell's centre, heights included; tested in every update)
+        sensors
+            .iter()
+            .any(|&b| glasnost_sim::psychic::within_reach(&self.world, b, at))
+    }
+
     /// Draws the game's animations in play that the drawing does not show
     /// (S-0109 claims 28 and 29), each as [`Live::take_effects`] draws the
     /// event that creates it (#98).
@@ -4173,11 +4203,15 @@ impl Live {
         own_ground.sort_by_key(|(k, _)| *k);
         self.laps.buildings += self.lap_end(&mut lap);
         // The playing animations with a sprite (S-0109), by serial number.
+        let mut sensors = None;
         let playing: Vec<(u32, super::slots::Layer, AnimDraw)> = self
             .anims
             .iter()
             .filter_map(|a| {
                 let e = a.entry.as_ref().filter(|e| e.sprite)?;
+                if !self.warning_shown(a, &mut sensors) {
+                    return None;
+                }
                 Some((
                     a.serial,
                     a.layer,
