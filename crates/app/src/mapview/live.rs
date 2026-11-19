@@ -3417,32 +3417,24 @@ impl Live {
     /// until its handover, or in the build-down of a sale; `None` outside
     /// it.
     ///
-    /// The simulation keeps the stage's timing (the entry tick, the first
-    /// construction processing *C* and the build-down's start) but not the
-    /// stage itself, so the drawing derives it from those ticks as
-    /// uninterrupted play runs it (S-0406 claims 14 and 17, F7; S-0408
-    /// claim 6). A tick without the building's update, which S-0406 claim
-    /// 17 says delays the processing steps, is not followed (our seam).
+    /// While the building builds up, the stage is the simulation's own
+    /// construction stage, which its updates advance (S-0108 Terms, *body
+    /// stage*, r111; S-0406 claims 14 and 17): an advance held by a missed
+    /// turn is drawn held (#440). The build-down of a sale derives its stage
+    /// from the build-down's start, as uninterrupted play runs it (S-0408
+    /// claim 6).
     pub(super) fn buildup_of(&self, o: &Object) -> Option<Buildup> {
         use glasnost_sim::econ::sell::{Stage, buildup_range};
         let t = self.shown_tick();
         let c = &o.econ.construction;
+        // `None` for the simulation's construction stage, else the build-down's start.
         let (start, selling) = match o.econ.sale.as_ref().map(|s| s.stage) {
             // spec: S-0309 claim 31 (an owner change's idle range takes the place of the build-down: the building is no longer in the construction state)
             Some(Stage::BuildDown(_)) if o.econ.idle_body.is_some() => return None,
             // spec: S-0408 claim 6 and S-0108 claim 2 (the build-down from its first tick, backwards)
-            Some(Stage::BuildDown(since)) => (since, true),
-            _ if c.building_up => {
-                // spec: S-0406 claim 17 (stage timing counts from the entry tick) and claim 14 (the
-                // first construction processing C starts the range again at stage 0)
-                let start = match (c.first, c.entry) {
-                    (Some(first), _) if t >= first => first,
-                    (_, Some(entry)) => entry,
-                    (Some(first), None) => first,
-                    (None, None) => t,
-                };
-                (start, false)
-            }
+            Some(Stage::BuildDown(since)) => (Some(since), true),
+            // spec: S-0406 claim 17 (stage timing counts from the entry tick) and claim 14 (the first construction processing C starts the range again at stage 0): the simulation's stage
+            _ if c.building_up => (None, false),
             _ => return None,
         };
         let range = buildup_range(&self.world, o.type_index);
@@ -3462,7 +3454,11 @@ impl Live {
         let stage = if range.delay <= 0 || range.n <= 1 {
             0
         } else {
-            (t.saturating_sub(start).max(0) / range.delay).rem_euclid(range.n)
+            match start {
+                Some(start) => (t.saturating_sub(start).max(0) / range.delay).rem_euclid(range.n),
+                // spec: S-0108 Terms (body stage, r111: it advances only in the building's update; an advance due on a missed turn is made at the next update)
+                None => c.stage.rem_euclid(range.n),
+            }
         };
         Some(Buildup {
             stage,
