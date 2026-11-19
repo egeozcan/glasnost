@@ -14,8 +14,7 @@ use glasnost_map::CellXY;
 use glasnost_map::triggers::{Event, TagDef, TriggerDef, Triggers};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
-    Country, Decimal, LocomotionClass, Locomotor, ProjectileType, UnitType, WarheadType,
-    WeaponType,
+    Country, Decimal, LocomotionClass, Locomotor, ProjectileType, UnitType, WarheadType, WeaponType,
 };
 use glasnost_sim::combat::check::{self, Answer};
 use glasnost_sim::combat::damage::{self, Hit};
@@ -2965,14 +2964,21 @@ fn claim_25_h30_a_two_by_two_reaches_the_far_field_either_way() {
         let (mut w, b, a) = issue_451_scene_with(&r, "SMV2");
         until(&mut w, 3000, |w| group(w, b).state == GroupState::Packing).expect("packing");
         assert_eq!(left_in(&w, 10, 8), 9, "the far field is untouched");
-        assert_eq!(w.obj(b).unwrap().guard_spot, Some(Target::Cell(a)), "{quirk}");
+        assert_eq!(
+            w.obj(b).unwrap().guard_spot,
+            Some(Target::Cell(a)),
+            "{quirk}"
+        );
         until(&mut w, 200, |w| w.obj(b).is_none()).expect("packed up");
         let v = vehicle_master(&w);
         // spec: S-0415 claim 10 and F3 (the return cell of a 2 × 2 foundation is its top-left cell)
         assert_eq!(w.obj(v).unwrap().pos.cell(), a);
         let next = next_building(&mut w, Some(b), 1500);
         let n = w.obj(next).unwrap().pos.cell();
-        assert!(near_far_field(n, a), "{quirk}: redeployed at {n:?}, from {a:?}");
+        assert!(
+            near_far_field(n, a),
+            "{quirk}: redeployed at {n:?}, from {a:?}"
+        );
     }
 }
 
@@ -3036,7 +3042,11 @@ fn claim_25_h30_c1_no_field_cycle_runs_on() {
     assert!(cells.len() >= 3, "{cells:?}");
     let mut last = a;
     for &c in &cells {
-        assert_eq!(c, CellXY::new(last.x - 1, last.y - 1), "{cells:?} from {a:?}");
+        assert_eq!(
+            c,
+            CellXY::new(last.x - 1, last.y - 1),
+            "{cells:?} from {a:?}"
+        );
         last = c;
     }
 }
@@ -3200,9 +3210,20 @@ fn s0301_bound_firer_is_illegal_for_every_target_and_slot() {
     // A replacement slave still inside its master is bound as well.
     let lost = ids.pop().unwrap();
     glasnost_sim::objects::remove(&mut w, lost);
-    until(&mut w, 200, |w| group(w, b).members.iter().any(|m| m.id.is_some_and(|s| m.inside && s != lost)))
-        .expect("a replacement inside");
-    ids.extend(group(&w, b).members.iter().filter(|m| m.inside).filter_map(|m| m.id));
+    until(&mut w, 200, |w| {
+        group(w, b)
+            .members
+            .iter()
+            .any(|m| m.id.is_some_and(|s| m.inside && s != lost))
+    })
+    .expect("a replacement inside");
+    ids.extend(
+        group(&w, b)
+            .members
+            .iter()
+            .filter(|m| m.inside)
+            .filter_map(|m| m.id),
+    );
     for &s in &ids {
         for t in targets {
             for slot in [0, 1] {
