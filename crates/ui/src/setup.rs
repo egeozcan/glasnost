@@ -1176,6 +1176,29 @@ mod tests {
         let g = game_setup(&lobby, &rules_sim, &offered, 1, 2).unwrap();
         assert_eq!(g.ai_seat(computer), easy);
         assert_eq!(g.ai_seat(person), AiSeat::DEFAULT);
+        // A computer above the person and a closed row between: the
+        // choices follow the houses, whose order is not the rows' (S-0009
+        // claim 19), and a closed row shifts nothing.
+        let mut s = Setup::new(&r);
+        s.apply(&SetupHit::Map(1), &r, &maps());
+        s.slots[0].kind = SlotKind::Ai;
+        s.slots[1].kind = SlotKind::Closed;
+        s.slots[2].kind = SlotKind::Human;
+        s.slots[3].kind = SlotKind::Ai;
+        s.apply(&SetupHit::Difficulty(0, 1), &r, &maps());
+        s.apply(&SetupHit::Difficulty(3, -1), &r, &maps());
+        assert_eq!(s.house_order(), vec![2, 0, 3]);
+        let hard = AiSeat {
+            script: AiSeat::DEFAULT_SCRIPT,
+            difficulty: AiDifficulty::Hard,
+        };
+        let lobby = s.lobby(&r, &maps()).unwrap();
+        let g = game_setup(&lobby, &rules_sim, &offered, 1, 2).unwrap();
+        let ai: Vec<bool> = g.houses.iter().take(3).map(|h| h.ai).collect();
+        assert_eq!(ai, [false, true, true]);
+        assert_eq!(g.ai_seat(0), AiSeat::DEFAULT, "the person");
+        assert_eq!(g.ai_seat(1), hard, "row 0's computer");
+        assert_eq!(g.ai_seat(2), easy, "row 3's computer");
     }
 
     #[test]
