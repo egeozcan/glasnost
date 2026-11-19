@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 67
+revision: 68
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-18
+approved-on: 2026-11-19
 measurements: [M-0023]
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142, Q-3236]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142, Q-3236, Q-3262]
 supersedes: []
 ---
 
@@ -52,7 +52,9 @@ jumpjet type move by the jumpjet locomotor, which belongs to other movement spec
 claim 16; claim 18 below supplies the previously missing cell-destination point and height,
 and the consequence of arriving underneath its deck. S-0212 claim 7 already specifies that
 a successful path to a high-bridge cell ends on its deck; claim 23 already owns later search
-failure. Neither supplied the locomotor destination's numeric height. Skirmish only; network games and
+failure. Neither supplied the locomotor destination's numeric height. Claim 25 answers Q-3262:
+the cell that a walker's searches look for while its destination names an object that has moved,
+and what a failed search near its locomotor destination does. Skirmish only; network games and
 campaigns are out of scope.
 
 Citations refer to the approved specs and their current correction-round drafts, including
@@ -186,7 +188,8 @@ used by this spec:
   its walk: while a unit walks under a move, the point that its destination gave when it was last
   assigned (for a cell destination, the centre and height defined by claim 18). A destination
   that names an object gives the object's movement point at that assignment. The point does not
-  follow the object as it moves; only a new assignment gives a new point. The point stays when
+  follow the object as it moves; only a new assignment gives a new point. A walker's searches look
+  for this point's cell, not for the object (claim 25). The point stays when
   the destination is lost without the locomotor being told, as when the object it names goes
   inside (S-0507 claim 6a). A unit with no movement in progress has none. It differs from the
   *destination* above, which is the cell or object the unit's orders and behaviour give it. Claim
@@ -1502,6 +1505,63 @@ used by this spec:
       but that particular combination is not independently tested
     - Confidence: high for destination selection not bypassing pathfinding; medium for the
       combined cliff-cell outcome, pending a discriminating observation
+
+### Searches for an object destination
+
+25. **Searches for an object destination that moves (Q-3262).** While a walker's destination
+    names an object, each search that its walking makes looks for the cell of its locomotor
+    destination (Terms): the point that the object gave when the destination was last assigned.
+    The object's place at the time of the search is not read. This holds for the fresh search of
+    S-0212 claim 20 when no stored steps are left, for the immediate new path of S-0209 claim 7 and
+    for the re-paths of S-0209 claim 10. It holds whatever the object is: an infantry unit, a
+    vehicle, an aircraft or a building. The kind of object matters only for the point it gives at
+    the assignment (Terms). So a walker whose object moves away after the assignment walks to the
+    cell of that point, and claim 16 decides there whether its walk ends. It heads for the object's
+    new place only when a later assignment gives it a new point, as S-0215 claim 26's leash can do
+    for *area guard* once the walker has no destination. Where S-0212 claim 24 substitutes a
+    nearby cell for the cell that a search looks for, that claim decides what the substitute
+    replaces.
+
+    **A failed search near the locomotor destination.** When a walker's fresh search finds no path
+    and the reachability gate has passed (S-0212 claim 23, the rows after the gate's row), the
+    walker loses its destination in the same locomotion when both of these hold:
+    - its distance *D* of S-0209 Formulas F1, from its position to its locomotor destination with
+      heights included, is less than the close-enough distance (strict),
+    - it is not held by a tether link (Terms).
+
+    No other test is made: not the contact, height or land-type test of S-0209 claim 8. The
+    immediate new path of S-0209 claim 7 is such a fresh search. The rule does not apply to a
+    failed re-path of S-0209 claim 10. When a failed fresh search does not meet both conditions,
+    S-0212 claim 23 decides alone. Where its third row applies, the walker keeps its destination,
+    its movement in progress ends at the failure (the sentence after that claim's table), and it
+    has no locomotor destination from then on, so it makes no further search until its destination
+    is assigned again.
+
+    **A walker standing with no stored path (Q-3262 question 3).** For such a walker the cell that
+    decides whether anything is left to walk is its locomotor destination's cell. The cell that the
+    object is in at the time decides nothing:
+    - With movement in progress, it makes the fresh search for that cell at its first locomotion that
+      the path retry delay allows (S-0212 claim 21). A walker that stands in that cell on the same
+      search layer gets no path (S-0212 claim 12), and S-0212 claim 23's third row applies. The
+      rule above then clears its destination when *D* is less than the close-enough distance and
+      it is not held by a tether link. Otherwise it keeps its destination with no movement in
+      progress. A walker outside that cell walks to it when the search finds a path, and claim 16
+      decides on its arrival tick.
+    - With no movement in progress, it has no locomotor destination. Its walking makes no search and
+      tests no cell, so a destination that it keeps stays until a rule assigns or clears it.
+
+    So a walker never ends its move because it stands in the cell that its object is in at that
+    time, unless that is also the cell of its locomotor destination.
+    - Backing: `measurable` (scenario W18: part a for the fresh search's cell with an infantry
+      object and with a vehicle object, part b for a walker standing in that cell that keeps its
+      destination, part c for the clearing near the locomotor destination). `unmeasured` for the
+      searches of S-0209 claims 7 and 10, for an aircraft or a building as the object and for the
+      tether condition. W18 arranges no blocked step and no tether link, a walker given a flying
+      aircraft as its destination is not arranged here, and a building does not move.
+    - Confidence: high for the fresh search's cell with an infantry or a vehicle object, and for a
+      walker standing in its locomotor destination's cell that does not end its move. Medium for
+      the searches of S-0209 claims 7 and 10, for an aircraft or a building as the object, for the
+      clearing near the locomotor destination and for its tether condition.
 
 ## Formulas
 
@@ -3013,6 +3073,38 @@ cases).**
   decides nothing: *F* is then held by *V*₁, not by a retry delay. Falsified by no change of
   position in that tick, in particular by *F* standing until a retry delay that started at its last
   search has run out.
+**Scenario W18: searches for an object destination that moves (claim 25; Q-3262).**
+- *Setup:* a purpose-made flat map of open, clear ground, stock data except the test files named
+  below, game speed index 2, director off and mods off. Walker *A* is an ordinary walking infantry
+  unit of the human-controlled house, of a type with a weapon or a guard range that gives a leash
+  *L* (S-0215 Formulas F5) of at least 3 cells. Object *B* is a second unit of the same house. No
+  enemy unit or building is within 30 cells of either, and no other unit is within 5 cells of the
+  cells named below. The recorder reads at the end of each tick *A*'s position, cell, destination
+  and target, and *B*'s position and cell. Cells are written (*x*, *y*) in map cell coordinates.
+- *Procedure and expected results:* (a) *A* stands at rest in cell (*x*, *y*) and *B*, an infantry
+  unit, in (*x* + 30, *y*). At the start of tick *T* give *A* an area guard order on *B* (S-0213
+  claim 21: *B* becomes its destination and guard spot). At the start of tick *T* + 1 order *B* to
+  (*x* + 30, *y* + 20). Run 2: the same with *B* a vehicle with the driving locomotor. Expected: *A*
+  first has no destination at the end of a tick on which it is in (*x* + 30, *y*), and every cell it
+  holds before then lies within 1 row of row *y*: its first path, of at most 24 steps (S-0212 claim
+  20), and the fresh search after it both lead to *B*'s first cell. Falsified by *A* first having no
+  destination in another cell, or by a cell of *A* more than 1 row from row *y* before that tick.
+  What *A* does after that tick (the leash may give it *B* again) is not part of this test. A run
+  decides nothing when *B* is still in (*x* + 30, *y*) at the end of the tick on which *A* first
+  enters a cell of column *x* + 24, or when *A*'s target is ever present. (b) *A* and *B*, both
+  infantry, are placed by the map in one cell *C*₀, *A* on the top standing position and *B* on the
+  bottom one (table P: 181 leptons apart). A test file sets the close-enough distance to 0.1 cells
+  (25 leptons by S-0209 F2). Order *A* and *B* as in part a, *B* to a cell 20 cells away, and record
+  600 ticks. Expected: *A*'s position never changes, and at the end of the run its destination still
+  names *B*. *A*'s only search, for its own cell, finds no path, *D* is above 25 leptons, and with
+  its destination kept the leash never holds. Falsified by any change of *A*'s position, in
+  particular a step towards *B*, or by *A* having no destination at the end of any tick. A run
+  decides nothing when *A*'s target is ever present or when *A* is given another order. (c) Part b
+  with the test file setting the close-enough distance to 2 cells (512 leptons) instead. Expected:
+  at the end of a tick before *B* is farther than *L* from *A*, *A* has no destination, and *A*'s
+  position does not change before that tick. Falsified by *A*'s destination naming *B* at the end of
+  every tick until *B* is farther than *L*, or by a change of *A*'s position before *A* first has no
+  destination. Remove the test files afterwards.
 
 ## Open questions
 
@@ -3150,3 +3242,24 @@ cases).**
   reserved while its warp was pending. Claim 48's row
   for the first pending turn may note that a teleporting infantry member does not jump to a
   landing point chosen then (S-0208 claim 19, rated low there as claim 48 rates that turn).
+- **S-0212, claim 20.** Beside its sentence for a hovering unit, it may say for the walk locomotor
+  that the cell its fresh search and its searches after a blocked step look for is the cell of its
+  locomotor destination, the point its destination gave at the last assignment, not the cell of
+  the object that its destination names (S-0208 claim 25).
+- **S-0212, claim 23.** Its third row's "For locomotors other than driving, ship and hovering, the
+  destination is kept" and the sentence "Being within the close-enough distance of the destination
+  makes no difference to any row" should point to S-0208 claim 25 for the walk locomotor: after a
+  fresh search that passes the gate and finds no path, a walker whose distance to its locomotor
+  destination is less than the close-enough distance and that is not held by a tether link loses
+  its destination in the same locomotion.
+- **S-0209, claim 7.** Its "When the search finds no path, S-0212 (claim 23) says what follows" may
+  add S-0208 claim 25 for the clearing near the locomotor destination, which applies to this search.
+- **S-0215, claim 22.** Its list of the updates whose locomotion clears an infantry unit's
+  destination ("by an arrival that ends its walk (S-0208) or a search that fails at the
+  reachability gate (S-0212 claim 23)") may add a failed fresh search near the locomotor
+  destination (S-0208 claim 25).
+- **S-0417, claim 17.** Its "A walking unit that keeps its destination after a failed search waits
+  for the delay with it (S-0212 claim 23, third row)" may add that a walking unit not held by a
+  tether link whose distance to its locomotor destination is less than the close-enough distance
+  loses its destination at that failure instead (S-0208 claim 25). Its movement in progress ends
+  at the failure in both cases, so the bullet's conclusion about the first request is unchanged.
