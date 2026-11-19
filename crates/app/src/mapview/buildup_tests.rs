@@ -369,12 +369,16 @@ fn a_placed_gate_builds_up_backwards() {
     assert!(building > 2, "built up over {building} drawn frames");
 }
 
+/// One drawn frame of [`trace_missed`]: the shown tick, the simulation's
+/// construction stage and the look.
+type StageSeen = (i32, i32, Look);
+
 /// A placed building with a build-up sprite that misses its turn on tick
 /// *C* + `miss` (an animation just before it in the update order leaves
 /// play in its own turn then, S-0203 claim 10), followed to its handover:
 /// per drawn frame the shown tick, the simulation's construction stage, and
 /// the look. Also the range (*n*, *d_b*) and *C*.
-fn trace_missed(miss_after_c: impl Fn(i32) -> i32) -> ((i32, i32), i32, Vec<(i32, i32, Look)>) {
+fn trace_missed(miss_after_c: impl Fn(i32) -> i32) -> ((i32, i32), i32, Vec<StageSeen>) {
     let (mut import, catalogue, mut assets) = context_full(RULES, ART);
     import
         .arts
