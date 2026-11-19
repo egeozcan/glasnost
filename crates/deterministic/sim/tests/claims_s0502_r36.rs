@@ -236,7 +236,11 @@ fn j12_e_r36_killed_ascending_before_its_maximum_speed() {
     let s = j(&w, u);
     assert_eq!(s.phase, Phase::Ascending, "void unless ascending");
     assert!(s.moving, "void unless committed");
-    assert_eq!(s.vm.to_i32_common(), 0, "void unless the maximum speed is 0");
+    assert_eq!(
+        s.vm.to_i32_common(),
+        0,
+        "void unless the maximum speed is 0"
+    );
     assert!(height(&w, u) * 2 <= s.ht, "void unless h is at most half");
     assert!(height(&w, u) > 0, "above the surface");
     kill(&mut w, u);
@@ -272,7 +276,11 @@ fn claim18_r36_a_killed_unit_with_no_cell_keeps_its_flight() {
             Phase::Cruising,
             "switch {on}: the flight state is kept"
         );
-        assert_eq!(j(&w, u).dest, point, "switch {on}: the movement point is kept");
+        assert_eq!(
+            j(&w, u).dest,
+            point,
+            "switch {on}: the movement point is kept"
+        );
         assert!(jump::moving(&w, u), "switch {on}: the commitment is kept");
         assert_eq!(
             w.obj(u).unwrap().dest,

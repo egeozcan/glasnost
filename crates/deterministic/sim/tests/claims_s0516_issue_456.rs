@@ -36,7 +36,10 @@ fn scene() -> (Ruleset, World, ObjectId, ObjectId) {
         acquire::player_owned(&w, tower),
         "void unless the searcher is human-owned (claim 25 g is not in play)"
     );
-    assert!(appears_disguised(&w, m, Some(BETA)), "void unless it appears disguised");
+    assert!(
+        appears_disguised(&w, m, Some(BETA)),
+        "void unless it appears disguised"
+    );
     (r, w, m, tower)
 }
 
@@ -85,7 +88,12 @@ fn issue_456_a_moving_mirage_is_undisguised_and_picked_on_every_moving_tick() {
                 "no disguise on a moving tick (tick {})",
                 w.tick
             );
-            assert_eq!(picks(&w, tower), Some(m), "picked while moving (tick {})", w.tick);
+            assert_eq!(
+                picks(&w, tower),
+                Some(m),
+                "picked while moving (tick {})",
+                w.tick
+            );
         }
         expect_by_predicate(&w, m, tower, "on the way");
         if !occupancy::in_progress(&w, m) && w.obj(m).unwrap().cloak.disguise.is_some() {
@@ -126,7 +134,12 @@ fn issue_456_after_a_damaging_hit_it_is_picked_until_it_disguises_again() {
     let mut waited = 0;
     while w.obj(m).unwrap().cloak.disguise.is_none() {
         assert!(!occupancy::in_progress(&w, m), "it stays still");
-        assert_eq!(picks(&w, tower), Some(m), "picked in the lockout (tick {})", w.tick);
+        assert_eq!(
+            picks(&w, tower),
+            Some(m),
+            "picked in the lockout (tick {})",
+            w.tick
+        );
         run(&mut w, 1);
         waited += 1;
         assert!(waited < 60, "it disguises again");
@@ -143,7 +156,10 @@ fn issue_456_the_fake_blink_does_not_let_a_human_defence_pick_it() {
     let t = w.tick;
     w.obj_mut(m).unwrap().cloak.blink_until = t + BLINK;
     assert!(disguise::blinking(&w, m), "void unless blinking");
-    assert!(appears_disguised(&w, m, Some(BETA)), "still appears disguised");
+    assert!(
+        appears_disguised(&w, m, Some(BETA)),
+        "still appears disguised"
+    );
     assert_ne!(picks(&w, tower), Some(m));
 }
 
@@ -160,7 +176,10 @@ fn issue_456_a_just_stopped_mirage_follows_the_predicate() {
         expect_by_predicate(&w, m, tower, "after the stop");
         run(&mut w, 1);
     }
-    assert!(w.obj(m).unwrap().cloak.disguise.is_some(), "it disguises again");
+    assert!(
+        w.obj(m).unwrap().cloak.disguise.is_some(),
+        "it disguises again"
+    );
     // Printed for the request (Q-3313): whether it was already disguised in the first still state between ticks.
     eprintln!("first still state between ticks disguised: {first_still_disguised}");
 }

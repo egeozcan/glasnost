@@ -62,6 +62,9 @@ fn issue_458_another_firer_keeps_an_erased_target_and_its_shots_do_nothing() {
         assert!(ticks < 60, "the lock removes it");
     }
     assert!(w.tick >= n + 34, "removed after the stated updates");
-    assert!(ticks >= 32, "void unless two of claim 29's 16-tick checks passed");
+    assert!(
+        ticks >= 32,
+        "void unless two of claim 29's 16-tick checks passed"
+    );
     assert!(shots >= 1, "void unless the other firer fired");
 }
