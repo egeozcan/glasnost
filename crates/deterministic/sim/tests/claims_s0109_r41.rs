@@ -408,7 +408,10 @@ fn open_question_owner_removed_by_its_own_detonation() {
         assert_eq!(w.rng, e, "seed {seed}");
         assert_eq!(stage(w, at(0, 0)), Some(if crater { 2 } else { 8 }));
         // spec: S-0109 r45 claim 22 (the killing hit ends the attachment: not drawn from it on, deleted at its next update)
-        assert!(anims::shown(w, id).is_none(), "not drawn from the killing hit on");
+        assert!(
+            anims::shown(w, id).is_none(),
+            "not drawn from the killing hit on"
+        );
         assert!(w.update.contains(id), "still in the update order this tick");
         let mut w = runs.pop().unwrap().0;
         tick::step(&mut w);

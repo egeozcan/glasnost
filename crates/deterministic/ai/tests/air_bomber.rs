@@ -234,7 +234,11 @@ fn a_bomber_that_reaches_half_a_cell_bombs_the_plant_on_its_way_in() {
         // spec: S-0502 claim 16 (r34)
         let hover = o.jump.as_ref().and_then(|j| j.dest);
         // spec: S-0502 claim 16 (r34)
-        assert_eq!(hover.map(|h| (h.x, h.y)), Some((point.x, point.y)), "{trace}");
+        assert_eq!(
+            hover.map(|h| (h.x, h.y)),
+            Some((point.x, point.y)),
+            "{trace}"
+        );
         // spec: S-0502 claim 16 (r34)
         assert!(aim_error(&w, b).is_some_and(|e| e <= 2048), "{trace}");
     }

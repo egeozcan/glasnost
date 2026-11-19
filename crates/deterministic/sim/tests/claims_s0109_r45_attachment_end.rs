@@ -194,7 +194,11 @@ fn hidden(s: CloakState) -> bool {
 fn start_cloaking(w: &mut World, id: ObjectId) {
     w.obj_mut(id).unwrap().cloak.own = true;
     sw_common::until(w, 300, |w| cloak_state(w, id) == CloakState::Cloaking);
-    assert_eq!(cloak_state(w, id), CloakState::Cloaking, "it starts to cloak");
+    assert_eq!(
+        cloak_state(w, id),
+        CloakState::Cloaking,
+        "it starts to cloak"
+    );
 }
 
 // spec: S-0109 claim 22 (End with the owner: destroyed, at the killing hit, also when the owner stays in play after it; it disappears inside the action and is deleted at its next update)

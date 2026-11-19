@@ -138,7 +138,6 @@ struct Row {
 /// A recorded part.
 struct Part {
     w: World,
-    u: ObjectId,
     t: ObjectId,
     /// The target's position at the attack order.
     target_at: Pos,
@@ -274,7 +273,6 @@ fn part(s: Setup, vehicle: bool, from: (i32, i32)) -> Part {
     }
     Part {
         w,
-        u,
         t,
         target_at,
         rows,
@@ -331,11 +329,7 @@ fn off_east(f: Facing) -> i32 {
 fn j34_a_from_the_west_it_fires_from_over_the_reference_point() {
     let p = part(V1, false, (-10, 0));
     let point = reference(&p);
-    assert!(
-        off_east(p.kept()) <= TAU,
-        "void: kept facing {}",
-        p.kept()
-    );
+    assert!(off_east(p.kept()) <= TAU, "void: kept facing {}", p.kept());
     hover_expectations(&p, point);
     assert_eq!(p.shots_before_window(), 0, "no shot on the way in");
     let shots = p.shots_in_window();
@@ -500,10 +494,7 @@ fn switch_off_j34_b_turns_its_body_to_map_east_and_fires() {
 }
 
 /// Q-3257's *Possible observation*: the weapon reaches half a cell.
-const HALF: Setup = Setup {
-    range: "0.5",
-    ..V1
-}; // nocite: synthetic test data (Q-3257, a vertical weapon of reach 0.5 cell)
+const HALF: Setup = Setup { range: "0.5", ..V1 }; // nocite: synthetic test data (Q-3257, a vertical weapon of reach 0.5 cell)
 
 // spec: S-0502 claims 10 and 16 (r34) (Q-3257's observation, S-0307 RG13 with a 2 × 2 building and a vertical weapon of reach 0.5 cell: from the west it hovers over the reference point and fires; from the east it hovers there and does not)
 #[test]
