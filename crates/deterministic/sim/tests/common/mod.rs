@@ -177,6 +177,7 @@ impl Scene {
             unit_count: 0,
             bases: false,
             skirmish: Default::default(),
+            ai: Vec::new(),
         };
         Scene {
             ruleset: r,

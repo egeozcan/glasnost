@@ -234,6 +234,7 @@ pub fn setup(seed: u32) -> GameSetup {
         unit_count: 0,
         bases: false,
         skirmish: Default::default(),
+        ai: Vec::new(),
     }
 }
 

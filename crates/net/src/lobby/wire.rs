@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use super::MemberId;
 use crate::start::{Field, Params, Slot, StartInfo};
 use crate::wire::WIRE_VERSION;
-use glasnost_sim::world::GameSetup;
+use glasnost_sim::world::{AiSeat, GameSetup};
 
 /// The first two bytes of every lobby message.
 // nocite: our own netcode
@@ -92,6 +92,9 @@ pub enum Edit {
         team: Option<u8>,
         /// A start position, 0-based.
         start: Option<u32>,
+        /// A computer row's script and difficulty (our own AI, #449); a
+        /// person's row keeps the default.
+        ai: AiSeat,
     },
     /// The host sets the game-wide values.
     Game {

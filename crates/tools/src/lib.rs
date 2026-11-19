@@ -16,6 +16,7 @@
 //! ([`path_report`], `glasnost-headless path-report`).
 
 pub mod ai_bench;
+pub mod ai_tournament;
 pub mod arena;
 pub mod desync;
 pub mod headless;

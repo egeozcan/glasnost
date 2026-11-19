@@ -147,6 +147,7 @@ fn build(r: &Arc<SimRules>, seed: u32, neutral: bool) -> World {
         unit_count: 0,
         bases: false,
         skirmish: Default::default(),
+        ai: Vec::new(),
     };
     let mut w = glasnost_sim::load::new_game(
         r.clone(),

@@ -80,6 +80,7 @@ fn choices(row: u8, colour: Option<u8>, start: Option<u32>) -> Edit {
         colour,
         team: None,
         start,
+        ai: Default::default(),
     }
 }
 
@@ -246,6 +247,7 @@ fn the_choice_rules_of_the_setup_are_enforced() {
         colour: None,
         team,
         start: None,
+        ai: Default::default(),
     };
     assert_eq!(
         r.edit(B, &with(Some(3), None)),
@@ -263,6 +265,48 @@ fn the_choice_rules_of_the_setup_are_enforced() {
     // Two players on random are not in each other's way.
     assert_eq!(r.edit(B, &choices(1, None, None)), Ok(()));
     assert_eq!(r.edit(HOST, &choices(2, None, None)), Ok(()));
+}
+
+// design: own AI (#449): the host sets a computer row's script and difficulty, which the room's setup carries; a person's row keeps the default
+#[test]
+fn the_host_sets_a_computer_rows_script_and_difficulty() {
+    use glasnost_sim::world::{AiDifficulty, AiSeat};
+    let mut r = room();
+    r.join(B, &join("Bea")).unwrap();
+    let hard = AiSeat {
+        script: AiSeat::DEFAULT_SCRIPT,
+        difficulty: AiDifficulty::Hard,
+    };
+    let with = |row| Edit::Choices {
+        row,
+        country: None,
+        colour: None,
+        team: None,
+        start: None,
+        ai: hard,
+    };
+    assert_eq!(r.edit(B, &with(2)), Err(Refusal::NotYours(2)));
+    assert_eq!(r.edit(HOST, &with(2)), Ok(()));
+    assert_eq!(r.setup().slots[2].ai, hard);
+    assert_eq!(r.edit(B, &with(1)), Ok(()));
+    assert_eq!(r.setup().slots[1].ai, AiSeat::DEFAULT, "a person's row");
+    // The choice goes with the room's setup to every member at the start.
+    r.edit(
+        HOST,
+        &Edit::Row {
+            row: 3,
+            kind: SlotKind::Closed,
+        },
+    )
+    .unwrap();
+    r.set_ready(B, true, "m4").unwrap();
+    let begin = r
+        .start(HOST, 5, Params::default())
+        .unwrap()
+        .begin_for(B)
+        .unwrap();
+    assert_eq!(begin.local_setup(0).slots[2].ai, hard);
+    assert_eq!(begin.local_setup(0).slots[1].ai, AiSeat::DEFAULT);
 }
 
 // spec: S-0412 claim 15 (on a map with fewer rows, the rows beyond it are emptied and hidden)

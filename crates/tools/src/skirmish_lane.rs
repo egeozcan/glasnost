@@ -555,7 +555,7 @@ pub(crate) fn countries(rules: &SimRules) -> Vec<(u32, String)> {
 }
 
 /// The first open country of each side, by side index.
-fn side_countries(rules: &SimRules) -> BTreeMap<i32, String> {
+pub(crate) fn side_countries(rules: &SimRules) -> BTreeMap<i32, String> {
     let mut out = BTreeMap::new();
     for (i, n) in countries(rules) {
         if let Some(Some(side)) = rules.econ.tech.country_side.get(i as usize) {
@@ -780,8 +780,17 @@ fn play_ai(
     map: &Map,
     tiles: Arc<TileCatalogue>,
     max_ticks: i32,
-    setup: glasnost_sim::world::GameSetup,
+    mut setup: glasnost_sim::world::GameSetup,
 ) -> Result<(), String> {
+    // `GLASNOST_AI_SEATS=key:level,…` (#449): the AI houses' script and
+    // difficulty in house order (`default:easy,default:hard`); unset, every
+    // house plays the default script at normal.
+    if let Ok(v) = std::env::var("GLASNOST_AI_SEATS") {
+        setup.ai = v
+            .split(',')
+            .map(crate::ai_tournament::parse_entrant)
+            .collect::<Result<_, _>>()?;
+    }
     let mut seen: [BTreeMap<Role, BTreeSet<u32>>; PLAYERS] = Default::default();
     let mut last = [i32::MAX; PLAYERS];
     let mut drained = 0usize;
@@ -1065,7 +1074,7 @@ fn play_ai(
         if eco_probe > 0 {
             cycles.observe(w);
             if w.tick % glasnost_ai::scripted::THINK_PERIOD == 0 {
-                field_spells.observe(w.tick, game.brains(), w);
+                field_spells.observe(w.tick, &game.brains(), w);
             }
             if w.tick % BROKE_SAMPLE == 0 {
                 broke_spells.observe(w, &game.broke_probes());
@@ -2424,7 +2433,7 @@ struct FieldSpells {
 const LONG_SPELL: i32 = 3000;
 
 impl FieldSpells {
-    fn observe(&mut self, tick: i32, brains: &[glasnost_ai::brain::Brain], w: &World) {
+    fn observe(&mut self, tick: i32, brains: &[&glasnost_ai::brain::Brain], w: &World) {
         for b in brains {
             let h = b.house().0;
             let wants = b.wants_field_refinery(w);

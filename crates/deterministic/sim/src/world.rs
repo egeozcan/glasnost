@@ -372,6 +372,94 @@ pub struct GameSetup {
     /// The other setup values of a skirmish (S-0412 claim 1).
     #[serde(default)]
     pub skirmish: crate::econ::setup::Settings,
+    /// Our own AI's choice for each house, by house index (#449): which
+    /// script plays an AI house and at what difficulty. A missing entry is
+    /// the default script at normal ([`AiSeat::default`]). The simulation
+    /// carries it for the AI and never reads it; it is not a value of the
+    /// original's lobby, and it never sets a house's difficulty row (S-0412
+    /// claim 5).
+    #[serde(default)]
+    pub ai: Vec<AiSeat>,
+}
+
+impl GameSetup {
+    /// House `i`'s AI choice: its entry of [`GameSetup::ai`], else the
+    /// default script at normal.
+    pub fn ai_seat(&self, i: usize) -> AiSeat {
+        self.ai.get(i).copied().unwrap_or_default()
+    }
+}
+
+/// Our own AI's choice for one house (#449): the script, by its stable id
+/// in the AI's registry, and the difficulty it plays at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct AiSeat {
+    /// The script's stable id ([`AiSeat::DEFAULT_SCRIPT`] for the default).
+    pub script: u8,
+    /// How well the script plays.
+    pub difficulty: AiDifficulty,
+}
+
+impl AiSeat {
+    /// The stable id of the default script, script 1 of the AI's registry.
+    // nocite: design: own AI (#449): the registry's ids start at 1, the default script's
+    pub const DEFAULT_SCRIPT: u8 = 1;
+
+    /// The default script at normal: today's AI.
+    // nocite: design: own AI (#449): the choice of a setup that names none
+    pub const DEFAULT: Self = Self {
+        script: Self::DEFAULT_SCRIPT,
+        difficulty: AiDifficulty::Normal,
+    };
+
+    /// Whether this is the default script at normal.
+    pub fn is_default(self) -> bool {
+        self == Self::DEFAULT
+    }
+}
+
+impl Default for AiSeat {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+/// How well our own AI plays (#449). It changes only the script's play,
+/// never a house's rules or difficulty row (glossary *difficulty skill
+/// block*; S-0412 claim 5).
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
+pub enum AiDifficulty {
+    /// Plays worse than normal.
+    Easy,
+    /// Today's play.
+    #[default]
+    Normal,
+    /// Plays better than normal.
+    Hard,
+}
+
+impl AiDifficulty {
+    /// Every difficulty, easiest first.
+    // nocite: design: own AI (#449): the list of our own AI's levels
+    pub const ALL: [Self; 3] = [Self::Easy, Self::Normal, Self::Hard];
+
+    /// The name the setup screen and the tools show.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Easy => "Easy",
+            Self::Normal => "Normal",
+            Self::Hard => "Hard",
+        }
+    }
+
+    /// The difficulty a lower-case name (`easy`, `normal`, `hard`) names.
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|d| d.name().eq_ignore_ascii_case(s))
+    }
 }
 
 /// The map's special flags that the simulation consults (S-0303 Import
