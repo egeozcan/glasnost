@@ -6,7 +6,7 @@
 //! pixel, so whatever is found is found by the candidates' points and the
 //! cell under the cursor alone.
 
-use super::access_tests::{client, own, session_mut, start_by_keyboard_with};
+use super::access_tests::{client, own, session, session_mut, start_by_keyboard_with, steps};
 use super::*;
 use glasnost_ai::fixture;
 use glasnost_convert::inputs::{InputFile, Inputs};
@@ -245,4 +245,129 @@ fn claim_35_out_of_reach_the_cells_occupant_or_nothing() {
         "{empty:?} is empty"
     );
     assert_eq!(id, None, "no occupant, no object");
+}
+
+/// The hovered object the marks were given by the last drawn frame
+/// (S-0111 claim 3: the hover's object, found as claim 35 finds it).
+fn hovered(c: &mut Client) -> Option<ObjectId> {
+    session_mut(c)
+        .with_live(|live, _, _| live.hovered_mark())
+        .flatten()
+}
+
+/// A started game past its starting order block (S-0201 claim 14), with a
+/// vehicle of the local house in the air at height 1000 two cells from the
+/// base unit, met by the view, and the pointer on its point, over a cell
+/// far from the vehicle's own. One frame has been drawn: the vehicle is
+/// the hover.
+fn hovering() -> (Client, ObjectId, Point) {
+    let (mut c, mcv) = game();
+    steps(&mut c, 400, |c| {
+        let w = &session(c).play.game.world;
+        w.tick > w.orders_blocked_through
+    });
+    let s = session_mut(&mut c);
+    let unit = place(s, mcv, Kind::Vehicle, "GUNR", (2, 0));
+    s.step();
+    s.play.game.world.obj_mut(unit).unwrap().pos.z = 1000;
+    let p = pixel(s, unit, (0, 0));
+    c.pointer_moved(p);
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), Some(unit), "the vehicle is the hover");
+    (c, unit, p)
+}
+
+/// Lifts the vehicle far above the pointer: from here on a lookup at the
+/// pointer does not find it (claim 35 (a): out of reach; (c): its cell is
+/// not under the pointer).
+fn lift_away(c: &mut Client, unit: ObjectId, p: Point) {
+    let s = session_mut(c);
+    s.play.game.world.obj_mut(unit).unwrap().pos.z = 4000;
+    assert_ne!(s.under(p).1, Some(unit), "a lookup no longer finds it");
+}
+
+/// spec: S-0214 claim 35 (e) (the hover is found again once for every drawn frame, whether the
+/// pointer has moved or not: an object that moves out of the region at a still pointer changes it
+/// without any pointer motion) and (a)
+#[test]
+fn claim_35_e_a_still_pointer_follows_a_unit_that_moves_away() {
+    let (mut c, unit, p) = hovering();
+    lift_away(&mut c, unit, p);
+    let _ = c.frame();
+    assert_ne!(hovered(&mut c), Some(unit), "the next frame looks it up again");
+}
+
+/// spec: S-0214 claim 35 (e) (while a left press is held the hover is not looked up again; a
+/// release is resolved at its own pixel, claim 26) and S-0111 Terms (*pointer object*, found as
+/// for *hovered*)
+#[test]
+fn claim_35_e_a_held_left_press_keeps_the_hover() {
+    let (mut c, unit, p) = hovering();
+    c.pointer_down(Button::Left, p);
+    lift_away(&mut c, unit, p);
+    for k in 0..3 {
+        let _ = c.frame();
+        assert_eq!(hovered(&mut c), Some(unit), "frame {k} of the held press");
+    }
+    c.pointer_up(Button::Left, p, Modifiers::default());
+    let _ = c.frame();
+    assert_ne!(hovered(&mut c), Some(unit), "after the release it is looked up again");
+}
+
+/// spec: S-0214 claim 35 (e) (while a left press is held the hover is not looked up again: also
+/// while the pointer moves with it, as a band-box drag does, claim 18)
+#[test]
+fn claim_35_e_a_left_drag_keeps_the_hover() {
+    let (mut c, unit, p) = hovering();
+    c.pointer_down(Button::Left, p);
+    // Far past claim 18's 4-pixel threshold, off the vehicle's region.
+    let q = Point::new(p.x + 60, p.y + 40);
+    c.pointer_moved(q);
+    assert_ne!(session_mut(&mut c).under(q).1, Some(unit));
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), Some(unit), "held through the drag");
+    c.pointer_up(Button::Left, q, Modifiers::default());
+    let _ = c.frame();
+    assert_ne!(hovered(&mut c), Some(unit), "after the release it is looked up again");
+}
+
+/// spec: S-0214 claim 35 (e) (only a held left press keeps the hover: with the right button held
+/// the hover is found again in every drawn frame)
+#[test]
+fn claim_35_e_a_held_right_press_does_not_keep_the_hover() {
+    let (mut c, unit, p) = hovering();
+    c.pointer_down(Button::Right, p);
+    lift_away(&mut c, unit, p);
+    let _ = c.frame();
+    assert_ne!(hovered(&mut c), Some(unit), "looked up again under a right press");
+    c.pointer_up(Button::Right, p, Modifiers::default());
+}
+
+/// spec: S-0214 claim 35 (e) (while the game takes no player input the hover is not looked up
+/// again) and S-0201 Terms (*cycle*: a cycle takes the player's input; *stand-still*: in a
+/// single-player game no cycle runs while the options menu is open, claim 8)
+#[test]
+fn claim_35_e_the_options_menu_keeps_the_hover() {
+    let (mut c, unit, p) = hovering();
+    assert!(session_mut(&mut c).open_options(), "the menu opens");
+    lift_away(&mut c, unit, p);
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), Some(unit), "held while the menu is open");
+    session_mut(&mut c).close_options();
+    let _ = c.frame();
+    assert_ne!(hovered(&mut c), Some(unit), "looked up again once it closes");
+}
+
+/// spec: S-0214 claim 35 (e) (while the game takes no player input the hover is not looked up
+/// again) and S-0201 claim 9 (in a single-player game no cycle runs while the window lacks the
+/// input focus) and Terms (*stand-still*)
+#[test]
+fn claim_35_e_a_window_without_focus_keeps_the_hover() {
+    let (mut c, unit, p) = hovering();
+    c.focus(false);
+    // The client hands the focus to the session in its update.
+    c.update(10_000);
+    lift_away(&mut c, unit, p);
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), Some(unit), "held without the focus");
 }

@@ -5032,6 +5032,12 @@ impl Live {
         true
     }
 
+    /// The hovered object the marks were last given (tests).
+    #[cfg(test)]
+    pub(crate) fn hovered_mark(&self) -> Option<ObjectId> {
+        self.hovered
+    }
+
     /// Sets the digit each control-group member shows (S-0111 claim 17).
     /// Returns whether it changed; then call [`Live::redraw_status`].
     pub fn set_group_digits(&mut self, digits: BTreeMap<ObjectId, u8>) -> bool {
