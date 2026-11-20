@@ -11319,6 +11319,11 @@
           "type": "boolean",
           "default": true
         },
+        "walker_search_ignores_queued_enter": {
+          "description": "A walker's searches and asks read no mission target of a queued *enter* behind a current behaviour, so a walker not of an engineer type whose *guard* or *area guard* carries out an enter-nearest instruction gets a substitute cell near the building and stands there in *enter*; off: while the queued behaviour is *enter* and the current behaviour has no mission target, *enter*'s mission target is read.",
+          "type": "boolean",
+          "default": true
+        },
         "walker_targets_allied_wall": {
           "description": "A walker that meets an allied wall with no object listed takes the wall as its target.",
           "type": "boolean",

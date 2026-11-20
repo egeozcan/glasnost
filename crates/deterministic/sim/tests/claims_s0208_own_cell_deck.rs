@@ -63,14 +63,14 @@ fn issue_273_own_cell_under_a_deck_is_searched_for() {
     );
 }
 
-// spec: S-0208 claim 16 (control: a walker on the ground with its own cell as destination and no deck there has completed it; no search)
+// spec: S-0208 claim 25 (r75, A cell destination that is the walker's own cell, Q-3301: control, no deck: with movement in progress the walker makes the fresh search within two height levels of the cell's point too; it finds no path, S-0212 claim 12, and with D = 0 less than the close-enough distance the destination is cleared)
 #[test]
 fn issue_273_control_own_cell_without_a_deck_is_complete() {
     let (mut w, id) = standing(false);
-    assert_eq!(searches_in_one_tick(&mut w, id), 0, "no search");
+    assert_eq!(searches_in_one_tick(&mut w, id), 1, "one search");
     assert_eq!(
         w.obj(id).expect("s").dest,
         None,
-        "the destination is complete"
+        "the destination is cleared"
     );
 }

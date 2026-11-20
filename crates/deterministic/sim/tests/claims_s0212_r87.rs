@@ -27,7 +27,12 @@ fn ruleset_r90() -> Ruleset {
 /// A game on the test kit's empty map with one unit of type `name` of house
 /// 0 at the map's middle, orders open (S-0201 claim 14), the trace on.
 fn one(kind: Kind, name: &str) -> (World, ObjectId) {
-    let mut w = testkit::game_with(&ruleset_r90(), SIZE, 1);
+    one_with(&ruleset_r90(), kind, name)
+}
+
+/// [`one`] with ruleset `r`.
+fn one_with(r: &Ruleset, kind: Kind, name: &str) -> (World, ObjectId) {
+    let mut w = testkit::game_with(r, SIZE, 1);
     let id = testkit::spawn(&mut w, kind, name, 0, mid(SIZE, 0, 0), 0);
     while w.tick < 4 {
         tick::step(&mut w);
@@ -127,10 +132,13 @@ fn claim_23_walker_repath_gate_failure_clears() {
 }
 
 // spec: S-0212 claim 23 (the sentence after the table: for the walk locomotor, the stop of rows 2 and 3 ends its movement in progress in the same movement update, whether or not the unit keeps its destination)
+// spec: S-0208 claim 25 (r75, Every kind of destination: a walker's cell destination is cleared when D is less than the close-enough distance, so row 3's walker needs a close-enough distance below its D of 256, Changes for S-0212 P25)
 #[test]
 fn claim_23_walker_search_failure_ends_movement() {
+    let mut r = ruleset_r90();
+    r.sim.general.close_enough = Some(Decimal("0.5".into()));
     for (far, kept) in [(false, true), (true, false)] {
-        let (mut w, g) = one(Kind::Infantry, "WALKER");
+        let (mut w, g) = one_with(&r, Kind::Infantry, "WALKER");
         let c = w.obj(g).unwrap().pos.cell();
         let d = if far {
             CellXY::new(c.x + 5, c.y)

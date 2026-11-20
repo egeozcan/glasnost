@@ -176,6 +176,10 @@ pub struct Quirks {
     // spec: S-0208 claim 18 and Edge cases (r71: an object's point too)
     #[serde(default = "on")]
     pub walker_bridge_destination_deck: bool,
+    /// A walker's searches and asks read no mission target of a queued *enter* behind a current behaviour, so a walker not of an engineer type whose *guard* or *area guard* carries out an enter-nearest instruction gets a substitute cell near the building and stands there in *enter*; off: while the queued behaviour is *enter* and the current behaviour has no mission target, *enter*'s mission target is read.
+    // spec: S-0208 claim 26 and Edge cases (r75, Q-3303: A queued enter is not read by the walker's search)
+    #[serde(default = "on")]
+    pub walker_search_ignores_queued_enter: bool,
     /// A teleporting infantry unit's landing entry check takes a cell at terrain level −6 or lower as clear without testing terrain or occupants; off: the ordinary landing entry check applies.
     // spec: S-0208 claim 19 and Edge cases
     #[serde(default = "on")]
@@ -2463,6 +2467,7 @@ impl Default for Quirks {
             enter_keeps_stored_path: true,
             slow_walker_stall: true,
             walker_bridge_destination_deck: true,
+            walker_search_ignores_queued_enter: true,
             teleport_infantry_negative_level_entry: true,
             teleport_infantry_ground_reservation: true,
             warp_pending_infantry_landing: true,
@@ -3088,6 +3093,10 @@ impl Quirks {
             (
                 "walker_bridge_destination_deck",
                 self.walker_bridge_destination_deck,
+            ),
+            (
+                "walker_search_ignores_queued_enter",
+                self.walker_search_ignores_queued_enter,
             ),
             (
                 "teleport_infantry_negative_level_entry",
