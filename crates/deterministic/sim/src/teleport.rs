@@ -269,6 +269,10 @@ fn take_destination_with(w: &mut World, id: ObjectId, forced: bool) {
     let dc = match dest {
         Target::Cell(c) => c,
         Target::Object(x) => match w.obj(x) {
+            // spec: S-0208 r82 claim 27 (Q-3317: a building gives a vehicle S-0506 claim 14's heading point asked for it, a docking point for the helipad, unit-repair and vehicle-bunker flags, its centre otherwise; S-0207 claim 20 b's destination cell is the cell that holds it, the larger-coordinate side of an even side by floor division; an aircraft keeps S-0501's point)
+            Some(t) if t.kind == Kind::Building && o.kind == Kind::Vehicle => {
+                crate::lift::lifter_point(w, x, id).cell()
+            }
             Some(t) => t.pos.cell(),
             None => return,
         },
@@ -658,6 +662,8 @@ fn infantry_landing(w: &mut World, id: ObjectId, dest: Target) -> Option<(Pos, L
     // spec: S-0208 claim 19 (P: the destination point supplied to the locomotor, C its cell)
     let p = match dest {
         Target::Cell(_) => path::heading_point(w, id)?,
+        // spec: S-0208 r82 claims 19 and 27 (Q-3317: for a building, P is claim 27's point, a docking point for the helipad, unit-repair and vehicle-bunker flags, its centre otherwise, the unit-reload flag alone included; for a docking type our engine gives the infantry unit the docking point a vehicle gets, Open questions; C is the cell that holds P, the larger-coordinate side of an even side)
+        Target::Object(x) if w.obj(x)?.kind == Kind::Building => crate::lift::lifter_point(w, x, id),
         Target::Object(x) => w.obj(x)?.pos,
     };
     let c = p.cell();
@@ -700,7 +706,11 @@ fn infantry_landing(w: &mut World, id: ObjectId, dest: Target) -> Option<(Pos, L
     let Target::Object(x) = dest else {
         return None;
     };
-    let centre = heading_cell(w, x)?;
+    // spec: S-0208 r82 claim 19 (Q-3317: the search's centre for a building is the cell of its centre, not its position, also with the unit-reload flag alone; for a docking type asked with no mover our engine uses the centre too, Open questions; another object's heading-point cell as before)
+    let centre = match w.obj(x)?.kind {
+        Kind::Building => w.reference_point(x).cell(),
+        _ => heading_cell(w, x)?,
+    };
     crate::regions::ensure(w);
     // spec: S-0208 claim 19 (reach: the unit's own heading-point cell, its own position for the teleporting locomotor, with its present deck status)
     let reach = crate::regions::reach_read(w, o.pos.cell(), u.zone, o.layer == Layer::Deck);
