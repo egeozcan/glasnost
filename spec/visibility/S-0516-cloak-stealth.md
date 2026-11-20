@@ -2,13 +2,13 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 29
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-20
 measurements: []
-requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796, Q-3060, Q-3085, Q-3313]
+requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796, Q-3060, Q-3085, Q-3313, Q-3322]
 supersedes: []
 ---
 
@@ -203,7 +203,9 @@ Two kinds of rule are kept apart throughout.
    - The EMP, paralysis and warping gate of claim 5 (a) does not apply.
    - The war-factory contact test of claim 5 (b) does not apply.
 
-   The same re-evaluation deselects a fully cloaked object (claim 26).
+   The same re-evaluation deselects a fully cloaked object from the selection of a non-owner
+   viewer who does not sense it (claim 26, whose backing and medium confidence this sentence
+   carries).
    - Backing: `measurable` (CS5)
    - Confidence: high
 
@@ -715,9 +717,17 @@ Two kinds of rule are kept apart throughout.
 26. **Clicks, hover and selection.** For viewing house *V*, the following cannot be hovered, clicked
     or picked:
     - a fully cloaked object that *V* does not own and does not sense, allies included
-    - a building at fade level 15 that *V* does not sense.
+    - a building at fade level 15 that *V* does not own and does not sense.
 
     Fading objects that are drawn can be clicked, subject to the ordinary selection rules.
+
+    **The owner's own building at fade level 15 (Q-3322).** None of these refusals applies to an
+    object that *V* owns. So *V* hovers, clicks and picks its own building at fade level 15 where
+    it does not sense it, as at any lower fade level (S-0214 claim 35 (d)). A left click on it
+    selects it under the ordinary selection rules (S-0214 Terms, *can be selected*), and an order
+    of *V*'s whose target is that building, such as an entry or a repair, takes it as its target
+    as at a lower fade level. The selection changes below remove an object only from a non-owner
+    viewer's selection, so they never remove the building from its owner's.
     Selection changes as follows:
     - an object that starts cloaking leaves a non-owner viewer's selection even if that viewer
       senses it
@@ -1599,8 +1609,37 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
     enemy, then add the viewer's own coverage. Expected: owner can pick it; unsensing
     non-owners cannot, allies included; sensing removes this cloak-specific refusal.
     Select a sensed non-owned object before cloak start: selection is still lost at start.
-    Repeat on buildings: level 15 without sensing cannot be picked even by the owner.
-    A differing click/selection result without another refusal falsifies claim 26.
+    Repeat on buildings, with this fixture: the owner's building is a stock repair depot in
+    the field of the owner's own cloaking generator (CS10), with no sensor coverage of the
+    owner's over its cells, and it reaches fade level 15 once the generator's field reaches it.
+    At level 15 without sensing the owner can pick it, and a non-owner cannot, allies included.
+    For the owner's depot, four separate runs:
+    - Cloak start under the owner's selection. A named map keeps the house's power output below its
+      drain, so that the generator is out of operation (S-0405 claim 8) and gives no field (claim
+      20's pending changes), until a trigger action destroys, at a fixed tick *T*, a building of the
+      owner's away from the depot whose drain causes that deficit. Select the depot alone before *T*
+      and give no further input. Record per tick whether the depot is selected, its fade level, and
+      the house's power output and drain, from before *T* through 300 ticks at level 15. Expected:
+      it stays selected throughout. Falsified by a tick in which it is not. A run in which the depot
+      does not start cloaking after *T* decides nothing.
+    - With nothing selected, hold the pointer over the depot at level 15, record whether it shows
+      the hover health bar, then left-click it and record whether it is selected. Expected: the
+      hover health bar is shown and the depot is selected.
+    - The order, in two single-click runs from the same start. In each, an own vehicle of a stock
+      type that the depot repairs (S-0314) and that is not a sensor unit (claim 13), damaged below
+      full strength by named test data, stands outside the generator's field, the generator is
+      switched off, the depot is at fade level 0, nothing is selected, and the house's power output
+      stays at or above its drain throughout. In the first run, select the vehicle and record the
+      cursor's action over the depot and the order that one left click on it gives. In the second,
+      first switch the generator on with the owner's power toggle (S-0214 claim 13; S-0405), wait
+      until the depot is at level 15, then select the vehicle and record the same. At the click,
+      record the depot's fade level and, as preconditions, the vehicle's strength and current
+      behaviour, the depot's strength, whether the depot is switched on and whether any unit is in
+      contact with the depot. Expected: the action and order of the second run are those of the
+      first. A different action or order falsifies claim 26's order statement, unless another
+      refusal applies or a recorded precondition differs between the two runs; such a pair decides
+      nothing.
+    A differing hover, click or selection result without another refusal falsifies claim 26.
   - **(f)** With radar available and the cell otherwise visible to radar, record the pixel
     of a fully cloaked object as ally and enemy, with and without the viewer's coverage.
     Expected: no pixel without own sensing, a pixel with it. An unsensed pixel or a
