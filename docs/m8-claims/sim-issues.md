@@ -2186,3 +2186,48 @@ Seams left:
 - The client: no change. The cursor and the insignia already read the simulation's answers.
 
 The P3 census rule: the batch adds no object-table reference, so it makes or moves no back-reference of `World::census`.
+
+## Batch S44: a teleporting entrant of a recycling building, every holder of a target that changes owner, a stolen vehicle and a bunkered vehicle's damage (Q-3297, #455; Q-3298, #453; Q-3302, #457)
+
+Base main 348c3d7, not rebased. The batch builds three answers:
+- Q-3297's, in S-0603 r15 claim 16 (#455);
+- Q-3298's, in S-0309 r149 claim 32, its *A stolen vehicle* bullet included (#453);
+- Q-3302's, in S-0302 r51 claim 8, *A bunkered unit and its bunker in one detonation* (#457). The engine already matched it, so this item is guard tests.
+
+Q-3301 and Q-3303 (S-0208 r75) were handed back untouched: S42's interim rules stand. The AI B10 counters line for `skirmish_lane` (item 5) was not started.
+
+The work went in this order:
+1. The requests Q-3317 and Q-3318 (4f5bfbc).
+2. For each item, the failing tests, then the fix. No fix commit changes a test. Item 1's tests carry the new switch and its schema entry (fa2dd8e).
+3. A rustfmt commit (1e0185a), the format bump (0080f20) and the goldens (e474db6).
+
+Each red was shown in a separate base worktree checked out at the test commit (`item1-red-base-2.txt`, `item2-red-base.txt`, `item2t-red-base.txt`). Logs are in `local-lane/sim-issues/s44/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| #455, a teleporting entrant of a recycling building (S-0603 r15 claim 16, Q-3297) | A self-teleporting infantry unit sent into its own grinder at rest landed beside it in *eaten* and was never consumed. r15: its landing-point choice is a start, so a ready unit's queued *eaten* is current there, row WP3 lands it on the foundation, and the jump tick consumes it. The fate route assigns the destination before it queues *eaten*, so it lands beside. A vehicle's first order lands beside, a second consumes it | fixed (fbd1383; tests fa2dd8e, red there: 3 failed of 31) | `teleport::take_destination_with` makes a ready infantry unit's queued behaviour current before the landing point is chosen (`landing_start`). `jump()` runs `grinder::jump_arrival` after the kind's arrival effects and returns after the second warp animation when it consumes. `grinder_fate` assigns the destination, then queues *eaten*. New switch `quirks.teleport_vehicle_recycle_lands_beside` (on, the original): off, a vehicle's first order asks row VP6 as if *eaten* were current. The landing point stays the building's position (Q-3317); the occupant-ignoring list stays S-0208 r75's (Q-3318) | `claims_s0603.rs`: claim 16 (b), (c), (e) both switch positions (red); guards for the invulnerable building (b, d) and the fate route (f); claim 1's cursor guard recited to r15 |
+| #453, every holder of a target that changes owner (S-0309 r149 claim 32, Q-3298) | Claim 30 dropped a target only at the holder's own owner change, so a tank kept attacking a vehicle its house's controller took over. r149: every holder of an object whose owner changes drops it, of whatever house and however it came to hold it | fixed (dbdb77b; tests b2745a8, red there: r149 5 failed of 7, s0601 5 failed of 64) | `combat::held::owner_change_drop`, called from `econ::events::owner_changed` right after claim 30's own drop when the owner really changes. An overridden holder reverts first (S-0215 claim 10) and drops the object only if the revert left it as its target. No timer draw; behaviours, destination, put-aside slots and attack-move memories kept; a living strike target kept | `claims_s0309_r149.rs` (new): every holder kind and house, an engineer capture, an overridden holder's three cases, put-aside, attack-move memory, strike target, no change. `claims_s0601.rs`: the `s0309_issue_453_*` tests (ordered, searched and force-fired targets; an ally's takeover; a computer-owned holder; the controller). `claims_s0309_r94.rs` recites claim 25 k |
+| #453, a stolen vehicle (S-0309 r149 claim 32, *A stolen vehicle*) | A vehicle thief's takeover changed the owner with no cloak-style drop first | fixed (c323ed7; test 1069cfd, red there: timer 30 ticks left, not 4 to 8) | `crush.rs`: after the thief is removed and before `mind::set_owner`, `cloak::machine::drop_attackers` (now `pub(crate)`) runs claim 28 with claim 27's draw, the revert and claim 27a's put-aside loss. Holders that sense the cell or have the old owner keep it there, and the owner change drops it for them with no draw | `claims_s0210.rs`: `a_stolen_vehicle_is_first_dropped_as_at_the_start_of_cloaking` (red) |
+| #457, a bunkered vehicle and its bunker in one detonation (S-0302 r51 claim 8, Q-3302) | The engine matches r51 | as built; guard tests (2040fce) | none | `claims_issue_457.rs`: a non-penetrating detonation (spread 1 and 0, centred on the vehicle and on the bunker's centre) deals the bunker exactly its empty-bunker hits; a penetrating one hurts the vehicle as outside and not the bunker; a penetrating killing hit leaves the bunker empty for its later hits; a curtain on the vehicle nullifies a small detonation the empty bunker would not; real shots (invisible and visible projectiles) follow the two rows. S42's five tests recite r51, and the "asked in Q-3302" wording is gone |
+| Q-3301, Q-3303 (S-0208 r75 claims 25 and 26) | Not started | handed back untouched | none: S42's interim rules stand (pre-r68 cell destinations; claim 26's substitute replaces only a cell destination, D3) | none. `quirks::tests::every_spec_quirk_has_a_switch` still names `walker_search_ignores_queued_enter` (r75's new switch), as on base |
+
+**Formats** (0080f20): save goes from 165 to 205 and AI game from 143 to 183, the brief's numbers. The AI game bump in `crates/deterministic/ai/src/game.rs` is forced by the sim change. Wire stays 13. The rules schema gains `teleport_vehicle_recycle_lands_beside` (fa2dd8e).
+
+**Goldens** (e474db6): three of the nine sim-gate goldens move: duel-m6c, duel-m7a and duel-m7b. Combat, duel, duel-diagonal, duel-naval, scripted and skirmish stay. The first differing lines were not read (see the hand-back's Guard section).
+
+Lanes compare base 348c3d7, run in this worktree before any change, with the batch at e474db6.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). The failing rows of every measurement stay as base: M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 checked, M-0021 10 of 50. M-0002's win-test failures go from 1 to 0; M-0001's stay 2.
+
+**Sweeps** (seeds 1 to 16): m6c's smallest minimum stays 0 (charger orders and support beams, as base); m7a's goes from 0 to 2 (the bunker entry, bunkered and bunker exit counters' minimum 0 to 2); m7b's drain minimum stays 3. All three pass.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games; `quick-base-<seed>.txt`, `quick-after-<seed>.txt`). 35 games end on another tick and 10 change winner: seed 7 games 5 and 8; seed 8 games 1 (to no winner at 120000), 4 and 6; seed 9 games 5, 6, 7 and 9; seed 10 game 9. They are not traced: the trace's first read was refused by the permission check, and it was not retried another way (hand-back, Guard section).
+
+**Suites.** The sim gate with its ignored tests passes 17 on base and after (`gate-base.txt`, `gate-after.txt`), after the goldens were regenerated. The final checks run on the commit that adds this section and are in the hand-back.
+
+Seams left:
+- Q-3317 (a teleporting entrant's destination point of a building) and Q-3318 (the occupant-ignoring list) wait for answers.
+- Q-3301 and Q-3303's r75 work (item 4) and the B10 counters line (item 5) are for a later batch.
+- The quick lane's 10 winner changes are untraced.
+
+The P3 census rule: the batch adds no object-table reference, so it makes or moves no back-reference of `World::census`.
