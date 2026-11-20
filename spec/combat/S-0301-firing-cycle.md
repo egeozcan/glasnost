@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 78
+revision: 80
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-19
+approved-on: 2026-11-20
 measurements: [M-0004, M-0021]
-requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416, Q-1714, Q-2567, Q-3012, Q-3275]
+requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770, Q-2181, Q-2246, Q-2416, Q-1714, Q-2567, Q-3012, Q-3275, Q-3314]
 supersedes: []
 ---
 
@@ -513,7 +513,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | moving | the firer may not fire while it moves (S-0310) |
    | cloaked | the weapon needs the firer uncloaked and it is not |
    | out of range | the target is beyond the weapon's range (S-0307) |
-   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a firer bound to a slave master, for every target and weapon (*A firer bound to a slave master within rank 4* below), a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing tests (their feature specs), the takeover test (S-0601 claim 3), the berserk refusals (S-0610 claims 3 and 6), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), a sinking firer or target (S-0504 claim 5), a falling firer (S-0511 claim 10), a deactivated firer (S-0405 claims 13 and 20), the drain refusals of S-0608 claim 3 (rank 4 below), a target that has a superweapon warp pending, from the launch until its departure, with every weapon, a temporal weapon (Terms) included (S-0513 claim 39), or, for an infantry firer whose type has the keep-acting flag, a vehicle target that is melee-linked to an object other than the firer (S-0214, Terms, *melee-linked*). S-0214, claim 6(e), defers to these for what the check refuses |
+   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a firer bound to a slave master, for every target and weapon (*A firer bound to a slave master within rank 4* below), a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing tests (their feature specs), the takeover test (S-0601 claim 3), the berserk refusals (S-0610 claims 3 and 6), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), a sinking firer or target (S-0504 claim 5), a falling firer (S-0511 claim 10), a deactivated firer (S-0405 claims 13 and 20), the drain refusals of S-0608 claim 3 (rank 4 below), a target that has a superweapon warp pending, from the launch until its departure, with every weapon, a temporal weapon (Terms) included (S-0513 claim 39), a target that is being erased (glossary), with every weapon that is not a temporal weapon (*Targets being erased within rank 4* below), or, for an infantry firer whose type has the keep-acting flag, a vehicle target that is melee-linked to an object other than the firer (S-0214, Terms, *melee-linked*). S-0214, claim 6(e), defers to these for what the check refuses |
    | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power, a hidden target fails the test below (S-0516 claim 24), and similar |
    | busy | the firer is launching spawned aircraft (Terms) |
    | must deploy | a vehicle whose type must deploy before it fires, when its own cell fails the deploy-to-fire cell test of S-0517 claim 14 (a slope, a building in the cell, or a land type that does not allow it) and no reason of ranks 1 to 10 below holds. It then outranks *not facing* (S-0310, claim 9), and in the rank table also *moving* and *still turning*, an order that no game state shows (see below). On a cell that passes the test none of this applies: the vehicle gets the aiming answers as usual and S-0310 deploys it on *can fire* or *not facing* |
@@ -536,7 +536,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of a firer bound to a slave master, for every target and weapon (below), the *illegal* answer of a deactivated firer (S-0405 claims 13 and 20), for every target and weapon, the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer of an infantry firer whose type has the keep-acting flag against a vehicle target that is melee-linked to an object other than the firer (S-0214, Terms, *melee-linked*), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer, with any weapon, for a target that has a superweapon warp pending, until its departure (S-0513 claim 39), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10); and for a building, the *rearming* of its pending delayed shot (claim 14). The specified precedence within this rank is given below |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of a firer bound to a slave master, for every target and weapon (below), the *illegal* answer of a deactivated firer (S-0405 claims 13 and 20), for every target and weapon, the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer of an infantry firer whose type has the keep-acting flag against a vehicle target that is melee-linked to an object other than the firer (S-0214, Terms, *melee-linked*), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer, with any weapon, for a target that has a superweapon warp pending, until its departure (S-0513 claim 39), the *illegal* answer, with a weapon that is not a temporal weapon, for a target that is being erased (below), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10); and for a building, the *rearming* of its pending delayed shot (claim 14). The specified precedence within this rank is given below |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | the firer's ammunition *a* is 0 |
@@ -684,8 +684,80 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    *illegal* (S-0310 claim 11) and a building's answers of S-0405 table T1, its pending delayed
    shot's *rearming* included, come before it too. It also outranks every reason of ranks 5 and 7
    to 16. So a firer whose rearm countdown is running, or whose weapon's own effect is alive,
-   gets *illegal* for such a target. This test is not the test of a target being erased: what
-   that one answers for a target that a temporal beam holds outside a warp is not settled here.
+   gets *illegal* for such a target. A target that is being erased has an *illegal* answer of its
+   own, which spares temporal weapons and comes after this one (*Targets being erased within rank 4*
+   below).
+
+   **Targets being erased within rank 4 (Q-3314).** A target that is being erased (glossary) answers
+   *illegal* for every weapon that is not a temporal weapon (Terms), whichever firer's beam erases
+   it. This holds for an infantry unit, vehicle, aircraft or building target, from the lock that
+   starts its erasure (S-0514 claims 1 and 4) until the last beam lets go (S-0514 claim 10) or the
+   target is removed. A cell target gets no such answer. The answer does not refuse a temporal
+   weapon: a temporal firer whose beam is not on the target gets the answers of the other reasons,
+   and the shot it makes locks and joins the erasure (S-0514 claims 1 to 4), while one whose beam is
+   already on it gets the held-temporal-target *rearming* (S-0514 claim 19; *A held temporal target
+   within rank 4* below). Within rank 4 this answer comes after every other reason listed there, the
+   warp-pending *illegal* above included, except the reasons that the warp-pending *illegal*
+   outranks too: the spawner-weapon answers (S-0506 claim 10), the other weapon's live-effect
+   *impossible*, every row of S-0306 claim 23 and the magnetic-beam *rearming* against a target
+   other than the gripped unit (S-0607 claim 11). It outranks those, and every reason of ranks 5 and
+   7 to 16. So a firer whose rearm countdown is running, or that is out of ammunition or cloaked,
+   gets *illegal* for such a target.
+
+   A superweapon warp member is being erased without a beam in its leaving stage (glossary). There
+   the warp-pending *illegal* above holds already, from the launch on, and it ranks before this
+   answer and refuses temporal weapons too, so the member answers *illegal* for every weapon, as it
+   does with a beam attached before its departure. From its departure update on it is no longer
+   being erased (S-0513 claim 39a), and this answer does not apply to it until a later lock makes
+   it being erased again.
+
+   So from the lock on, no attempt that asks the firing check makes a shot at the target with a
+   weapon that is not temporal. A projectile already in flight at the lock still reaches it, and
+   S-0302 claim 8's being-erased row stops its damage or healing (a hit that ignores defences
+   excepted). The drops and the search rejection below happen at an occasion whose check gives this
+   answer. At an occasion at which an answer that ranks before it holds for the holder or searcher
+   and its weapon (an answer of ranks 1 to 3, such as the *busy* of a vehicle launching spawned
+   aircraft, or a rank-4 reason that comes before it, such as a materialising firer's *rearming*),
+   that occasion acts on that answer instead, as S-0309 claim 29, S-0215 claim 32 and S-0309 table C
+   give for it, and a later occasion decides again. A holder drops such a target at the occasions
+   that S-0304 claim 2 gives for a target the firing check answers *illegal* for, without the wait
+   that claim gives while the countdown, ammunition or cloak answers hold, since they rank below
+   this one. An infantry unit or vehicle that is not a healer keeps it until its checking turn in
+   the first check tick of S-0309 claim 29 after the lock at which the check gives this answer, and
+   drops it then (that claim's *Phase* gives the tick). A building in *attack* drops it at its next
+   *attack* processing (S-0215 claim 32) at which the check gives this answer, unless its delayed
+   shot is pending (claim 14): it then keeps the target until the delay ends, the check made then
+   answers *illegal*, so the shot is dropped, and its next *attack* processing drops the target. An
+   opportunity target (S-0215 Terms) is also dropped at the holder's next search when that comes
+   first (S-0309 claims 4 and 19). A search whose check of the target gives this answer does not
+   pick it: S-0309 table C's *firing check* row rejects it (S-0309 claim 12), whatever the
+   searcher's house (S-0309, Changes below).
+   - Backing: `measurable` (scenario F24: part a for no shot from the lock on, part b for the
+     drop by infantry and vehicle holders at the first check tick after the lock, part c for a
+     building's drop, part d for no pick by the human house's searcher, part e for a second
+     temporal firer, which is not refused and joins, and part f for the drop while the holder's
+     rearm countdown runs). Part d also tells *illegal* from *impossible*, since the *firing
+     check* row of S-0309 table C acts only on *illegal*. `unmeasured`: the place within rank 4
+     and against ranks 7 to 16, because no scenario here gives such a target another reason of
+     those ranks at a check tick or a search, and the pairs within rank 4 give *illegal* or
+     *impossible*, which S-0309 claim 29 and S-0215 claim 32 treat alike; aircraft holders and a
+     healer's firing step, which no part here plays; a building whose delayed shot is pending at
+     the lock, which F24's *B* excludes; a searcher of a house other than the human-controlled
+     one, which no part here plays, and S-0309 table C gives its *firing check* row for every
+     house; an occasion at which an answer that ranks before this one holds, which no part here
+     arranges; the leaving stage, which rests on the warp- pending *illegal* (S-0513 scenario
+     SW12 parts i and j measure the drops it causes); the answer's end at the last release,
+     because part d uses the pick after the release as its control, so a run in which the answer
+     outlasts the release judges nothing.
+   - Confidence: high (for F24's vehicle, infantry and building firers and its vehicle target:
+     the *illegal* answer for a weapon that is not temporal, no shot from the lock on, the drops
+     of parts b, c and f, no pick by the human house's searcher, and a temporal weapon not
+     refused); medium (the place within rank 4 and against ranks 7 to 16, `unmeasured`); medium
+     (the answer's end at the last release, `unmeasured`, for the reason above); medium (aircraft
+     holders, healers, a building's pending delayed shot, targets other than a vehicle, searchers
+     of other houses, and occasions at which a higher-ranked answer holds, `unmeasured`, since no
+     part here plays them); medium (the leaving stage, `unmeasured` here, as the warp-pending
+     *illegal* is rated).
 
    **A held temporal target within rank 4 (S-0514 claim 19).** The held-temporal-target
    *rearming* outranks the hidden-target *impossible* (S-0516 claim 24) and the *illegal* for a
@@ -2746,6 +2818,79 @@ reason is absent (the control). Part (g) checks the order of two reasons of one 
   shot, judges nothing for part d. *M* exists in this scenario while it is either the building or
   the vehicle that a pack-up makes of it.
 
+**F24. Firing at a target that another firer is erasing (claim 9; Q-3314).**
+- Setup: tiny skirmish test map, speed index 2, 800 × 600, no engine add-on, the measurement
+  harness's in-game helper off and no mods (the named test files of a scenario and the purpose-made
+  test maps excepted), one bystander computer player outside the test area under the glossary's void
+  rule. Every object stands on open level ground. The human-controlled house has a stock infantry
+  unit *E* whose primary weapon is a temporal weapon (Terms), an armed stock vehicle *A1* and an
+  armed stock infantry unit *A2*, neither a healer, an armed stock defensive building *B* without
+  the SAM flag whose type does not have the animation-delayed-fire flag (claim 14), and an armed
+  stock vehicle *A3*. *B* is in operation throughout, its house having no power shortage, so that
+  no answer of S-0405 table T1 holds for it. None of *A1*, *A2*, *B* and *A3* has a temporal
+  weapon, and each has a weapon with a versus value above 0 against *V*'s armour class that can hit
+  *V*. A second computer house has a vehicle *V* of a test type of the scenario's named test rules
+  file (no stock file changed), that has no weapon and
+  whose strength field is large enough that its erasure by *E* alone (S-0514 formula F3) lasts at
+  least 400 ticks after the lock, after the damage that *A1*, *A2* and *B* deal it before the lock,
+  and no other object in the test area. The test map gives *V* no
+  order. *E*, *A1*, *A2* and *B* stand with *V* in their weapons' range; *A3* stands far enough
+  from *V* that it does not take *V* as its target before its move order. Parts:
+  - a to d, one kind of run: in one tick the human orders *A1*, *A2* and *B* to attack *V* without
+    force-fire, then *E*. Call *L* the first tick at whose end *E*'s beam is attached to *V*. In a
+    tick after *L* the human orders *A3* to move to a cell from which *V* is in its weapon's range,
+    and gives it no further order. In a tick at least 100 ticks after *A3* has arrived, and at least
+    100 ticks before the erasure would complete, the human gives *E* a move order to a cell far
+    enough from *V* that *E* does not take *V* as its target again, and its beam lets go at its
+    first arrival in a new cell (S-0514 claim 14). Call *R* the first tick at whose end no beam is
+    attached to *V*.
+  - e: a second temporal firer. As run a to d, with a second stock infantry unit *E2* of *E*'s type
+    standing with *V* in its weapon's range. In a tick at least 20 ticks after *L* the human orders
+    *E2* to attack *V*, with force-fire, so that the order does not rest on the attack cursor
+    (S-0214 claim 6(e)). *A3* and *E*'s move order are left out.
+  - f: rearm countdown. As run a to d, with *A1* replaced by a vehicle *A1f* of a copy of *A1*'s
+    type in the named test rules file whose weapon's rate-of-fire field is at least 300 ticks; the
+    human's house uses the normal row and a country factor of 1.0 (as in F1). Call *s* the tick of
+    *A1f*'s first shot at *V*.
+- Procedure: 5 runs of a to d, 5 of e and 5 of f, and one control run of f without *E*, in which
+  *A1f* fires at *V* until it has made three shots, with the order tick varied so that *L* falls at
+  different distances from the next check tick of S-0309 claim 29 (a tick whose number is a
+  multiple of 16). With tick-labelled capture and a read-only recorder, record per tick, from the
+  orders to the end of the run: each object's target at the end of the tick, whether it took its
+  turn (S-0203 claim 10), every shot it makes and its target, *A3*'s cell, whether *E*'s and *E2*'s
+  beams are attached to *V*, and *V*'s presence, cell and strength. No injection or state writes
+  are permitted. Call *c* the first tick after *L* whose number is a multiple of 16.
+- Expected (claim 9, *Targets being erased within rank 4*):
+  - a: from *L* + 1 to *R* − 1 (in runs e and f to the end of the erasure), none of *A1*, *A1f*,
+    *A2* and *B* makes a shot at *V*.
+  - b: *A1* and *A2* hold *V* at the end of every tick from *L* to *c* − 1, hold no target at the
+    end of *c*, and do not hold *V* again before *R*.
+  - c: *B* holds no target at the end of *L* + 2 (S-0215 claim 32's processing delays are 1 or 2
+    ticks) and does not hold *V* again before *R*.
+  - d: *A3* holds no target at the end of every tick from its arrival (the first tick at whose end
+    it stands in the cell it was sent to) to *R* − 1, and holds *V* by the end of *R* + 100.
+  - e: *E2* holds *V* at the end of every tick from its order until its beam is attached to *V*, and
+    its beam is attached to *V* by the end of the 100th tick after the order, while *E*'s stays
+    attached.
+  - f: *A1f* holds no target at the end of *c*, as *A1* does in part b.
+- Falsified by, in part a, such a shot; in part b, *A1* or *A2* holding no target at the end of a
+  tick from *L* to *c* − 1, still holding *V* at the end of *c*, or holding *V* again before *R*; in
+  part c, *B* holding *V* at the end of a tick from *L* + 2 to *R* − 1; in part d, *A3* holding *V*
+  at the end of a tick from its arrival to *R* − 1; in part e, *E2* holding no target at the end of
+  a tick before its beam is attached, or no beam of *E2* attached by the end of the 100th tick after
+  the order; in part f, *A1f* still holding *V* at the end of *c*. A run in which *V* is destroyed
+  before *L*, *L* comes more than 50 ticks after the orders, *V* moves, the erasure ends before *R*
+  (in runs e and f, before the 100th tick after *E2*'s order or before *c*), or an object that a
+  part judges misses a turn from *L* to the last tick that part judges, judges nothing. Part b
+  judges nothing in a run in which *L* is a multiple of 16. Part d judges nothing in a run in which
+  *A3* takes *V* as its target before its move order, or does not hold *V* by the end of *R* + 100
+  (the search's pick of *V* without the erasure is the control), or in which a beam is attached to
+  *V* at the end of a tick from *R* + 1 to the first tick at whose end *A3* holds *V*. Part f judges
+  nothing in a run in which *A1f* made no shot before *L* or *c* − *s* is at least the shortest time
+  between two consecutive shots of *A1f* in the control run of f, so that its rearm countdown may
+  have run out by *c*. What the holders do after *R* judges nothing beyond
+  part d's control.
+
 ## Changes for other specs
 
 - **S-0306 (approved, revision 33), claim 23, "Rank of the water and land rows".** Replace "Where
@@ -2898,6 +3043,18 @@ reason is absent (the control). Part (g) checks the order of two reasons of one 
   "the deploy test of claim 9 give no answer" add: ", and the vehicle is not tethered with a
   building as its contact (S-0301 claim 9, rank 12: that tether's *impossible* comes first, so
   such a vehicle does not make this claim's drop while the tether holds)".
+- **S-0309 (approved, revision 149), claim 12 and table C, row *firing check*.** In the row's
+  Scenario column, replace "none (claim 12)" with "S-0301 scenario F24, part d, for a target being
+  erased (S-0301 claim 9)". In claim 12's Backing, replace "Two other rows are `unmeasured`." with
+  "One other row is `unmeasured`.", and replace the sentence that begins "*Firing check*: every
+  *illegal* case known to the combat specs" with: "*Firing check*: `measurable` through S-0301
+  scenario F24, part d, in which a target that another firer's temporal beam is erasing is rejected
+  by this row alone (S-0301 claim 9)."
+- **S-0513 (approved, revision 129), Changes for other specs, entry "S-0301, the firing check".**
+  Replace "This test is not the test of a target being erased: what that one answers for a target
+  that a temporal beam holds outside a warp is not settled here." with "A target being erased has
+  its own *illegal* answer, which spares temporal weapons and ranks after this one (S-0301 claim
+  9)."
 
 ## Open questions
 
