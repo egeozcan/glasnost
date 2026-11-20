@@ -99,7 +99,7 @@ use std::process::ExitCode;
 use glasnost_sim::save::Replay;
 use glasnost_tools::local_lane::GAME_DIR_VAR;
 use glasnost_tools::{
-    ai_bench, ai_tournament, arena, desync, headless, net_client, oracle, path_report,
+    ai_bench, ai_tournament, arena, desync, headless, net_client, oracle, path_report, siege_watch,
     skirmish_lane, soak, tick_bench, trigger_lane,
 };
 
@@ -441,6 +441,32 @@ fn main() -> ExitCode {
                 }
                 Err(e) => {
                     eprintln!("glasnost-headless ai-tournament: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Some("siege-watch") => {
+            let o = match siege_watch::Options::parse(&args[1..]) {
+                Ok(o) => o,
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless siege-watch: {e}\nusage: glasnost-headless {}",
+                        siege_watch::USAGE
+                    );
+                    return ExitCode::from(2);
+                }
+            };
+            let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
+                eprintln!("glasnost-headless siege-watch: set {GAME_DIR_VAR} to an install folder");
+                return ExitCode::from(2);
+            };
+            match siege_watch::run(&o, std::path::Path::new(&dir)) {
+                Ok(end) => {
+                    println!("{end}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("glasnost-headless siege-watch: {e}");
                     ExitCode::FAILURE
                 }
             }

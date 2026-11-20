@@ -33,6 +33,7 @@ pub mod oracle_m0025;
 pub mod oracle_trace;
 pub mod path_report;
 pub mod side_audit;
+pub mod siege_watch;
 pub mod skirmish_lane;
 pub mod soak;
 pub mod stats;
