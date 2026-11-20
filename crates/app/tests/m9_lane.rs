@@ -231,6 +231,20 @@ fn script(c: &mut Client, tick: i32, n: &mut u64) -> usize {
     }])
 }
 
+/// The verdict on the two sides' state hashes, kept by tick, over ticks 1
+/// to `ticks`: the number of ticks that agree, or why the games count as
+/// apart.
+fn compare<H: PartialEq>(hashes: &[BTreeMap<i32, H>; 2], ticks: i32) -> Result<usize, String> {
+    let agree = (1..=ticks)
+        .filter(|t| hashes[0].get(t) == hashes[1].get(t))
+        .count();
+    if agree == ticks as usize {
+        Ok(agree)
+    } else {
+        Err(format!("hashes agree on {agree} of {ticks} ticks"))
+    }
+}
+
 #[test]
 #[ignore = "local lane: needs GLASNOST_GAME_DIR and builds the relay"]
 fn two_native_clients_play_through_the_relay() {
@@ -357,18 +371,18 @@ fn two_native_clients_play_through_the_relay() {
         std::thread::sleep(Duration::from_millis(1));
     }
     let played = t.elapsed();
-    let agree = (1..=ticks)
-        .filter(|t| hashes[0].get(t) == hashes[1].get(t))
-        .count();
+    let verdict = compare(&hashes, ticks);
     println!(
         "played {ticks} ticks in {} ms ({} ticks/s); orders issued {issued:?}; \
-         hashes agree on {agree} of {ticks} ticks",
+         hashes: {verdict:?}",
         played.as_millis(),
         u128::from(ticks as u32) * 1000 / played.as_millis().max(1),
     );
     save(&mut a, &out, "game-host");
     save(&mut b, &out, "game-guest");
-    assert_eq!(agree, ticks as usize, "the games went apart");
+    if let Err(why) = verdict {
+        panic!("the games went apart: {why}");
+    }
     assert!(issued.iter().all(|&n| n > 0), "orders were given");
 
     // The guest leaves; the host is told.
