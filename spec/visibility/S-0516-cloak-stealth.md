@@ -2,13 +2,13 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 25
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-14
+approved-on: 2026-11-20
 measurements: []
-requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796, Q-3060, Q-3085]
+requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796, Q-3060, Q-3085, Q-3313]
 supersedes: []
 ---
 
@@ -23,6 +23,8 @@ This spec covers how objects hide from other houses and how other houses find th
 - **Sensors.** The per-house coverage that lets a house see and attack cloaked objects.
 - **Disguise.** How a unit takes on a disguise, whom the disguise fools in game logic, how each
   viewer sees it drawn, and how it is lost or detected.
+- **Disguised attackers.** How the objects a disguised vehicle attacks answer it: retaliation,
+  acquisition, targets already held, and the tick in which the vehicle stops.
 - **Submarines.** The rules that turn this machinery into submerging and surfacing for
   underwater vessels.
 
@@ -110,6 +112,7 @@ Two kinds of rule are kept apart throughout.
   unit cannot take a new disguise (claim 33).
   - Damage sets it, and S-0302 claim 12 calls it the *disguise-disruption countdown*.
   - Adjacent enemy infantry also set it.
+- **Turn.** In this spec, an object's share of one tick (glossary *turn*, second sense; S-0203).
 - **EMP-disabled, paralysed.** The cloak rules make two disable tests and treat them alike: being
   under an electromagnetic pulse, and being *paralysed* in S-0214's sense. Which effects set each
   belongs to the special weapons specs. *Warping* means *being erased* (glossary) or being in a
@@ -890,7 +893,8 @@ Two kinds of rule are kept apart throughout.
 36. **What appearing disguised changes.** Each of the following uses claim 35 and is owned by the spec
     named:
     - target acquisition: S-0309 claim 12, table C, disguise row
-    - an object does not retaliate against an attacker that appears disguised to its house
+    - an object does not retaliate against an attacker that appears disguised to its house,
+      tested when the hit is applied (claim 44)
     - automatic crushing target choice excludes a unit that appears disguised to the crusher's
       house (S-0210 claim 11). This exclusion does not prevent ordered drive-through crushing
       under S-0210 claims 2–3
@@ -948,9 +952,13 @@ Two kinds of rule are kept apart throughout.
     - It does not remove the disguise.
     - While it runs, claim 37 (a) applies, and so do S-0214 claim 6 (attack cursor) and S-0309 claim
       25g.
+    - It does not enter retaliation, and it gives a searcher of a player house that is not a marked
+      test-only house no chance to see through the disguise (claim 44 (a) and (b)).
     - Infantry firing never sets it.
-    - Backing: `measurable` (CS16, part d)
-    - Confidence: high
+    - Backing: `measurable` (CS16, part d); for the bullet on retaliation and acquisition, claim
+      44's backing for parts (a) and (b) (CS23, parts b and c)
+    - Confidence: high; for the bullet on retaliation and acquisition, as claim 44 rates parts (a)
+      and (b)
 
 40. **Disguise detection.** A building whose type detects disguises adds the sensor disc of radius
     equal to its disguise-detection range to its owner's detector coverage.
@@ -1054,6 +1062,132 @@ Two kinds of rule are kept apart throughout.
       This normalization does not change buildings' level-based fade.
     - Backing: `measurable` (CS18 part E, including the original's invalid-input contrast)
     - Confidence: high
+
+### Disguised attackers
+
+44. **Answering a disguised attacker (Q-3313).** These rules say how the objects that a vehicle of
+    claim 33 attacks while disguised answer it. They follow from claims 35 and 39 and from the drop
+    rules of S-0309, and gather the consequences in one place.
+    - **(a) Retaliation is tested at the hit.** The disguise condition of retaliation (claim 36,
+      S-0309 claim 18) is tested when the hit is applied to the victim, for the attacker as it is at
+      that moment: whether it is disguised, its owner's alliance with the victim's house, and the
+      victim house's detector coverage on the cell under the attacker's centre then. When the
+      projectile was fired does not matter. The fake blink does not enter this test, and no draw is
+      taken, whoever owns the victim: a player house, a marked test-only house (S-0309 Terms,
+      *Test-only exception*), or the neutral or special house. So a hit from an attacker that
+      appears disguised to the victim's house when the hit is applied gives no retaliation, whether
+      the attacker's fake blink is running or has ended; a hit from one that does not gives the
+      ordinary retaliation of S-0309 claim 18.
+    - **(b) Acquisition.** A searcher of a player house that is not a marked test-only house, whose
+      type cannot detect disguises, never picks a target that appears disguised to its house,
+      whether or not the target's fake blink runs (S-0309 table C, disguise row). A hit on the
+      searcher or on another object of its house does not change that: the hit does not make the
+      attacker acquirable. A searcher of the neutral or special house, or of a marked test-only
+      house, can pick an attacker whose fake blink runs, through the one draw of S-0309 claim 25
+      (g). A searcher whose type detects disguises, and a house with detector coverage on the
+      attacker's cell (claims 35 and 40), see through the disguise at any time.
+    - **(c) A held target is kept.** Taking a disguise drops no holder's target, and whether a
+      target appears disguised is not among the tests of the firing check (S-0301 claim 9). An
+      object that already holds the vehicle as its target therefore keeps it after the vehicle
+      disguises again and goes on firing at it, under the drop rules of S-0309 (claims 4 and 27 to
+      32), none of which concerns a disguise. A holder can have gained the vehicle as its target
+      while the vehicle did not appear disguised to its house: from a search on a tick on which the
+      vehicle moved (claim 33 (a)) or while its re-disguise lockout ran (claim 34 (a)), from
+      retaliation to a hit made while it was undisguised, or from an order; a person can give an
+      attack order on the vehicle while its fake blink runs (S-0214 claim 6).
+    - **(d) Hits clear the disguise.** Each hit on the vehicle that S-0302 claim 12 covers clears
+      its disguise and starts its re-disguise lockout (claim 34 (a)). Until the vehicle disguises
+      again, it appears disguised to no house, so every house's searches can pick it and every
+      object it hits can retaliate against it under the other conditions of S-0309 claim 18.
+    - **(e) The vehicle's own turn.** In a vehicle's turn, the rules of claim 33 come after its
+      movement and before its own firing attempt. A vehicle counts as moving for claim 33 (a) while
+      its locomotor's movement report (S-0207 claim 27) is true. A vehicle that moves with the
+      driving locomotor (S-0207) and is on a track when an order stops it keeps its heading point:
+      the order clears its destination, and the vehicle still finishes the track it is on (S-0207
+      claim 11), which it does in its own movement. So in the turn whose movement brings it to rest,
+      the rules of claim 33, which come after that movement, find it still: claim 33 (a) does not
+      withhold the disguise in that tick, and the vehicle takes its disguise in that same turn when
+      claim 33 (c)'s other conditions hold. An object whose turn comes earlier in that tick finds it
+      moving and undisguised, as at the end of the tick before, and its searches and any retaliation
+      treat it as an undisguised unit; an object whose turn comes later finds it still and
+      disguised. No object finds it still and undisguised in that tick, unless claim 33 (c)
+      withholds the disguise. A stop that leaves no heading point is different: an order that stops
+      or cancels the move while the vehicle has no heading point (before its first step, while it
+      waits, or between two tracks, S-0207 Terms) makes its movement report false when the order is
+      applied (S-0207 claims 25 and 27), which is before any turn of the next tick (S-0215 claim
+      12). In that next tick, an object whose turn comes before the vehicle's finds it still and
+      undisguised, and its searches and any retaliation treat it as an undisguised unit; the vehicle
+      takes its disguise in its own turn of that tick when claim 33 (c)'s other conditions hold, and
+      an object whose turn comes later finds it disguised. A shot the vehicle fires in the turn in
+      which it takes its disguise is fired with the disguise already taken, so its hit gives no
+      retaliation by (a) unless the disguise has been cleared by then or the victim's house has
+      detector coverage on the vehicle's cell when the hit is applied.
+    - **Consequence.** A defence of a player house that is not a marked test-only house, whose type
+      cannot detect disguises and which does not already hold the vehicle as its target, attacked by
+      such a vehicle that appears disguised to the defence's house (claim 35) at rest from before
+      its first shot, with no hit on the vehicle and no detector coverage, neither retaliates nor
+      picks it, and fires at it only after it loses its disguise or when the person orders the
+      defence to attack it. A defence that already holds it, for example from a search while it
+      drove into the defence's range, fires at it throughout, and its first hit lets every other
+      object answer the vehicle as in (d).
+    - **Original only (note for AI designers).** In the original, every house that is not
+      human-controlled, the computer players included, has the draw of (b). In our engine an AI
+      house is a player house (S-0309 Terms), so its searches never see through a disguise by
+      that draw; our AI can order an attack on the vehicle while its fake blink runs, as a person
+      can.
+    - Backing:
+      - (a): `measurable` (CS23, part b for a victim of a player house, part c for a victim of *K*,
+        each with a disguised attacker whose fake blink runs at every hit and with a control in
+        which it is undisguised; in part c every draw of S-0309 claim 25 (g) would let the attacker
+        through, so a retaliation that took the draw would show); `unmeasured` for a victim of the
+        neutral or special house, which no part here plays; for a disguise, an alliance or a
+        detector coverage that changes between the shot and its hit: no part here times such a
+        change during a projectile's flight; and for "no draw is taken", as against a draw whose
+        result is not used: CS23 does not record the random stream, and such a draw leaves every
+        recorded target as it is
+      - (b): the disguise row's backing in S-0309 (scenario A13) for a player house, and
+        `measurable` (CS23, part b, run b2) for a hit on the searcher not making the attacker
+        acquirable; `unmeasured` for the draw letting an attacker whose fake blink runs through: a
+        vehicle is undisguised while it moves and from its placement until its first still turn, so
+        no part here can bring it, already disguised and with no hit on it, into the search radius
+        of a defence that has not yet taken it; S-0309 claim 25 (g) rates the draw medium
+      - (c): `measurable` (CS23, part a, whose holder is *K*'s) for a target from a search while
+        the vehicle moved; `unmeasured` for a holder of a player house, and for a target from an
+        order or from retaliation: CS23 plays none of them, since the person must drive the
+        vehicle in part a, and the rule is the same keep, since none of S-0309's drop rules,
+        whatever the holder's owner, concerns a disguise, and claim 29's check reads only the held
+        target, whatever gave it
+      - (d): claim 34 (a)'s backing (CS13, part c) for the clearing; for a search after a hit, the
+        undisguised control of S-0309 scenario A13; `unmeasured` for retaliation after a hit: no
+        part here has a vehicle whose disguise a hit has cleared attack an object that does not
+        already hold it, and the rule is S-0309 claim 18's for an attacker that does not appear
+        disguised, which the controls of CS23 parts b and c play
+      - (e): `unmeasured` for the order within the turn and the stop-tick consequences, after a stop
+        on a track and after a stop that leaves no heading point: the tick-end records of CS23 part
+        d show the position and the disguise, but not the tick in which the locomotor stops moving,
+        so they do not tell this order from the opposite one. `measurable` (CS23, part d) that the
+        vehicle is disguised at the latest at the second tick end at which it stands at its final
+        position, while claim 33 (c)'s other conditions hold
+      - the consequence: as (a) to (d), from which it follows
+      - the original-only note: `unmeasured`, for the reason given for the draw in (b)
+    - Confidence:
+      - part (a): high for a victim of a player house and for a victim of a marked test-only house
+        or of the original's computer player, with a disguised attacker and its control; medium
+        for a victim of the neutral or special house, which follows the rules that the marked
+        test-only house plays (S-0309 Terms), when the disguise, the alliance or the detector
+        coverage changes during a projectile's flight, and for no draw being taken (as against a
+        draw whose result is not used)
+      - part (b): high for a player house, medium for the draw, as S-0309 claim 25 rates it
+      - part (c): high for a target from a search with a holder of *K*; medium for a holder of a
+        player house and for a target from an order or from retaliation
+      - part (d): high for the clearing, medium for the retaliation and search after a hit
+      - part (e): medium for the order within the turn and its consequences under the driving
+        locomotor, after either kind of stop, and for the disguise by the second tick end at the
+        final position; low under other locomotors, which were not examined
+      - the consequence: high for its first sentence, as parts (a) and (b) for a player house, and
+        medium for a holder that fires throughout, as part (c) for a holder of a player house, and
+        for every other object answering after the first hit, as part (d)
+      - the original-only note: medium, as S-0309 claim 25 rates the draw
 
 ## Formulas
 
@@ -1169,6 +1303,8 @@ F6, owner's disguise cycle (integers):
   its abort/completion tests.
 - The draws of claims 5, 8 and 33 are taken in the object's own turn (S-0203), at most one per
   object per tick for each claim.
+- In a vehicle's turn, claim 33's rules come after its movement and before its own firing attempt
+  (claim 44 (e), medium).
 - A unit on a newly covered cell can start cloaking in the generator's tick before its own
   update. An attacker processed later that tick can therefore lose this target even when the
   target has not yet had its own update.
@@ -1960,6 +2096,83 @@ Use CS-fixture and the common map, recording setup and three repeats.
   are met, falsifies the corresponding rule. Lost targeting, an expired observation stage
   or any independent firing restriction makes the run inconclusive.
 
+### CS23: Answering a disguised attacker (claim 44; Q-3313)
+
+Use CS-fixture and the common map, three runs for each part and control.
+- **Roles.**
+  - **V**: a vehicle type with the driving locomotor that can disguise, disguises when still and
+    does not disguise permanently. It has one weapon, whose fake-blink time is set longer than the
+    flight of its projectile to D, so that each of its hits on D lands while its fake blink runs,
+    and a strength that lets it survive the run. D's strength also lets it survive the run.
+  - **D**: an armed defence building whose type cannot detect disguises and has the retaliate flag,
+    with one weapon that can fire at V. Its *search radius* is the radius of its range searches
+    (S-0309 claim 8).
+  - **Out of reach.** V stands *out of D's reach* when its distance from D is greater than D's
+    search radius and than D's weapon range, at most (*S* + 0.5) × 256 leptons, where *S* is D's
+    sight field in cells (set in the test rules so that such a cell exists), and D is within the
+    range of V's weapon. From there only retaliation can give D the target V, and S-0215 claim
+    18's distance condition for an owner that is human-controlled holds.
+  - No detector building of D's owner, no infantry on V's neighbouring cells unless a part places
+    one, and no other object that can fire at V or at D.
+- **Owners.** In part b, D belongs to the human player, who builds it by a place order before the
+  part starts, and V belongs to the computer player *K*, placed at set-up, with no order: it takes D
+  as its target by its own search. In parts a and c, D belongs to *K*, placed at set-up, and V
+  is the human's, given its orders by the person. In part d, V is the human's and there is no D. On
+  our engine *K* is the marked test-only house. The disguise-detection list (Import mapping) has
+  every entry set in the test rules to −1 in part a, so that no draw of S-0309 claim 25 (g) lets V
+  through, and to 100 in part c, so that every such draw lets V through while its fake
+  blink runs.
+- **Record** at each tick end: V's position, disguised flag and health; D's target and health; the
+  target of every object of *K* and of the human; every fire event (tick, firer, target) and every
+  hit on V, on D and on any other object.
+- **Void.** A run is void when V gets an order other than the part's, when V fires at anything
+  other than the part's target, when any object other than V and D fires at V or at D, or, in
+  parts b and c, when V's position changes.
+
+Parts:
+- **(a) A held target is kept.** D's weapon has a rate of fire set longer than the time V needs,
+  after D's first hit, to come to rest and disguise again. V starts outside D's search radius. The
+  person orders it to move to a cell inside D's search radius and D's weapon range from which D is
+  within the range of V's weapon, and, once it has arrived, to attack D.
+  - Expected: D takes V as its target while V drives in, and fires at it. V stops and disguises
+    again. From the first tick end after D first took V at which V is disguised, until D's second
+    fire event, D has V as its target at every tick end, and that fire event is at V. D's second
+    hit leaves V undisguised.
+  - Falsified by: D without V as its target at a tick end at which V is disguised, alive and on the
+    map, after D first took it; D's second fire event at another target, or none while V is
+    disguised and D is alive; V disguised after D's second hit and before its lockout could end.
+  - Void when D has not taken V as its target by the end of the tick in which V comes to rest at
+    its cell, and void for the hold when V does not disguise again between D's first hit and D's
+    second fire event.
+- **(b) No retaliation and no search against a disguised attacker, victim of a player house.** V is
+  placed at set-up, at rest, with D's cell within V's own search radius, and is disguised before D
+  is built. No other object of the human stands within V's search radius, and a run in which V's
+  first target is not D is void. Run b1: V stands out of D's
+  reach. Run b2: V stands inside D's search radius, within its weapon's range of D.
+  - Expected: in b1 and b2, D never has V as its target, and each of V's hits lowers D's health.
+  - Falsified by: D with V as its target at any tick end at which V is disguised.
+  - Void when V makes no fire event at D within 200 ticks of D's completion.
+  - Control on b1's set-up: a test copy of V's type without the can-disguise flag. Expected: D has
+    V as its target at the end of the tick of V's first hit on D. A control in which it does not
+    voids the part.
+- **(c) No retaliation through the draw, victim of *K*.** V is placed at set-up for the human, at
+  rest, out of D's reach, and is disguised before the person orders it to attack D. Every draw of
+  S-0309 claim 25 (g) would let V through (Owners).
+  - Expected: D never has V as its target, and each of V's hits lowers D's health.
+  - Falsified by: D with V as its target at any tick end at which V is disguised.
+  - Control on the same set-up: (i) a test copy of V's type without the can-disguise flag.
+    Expected: D has V as its target at the end of the tick of V's first hit on D. A control in
+    which it does not voids the part.
+  - Void when another object of *K* has V as its target at any tick end, or when V makes no fire
+    event at D within 200 ticks of the order.
+- **(d) The stop tick.** V, with no re-disguise lockout running, no contact and no infantry near
+  it, is ordered by the person to drive to a cell *P* on open ground. Run d2: the same, with a stop
+  order given while V drives, its final position being where it stops. Record from the order until
+  30 ticks after V's position last changed.
+  - Expected: V is disguised at the latest at the second tick end at which it stands at its final
+    position, and at every later tick end of the record.
+  - Falsified by: V undisguised at its final position at the second tick end there or later.
+
 ## Open questions
 
 - Arithmetic overflow of sensor counts or inputs beyond the signed import domains is not
@@ -1967,3 +2180,21 @@ Use CS-fixture and the common map, recording setup and three repeats.
   are covered by claims 20 and 43.
 - No oracle measurements have yet been performed for CS18. The claims are source-backed,
   not measured; the scenarios distinguish the identified timing, tie and coverage cases.
+- Whether a disguise-when-still vehicle with a locomotor other than the driving locomotor can
+  stop moving outside its own movement, so that another object finds it still and undisguised
+  (claim 44 (e), low).
+
+## Changes for other specs
+
+- **S-0309 (approved, revision 149), claim 18.** After the condition "*X* is not allied with it,
+  and *X* does not appear disguised to *A*'s owner (a house counts as allied with itself, glossary
+  *alliance*, so a hit by an attacker of *A*'s own house falls under this condition)," add: "This
+  condition is tested when the hit is applied, for *X* as it is then. *X*'s fake blink does not
+  enter it, and no draw is taken for it, whatever *A*'s owner (S-0516 claim 44 (a), where the
+  no-draw half is rated medium)."
+- **S-0309 (approved, revision 149), claim 28.** At the end of the claim's text, before its
+  Backing, add: "Taking a disguise is not a drop cause: no holder drops its target when the target
+  disguises (S-0516 claim 44 (c))."
+- **S-0301 (approved, revision 80), claim 9.** After the table of answers, add: "Whether the target
+  appears disguised to the firer's house is not among the firing check's tests (S-0516 claim 44
+  (c))."
