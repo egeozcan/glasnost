@@ -675,3 +675,47 @@ fn a_killed_client_process_restarts_and_rejoins() {
     assert_eq!(agree, both.len(), "the games went apart");
     assert!(after >= 200, "too few ticks after the readmission");
 }
+
+/// Invented hashes for ticks `from..=to`: tick t's hash is t, plus `apart`
+/// from tick `split` on (a game whose state went apart there stays apart).
+fn kept(from: i32, to: i32, split: i32, apart: i32) -> BTreeMap<i32, i32> {
+    (from..=to)
+        .map(|t| (t, if t >= split { t + apart } else { t }))
+        .collect()
+}
+
+/// Our own test design (the lane's verdict, on invented hashes, no install):
+/// ticks one side ran before its first sample, and so never kept, are left
+/// out of the comparison; the rest agree, so the games did not go apart.
+#[test]
+fn the_relay_verdict_leaves_out_ticks_one_side_did_not_keep() {
+    let ticks = 400;
+    let hashes = [kept(4, 403, i32::MAX, 0), kept(2, 401, i32::MAX, 0)];
+    assert_eq!(compare(&hashes, ticks), Ok(397));
+}
+
+/// Our own test design: a game whose state goes apart fails the verdict,
+/// also when the tick it went apart at is one that one side did not keep.
+#[test]
+fn the_relay_verdict_fails_when_one_game_goes_apart() {
+    let ticks = 400;
+    let whole = kept(1, ticks, i32::MAX, 0);
+    let late = [whole.clone(), kept(1, ticks, 250, 1)];
+    assert!(compare(&late, ticks).is_err(), "apart from tick 250");
+    let unseen = [kept(4, 403, i32::MAX, 0), kept(1, ticks, 2, 1)];
+    assert!(compare(&unseen, ticks).is_err(), "apart from tick 2");
+    let last = [whole, kept(1, ticks, ticks, 1)];
+    assert!(compare(&last, ticks).is_err(), "apart at the last tick");
+}
+
+/// Our own test design: too few ticks kept on both sides fail the verdict,
+/// even when those that were kept agree.
+#[test]
+fn the_relay_verdict_fails_when_too_few_ticks_were_kept_on_both_sides() {
+    let ticks = 400;
+    let odd: BTreeMap<i32, i32> = (1..=ticks).filter(|t| t % 2 == 1).map(|t| (t, t)).collect();
+    let hashes = [odd, kept(1, ticks, i32::MAX, 0)];
+    assert!(compare(&hashes, ticks).is_err());
+    let none: BTreeMap<i32, i32> = BTreeMap::new();
+    assert!(compare(&[none.clone(), none], ticks).is_err());
+}
