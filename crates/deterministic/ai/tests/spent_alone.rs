@@ -1,7 +1,7 @@
 //! #449 (B12): the army's round of types keeps the units it sends alone and
 //! loses on use to a share of what it spends on the army. The synthetic
 //! skirmish with invented types (test data of our own), all built at the
-//! barracks: PLANTER (a bomb-planting warhead, S-0519 claim 1), KAMI (a
+//! barracks: PLANTER (a bomb-planting warhead, S-0519 claim 2), KAMI (a
 //! suicide weapon, S-0519 claim 11), CHARGE (explosive charges, S-0519
 //! claim 12), DESIG (an air-strike designator, S-0519 Terms) and ENGR (an
 //! armed engineer, S-0509), beside the fixture's rifleman WALKER.
@@ -176,7 +176,7 @@ fn infantry_builds(w: &World, orders: &[Order]) -> Vec<String> {
         .collect()
 }
 
-// design: own AI (#449, B12): with the house's spend on the types it sends alone (S-0519 claims 1, 11 and 12, S-0519 Terms, S-0509) already past its share of the army's spend (S-0407 claim 10's ever-built counts), the round of army types builds a fighter, not one more of them, though none of them stands on the map and the rifleman does.
+// design: own AI (#449, B12): with the house's spend on the types it sends alone (S-0519 claims 2, 11 and 12, S-0519 Terms, S-0509) already past its share of the army's spend (S-0407 claim 10's ever-built counts), the round of army types builds a fighter, not one more of them, though none of them stands on the map and the rifleman does.
 #[test]
 fn the_round_builds_a_fighter_once_the_spent_share_is_full() {
     let w = scene(4, 1);
