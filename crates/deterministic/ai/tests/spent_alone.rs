@@ -202,6 +202,37 @@ fn the_round_builds_a_fighter_once_the_spent_share_is_full() {
     }
 }
 
+// design: own AI (#449, B12): the hard level throws fewer units away: with the spend on the types sent alone between an eighth and a quarter of the rest of the army's, normal still builds one of them (the rifleman stands on the map, they do not) and hard builds the rifleman.
+#[test]
+fn hard_keeps_a_smaller_spent_share_than_normal() {
+    use glasnost_ai::scripts::Seat;
+    use glasnost_sim::world::{AiDifficulty, AiSeat};
+    // nocite: test data of our own (a spend of 7000 on the types sent alone against about 40 000 on the rest)
+    let w = scene(7, 200);
+    let builds = |level: AiDifficulty| {
+        let seat = AiSeat {
+            script: AiSeat::DEFAULT_SCRIPT,
+            difficulty: level,
+        };
+        let orders = Seat::start(seat, &w, &fixture::map(), HouseId(0)).think(&w, None, &mut ());
+        infantry_builds(&w, &orders)
+    };
+    let normal = builds(AiDifficulty::Normal);
+    assert!(
+        normal.iter().any(|b| SPENT.contains(&b.as_str())),
+        "normal builds a spent type: {normal:?}"
+    );
+    let hard = builds(AiDifficulty::Hard);
+    assert!(
+        hard.iter().any(|n| n == "WALKER"),
+        "hard builds a rifleman: {hard:?}"
+    );
+    assert!(
+        !hard.iter().any(|b| SPENT.contains(&b.as_str())),
+        "hard builds no spent type: {hard:?}"
+    );
+}
+
 // design: own AI (#449, B12): while the spend on the types sent alone is small beside the army's, the round still builds them (S-0519's special attacks keep their units): one of them, at the round's ever-built tie-break, before a rifleman that already stands on the map.
 #[test]
 fn the_round_still_builds_a_spent_type_within_the_share() {
