@@ -601,6 +601,27 @@ fn drop_pod_ends(w: &mut World, lifter: ObjectId, x: ObjectId) {
     }
 }
 
+/// The point object destination `x` gives jumpjet or hovering vehicle
+/// `mover` at an assignment (S-0502 claim 16, r34; S-0503 claim 20, r30):
+/// S-0607 claim 7's point with `mover` in place of the seized unit. A
+/// passenger of an open-topped transport gives its own position; any other
+/// object gives [`lifter_point`]. None when `x` is not in the game.
+///
+/// Claim 7's riding test is the open-topped one. An object riding in a
+/// transport that is not open-topped never reaches here: `transport::board`
+/// makes it go inside before marking it riding, so S-0507 claim 6a's pass
+/// takes it from every holder's order-level destination, and the orders'
+/// target test refuses an object that is not on the map.
+pub(crate) fn destination_point(w: &World, x: ObjectId, mover: ObjectId) -> Option<Pos> {
+    let o = w.obj(x)?;
+    if crate::transport::open_topped_passenger(w, x) {
+        // spec: S-0607 claim 7 (a riding lifter: a passenger of an open-topped transport gives its own position), as S-0502 claim 16 (r34) and S-0503 claim 20 (r30) take it
+        return Some(o.pos);
+    }
+    // spec: S-0607 claim 7 (a lifter outside any transport: a building's reference point, or its docking point with the pad, repair-depot or vehicle-bunker flag; a mobile object's heading point), as S-0502 claim 16 (r34) and S-0503 claim 20 (r30) take it
+    Some(lifter_point(w, x, mover))
+}
+
 /// The lifter's point at the seize (S-0607 claim 7): a mobile lifter's
 /// heading point (Terms: its next movement point, or its position when it
 /// has none); a building's foundation centre, or its docking point

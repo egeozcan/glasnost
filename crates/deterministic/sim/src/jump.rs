@@ -1080,20 +1080,11 @@ fn order_point(w: &mut World, id: ObjectId, t: Target) {
 }
 
 /// The point of an object destination `x` of jumpjet `id` (claim 16, r34):
-/// an object riding in an open-topped transport gives its own position;
-/// any other gives S-0607 claim 7's lifter point with the jumpjet in place
-/// of the seized unit: a building its reference point, or its docking point
-/// with the pad, repair-depot or vehicle-bunker flag; a mobile object its
-/// heading point (its next movement point, or its position when it has
-/// none). Seam: an aircraft's next movement point is not read, so it gives
-/// its position.
+/// [`crate::lift::destination_point`] with the jumpjet as the mover. Seam:
+/// an aircraft's next movement point is not read, so it gives its position.
 fn object_point(w: &World, id: ObjectId, x: ObjectId) -> Pos {
-    if crate::transport::riding(w, x).is_some() {
-        // spec: S-0502 claim 16 (r34: S-0607 claim 7's riding rule included) and S-0607 claim 7 (a passenger of an open-topped transport gives its own position)
-        return w.obj(x).map_or(Pos::default(), |o| o.pos);
-    }
-    // spec: S-0502 claim 16 (r34: a building gives its reference point, S-0204 claim 4, or its docking point with the pad, repair-depot or vehicle-bunker flag by S-0607 claim 7 with the jumpjet in place of the seized unit; a vehicle, infantry unit or aircraft the point S-0607 claim 7 gives for a lifter that is not a building)
-    crate::lift::lifter_point(w, x, id)
+    // spec: S-0502 claim 16 (r34: S-0607 claim 7's point with the jumpjet in place of the seized unit, its riding rule included)
+    crate::lift::destination_point(w, x, id).unwrap_or_default()
 }
 
 /// Whether, for the reply to *not facing* without a turret (S-0310 claim
@@ -1284,6 +1275,10 @@ fn stop_with(w: &mut World, id: ObjectId, order_level: bool, lifter_ended: bool)
             j.order = None;
             j.moving = false;
         });
+        return;
+    }
+    if w.obj(id).is_none_or(|o| o.health <= 0) {
+        // spec: S-0502 claim 18 (r36, Q-3282, *Destination clear at crash start*) and Edge cases (r36, *No landing slot*): the no-cell outcome of either setting of quirks.jumpjet_no_cell_self_destruct acts only on a unit with health; a killed unit keeps its flight state, movement point and commitment
         return;
     }
     if !w.rules().quirks.jumpjet_no_cell_self_destruct {

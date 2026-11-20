@@ -2186,3 +2186,82 @@ Seams left:
 - The client: no change. The cursor and the insignia already read the simulation's answers.
 
 The P3 census rule: the batch adds no object-table reference, so it makes or moves no back-reference of `World::census`.
+
+## Batch S43: the jumpjet crash start's answers, a mirage and a defence, a target being erased, one object point, and S42's quick lane (Q-3281, Q-3282, #456, #458)
+
+Base main 3e6489f, not rebased. The batch builds S-0502 r36's answers to S39's two requests, Q-3281 and Q-3282. It checks issues #456 and #458 against the specs, joins the jumpjet's and the hovering vehicle's object-point helpers, and traces S42's quick-lane winner changes. The design text came first, in *Simulation (sim issues S43 …)* in `docs/dev/simulation.md` (46a101c for item 1, 04f2c70 for item 5). Item 1's tests (904a98d) came before its fix (04be785). The fix changes no test. The red was shown in a separate base worktree checked out at 904a98d (`red-1.txt`). Two requests are filed:
+- Q-3313 (073f7c2): #456;
+- Q-3314 (65018de): #458.
+
+Q-3315 and Q-3316 were not used. The guard tests are cef88eb (#456) and da1d500 (#458). Item 5 is f1b3b21. A rustfmt commit (bb4423e), the format commit (b39e629) and a clippy fix (0cedb16) close the code. Logs are in `local-lane/sim-issues/s43/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| Q-3281 (S-0502 claim 18 r36, *Start*, *Path of the fall*) | `jump::fly::tick` ran the update that enters *crashing* as any other: the preceding state's physics, then that state's own outcome, then `crashing_outcome`. So a unit killed while cruising met claim 11's arrival test or F6's bands against the point the crash start's stop had just moved near it, and its maximum speed fell in the first crash update. r36: only the preceding state's physics runs, then crashing's decisions | fixed (04be785; tests 904a98d, red at 904a98d: 3 tests) | after `physics`, `tick` reads whether this is the entering update (a crash started, the phase not yet *crashing* or *crashed*). If so it skips the state's outcome and goes straight to `crashing_outcome`. Claim 29's registration move still follows for an update that started *ascending* or *cruising*. Physics is unchanged | `claims_s0502_r36.rs`: `j12_a_r36_the_maximum_speed_is_kept_through_the_first_crash_update`, `j12_a_r36_killed_near_the_cell_centre`, `j12_a_r36_killed_in_a_speed_band` (all three red at 904a98d); `j12_e_r36_killed_ascending_before_its_maximum_speed` (a guard, passes at 904a98d) |
+| Q-3282 (S-0502 claim 18 r36, *Destination clear at crash start*; Edge cases, *No landing slot*) | `jump::stop_with` gave a unit whose nearby-cell search found no cell the no-cell outcome whatever its health. With `quirks.jumpjet_no_cell_self_destruct` on, the self-destruction was skipped for a unit with no health, but its movement point and order were still cleared. r36: both settings' outcomes act only on a unit that still has health | fixed (04be785; tests 904a98d, red at 904a98d: 1 test) | `stop_with` returns after a failed search when the unit's health is 0 or less. The return comes after the magnetic-release branch (S-0607 claim 13's departure, unchanged). S40's `jump::start_crash` still ends the attached animations: `fly::start_crash` returns `true` after `crash_start_stop` whatever the stop did (`claims_s0109_r45_attachment_end.rs` `a_jumpjet_crash_ends_it` passes) | `claims_s0502_r36.rs`: `claim18_r36_a_killed_unit_with_no_cell_keeps_its_flight`, both settings (red at 904a98d); `claim18_r36_a_crash_without_a_kill_still_takes_the_switch_off_outcome` (a guard, passes at 904a98d) |
+| #456 (S-0516 claims 33 to 36 and 39, S-0309 claim 12 table C and claim 25 (g)) | A defence of a player house whose type cannot detect disguises does not acquire, or retaliate against, a still, disguised vehicle, also while the vehicle fires. Claim 39's fake blink does not remove the disguise, and claim 25 (g)'s chance is for the computer-owner houses only. The engine follows the specs. The lead's report that defences should fire back is a spec question | as built; guard tests; request Q-3313 (073f7c2) | none | `claims_s0516_issue_456.rs`: `issue_456_a_still_disguised_mirage_is_not_picked`, `issue_456_a_moving_mirage_is_undisguised_and_picked_on_every_moving_tick`, `issue_456_after_a_damaging_hit_it_is_picked_until_it_disguises_again`, `issue_456_the_fake_blink_does_not_let_a_human_defence_pick_it`, `issue_456_a_just_stopped_mirage_follows_the_predicate` (all pass with no code change; the last prints that the first still state between ticks is already disguised, which Q-3313 reports) |
+| #458 (S-0301 claim 9, S-0309 claim 29, S-0302 claim 8 stage 1, S-0514) | S-0301 claim 9 leaves open what the firing check answers for a target that another firer's temporal beam is erasing. S-0309 claim 29's check drops a target only on *illegal* or *impossible*, so other firers keep the target and fire, and their shots do no damage. The engine follows the specs | as built; guard test; request Q-3314 (65018de) | none | `claims_s0301_issue_458.rs`: `issue_458_another_firer_keeps_an_erased_target_and_its_shots_do_nothing` (passes) |
+| S-0607 claim 7 (one object point; S-0502 claim 16, S-0503 claim 20) | `jump::object_point` (S40) gave its own position for an object riding in any transport. `hover::object_point` (S42) gave it only for a passenger of an open-topped transport, which is what claim 7 names. The two differ only for an object riding in a closed transport. By the design's argument, no such object reaches either helper: boarding makes the passenger go inside before it is marked riding, S-0507 claim 6a then takes it from every holder's destination, and the orders' target test refuses an object off the map | joined (f1b3b21) | `lift::destination_point` gives both, with the open-topped test. `jump::object_point` and `hover::object_point` call it | no new test; the sim suite passes unchanged (`sim-fix5.txt`) |
+
+Switch: none new. The rules quirk test lists only S-0402's `slave_auto_pack_old_top_left`, on base and after (`ws-base.txt`, `ws-after.txt`).
+
+Formats (b39e629): no saved field is added, but item 1 changes the replays. So save goes from 164 to 203 and AI game from 142 to 181, the numbers the main session gave this batch (renumbered to 166 and 145 at the merge). The AI game bump in `crates/deterministic/ai/src/game.rs` is forced by the sim change. Wire stays 13: no order's encoding changes.
+
+Goldens: none moves (`golden-regen.txt`; `gate-i1.txt` passes 17 after item 1).
+
+Lanes compare base 3e6489f with the batch at b39e629. Seed 7's quick-lane run is at bb4423e, which differs from b39e629 only in the format numbers. The clippy fix 0cedb16 only adds an attribute to a test, so it cannot change any result.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt`, `arena-after.txt`). The text outputs differ only in timings and output paths. `ours-M-0001.csv`, `ours-M-0002.csv` and `ours-M-0003.csv` are identical to base. These rows fail, on base and after:
+- M-0001: 10 of 96 (`arena-after.txt` line 102);
+- M-0002: 4 of 24 (line 146);
+- M-0003: 3 of 35 (line 194);
+- M-0019: 0 of 6 (line 210);
+- M-0021: 10 of 50 (line 269);
+- M-0020: 0 of 25 checked, 28 rows (line 300).
+
+**Sweeps** (`m6c-*`, `m7a-*`, `m7b-*`). M6c, M7a and M7b over seeds 1 to 16 pass, before and after (`m6c-after.txt` line 53, `m7a-after.txt` line 67, `m7b-after.txt` line 58). Each differs from base only in build lines and timings: no seed line or summary row moves.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games; `quick-base-7.txt` to `quick-base-10.txt`, `quick-after-7.txt` to `quick-after-10.txt`). Each seed's games are numbered 1 to 9: map 0 with sides 0v1, 0v2 and 1v2, then map 2, then map 8. 33 games end on the same tick with the same winner as base. Three move, and two of them change winner:
+
+| Seed | Game | Base ticks (winner) | Batch ticks (winner) | First difference | Cause |
+|---|---|---|---|---|---|
+| 7 | 3 (map 0, sides 1, 2) | 74473 (house 0) | 105981 (house 1) | tick 21835: a house 0 jumpjet vehicle in its first crash update. On base its maximum speed (`jump.vm`) falls and it starts a new heading turn; in the batch both keep their values | item 1 (Q-3281); winner |
+| 8 | 8 (map 8, sides 0, 2) | 27417 (house 0) | 82253 (house 0) | not traced | — |
+| 10 | 5 (map 2, sides 0, 2) | 48492 (house 1) | 54848 (house 0) | tick 8475: a house 0 jumpjet infantry unit in its first crash update. Same fields as seed 7 game 3: on base `jump.vm` falls and a heading turn starts; in the batch neither | item 1 (Q-3281); winner |
+
+Each winner change was traced as a single pair (`GLASNOST_AI_SIDES`), which reproduced the full set's result. The base binary was built in the base worktree at 904a98d (base plus item 1's tests only). State hashes every 10 ticks (`GLASNOST_AI_HASH=10,0,0`; `tr-s7g3-hash-*`, `tr-s10g5-hash-*`) found the first differing 10-tick window. A dump of the objects in it (`GLASNOST_AI_OBJS`; `tr-s7g3-objs-diff.txt`, `tr-s10g5-objs-diff.txt`) found the first differing tick. At that tick one object differs, and only in those fields. No item-1-only build was made: the attribution to item 1 is read from the fields. Item 5 is designed to change no behaviour. The length change in seed 8 game 8 was not traced, so it is not known which item moves it.
+
+**S42's AI quick lane** (item 4 of this batch). S42's section above hands back its quick lane: its files differed from base, but their contents were not read. This batch built S42's base 43eaa36 and S42's head 2cd701a in two more worktrees and ran seeds 7 to 14, maps 0, 2 and 8 (`s42base-quick-7.txt` to `s42base-quick-14.txt`, `s42head-quick-7.txt` to `s42head-quick-14.txt`). Most games move. Eleven of the 72 change winner. Each was traced as above: a single pair, state hashes every 10 ticks, then an object dump of the first differing window (`s42tr-s<seed>g<game>-hash-*`, `-objs-diff.txt`). The two S42 binaries' hashes are equal for a long prefix in every game. At the first differing tick one object differs:
+
+| Seed | Game | S42 base ticks (winner) | S42 head ticks (winner) | First difference | Cause |
+|---|---|---|---|---|---|
+| 8 | 3 (map 0, sides 1, 2) | 113616 (house 0) | 90418 (house 1) | tick 55868: a house 1 hovering vehicle moving to a mobile object; only `hover.taken_point` differs | Q-3263 (S-0503 claim 20 r30: a mobile object's heading point) |
+| 8 | 9 (map 8, sides 1, 2) | 65194 (house 1) | 62526 (house 0) | tick 43774: a house 0 walker in Capture with an object point. On base its destination is cleared and it has no path; on head the destination is kept, with a path and a walk target | Q-3262 (S-0208 claim 25 r68) |
+| 9 | 7 (map 8, sides 0, 1) | 84628 (house 0) | not over at 120000, no winner | tick 66225: a house 1 walker in Capture; the same fields as seed 8 game 9 | Q-3262 |
+| 10 | 9 (map 8, sides 1, 2) | 39761 (house 0) | 38592 (house 1) | tick 24477: a house 0 walker. On base its Capture has ended and it guards, with no destination and a retry; on head Capture is kept, with the destination, a path and a walk target | Q-3262 |
+| 11 | 7 (map 8, sides 0, 1) | 49144 (house 0) | not over at 120000, no winner | tick 32896: a house 0 hovering vehicle in contact with a depot, with *enter* queued; only its path and the path's goal cell differ | Q-3263 (a depot's docking point) |
+| 12 | 6 (map 2, sides 1, 2) | 78849 (house 0) | 63570 (house 1) | tick 33718: a house 0 walker in Capture; the same fields as seed 8 game 9 | Q-3262 |
+| 12 | 7 (map 8, sides 0, 1) | 63140 (house 1) | 49960 (house 0) | tick 32494: a house 1 walker in Capture; the same fields as seed 8 game 9 | Q-3262 |
+| 13 | 1 (map 0, sides 0, 1) | 108299 (house 0) | 68463 (house 1) | tick 35133: a house 0 walker sabotaging, with no destination on either; only the path's retry tick and retry object differ | Q-3262 (a search for the point's cell) |
+| 13 | 3 (map 0, sides 1, 2) | 108343 (house 0) | not over at 120000, no winner | tick 65122: a house 0 walker entering an object, with no destination on either; the same fields as seed 13 game 1 | Q-3262 |
+| 14 | 6 (map 2, sides 1, 2) | 91491 (house 0) | 79151 (house 1) | tick 39354: a house 1 walker sabotaging. On base its destination is cleared and its path is for its own cell; on head the destination is kept and the path is for the point's cell | Q-3262 |
+| 14 | 7 (map 8, sides 0, 1) | 51508 (house 0) | 64641 (house 1) | tick 37511: a house 0 walker in Capture; the same fields as seed 8 game 9 | Q-3262 |
+
+Two winner changes come from Q-3263's hover object point and nine from Q-3262's walker object point. None comes from Q-3261 or Q-3264. No check build isolated one answer: each attribution is read from the differing fields. Seed 14 game 6 is the clearest, since its path is for the point's cell.
+
+**Suites.** The AI suite with its ignored tests passes 387 on base and after, in 42 result lines (`ai-base.txt`, `ai-after.txt`). The sim gate with its ignored tests passes 17 on both (`gate-base.txt`, `gate-after.txt`), with no golden regenerated.
+
+Final checks:
+- `cargo test --workspace --no-fail-fast`, on b39e629 (`ws-after.txt`): 9461 tests pass, against 9449 on base (`ws-base.txt`). The 12 new tests are 6 for r36, 5 for #456 and 1 for #458. The only failure is the known `quirks::tests::every_spec_quirk_has_a_switch`, which names only `slave_auto_pack_old_top_left`, as on base;
+- `cargo clippy --workspace --all-targets -- -D warnings`: the first run (`clippy.txt`) found `eprintln!` in the #456 test, a disallowed macro. The fix (0cedb16) is an allow attribute on that test, as in `claims_s0309_r129.rs`. The rerun on 0cedb16 is clean (`clippy-2.txt`);
+- `cargo fmt --all -- --check`, on 0cedb16;
+- the wasm32 build of glasnost-app, on 0cedb16 (`wasm-after.txt`);
+- `cargo xtask check`, on 0cedb16 (`xcheck-after.txt`): fails only on the 8 known stock-guard problems in M-0027;
+- `cargo xtask gate`, on 0cedb16 (`xgate-after.txt`): ok, and all nine goldens match under wasm32;
+- the AI suite with its ignored tests, on the final commit 7ee88ba (`ai-final.txt`): 387 pass in 42 result lines, 0 failed.
+
+Seams left:
+- Q-3313 (#456: retaliation and acquisition against a disguised vehicle that fires) and Q-3314 (#458: the firing check for a target another firer is erasing) wait for answers.
+- The length change in seed 8 game 8 of this batch's quick lane is not traced.
+
+The P3 census rule: the batch adds no saved field and no object-table reference, so it makes or moves no back-reference of `World::census`.

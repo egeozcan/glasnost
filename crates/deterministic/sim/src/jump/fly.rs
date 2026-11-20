@@ -815,19 +815,25 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     if w.obj(id).is_none() {
         return false;
     }
-    match phase(w, id) {
-        Some(Phase::Grounded) => grounded_outcome(w, id),
-        Some(Phase::Ascending) => ascending_outcome(w, id),
-        Some(Phase::Hovering) => hovering_outcome(w, id),
-        Some(Phase::Cruising) => cruising_outcome(w, id),
-        Some(Phase::Descending) => descending_outcome(w, id),
-        Some(Phase::Crashing | Phase::Crashed) | None => {}
+    // spec: S-0502 claim 18 (r36, Q-3281, *Start*: in the update that enters crashing only the preceding state's physics runs; the entry into crashing comes before the state's decisions, so none of the preceding state's outcomes acts in that update)
+    let entering = st(w, id)
+        .is_some_and(|j| j.crash_started && !matches!(j.phase, Phase::Crashing | Phase::Crashed));
+    if !entering {
+        match phase(w, id) {
+            Some(Phase::Grounded) => grounded_outcome(w, id),
+            Some(Phase::Ascending) => ascending_outcome(w, id),
+            Some(Phase::Hovering) => hovering_outcome(w, id),
+            Some(Phase::Cruising) => cruising_outcome(w, id),
+            Some(Phase::Descending) => descending_outcome(w, id),
+            Some(Phase::Crashing | Phase::Crashed) | None => {}
+        }
     }
     // The crash start and the fall's end are judged after the state's outcome (claim 18).
     if w.obj(id).is_some() {
         crashing_outcome(w, id);
     }
     if matches!(start, Phase::Ascending | Phase::Cruising) {
+        // Also in the update that enters crashing: the registration's own rule, not a decision of the flight state (claim 18 r36 leaves it alone).
         // spec: S-0502 claim 29 (revision 18, Q-1500 answered: in each update of ascending or cruising over a different cell, the registration moves to the new cell's sector with S-0303 claim 11's arrival order; hovering, descending and crashing updates do not move it)
         crate::combat::flying::moved(w, id);
     }
