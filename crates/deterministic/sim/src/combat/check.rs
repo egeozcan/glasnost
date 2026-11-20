@@ -547,6 +547,13 @@ fn answer(
     {
         return Answer::Illegal;
     }
+    // spec: S-0301 r80 claim 9 (Targets being erased within rank 4, Q-3314 answered: an infantry unit, vehicle, aircraft or building target being erased, glossary, by whichever firer's beam, answers illegal for every weapon that is not a temporal weapon, from the lock until the last beam lets go or the target is removed; a cell target gets no such answer; a temporal firer gets the other answers, the held-temporal-target rearming above included; within rank 4 it comes after every other rank-4 reason, the warp-pending illegal above included, and ahead of the spawner answers, the other weapon's live-effect impossible, every row of S-0306 claim 23, the magnetic-beam rearming and ranks 5 and 7 to 16)
+    if let Some(Target::Object(x)) = target
+        && crate::superweapons::being_erased(w, x)
+        && !r.combat.warhead_of(weapon).is_some_and(|h| h.temporal)
+    {
+        return Answer::Illegal;
+    }
     // spec: S-0301 claim 9 rank 4 and S-0614 claim 8 (a spawner weapon of a held mobile firer: impossible, whatever its organic type)
     if !pass && crate::parasite::held_spawner(w, firer, weapon) {
         return Answer::Impossible;
