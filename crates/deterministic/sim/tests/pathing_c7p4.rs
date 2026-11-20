@@ -394,6 +394,133 @@ fn hold_off_alone_gives_up_after_the_first_hold() {
     assert!(gave_up > 0, "the held moves are given up in the end");
 }
 
+// design: C7-P6 hold (S45's seam, `PathState::held_for`: a walker whose move is blocked only by moving units is held; while it holds that destination it makes no search before its retry delay ends, keeps its delay, its destination and the mark through the end of each update, S-0215 claim 22's end-of-update assignment not being given to it, and the hold ends at a found path or at an assignment)
+#[test]
+fn hold_off_a_held_walker_waits_for_its_retry_delay() {
+    use glasnost_sim::path::Search;
+    use glasnost_sim::rules::{Behaviour, Kind};
+    use glasnost_sim::trace::{self, What};
+    use glasnost_sim::world::{HouseId, Target};
+    // The rooms of `narrow_rooms` with the hold alone: an unarmed walker
+    // walks from the west room into the hall 1 cell wide and meets head-on
+    // the vehicles of another house coming from the east room. They are
+    // moving (they hold destinations), and to an unarmed walker an enemy
+    // vehicle's cell is blocked (S-0209 claim 4 row WP22), so its search
+    // fails with units alone in its way. To an armed walker no unit on the
+    // ground blocks a cell (rows WP16 to WP18, WP26 and WP28), so its
+    // searches find paths through moving units and it is never held.
+    let mut r = ruleset(off(&["jammed_move_dropped"]));
+    r.sim.infantry.get_mut("WALKER").unwrap().primary = None;
+    let mut w = world(&r, 7, |x, y| {
+        let room = (9..=14).contains(&x.abs()) && (-3..=2).contains(&y);
+        let hall = x.abs() < 9 && y == 0;
+        if room || hall {
+            Ground::Clear
+        } else {
+            Ground::Rock
+        }
+    });
+    ready(&mut w);
+    let tanks: Vec<_> = (0..3)
+        .map(|i| {
+            glasnost_sim::testkit::spawn(&mut w, Kind::Vehicle, "TANK", 1, at(12 + i, -1), 0)
+        })
+        .collect();
+    let u = glasnost_sim::testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at(-9, 0), 0);
+    glasnost_sim::testkit::run(&mut w, 1);
+    for &t in &tanks {
+        glasnost_sim::orders::issue(&mut w, HouseId(1), mv(t, at(-12, 0)));
+    }
+    let goal = Target::Cell(at(12, 1));
+    glasnost_sim::orders::issue(&mut w, HouseId(0), mv(u, at(12, 1)));
+    trace::switch_on(&mut w);
+    let mut s = Scene {
+        name: "an unarmed walker against moving enemy vehicles",
+        w,
+        goals: Vec::new(),
+        bound: 4000,
+        open: true,
+        each: None,
+    };
+    let searches = |w: &glasnost_sim::world::World| -> Vec<(i32, Search)> {
+        trace::take(w)
+            .into_iter()
+            .filter(|e| e.unit == u)
+            .filter_map(|e| match e.what {
+                What::Search { result, .. } => Some((e.tick, result)),
+                _ => None,
+            })
+            .collect()
+    };
+    // The first tick that ends with the walker held.
+    let mut last = None;
+    for _ in 0..s.bound {
+        glasnost_sim::tick::step(&mut s.w);
+        last = searches(&s.w).last().copied();
+        if s.w.obj(u).unwrap().path.held_for == Some(goal) {
+            break;
+        }
+    }
+    let o = s.w.obj(u).unwrap();
+    assert_eq!(o.path.held_for, Some(goal), "the walker's move is held");
+    let (held_at, failed) = last.expect("the hold follows a search");
+    assert_eq!(failed, Search::SearchFailed);
+    let r = o.path.retry_at;
+    assert!(r > held_at + 1, "a retry delay to wait for: {held_at} to {r}");
+
+    // An assignment ends the hold: a copy given a move to its own cell.
+    let mut c = s.w.clone();
+    let here = c.obj(u).unwrap().pos.cell();
+    glasnost_sim::orders::issue(&mut c, HouseId(0), mv(u, here));
+    glasnost_sim::tick::step(&mut c);
+    assert_ne!(c.obj(u).unwrap().path.held_for, Some(goal), "an assignment ends it");
+
+    // A found path ends the hold: a copy with the vehicles taken away.
+    let mut c = s.w.clone();
+    trace::switch_on(&mut c);
+    let vehicles: Vec<_> = c
+        .objects
+        .iter()
+        .filter(|(_, o)| o.kind == Kind::Vehicle)
+        .map(|(&id, _)| id)
+        .collect();
+    for v in vehicles {
+        glasnost_sim::objects::remove(&mut c, v);
+    }
+    let mut found = None;
+    for _ in 0..r - held_at + 30 {
+        glasnost_sim::tick::step(&mut c);
+        if let Some(&(t, res)) = searches(&c).first() {
+            found = Some((t, res));
+            break;
+        }
+    }
+    let (t, res) = found.expect("it searches again");
+    assert!(t >= r, "not before its retry tick: {t} < {r}");
+    assert_eq!(res, Search::Found);
+    assert_eq!(c.obj(u).unwrap().path.held_for, None, "a found path ends it");
+
+    // While it holds, it waits: no search before its retry tick, and each
+    // update ends with its delay, its destination and the mark.
+    let mut waited = 0;
+    loop {
+        glasnost_sim::tick::step(&mut s.w);
+        let done = searches(&s.w);
+        if let Some(&(t, _)) = done.first() {
+            assert!(t >= r, "a search at {t} before the retry tick {r}");
+            break;
+        }
+        let o = s.w.obj(u).unwrap();
+        assert_eq!(o.path.held_for, Some(goal), "the mark is kept while it waits");
+        assert_eq!(o.path.retry_at, r, "the delay is not ended");
+        assert_eq!(o.dest, Some(goal), "the destination is kept");
+        assert_eq!(o.beh.current, Some(Behaviour::Move));
+        waited += 1;
+        assert!(waited <= r - held_at, "it searches at its retry tick");
+    }
+    assert!(waited > 0, "it waited {waited} ticks");
+}
+
 // design: C7-P6 hold (only a move with units alone in its way is held: a move into a ring of buildings or onto rock fails and is given up or redirected as before)
 #[test]
 fn hold_off_leaves_unreachable_moves_alone() {
