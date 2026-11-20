@@ -1,9 +1,9 @@
 ---
 id: Q-3297
 title: A self-teleporting infantry unit sent into its own recycling building
-status: open
+status: answered
 related: [S-0603, S-0214, S-0213, S-0215, S-0207, S-0208, S-0209]
-answered-by: []
+answered-by: [S-0603]
 ---
 
 ## Need

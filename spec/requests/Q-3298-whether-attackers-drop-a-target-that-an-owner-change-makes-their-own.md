@@ -1,9 +1,9 @@
 ---
 id: Q-3298
 title: Whether attackers drop a target that an owner change makes their own or allied
-status: open
+status: answered
 related: [S-0309, S-0301, S-0601, S-0509, S-0612, S-0215]
-answered-by: []
+answered-by: [S-0309]
 ---
 
 ## Need

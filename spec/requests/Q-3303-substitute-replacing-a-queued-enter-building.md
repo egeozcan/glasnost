@@ -1,9 +1,9 @@
 ---
 id: Q-3303
 title: A substitute cell that replaces a walker's building destination before its queued enter starts
-status: open
+status: answered
 related: [S-0208, S-0212, S-0215, S-0605]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need

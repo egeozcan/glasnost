@@ -1,9 +1,9 @@
 ---
 id: Q-3301
 title: A walker's failed search near a cell destination, and a standing walker with one
-status: open
+status: answered
 related: [S-0208, S-0212, S-0209, S-0417]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need

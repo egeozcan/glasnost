@@ -2,13 +2,13 @@
 id: S-0603
 title: Grinder (recycling units into credits)
 topic: structures
-revision: 9
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-11-20
 measurements: []
-requests: [Q-1157]
+requests: [Q-1157, Q-3297]
 supersedes: []
 ---
 
@@ -44,6 +44,8 @@ Neighbouring specs own the rest, and this spec does not repeat them:
   different action from claim 14's search: S-0215 (claim 24),
 - a slave master that is consumed: its untransferred slave group ends by S-0312 claim 31,
 - an entrant converted by mutation before it arrives: S-0611 claim 5,
+- the jump of an entrant with the teleporting locomotor and its landing point: S-0207 claim 20,
+  and S-0208 claim 19 for infantry,
 - being drained adds no direct entry or consumption restriction and leaves the recycle payout
   going to the building's owner: S-0608 claim 18. Any separate transfer to the drainer is
   S-0608 claim 7's payout, not a change to this spec's recycle payout.
@@ -169,7 +171,8 @@ Neighbouring specs own the rest, and this spec does not repeat them:
    unit because the building is its mission target (S-0209 claim 4 row WP3), a vehicle by S-0209
    claim 5 rows VP6 and VP7. It is consumed on the first foundation cell it arrives in (claim 5),
    so it does not need to reach the centre. This presumes the approach is not cut short as
-   described in claim 3 (a short line of buildings in the way).
+   described in claim 3 (a short line of buildings in the way). An entrant with the teleporting
+   locomotor does not cross the foundation: claim 16 gives where it lands.
    - Backing: `measurable` (scenario G1, positions)
    - Confidence: medium (which foundation cell, for a large building)
 
@@ -179,13 +182,16 @@ Neighbouring specs own the rest, and this spec does not repeat them:
    cell that holds the building it is bound for:
    - an infantry unit at the arrival update of a walking step (S-0208 claim 22),
    - a vehicle at a cell-arrival update (S-0417 claim 7),
+   - an entrant with the teleporting locomotor, of either kind, at the arrival of its own jump
+     (claim 16),
 
    provided its current behaviour is *eaten* and the building in that cell is its destination
    or its target. Nothing else is tested at that moment: not the alliance, not the building's
    owner, not power or the switch, not a sale or construction in progress, not the building's
    health. A building that is being sold, is switched off or has changed owner since the order
    still consumes the entrant (`quirks.grinder_no_arrival_recheck`, Edge cases).
-   - Backing: `measurable` (scenarios G1, G7 and G8), except arrival during
+   - Backing: `measurable` (scenarios G1, G7 and G8; G12 parts b and d for an entrant's jump,
+     claim 16 c), except arrival during
      construction, which is `unmeasured`: no setup establishes an already-bound entrant
      arriving while the same destination building is under construction.
    - Confidence: high
@@ -347,6 +353,123 @@ Neighbouring specs own the rest, and this spec does not repeat them:
     - Backing: `measurable` (scenarios G7 and G8; G9 for failed-search clearing and queueing)
     - Confidence: high (sale, switch, destruction), medium (owner change)
 
+### Entrants with the teleporting locomotor
+
+16. **Teleporting entrants (Q-3297).** An entrant that moves with the teleporting locomotor
+    (S-0207 claim 20) does not walk or drive onto the foundation. Its recycle destination makes it
+    jump, and where it lands decides whether it is consumed.
+
+    - (a) **The order.** A self-teleporting infantry unit (S-0214 Terms), armed or not, is offered
+      the recycle order over a recycling building of its own house as any infantry unit is (claim 1,
+      S-0214 row I26), at rest and in every tick of its phasing in after its own jump. Its
+      teleporting does not change the offer, and nor does a weapon that does not heal. A
+      self-teleporting unit whose weapon heals is a healing actor (S-0214 Terms): row I13, which
+      comes before row I26, gives it its own answer over a recycling building whose type carries no
+      passengers, so it is not offered the recycle order there, unless a row before row I13 decides
+      first: for a unit of an engineer type over an engineer-friendly building at full health, row
+      I5 offers recycle when the building recycles. While it is phasing in, the click
+      gives no order: table M's recycle order needs a movable actor, and a phasing-in unit is not
+      movable (S-0214 Terms). The unit keeps its rest behaviour where it landed, and no order
+      follows by itself when phasing in ends. A click after phasing in has ended gives table M's
+      order.
+      - Backing: `measurable` (scenario G12 parts a and c). `unmeasured` for a unit whose weapon
+        heals: G12 plays no healer, and its answer is S-0214 row I13's
+      - Confidence: high for the click's result at rest and while phasing in; medium for the
+        cursor drawn over the building, since only the offer of the order, not the drawn cursor,
+        is established for this unit; medium for a unit whose weapon heals, which follows
+        S-0214 row I13
+    - (b) **Where an infantry entrant lands.** The order sets the destination at once, and the
+      teleporting locomotor fixes the landing point at once (S-0207 claim 20 a). For an infantry
+      unit, fixing a landing point is itself a start (S-0215, Changes below): if the unit is then
+      ready under S-0215 claim 11's infantry rules, its queued behaviour becomes current before
+      the point is chosen. A unit given the recycle order while it stands at rest is ready unless
+      one of that rule's conditions holds, so its point is then chosen with *eaten* current.
+      The destination point is the building's centre, so the destination
+      cell is the cell that holds that point. With *eaten* current and the building occupying that
+      cell, S-0208 claim 19 ignores occupants for the standing position, and S-0209 claim 4 row
+      WP3 decides the entry, because the building is the unit's mission target: the outcome is
+      *clear*. The unit lands in the cell of the building's centre, whichever side it starts from,
+      and (c) follows.
+
+      Two cases land it beside the foundation instead, and (d) follows:
+      - the unit is not ready when the point is chosen and is not of an engineer type (S-0208
+        Terms): its rest behaviour is still current, which gives it no mission target, and S-0209
+        row WP19 refuses its own building,
+      - the building is invulnerable: row WP3 refuses it.
+
+      In both cases S-0208 claim 19's nearby-cell search, which an object destination allows,
+      gives the landing cell. A unit of an engineer type that is not ready has the building as
+      its mission target in its rest behaviour, *guard* or *area guard* (S-0208 claim 26), so row
+      WP3 decides its entry, as for a ready unit, not row WP19. What follows when that gives
+      *clear* while *eaten* is not current is not established (Open questions).
+      - Backing: `measurable` (scenario G12 part b) for the landing cell of a unit ordered at rest,
+        and G12 part e for the invulnerable building. The not-ready case is `unmeasured`: no setup
+        is established that leaves a self-teleporting unit at rest but not ready when its order
+        takes effect, and no scenario here plays a self-teleporting type with the engineer flag.
+      - Confidence: high for a unit ordered at rest landing in the cell of the building's centre,
+        for G12's subjects (one recycling building type that is not invulnerable, one
+        self-teleporting infantry type, a human owner); low beyond those subjects, since the
+        landing rests on row WP3, which S-0209 rates low; medium for the start at the
+        landing-point choice as its reason, since the landing cell is that start's only
+        observable sign; medium for the not-ready case of a type without the engineer flag; low
+        for the not-ready case of an engineer type and for the invulnerable building, as S-0209
+        rates row WP3
+    - (c) **Consumption in the jump tick.** Landing is an arrival of the entrant's own kind
+      (S-0207 claim 20 e; for infantry, S-0208 claim 22). Its arrival effects include claim 5's
+      consumption test, and the entrant still holds its destination then, because the jump removes
+      it later. So an entrant whose current behaviour is *eaten* and whose jump lands in a cell
+      holding the building that is its destination or target is consumed in the jump tick, with
+      claims 6 to 12. This holds for an infantry unit and a vehicle alike. Among the jump tick's
+      effects of S-0207 claim 20 e, consumption comes after the departure effects, the placement
+      at the landing point and the arrival sound. The jump tick's later effects still follow, and of
+      them only the second warp animation is observable: it plays at the landing point although
+      the entrant has left the game.
+      - Backing: `measurable` (scenario G12 parts b and d) for consumption in the jump tick, the
+        payment and the animation at the landing point. The order of consumption among the jump
+        tick's other effects is `unmeasured`: they fall in one tick, and none of the later ones
+        except the animation is observable once the entrant has left the game.
+      - Confidence: high for consumption in the jump tick with a payment, for both kinds, for
+        G12's subjects; medium for its place among the jump tick's effects and for the animation
+    - (d) **Landing beside.** An entrant whose jump lands beside the foundation is not consumed and
+      not paid for: the cell it lands in holds no building, and the jump removes its destination.
+      It does not try again by itself. With no destination, *eaten* falls back as claim 3 gives:
+      an infantry unit to rest (S-0215 claim 14), while a vehicle stays in *eaten* with nothing
+      queued (S-0215 claim 15) and does not move until it gets another order. The end of the
+      vehicle's phasing in does not change this when it finds no target there: its fall-back to
+      its idle behaviour (S-0207 claim 20 f) is the same claim 15 fall-back.
+      - Backing: `measurable` (scenario G12 part d for a vehicle, part e for infantry)
+      - Confidence: high for the vehicle staying in *eaten*, unmoved and not consumed, for G12's
+        subjects; medium for the infantry unit's fall-back to rest
+    - (e) **Where a vehicle entrant lands.** A vehicle has no start at its landing-point choice:
+      S-0215 claim 12 holds for it unchanged. The landing point of a first recycle order given at
+      rest is therefore chosen with its rest behaviour current. S-0209 claim 5 row VP6 needs *eaten*
+      current, so it does not apply, and row VP19 makes the building, its own house's, *blocked*.
+      S-0207 claim 20 b's nearby-cell search then gives a cell beside the foundation. The first
+      order thus ends as (d) gives: beside the foundation, in *eaten*, not consumed and not paid
+      for. A second recycle order finds *eaten* already current, row VP6 gives *clear*, and the
+      vehicle lands in the cell of the building's centre. It is consumed in that jump tick and pays
+      what the same type pays when it drives in. This is
+      `quirks.teleport_vehicle_recycle_lands_beside` (Edge cases). It concerns a vehicle whose own
+      locomotor is teleporting. A vehicle with the teleport-capable flag receives the recycle
+      destination through its ordinary locomotor (S-0207 claim 28) and drives in as claim 4 gives.
+      - Backing: `measurable` (scenario G12 part d; part g for the switch's off form)
+      - Confidence: high for the first order landing beside without consumption and the second
+        landing in the cell of the building's centre with consumption, for G12's subjects; low
+        for the second order's landing beyond them, since it rests on row VP6, which S-0209 rates
+        low; medium for the absence of a start at the vehicle's landing-point choice as their reason
+    - (f) **The original's fate route.** Claim 14's fate decision sets the destination before it
+      queues *eaten*. A self-teleporting infantry unit sent this way therefore chooses its landing
+      point before *eaten* is queued, so *eaten* is not current at the choice. For a unit that is not
+      of an engineer type, S-0209 row WP19 then refuses the building, which belongs to the unit's
+      own house, and such a unit lands beside the building by the nearby-cell search of (b), and (d)
+      follows: it falls back to rest and is not consumed. For a unit of an engineer type row WP3
+      decides, as in (b), and what follows is not established (Open questions).
+      - Backing: `measurable` in the original with a computer player (scenario G12 part f), for a
+        type without the engineer flag. `unmeasured` for an engineer type: no scenario here plays a
+        self-teleporting type with the engineer flag
+      - Confidence: medium for a type without the engineer flag; low for an engineer type, whose
+        entry rests on row WP3, which S-0209 rates low
+
 ## Formulas
 
 All amounts are integers in credits. Rounding, number domains and the floating-point sites are
@@ -375,6 +498,8 @@ S-0408's Formulas, which this spec does not restate.
 | bound | new order | per the order | *eaten* replaced (claim 15) |
 | bound | building destroyed or removed | resting (infantry) or *eaten* with nothing queued (vehicle) | destination cleared, fall-back (claims 3, 15) |
 | bound | building begins sale, switched off, low power, owner change | bound | nothing (claim 15) |
+| bound, teleporting locomotor | its jump lands in a cell holding the building, *eaten* current | removed | consumption in the jump tick, claims 6 to 11 (claim 16 c) |
+| bound, teleporting locomotor | its jump lands beside the foundation | resting (infantry) or *eaten* with nothing queued (vehicle) | the jump removes the destination; no retry (claim 16 d) |
 
 **Within the tick of a consumption.** The building's entry raise can still observe the entrant
 on the map and the pre-payment balance; the entrant's destroyed-by-anything raise sees all
@@ -411,6 +536,15 @@ to S-0203 claim 10's effect on which later objects get turns (claims 5 and 6; G9
 - **No *special-1* animation.** Keep *active-1* running when the selected consumption animation
   is absent (claim 12). The original instead leaves that slot stopped, a display-only bug with
   no switch.
+- **A teleporting vehicle's first recycle order lands beside
+  (`quirks.teleport_vehicle_recycle_lands_beside`, default on, the original).** Claim 16 (e): the
+  first order chooses the landing point with the rest behaviour current, so the vehicle lands
+  beside the foundation and then stays in *eaten*, unmoved, until it gets another order. A second
+  order is needed for it to be consumed. *Fixed behaviour:* when a vehicle with the teleporting
+  locomotor chooses a landing point while *eaten* is queued and its destination is a recycling
+  building, row VP6 is applied as if *eaten* were current. Its first order then lands in the cell
+  of the building's centre, and it is consumed in that jump tick when *eaten* is current then
+  (claim 5). No other landing-point choice and no start changes.
 
 ## Import mapping
 
@@ -593,6 +727,71 @@ distances, and record that *eaten* is queued, not started immediately. Choosing 
 choosing the earlier-gained equal-distance building, or immediately starting *eaten* falsifies the
 respective prediction.
 
+**G12. Teleporting entrants** (claim 16). G1's map and settings, with A a human house and no
+enemy object within reach of the subjects. A recycling building of A stands on open ground.
+Record its foundation cells and the cell that holds its centre. Subjects, each of A:
+- a self-teleporting infantry unit, of a type without the engineer flag whose weapon, if it has
+  one, does not heal,
+- an ordinary walking infantry unit and a driving vehicle, as controls,
+- the driving vehicle's type made to move with the teleporting locomotor by the named test rules
+  file *teleport-vehicle-test*, which changes nothing else. The type has no teleport-capable flag,
+  so S-0207 claim 28 does not apply.
+
+Each subject starts at rest 5 to 6 cells from the foundation; the teleporting subjects also start
+from two other sides and from about 11 cells away. Record every tick each subject's cell, whether
+it is on the map, its current and queued behaviour and its destination, and A's balance. A has no
+other income, and a run with no order is the balance control. Payments are compared as relations
+(a rise or none, equal or not), and each subject runs with two seeds.
+- (a) With the subject selected, hover the building and capture the drawn cursor every tick: at
+  rest, and in every tick of the phasing in after a move jump of 3 cells. *Expected:* the recycle
+  cursor in every captured tick, for the self-teleporting unit as for the walking control.
+  *Falsified by:* another cursor for the self-teleporting unit in a tick in which the walking
+  control shows recycle.
+- (b) Give the self-teleporting unit the recycle order at rest, from each start. Capture images in
+  the jump tick. *Expected:* in its first update after the order takes effect it jumps into the
+  cell that holds the building's centre and is off the map at the end of that tick, with no later
+  appearance; A's balance has risen by the next read, while the control run's has not; a warp
+  animation appears at that cell in the jump tick. The landing cell is the only observable that
+  tells a start at the landing-point choice from a start at the next per-tick start: with the
+  latter the point would be chosen with rest current and the unit would land beside.
+  *Falsified by:* a landing outside the foundation, the unit on the map at the end of the jump
+  tick or later, no rise in A's balance, a rise in the control run, or no animation at the
+  landing cell.
+- (c) Order the self-teleporting unit to move 3 cells, then give it the recycle order once, at one
+  tick per run, from the tick after its jump to 60 ticks after it. Its phasing in ends where
+  S-0207 F9 gives for that jump, computed from the type's imported fields. *Expected:* a click
+  while it is phasing in leaves its rest behaviour current, with no destination, nothing queued
+  and no further jump to the end of the run, and A's balance unchanged; a click after phasing in
+  has ended gives part (b)'s result. *Falsified by:* a destination, *eaten* current or queued, or a
+  jump after a click while phasing in; a click after the end of phasing in that does not give
+  part (b)'s result.
+- (d) Give the teleporting test vehicle the recycle order at rest, from three starts, and record
+  for at least 500 ticks after its jump. In separate runs give it a second recycle order after its
+  phasing in has ended. Run the walking and driving controls with the same order. *Expected:* the
+  first order's jump lands outside the foundation, in a cell beside it, and A's balance does not
+  rise. Afterwards *eaten* is current, nothing is queued, it has no destination and its cell
+  does not change to the end of the run. The second order's jump lands in the cell that holds the
+  building's centre, the vehicle is off the map at the end of that jump tick, and A's balance
+  rises by as much as the driving control's consumption raised it. The controls are consumed on
+  arrival in their first foundation cell (claim 4). *Falsified by:* a first-order landing on the
+  foundation; a rise in A's balance after the first order; any later behaviour other than
+  *eaten* current, or anything queued; any change of cell before the second order; a
+  second-order landing outside the foundation, or a different rise.
+- (e) Make the building invulnerable by a map trigger (the superweapon specs own how) from before
+  the self-teleporting unit's recycle order until after its jump tick, and record for at least 500
+  ticks after the jump. *Expected:* the jump lands beside the foundation, the unit stays on the map
+  and is not paid for, and at the end of the run rest is current with no destination. *Falsified
+  by:* a landing on the foundation, a consumption or a rise in A's balance, or *eaten* still current
+  at the end of the run.
+- (f) In the original, scenario G11's fixture with a self-teleporting infantry unit as the unit
+  taken. *Expected:* it lands beside the nearest recycling building, is not consumed and falls
+  back to rest. *Falsified by:* a landing on that building's foundation, or a consumption.
+- (g) On our engine with `quirks.teleport_vehicle_recycle_lands_beside` off, repeat part (d)'s
+  first order. *Expected:* the jump lands in the cell that holds the building's centre, and the
+  vehicle is consumed in that jump tick with a rise equal to the driving control's. With the switch
+  on, part (d)'s expectations hold. *Falsified by:* a landing outside the foundation, or no
+  consumption in the jump tick, with the switch off.
+
 ## Open questions
 
 - Which foundation cell a large building consumes in, and whether a vehicle approaching along
@@ -607,3 +806,68 @@ respective prediction.
 - Which lengths and alignments of a short line of buildings make the approach fail. Low confidence. Tracked by Q-1280.
 - Whether a recycle order can reach a vehicle standing on a vehicle factory's exit cell whose approach fails at once (claim 3). Not established.
 - Whether a vehicle whose body is turning, in place or to face a target, when its approach fails keeps *guard* queued until the turn ends, as claim 3 predicts from S-0215 claim 11. No scenario yet fixes its setup, so the case is `unmeasured`, medium confidence.
+- A self-teleporting infantry unit of an engineer type whose landing point is chosen while
+  *eaten* is not current (claim 16 b's not-ready case, the fate route of claim 16 f): where row WP3
+  gives *clear*, it would land on the foundation. Whether *eaten* is current by its landing (a
+  ready unit's queued *eaten* can become current at a start in between, S-0215 claim 11), and so
+  whether it is consumed then or later, and where it stands otherwise, were not traced (low).
+- When a behaviour that becomes current at a teleporting infantry unit's landing-point choice
+  (claim 16 b) is first processed, when the destination comes from a behaviour's own processing
+  rather than an order. Nothing in this spec depends on it; S-0215 owns it (Changes below). Low
+  confidence.
+
+## Changes for other specs
+
+- **S-0215 (approved, revision 139), claim 12, "Orders go through the queue".** After "The
+  behaviour therefore becomes current at the actor's next per-tick start (claim 11; for aircraft,
+  through the aircraft rules that claim 11 points to)." add: "There is one exception. When a
+  destination makes an infantry unit with the teleporting locomotor fix a landing point (S-0207
+  claim 20 a, S-0208 claim 19), fixing the point is itself a start, before the point is chosen. A
+  unit that is then ready under claim 11's infantry rules makes its queued behaviour current at
+  once. This holds whatever gives the destination, an order or a behaviour's processing, and for
+  no other kind of object. It is not a start of the unit's update, so claim 2's exclusions and,
+  in our engine, S-0513 claim 51's suppression of the per-tick start do not apply to it. A choice
+  made while a warp is pending (S-0208 claim 19) can therefore make a queued behaviour current,
+  whose processing S-0513 claim 51 still suppresses. A behaviour made current at the choice that
+  an order triggers is processed in the unit's first update after the order, as after a first
+  per-tick start (claim 3 (a)), since the order takes effect before any turn of that tick." In
+  claim 11, after "makes it current by a start-next, its **first
+  per-tick start**." add: "An infantry unit with the teleporting locomotor also has a start when it
+  fixes a landing point (claim 12)." Rated medium, `measurable` by S-0603 scenario G12 part b (the
+  landing cell is that start's only observable sign), for a destination given by an order to a
+  self-teleporting infantry unit, and for the vehicle's lack of the start by G12 part d. Medium,
+  `unmeasured`, for a destination given by a behaviour's processing and for the lack of the start
+  in an aircraft or a building: the start was traced in the infantry rules alone, and no scenario
+  here gives such a unit a destination by a behaviour's processing at a known tick or plays an
+  aircraft or building with the teleporting locomotor. The processing in the first update after
+  an order is rated medium, `unmeasured`: G12 records nothing that tells it from a later
+  processing, since *eaten* is current from the choice on and the jump follows from the fixed
+  landing point (S-0207 claim 20 (d)) whenever *eaten* is processed, and it was traced in the
+  original's order handling. The
+  warp-pending case is low, `unmeasured`, as S-0208 claim 19 rates a choice in that state. When a
+  behaviour made current at a choice that a behaviour's own processing triggers is first processed
+  is for S-0215 to state (S-0603 Open questions).
+- **S-0208 (approved, revision 75), claim 19, "Landing-point choice".** Replace "A ready queued
+  behaviour can start when the landing point is chosen (S-0215); the current behaviour below is
+  the one then in force." with "Fixing the landing point is a start (S-0215 claim 12): a unit that
+  is then ready under S-0215 claim 11's infantry rules makes its queued behaviour current before
+  the point is chosen, and the current behaviour below is the one in force after that start."
+  Replace "Occupants are ignored when it is *capture*, *sabotage*, *enter* or *eaten*" with
+  "Occupants are ignored when it is *capture*, *enter*, *eaten* or *patrol*": *sabotage* is not one
+  of the four behaviours, *patrol* is. In its Confidence line, replace "the four behaviours" with
+  "*capture*, *enter* and *eaten*, and *sabotage* not being among them (scenario W11 (c))", which
+  stay high, and add: "Medium, `unmeasured`, for *patrol* being among them: *patrol* comes from
+  the original's team logic, which is out of scope, and from route orders (S-0215 claim 34), and
+  no scenario here gives a patrolling walker an object destination at a landing-point choice."
+  In scenario W11's procedure (c), replace "enter a transport, capture, sabotage or be absorbed by
+  a building" with "enter a transport, capture or be absorbed by a building", and after "check the
+  occupant-ignoring choice." add "Give a saboteur type its sabotage order on a building as well:
+  it respects occupants, since *sabotage* is not one of the four behaviours." Claim 19's list is
+  not the list of S-0215 claim 28's scatter after a fall-back (*capture*, *sabotage* or *eaten*),
+  which is a different rule and stays as it is.
+- **S-0207 (approved, revision 85), claim 20 (e), "What the jump does".** After "The respective
+  movement and combat specs own those effects." add: "They include the consumption of an entrant
+  by a recycling building, for an infantry unit and a vehicle alike, while the destination is still
+  held (S-0603 claims 5 and 16). For a consumed entrant the crate attempt, the stop, the
+  destination removal and the second warp animation below still follow; only the animation is
+  then observable, at *L*."
