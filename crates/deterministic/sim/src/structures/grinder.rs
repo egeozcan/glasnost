@@ -188,6 +188,20 @@ pub fn vehicle_arrival(w: &mut World, u: ObjectId) -> bool {
     arrive(w, u)
 }
 
+/// A teleporting entrant's landing in its jump tick (claim 16 c): an
+/// arrival of its own kind, so claim 5's consumption test runs while the
+/// entrant still holds its destination. Returns whether it was consumed.
+pub fn jump_arrival(w: &mut World, u: ObjectId) -> bool {
+    // spec: S-0603 r15 claim 16 (c) (an infantry unit and a vehicle alike; S-0207 claim 20 e, S-0208 claim 22)
+    if w
+        .obj(u)
+        .is_none_or(|o| !matches!(o.kind, Kind::Infantry | Kind::Vehicle))
+    {
+        return false;
+    }
+    arrive(w, u)
+}
+
 fn arrive(w: &mut World, u: ObjectId) -> bool {
     let Some(b) = arrival_building(w, u) else {
         return false;
@@ -303,13 +317,15 @@ pub fn grinder_fate(w: &mut World, u: ObjectId) -> bool {
         return false;
     };
     if let Some(ob) = w.obj_mut(u) {
-        // spec: S-0603 claim 14 (it queues eaten, without an immediate start)
-        ob.beh.queue(Some(Behaviour::Eaten));
         ob.path.steps.clear();
         // spec: S-0212 claim 21 and its state table, row "destination changes" (r97: for the driving and walk locomotors a different destination, or none, ends a running retry delay, path::destination_changed and path::waits; the ship and the other locomotors keep it, low confidence; the hovering locomotor's is S-0503's)
     }
-    // spec: S-0603 claim 14 (it takes that building as its destination)
+    // spec: S-0603 r15 claims 14 and 16 (f) (it takes that building as its destination before it queues eaten, so a teleporting entrant's landing point is chosen with nothing queued)
     crate::econ::assign_destination(w, u, Some(Target::Object(b)));
+    if let Some(ob) = w.obj_mut(u) {
+        // spec: S-0603 claim 14 (it queues eaten, without an immediate start)
+        ob.beh.queue(Some(Behaviour::Eaten));
+    }
     true
 }
 
