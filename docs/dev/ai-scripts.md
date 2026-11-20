@@ -64,13 +64,45 @@ script plays, never a house's rules, credits or factors.
 
 What the default script does with it, and why a player sees it:
 
-| level | harvesters kept | attack wave | base defence | what a player sees |
-|---|---|---|---|---|
-| easy | 1 | 3 units | reacts on the house's think ticks only | one harvester on the field, small attacks, a slower answer to a raid on its base |
-| normal | 2 | 6 units | every tick | today's AI |
-| hard | 3 | 6 units | every tick | a third harvester on the field, so more money and a larger army sooner |
+| level | harvesters (plan, at most) | attack wave | acts on | base defence | superweapon and special buildings | what a player sees |
+|---|---|---|---|---|---|---|
+| easy | 1, at most 2 | 3 units | one think tick in three (`EASY_EVERY`) | on its acting think ticks only | none | one or two harvesters, small attacks, a base that grows and answers a raid slowly, no superweapon strikes, no sensor, grinder, gattling defence, bunker, lifter or drainer |
+| normal | 2, at most 4 | 6 units | every think tick | every tick | built | today's AI |
+| hard | 3, at most 6 | 6 units | every think tick | every tick | built | a third harvester (up to six on a large field), so more money and a larger army sooner |
 
-`brain::plan_for` gives the plan of each level; the defence gate is in `Brain::think_from`.
+The plan's count is the harvesters kept; on a large explored field the house buys one more for
+every 20 resource cells within reach, up to twice the plan's count (`Script::harvesters_wanted`;
+a Yuri house's slave miners are not capped), so the plan counts 1, 2 and 3 are on stock maps
+often 2, 4 and 6 harvesters. `brain::plan_for` gives the plan of each level; the think rate, the
+defence gate and the skipped building parts are in `Brain::think_from`, read from the tick and the
+level alone (no state is added, so normal hashes and plays as before).
+
+### Telling the levels apart (batch 10)
+
+Rounds on the install, `ai-tournament game=install maps=0,2,8 seeds=7-10 ticks=27000 threads=2`:
+144 games, 48 per pair, 16 per pair and ground, 22 to 25 minutes each. B9's 24 games (8 per
+pair) were too few. Head-to-head score of the stronger level of each pair (win 1, draw ½):
+
+| round | easy v normal: normal | easy v hard: hard | normal v hard: hard | Elo easy / normal / hard |
+|---|---|---|---|---|
+| base (f62d868, before the batch) | 0.53 (16-19-13) | 0.59 (17-23-8) | 0.66 (23-17-8) | 1512.7 / 1439.4 / 1547.9 |
+| round 1 (easy acts on one think tick in three) | 0.56 (20-14-14) | 0.55 (17-19-12) | 0.58 (21-14-13) | 1535.9 / 1458.2 / 1505.9 |
+| round 2 (and no superweapon or special buildings at easy) | 0.56 (20-14-14) | 0.61 (24-11-13) | 0.58 (21-14-13) | 1534.3 / 1445.5 / 1520.2 |
+
+- **The side decides.** In every pair and round the entrant on country index 0 scores
+  0.56 to 0.75 and on country index 1 0.04 to 0.31. Since each pair plays both countries
+  equally, the stronger level's lead on the same country is 2S − 1 for its overall score S: the
+  split by side adds nothing to S.
+- **The spread.** Normal v hard is not touched by the levels of this batch, yet moved from 0.66 to
+  0.58 between the base and round 1 (the batch's spies and bombers change play at every level), so
+  about 0.08 is within the spread of one round. Rounds 1 and 2 give normal v hard game for game
+  the same (the levels do not reach normal or hard).
+- **Not separated.** Hard leads normal (0.58 to 0.66) and easy (0.55 to 0.61), but easy and normal
+  are not told apart (0.53 to 0.56) though easy now thinks at a third of the rate and builds no
+  superweapon: every easy game changed, its results hardly. Easy's wins come late (at the cap on
+  worth, or by victory after tick 15000), not from an early rush of its small waves. What decides
+  a game between two levels of this script is still unknown; the Elo order depends on the order
+  of the games and is not the measure.
 
 **The house difficulty row is not touched.** Every player house in a skirmish, person or AI, uses
 the normal row: S-0302 Terms (*Difficulty row*) and claim 3 ("AI difficulty comes from the AI's

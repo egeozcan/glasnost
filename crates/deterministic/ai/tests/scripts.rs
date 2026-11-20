@@ -244,3 +244,101 @@ fn the_difficulties_change_the_plan_only_away_from_normal() {
     assert!(easy.harvesters < normal.harvesters && easy.wave < normal.wave);
     assert!(hard.harvesters > normal.harvesters);
 }
+
+/// A probe that keeps the names of the brain's parts it is told of.
+struct Parts(Vec<&'static str>);
+
+impl glasnost_sim::probe::Probe for Parts {
+    fn mark(&mut self, phase: glasnost_sim::probe::Phase) {
+        if let glasnost_sim::probe::Phase::Part(name) = phase {
+            self.0.push(name);
+        }
+    }
+}
+
+// design: own AI (#449, B10): at easy the default script acts on one of every three of its house's think ticks, and on the other two gives only what it gives between thinks, so it builds, sends its army and answers a raid later; normal and hard act on every think tick
+#[test]
+fn easy_acts_on_one_think_tick_in_three() {
+    use glasnost_ai::scripts::{AiScript, Schedule, ScriptState, View};
+    // nocite: design: own AI (#449, B10): the easy level's rate
+    const EASY_EVERY: usize = 3;
+    let map = fixture::map();
+    let mut got = Vec::new();
+    for level in AiDifficulty::ALL {
+        let seat = AiSeat {
+            script: AiSeat::DEFAULT_SCRIPT,
+            difficulty: level,
+        };
+        let mut g = armed(seat);
+        let base = ScriptState::start(seat, &g.world, &map, HouseId(0));
+        let (mut acted, mut idle) = (0, 0);
+        // nocite: test data of our own (two of easy's think cycles)
+        for _ in 0..2 * EASY_EVERY as i32 * THINK_PERIOD {
+            let tick = g.world.tick;
+            if glasnost_ai::scripted::thinks_at(HouseId(0), tick) {
+                // The parts of a think (the economy first, the build and
+                // the specials) mark the probe only when the house acts.
+                let view = View::new(&g.world, HouseId(0));
+                let mut p = Parts(Vec::new());
+                base.clone()
+                    .think(&view, Schedule { tick, thinks: true }, level, None, &mut p);
+                if p.0.contains(&"ai:economy_first") {
+                    acted += 1;
+                } else {
+                    idle += 1;
+                }
+            }
+            g.step();
+        }
+        got.push((level, acted, idle));
+    }
+    let n = 2 * EASY_EVERY;
+    assert_eq!(
+        got,
+        vec![
+            (AiDifficulty::Easy, 2, n - 2),
+            (AiDifficulty::Normal, n, 0),
+            (AiDifficulty::Hard, n, 0),
+        ]
+    );
+}
+
+// design: own AI (#449, B10): at easy the default script builds no superweapon building and none of the brain's own special buildings (psychic sensor, grinder, gattling defence, bunker, lifter, drainer), as a beginner's base has none; normal and hard run those parts on every think
+#[test]
+fn easy_builds_no_superweapon_nor_special_buildings() {
+    use glasnost_ai::scripts::{AiScript, Schedule, ScriptState, View};
+    const PARTS: [&str; 4] = [
+        "ai:build_superweapon",
+        "ai:build_specials",
+        "ai:build_lifter",
+        "ai:build_drainer",
+    ];
+    let map = fixture::map();
+    for level in AiDifficulty::ALL {
+        let seat = AiSeat {
+            script: AiSeat::DEFAULT_SCRIPT,
+            difficulty: level,
+        };
+        let mut g = armed(seat);
+        let base = ScriptState::start(seat, &g.world, &map, HouseId(0));
+        let mut p = Parts(Vec::new());
+        // nocite: test data of our own (one of easy's think cycles)
+        for _ in 0..3 * THINK_PERIOD {
+            let tick = g.world.tick;
+            if glasnost_ai::scripted::thinks_at(HouseId(0), tick) {
+                let view = View::new(&g.world, HouseId(0));
+                base.clone()
+                    .think(&view, Schedule { tick, thinks: true }, level, None, &mut p);
+            }
+            g.step();
+        }
+        assert!(p.0.contains(&"ai:economy_first"), "{level:?} acted");
+        for part in PARTS {
+            assert_eq!(
+                p.0.contains(&part),
+                level != AiDifficulty::Easy,
+                "{level:?}: {part}"
+            );
+        }
+    }
+}

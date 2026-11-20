@@ -355,9 +355,13 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
             // Only types the simulation moves: driving, walking,
             // teleporting, ship and hovering vehicles and infantry.
             let moves = u.locomotor != Locomotor::None;
+            // design: own AI (#454): a spy (S-0510 Import mapping, Agent) is the spies' part's, armed or not: an armed one (a disguise weapon, S-0516 claim 31) is no army unit to send in waves
+            let spy = t.kind == Kind::Infantry && u.raw.agent.unwrap_or(false) && !u.engineer;
             match role {
                 Role::Harvester => (u.harvester || is_slave_miner(w, t)) && moves,
-                Role::Army => armed(u) && !u.harvester && !is_slave_miner(w, t) && ground && moves,
+                Role::Army => {
+                    armed(u) && !u.harvester && !is_slave_miner(w, t) && ground && moves && !spy
+                }
                 _ => false,
             }
         }

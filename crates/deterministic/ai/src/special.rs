@@ -214,6 +214,23 @@ pub struct Uses {
     /// (`air_attack`, #443).
     #[serde(default)]
     pub air_steps: u32,
+    /// Spies sent to attack an infantry unit to copy its disguise
+    /// (S-0516 claim 31, `disguise`, #454).
+    #[serde(default)]
+    pub disguises: u32,
+    /// Disguised spies sent round a seen disguise detector on their way in
+    /// (S-0516 claim 40, `disguise`, #454).
+    #[serde(default)]
+    pub spy_detours: u32,
+    /// Orders of a new approach for a jumpjet that held over its target
+    /// without firing: the move round and the attack after it (`bomber`,
+    /// #445).
+    #[serde(default)]
+    pub bomber_rounds: u32,
+    /// Jumpjets that held over their target without firing after a new
+    /// approach sent home (`bomber`, #445).
+    #[serde(default)]
+    pub bomber_retreats: u32,
 }
 
 /// What an order the brain gives is for: the counter of [`Uses`] it adds
@@ -271,6 +288,10 @@ pub(crate) enum Use {
     AirEscape,
     AirHelp,
     AirStep,
+    Disguise,
+    SpyDetour,
+    BomberRound,
+    BomberRetreat,
 }
 
 impl Uses {
@@ -328,6 +349,10 @@ impl Uses {
             Use::AirEscape => &mut self.air_escapes,
             Use::AirHelp => &mut self.air_helpers,
             Use::AirStep => &mut self.air_steps,
+            Use::Disguise => &mut self.disguises,
+            Use::SpyDetour => &mut self.spy_detours,
+            Use::BomberRound => &mut self.bomber_rounds,
+            Use::BomberRetreat => &mut self.bomber_retreats,
         };
         *c = c.saturating_add(1);
     }
@@ -348,6 +373,13 @@ pub struct Special {
     /// The units sent away from an air attacker (`air_attack`, #434).
     #[serde(default)]
     pub(crate) air: crate::air_attack::Watch,
+    /// The jobs of the house's spies that disguise (`disguise`, #454).
+    #[serde(default)]
+    pub(crate) spy_jobs: crate::disguise::Watch,
+    /// The jumpjets that hold over their target without firing (`bomber`,
+    /// #445).
+    #[serde(default)]
+    pub(crate) bomber: crate::bomber::Watch,
     /// The uses offered in this think, each with the order offered for it,
     /// counted once the brain knows which orders it gives
     /// ([`Special::note_given`]); empty between thinks.
@@ -464,6 +496,10 @@ impl Special {
         // design: own AI (#434): units under air attack first, so a unit shot from the air is moved before another part gives it a job
         mark("ai:special:air_attack");
         self.air_attack(script, &own, w, out);
+        free(&mut own, out);
+        // design: own AI (#445): a jumpjet that holds over its target without firing is moved on before another part gives it a job
+        mark("ai:special:bombers");
+        self.bombers(script, &own, w, out);
         free(&mut own, out);
         mark("ai:special:garrison");
         self.garrison(house, &own, home, w, out);
@@ -1000,10 +1036,13 @@ impl Special {
     /// Spies (S-0510): every idle spy is sent to the best seen enemy
     /// building it may infiltrate, never to one another spy of the house is
     /// bound for; a house with no spy (on the map, off it or in its line)
-    /// that sees such a building orders one.
+    /// that sees such a building orders one. A spy with a disguise weapon
+    /// disguises first and goes round seen detectors (`disguise`, #454).
     fn spies(&mut self, script: &Script, own: &[ObjectId], w: &World, out: &mut Vec<Order>) {
         let house = script.house;
-        let mut taken: Vec<ObjectId> = Vec::new();
+        self.spy_jobs.prune(w, house);
+        // design: own AI (#454): a building a disguiser goes for is taken, though the spy is not yet on its way in
+        let mut taken: Vec<ObjectId> = self.spy_jobs.buildings();
         let mut any = false;
         let mut en_route: Option<EnRoute> = None;
         let mut ranked: Option<Vec<(ObjectId, u8)>> = None;
@@ -1012,7 +1051,34 @@ impl Special {
                 continue;
             }
             any = true;
-            if !scripted::idle(w, id) || !targeting::selectable(w, id) {
+            if !targeting::selectable(w, id) {
+                continue;
+            }
+            let disguiser = crate::disguise::disguiser(w, id);
+            if disguiser {
+                // design: own AI (#454): a disguiser keeps its building, also while it copies or walks round
+                let kept = self.spy_jobs.jobs.get(&id).map(|j| j.building).or_else(|| {
+                    w.obj(id).and_then(|o| match (o.beh.current, o.dest) {
+                        (
+                            Some(glasnost_sim::rules::Behaviour::Capture),
+                            Some(Target::Object(b)),
+                        ) => Some(b),
+                        _ => None,
+                    })
+                });
+                if let Some(b) = kept
+                    && Self::enemy_player(w, house, w.obj(b).and_then(|o| o.owner))
+                {
+                    self.disguise_step(w, house, id, b, out);
+                    continue;
+                }
+            }
+            let free = if disguiser {
+                crate::disguise::free(w, id)
+            } else {
+                scripted::idle(w, id)
+            };
+            if !free {
                 continue;
             }
             let at = w.obj(id).map_or(CellXY::new(0, 0), |o| o.pos.cell());
@@ -1036,6 +1102,11 @@ impl Special {
             else {
                 continue;
             };
+            if disguiser {
+                taken.push(b);
+                self.disguise_step(w, house, id, b, out);
+                continue;
+            }
             if let Some(orders) = click_if(w, house, id, b, &[Action::Capture]) {
                 out.extend(orders);
                 taken.push(b);
@@ -1050,6 +1121,100 @@ impl Special {
         {
             self.order_unit(script, w, t, out);
         }
+    }
+
+    /// One think of disguiser `id` bound for building `b` (`disguise`,
+    /// #454): copy a seen infantry unit of the owner while its disguise does
+    /// not fool the owner, else (or with none to copy) go in, round the
+    /// seen detectors once per disguise.
+    fn disguise_step(
+        &mut self,
+        w: &World,
+        house: HouseId,
+        id: ObjectId,
+        b: ObjectId,
+        out: &mut Vec<Order>,
+    ) {
+        use crate::disguise::{self, Job, Step};
+        let Some(victim) = w.obj(b).and_then(|o| o.owner) else {
+            return;
+        };
+        let tick = w.tick;
+        let mut job = match self.spy_jobs.jobs.remove(&id) {
+            Some(j) if j.building == b => j,
+            _ => Job {
+                building: b,
+                step: Step::Enter,
+                at: tick,
+                tried: Vec::new(),
+                rounded: false,
+            },
+        };
+        let age = tick.saturating_sub(job.at);
+        if disguise::fools(w, id, victim) {
+            job.tried.clear();
+            if let Step::Round(c) = job.step {
+                // design: own AI (#454): the walk round a detector is kept until the spy arrives or stops, for at most ROUND_TIME ticks
+                if age <= scripted::THINK_PERIOD
+                    || (age <= disguise::ROUND_TIME && disguise::walking(w, id, c))
+                {
+                    self.spy_jobs.jobs.insert(id, job);
+                    return;
+                }
+            } else if !job.rounded
+                && let Some(c) = disguise::round_cell(w, house, id, b, victim)
+            {
+                out.push(Order::Behaviour {
+                    actor: id,
+                    behaviour: glasnost_sim::rules::Behaviour::Move,
+                    attack_move: false,
+                    target: None,
+                    dest: Some(Target::Cell(c)),
+                });
+                self.offer_use(Use::SpyDetour, out);
+                job.step = Step::Round(c);
+                job.at = tick;
+                job.rounded = true;
+                self.spy_jobs.jobs.insert(id, job);
+                return;
+            }
+        } else {
+            job.rounded = false;
+            if let Step::Copy(src) = job.step {
+                // design: own AI (#454): the attack on the unit to copy is kept for at most COPY_TIME ticks
+                if age <= scripted::THINK_PERIOD
+                    || (age <= disguise::COPY_TIME && disguise::copying(w, id, src))
+                {
+                    self.spy_jobs.jobs.insert(id, job);
+                    return;
+                }
+                if !job.tried.contains(&src) {
+                    job.tried.push(src);
+                }
+            }
+            let memory = &self.memory;
+            if let Some(src) = disguise::source(w, house, id, victim, &job.tried, |x| {
+                memory.ok(w, id, Target::Object(x))
+            }) && let Some(orders) = click_if(w, house, id, src, &[Action::Attack])
+            {
+                out.extend(orders);
+                self.offer_use(Use::Disguise, out);
+                job.step = Step::Copy(src);
+                job.at = tick;
+                self.spy_jobs.jobs.insert(id, job);
+                return;
+            }
+        }
+        // design: own AI (#454): fooling the owner, or with nothing to copy, the spy goes in (undisguised as before when nothing is in sight)
+        job.step = Step::Enter;
+        if !disguise::entering(w, id, b)
+            && let Some(orders) = click_if(w, house, id, b, &[Action::Capture])
+        {
+            out.extend(orders);
+            self.offer_use(Use::Spy, out);
+            job.at = tick;
+        }
+        self.spy_jobs.jobs.insert(id, job);
     }
 
     /// Whether the house sees an enemy building with a worthwhile

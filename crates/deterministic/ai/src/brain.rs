@@ -148,6 +148,10 @@ const LAND_RINGS: (i32, i32) = (4, 9); // nocite: tuning of our own opponent
 /// paradrop is aimed.
 const DROP_RINGS: (i32, i32) = (3, 8); // nocite: tuning of our own opponent
 
+/// At easy, the house acts on one of every this many of its think ticks
+/// (#449, B10).
+pub const EASY_EVERY: i32 = 3; // nocite: design: own AI (#449): easy acts at a third of the think rate
+
 /// The default plan of an AI house: types by role, two harvesters, waves of
 /// six (tuning of our own opponent).
 pub fn default_plan() -> Plan {
@@ -343,6 +347,13 @@ impl Brain {
         thinks: bool,
         level: AiDifficulty,
     ) -> Vec<Order> {
+        // design: own AI (#449, B10): at easy the house acts on one of every `EASY_EVERY` of its think ticks; on the others it plays as between thinks, so it builds, sends its army and answers a raid on its base later, as a slow player does. Read from the tick alone: no state is added, and normal and hard think as before
+        let thinks = thinks
+            && (level != AiDifficulty::Easy
+                || w.tick
+                    .div_euclid(crate::scripted::THINK_PERIOD)
+                    .rem_euclid(EASY_EVERY)
+                    == 0);
         let on = p.on();
         let mark = |p: &mut P, part: &'static str| {
             if on {
@@ -373,20 +384,23 @@ impl Brain {
             self.send_for_repair(w, &mut out);
             mark(p, "ai:ferry");
             self.ferry(w, &mut out);
-            mark(p, "ai:build_superweapon");
-            self.build_superweapon(w, &mut out);
-            mark(p, "ai:build_specials");
-            if !self.build_sensor(w, &mut out)
-                && !self.build_grinder(w, &mut out)
-                && !self.build_gattling_defence(w, &mut out)
-                && !paying
-            {
-                self.build_bunker(w, &mut out);
+            // design: own AI (#449, B10): at easy the house builds no superweapon building and none of the brain's own special buildings (sensor, grinder, gattling defence, bunker, lifter, drainer): a beginner's base, without the late strikes and the defences a person sees in a harder one
+            if level != AiDifficulty::Easy {
+                mark(p, "ai:build_superweapon");
+                self.build_superweapon(w, &mut out);
+                mark(p, "ai:build_specials");
+                if !self.build_sensor(w, &mut out)
+                    && !self.build_grinder(w, &mut out)
+                    && !self.build_gattling_defence(w, &mut out)
+                    && !paying
+                {
+                    self.build_bunker(w, &mut out);
+                }
+                mark(p, "ai:build_lifter");
+                self.build_lifter(w, &mut out);
+                mark(p, "ai:build_drainer");
+                self.build_drainer(w, &mut out);
             }
-            mark(p, "ai:build_lifter");
-            self.build_lifter(w, &mut out);
-            mark(p, "ai:build_drainer");
-            self.build_drainer(w, &mut out);
             mark(p, "ai:build_anti_air");
             self.build_anti_air(w, &mut out, short);
             mark(p, "ai:expand");
@@ -508,6 +522,8 @@ impl Brain {
         crate::drain::filter_orders(w, &mut out);
         // design: own AI (#434): a unit on its way away from an air attacker takes only that move (`air_attack`)
         out.retain(|o| self.special.air.keeps_order(w, o));
+        // design: own AI (#445): a jumpjet on its way round takes only that move, one sent home no attack and no attack-move, and one with a job no repeat of an order (`bomber`)
+        self.special.bomber.filter_orders(w, &mut out);
         // S-0601 claim 16: no attack order (from any part of the brain) to an unlimited controller one more victim would overload harmfully
         out.retain(|o| match o {
             Order::Behaviour {
