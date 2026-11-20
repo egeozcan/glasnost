@@ -263,6 +263,64 @@ fn wants_no_far_field_refinery_it_could_not_order() {
     );
 }
 
+// design: own AI (#449, B11): at easy the house builds no refinery by a new field once its home field runs dry: a beginner stays on the field by his base (B11: easy ended level-round games with as many refineries and harvesters as normal, one harvester planned). Normal and hard order the far field's refinery, as above
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn easy_builds_no_refinery_by_a_new_field() {
+    use glasnost_ai::scripts::{AiScript, Schedule, ScriptState, View};
+    use glasnost_sim::world::{AiDifficulty, AiSeat};
+    let map = far_field_map();
+    let mut g = built_up(&map);
+    scout(&mut g.world);
+    let ore: Vec<CellXY> = g
+        .world
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|&c| {
+            glasnost_sim::econ::resource::resource_at(&g.world, c).is_some() && dist2(c, far()) > 8
+        })
+        .collect();
+    for c in ore {
+        glasnost_sim::crush::remove_overlay(&mut g.world, c);
+    }
+    let proc_ = glasnost_sim::econ::TypeRef {
+        kind: Kind::Building,
+        index: g.world.rules().index_of(Kind::Building, "PROC").unwrap(),
+    };
+    let mut ordered = Vec::new();
+    for level in AiDifficulty::ALL {
+        let seat = AiSeat {
+            script: AiSeat::DEFAULT_SCRIPT,
+            difficulty: level,
+        };
+        let mut w = g.world.clone();
+        let mut s = ScriptState::start(seat, &w, &map, H);
+        let mut any = false;
+        // nocite: test data of our own (one of easy's think cycles)
+        for _ in 0..3 * glasnost_ai::scripted::THINK_PERIOD {
+            w.houses[0].credits = 3000;
+            let tick = w.tick;
+            if glasnost_ai::scripted::thinks_at(H, tick) {
+                let view = View::new(&w, H);
+                let orders = s.think(&view, Schedule { tick, thinks: true }, level, None, &mut ());
+                any |= orders.contains(&Order::Build { what: proc_ });
+            }
+            testkit::run(&mut w, 1);
+        }
+        ordered.push((level, any));
+    }
+    assert_eq!(
+        ordered,
+        vec![
+            (AiDifficulty::Easy, false),
+            (AiDifficulty::Normal, true),
+            (AiDifficulty::Hard, true),
+        ]
+    );
+}
+
 /// The yard vehicle type.
 fn mcv(w: &World) -> glasnost_sim::econ::TypeRef {
     glasnost_sim::econ::TypeRef {

@@ -812,6 +812,10 @@ struct Kept {
     /// think for the lifter, drainer and economy questions instead of one
     /// each).
     knows_field: Option<bool>,
+    /// Whether the house builds no refinery by a new field this think
+    /// ([`Script::stay_on_home_field`]; design: own AI, #449, B11). Read
+    /// from the difficulty the think is given, so it is no state.
+    home_field_only: bool,
 }
 
 impl PlaceMemo {
@@ -990,6 +994,15 @@ impl Script {
             own: Some(own),
             ..Kept::default()
         });
+    }
+
+    /// For the rest of the think that has begun, the house builds no
+    /// refinery by a new field ([`Script::field_refinery`]): the easy level
+    /// (design: own AI, #449, B11). Outside a think it does nothing.
+    pub(crate) fn stay_on_home_field(&self) {
+        if let Some(m) = self.placed.0.borrow_mut().as_mut() {
+            m.home_field_only = true;
+        }
     }
 
     /// The think is over: the kept answers go.
@@ -2165,6 +2178,16 @@ impl Script {
     /// comes with a free unit gives the house a harvester with it (S-0402
     /// claim 18).
     pub(crate) fn field_refinery(&self, w: &World) -> bool {
+        // design: own AI (#449, B11): at easy the house stays on the field by its base and builds no refinery by a new one (`stay_on_home_field`); a lost refinery is still rebuilt (`refinery_lost`)
+        if self
+            .placed
+            .0
+            .borrow()
+            .as_ref()
+            .is_some_and(|m| m.home_field_only)
+        {
+            return false;
+        }
         if self.slave_miners(w) || self.of_role(w, Role::Harvester).is_empty() {
             return false;
         }

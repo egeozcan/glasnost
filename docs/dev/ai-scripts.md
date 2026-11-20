@@ -66,7 +66,7 @@ What the default script does with it, and why a player sees it:
 
 | level | harvesters (plan, at most) | attack wave | acts on | base defence | superweapon and special buildings | what a player sees |
 |---|---|---|---|---|---|---|
-| easy | 1, at most 2 | 3 units | one think tick in three (`EASY_EVERY`) | on its acting think ticks only | none | one or two harvesters, small attacks, a base that grows and answers a raid slowly, no superweapon strikes, no sensor, grinder, gattling defence, bunker, lifter or drainer |
+| easy | 1, at most 2, on the home field only | 3 units | one think tick in three (`EASY_EVERY`) | on its acting think ticks only | none built, none fired (its country's own included) | one or two harvesters and no refinery by a new field, small attacks, a base that grows and answers a raid slowly, no superweapon strikes or paradrops, no sensor, grinder, gattling defence, bunker, lifter or drainer |
 | normal | 2, at most 4 | 6 units | every think tick | every tick | built | today's AI |
 | hard | 3, at most 6 | 6 units | every think tick | every tick | built | a third harvester (up to six on a large field), so more money and a larger army sooner |
 
@@ -74,8 +74,12 @@ The plan's count is the harvesters kept; on a large explored field the house buy
 every 20 resource cells within reach, up to twice the plan's count (`Script::harvesters_wanted`;
 a Yuri house's slave miners are not capped), so the plan counts 1, 2 and 3 are on stock maps
 often 2, 4 and 6 harvesters. `brain::plan_for` gives the plan of each level; the think rate, the
-defence gate and the skipped building parts are in `Brain::think_from`, read from the tick and the
-level alone (no state is added, so normal hashes and plays as before).
+defence gate, the skipped building parts and the skipped superweapon launches are in
+`Brain::think_from`, read from the tick and the level alone (no state is added, so normal hashes
+and plays as before). The home-field rule is a flag of the think's memo
+(`Script::stay_on_home_field`), set by `think_from` at easy; `Script::field_refinery` answers no
+under it. A refinery the house lost is still rebuilt (`Script::refinery_lost`). Without the rule
+the plan's count did not hold at easy: each refinery by a new field brings a harvester.
 
 ### Telling the levels apart (batch 10)
 
@@ -103,6 +107,58 @@ pair) were too few. Head-to-head score of the stronger level of each pair (win 1
   worth, or by victory after tick 15000), not from an early rush of its small waves. What decides
   a game between two levels of this script is still unknown; the Elo order depends on the order
   of the games and is not the measure.
+
+### Telling the levels apart (batch 11)
+
+The same round as batch 10 (144 games, about 24 minutes, the size of the base round so that the
+tables compare). The criterion was fixed before the first round: each pair's stronger level
+scores at least 0.60, and the Elo order is hard, normal, easy. The final build then plays the
+same round on seeds 11 to 14, which it had not been tuned on, and must pass the same bar.
+Stronger level's score (won-drawn-lost):
+
+| round | easy v normal: normal | easy v hard: hard | normal v hard: hard | Elo easy / normal / hard |
+|---|---|---|---|---|
+| base (f393424) | 0.552 (19-15-14) | 0.615 (24-11-13) | 0.667 (23-18-7) | 1543.0 / 1418.8 / 1538.2 |
+| E1 (easy fires no superweapon) | 0.635 (21-19-8) | 0.719 (30-9-9) | 0.667 (23-18-7) | 1491.3 / 1445.0 / 1563.7 |
+| E2 (and stays on its home field) | 0.812 (34-10-4) | 0.823 (35-9-4) | 0.667 (23-18-7) | 1347.1 / 1521.6 / 1631.3 |
+| E2 on seeds 11-14 | 0.750 (32-8-8) | 0.750 (34-4-10) | 0.646 (25-12-11) | 1393.3 / 1499.9 / 1606.8 |
+
+- **What held easy up.** The base round split by country: normal lost 11 games to easy by
+  victory, 10 of them with easy on country index 0, whose country paradrop easy still fired (B10
+  skipped only the superweapon buildings). E1 takes that away. E1 then passed the three pair scores
+  but not the Elo clause (easy 1491.3 above normal 1445.0, though normal scored 0.484 over its
+  games and easy 0.323): the sequential Elo is noisy at this size, but the clause stayed.
+  A dump of one easy-v-normal game showed why easy kept up on worth: it ended with five
+  refineries and five harvesters, against a plan of one, since each refinery by a new field brings
+  a harvester. E2 keeps easy on its home field.
+- **Normal and hard are untouched.** Normal v hard is game for game the same in all three rounds
+  on seeds 7-10. The quick lane, the sweeps, the arena and the bench play only normal and do
+  not move.
+- **The country still shows.** In E2 the stronger level on country index 0 scores 0.875 to 0.958,
+  and on country index 1 0.375 (hard over normal) to 0.771. Hard on country index 1 still loses
+  to normal on country index 0 (see below).
+
+### The two countries (batch 11)
+
+The default script on country index 1 loses heavily to itself on country index 0. Normal mirror,
+`ai-tournament game=install entrants=default:normal,default:normal maps=0,2,8 seeds=7-14
+ticks=27000 threads=2`, 96 games, each start and each country equally:
+
+- **Country index 0 scores 0.844** (63 won, 32 drawn, 1 lost).
+- **Its country paradrop is half the gap.** In a probe build where the country paradrop is never
+  fired, country index 0 scores 0.667. The paradrop is a rules asymmetry that a person in the same
+  seat has too, so #449 allows it, and normal keeps firing it.
+- **The rest is play, not the judge.** In the probe, country index 0 wins 11 games on maps 0
+  and 2 by victory against 3, and 25 against 3 at the cap. Map 8 is even (0.531). Scoring the capped games on
+  army and aircraft worth alone, with buildings left out, gives 0.714, not nearer 0.5. On map 2
+  country index 1 holds half the army worth at the cap (11.9k against 23.2k). In the base lane it
+  never sends a first wave while country index 0 does. In one dump it lost about 2.2 times the
+  army units (82 against 37), 9 of them to aircraft. Its side fields no army aircraft, while
+  country index 0 holds 3k to 4.5k of aircraft at the cap.
+- **One fix tried, no effect.** While the house saw more enemy army aircraft than it had army
+  units that hit them, each factory's pick went to an anti-air type. The probe mirror went from
+  0.667 to 0.656, within one standard error of about 0.05. It was not shipped. Why country index 1
+  fields half the army is open; no simulation claim was found.
 
 **The house difficulty row is not touched.** Every player house in a skirmish, person or AI, uses
 the normal row: S-0302 Terms (*Difficulty row*) and claim 3 ("AI difficulty comes from the AI's
