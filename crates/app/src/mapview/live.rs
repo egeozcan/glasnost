@@ -984,6 +984,28 @@ pub fn attitude_with(w: &World, o: &Object, rocking: &super::rocking::Rocking) -
     }
 }
 
+/// A rocking body of the jumpjet locomotor drawn as S-0113 claim 18 gives:
+/// with its pitch and roll only for a type with the tilt-crash flag
+/// (`tilt_crash`), else turned to its body facing only, crashing included;
+/// its angles still step. With the flag, the drawing step leaves the body
+/// level below 0.005 radians (S-0106 claim 13, `voxel::Rocking::rocks`).
+fn jumpjet_tilt(a: Attitude, w: &World, o: &Object, tilt_crash: bool) -> Attitude {
+    use glasnost_rules::sim::Locomotor as L;
+    let jumpjet = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.type_locomotor() == L::Jumpjet);
+    match a {
+        // spec: S-0113 r21 claim 18 (the jumpjet locomotor draws the pitch and roll only for a type with the tilt-crash flag, and then only while |pitch| or |roll| ≥ 0.005 radians; otherwise the body turned to its body facing only, in every flight state) and Import mapping (`TiltCrashJumpjet` on the object type, off: an engine default)
+        Attitude::Rocking { pitch, roll, drawn } if jumpjet => Attitude::Rocking {
+            pitch,
+            roll,
+            drawn: drawn && tilt_crash,
+        },
+        other => other,
+    }
+}
+
 /// The import kind of a simulation kind.
 pub fn import_kind(k: SimKind) -> Option<Kind> {
     match k {
@@ -3741,7 +3763,18 @@ impl Live {
             shadow: (kind == Kind::Aircraft || kind == Kind::Vehicles).then(|| shadow_anchor(w, o)),
             // spec: S-0105 claim 12 (alternative body: a spawner none of whose spawned aircraft is docked)
             alternative: glasnost_sim::spawn::any_docked(w, id) == Some(false),
-            attitude: attitude_with(w, o, &self.rocking),
+            attitude: jumpjet_tilt(
+                attitude_with(w, o, &self.rocking),
+                w,
+                o,
+                self.types
+                    .get(&(o.kind, o.type_index))
+                    .copied()
+                    .flatten()
+                    .is_some_and(|i| {
+                        super::build::rule_bool(inputs.import, kind, i, b"TiltCrashJumpjet", false)
+                    }),
+            ),
             // spec: S-0104 claim 13 (Deactivated voxel vehicles) and S-0405 claims 13 and 20
             disabled: kind == Kind::Vehicles && glasnost_sim::econ::power::unit_disabled(w, id),
             // spec: S-0107 claim 19 and Terms (height above the surface; 0 on a bridge deck)

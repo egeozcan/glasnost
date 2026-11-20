@@ -1817,6 +1817,10 @@ mod watch_tests;
 mod name_tip_tests;
 
 #[cfg(test)]
+#[path = "client_pointing_tests.rs"]
+mod pointing_tests;
+
+#[cfg(test)]
 #[path = "client_sidebar_tip_tests.rs"]
 mod sidebar_tip_tests;
 

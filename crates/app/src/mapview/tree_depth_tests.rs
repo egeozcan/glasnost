@@ -17,7 +17,7 @@ use glasnost_fmt::shp::{ShpWriter, WriteFrame};
 use glasnost_map::CellXY;
 use glasnost_map::objects::TerrainObject;
 use glasnost_render::compose::{
-    ComposeQuirks, DEPTH_REFERENCE, DepthTest, Frame, Profile, quantise_depth,
+    ComposeQuirks, DEPTH_REFERENCE, DepthTest, Frame, Paint, Profile, quantise_depth,
 };
 use glasnost_render::palette::{PaletteQuirks, PaletteState};
 use glasnost_render::projection::project_lifted;
@@ -153,7 +153,17 @@ struct Case {
 }
 
 fn case(tree: (i32, i32)) -> Case {
-    let art = ART.replacen("Foundation=2x2", "Foundation=4x4", 1);
+    case_with(tree, 0)
+}
+
+/// [`case`] with the building type's normal depth adjustment
+/// (`NormalZAdjust`, S-0102 claim 13) `normal_z`.
+fn case_with(tree: (i32, i32), normal_z: i32) -> Case {
+    let art = ART.replacen(
+        "Foundation=2x2",
+        &format!("Foundation=4x4\nNormalZAdjust={normal_z}"),
+        1,
+    );
     let (mut import, catalogue, mut assets) = context_full(RULES, &art);
     import
         .arts
@@ -521,6 +531,121 @@ fn the_gpu_draws_a_tree_at_a_buildings_west_corner_as_the_cpu_does() {
             "{tree:?}: the GPU and the CPU differ over {o:?}"
         );
     }
+}
+
+/// The beside case with the body's normal depth adjustment set so that the
+/// body's depth equals the tree's at an overlap pixel where the tree is
+/// drawn and stored; also the plain case's pixels and the adjustment.
+fn tie_case() -> (Case, Vec<Pixel>, i32) {
+    let tree = (-1, FOOT);
+    let pixels = trace(&case(tree));
+    let p = pixels
+        .iter()
+        .find(|p| p.tree_drawn() && p.before_body == p.tree)
+        .expect("a pixel where the tree is drawn and nothing nearer");
+    let nz = i32::from(p.tree) - i32::from(p.body);
+    let mut c = case_with(tree, nz);
+    // The synthetic palettes are black: the tree and the body are painted
+    // with two colours of their own, which changes no depth, so that the
+    // drawing on top can be seen.
+    let white = c.scene.add_row([0xFFFF; 256]);
+    let red = c.scene.add_row([0xF800; 256]);
+    c.scene.items[c.tree].paint = Paint::Row(white);
+    c.scene.items[c.body].paint = Paint::Row(red);
+    (c, pixels, nz)
+}
+
+/// #437, Q-3249. spec: S-0102 r50 claim 31a (between a tree and a live building body with a
+/// companion depth image the tree pixel shows where its depth is less than or equal to the body
+/// pixel's and the body pixel where its depth is less: a tie goes to the tree, which ranks first,
+/// claim 16, since a later writer needs a strictly smaller depth, F2; the body's anchor bias
+/// includes its normal depth adjustment, claim 13)
+///
+/// The beside case of R14's trace, its body moved by a normal depth adjustment so that some overlap
+/// pixels tie: at each the tree's colour stays; elsewhere the nearer one shows. (A tie leaves the
+/// stored depth the same whichever writer shows, so the colour tells them apart: the tree's and the
+/// body's colours differ at every pixel compared.)
+#[test]
+fn a_tie_between_a_tree_and_a_buildings_body_goes_to_the_tree() {
+    let (c, plain, nz) = tie_case();
+    let pixels = trace(&c);
+    assert_eq!(pixels.len(), plain.len());
+    let o = overlap(&c);
+    let items = &c.scene.items;
+    let tree = compose(&c.scene, vec![items[c.tree]], o);
+    let body = compose(&c.scene, vec![items[c.body]], o);
+    let before = compose(&c.scene, items[..c.body].to_vec(), o);
+    let after = compose(&c.scene, items[..=c.body].to_vec(), o);
+    let mut ties = 0;
+    for (i, (a, p)) in plain.iter().zip(&pixels).enumerate() {
+        assert_eq!(p.at, a.at);
+        assert_eq!(
+            i32::from(p.body),
+            i32::from(a.body) + nz,
+            "the normal depth adjustment {nz} is in the body's bias: {p:?}"
+        );
+        if !(p.tree_drawn() && p.before_body == p.tree) {
+            continue;
+        }
+        assert_ne!(
+            tree.color[i], body.color[i],
+            "tree and body colours differ: {p:?}"
+        );
+        let body_shows = after.color[i] != before.color[i];
+        if p.body == p.tree {
+            ties += 1;
+            assert!(!body_shows, "a tie goes to the tree: {p:?}");
+        } else {
+            assert_eq!(body_shows, p.body < p.tree, "the nearer shows: {p:?}");
+        }
+    }
+    assert!(ties > 0, "some pixels tie");
+}
+
+/// #437, Q-3249: the GPU map path draws the tie case of
+/// [`a_tie_between_a_tree_and_a_buildings_body_goes_to_the_tree`] as the CPU reference does
+/// (spec: S-0102 r50 claim 31a, a tie goes to the tree). Needs a GPU adapter (software is fine);
+/// skipped without one unless `GLASNOST_REQUIRE_GPU=1`.
+#[test]
+fn the_gpu_gives_a_tie_to_the_tree_as_the_cpu_does() {
+    use glasnost_render::gpu;
+    use glasnost_render::map_gpu::{COLOR_FORMAT, MapRenderer, targets};
+    use glasnost_render::offscreen::read_texture;
+    let required = std::env::var("GLASNOST_REQUIRE_GPU").is_ok_and(|v| v == "1");
+    let (device, queue) = match gpu::shared_device() {
+        Ok(g) => (g.device, g.queue),
+        Err(gpu::SharedGpuError::NoAdapter(e)) if !required => {
+            eprintln!("skipping: {e} (set GLASNOST_REQUIRE_GPU=1 to make this fatal)");
+            return;
+        }
+        Err(e) => panic!("a GPU device: {e}"),
+    };
+    let (c, _, _) = tie_case();
+    let o = overlap(&c);
+    let view = View {
+        origin: (o.0, o.1),
+        size: (o.2, o.3),
+        reference: DEPTH_REFERENCE,
+    };
+    let q = ComposeQuirks::default();
+    let cpu = c.scene.compose(&view, &Filter::default(), &q).to_rgba();
+    let mut r = MapRenderer::new(&device, &queue, &c.scene, COLOR_FORMAT).expect("uploads");
+    let (color, depth) = targets(&device, view.size, COLOR_FORMAT);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    r.render(
+        &device,
+        &queue,
+        &mut encoder,
+        &color,
+        &depth.create_view(&Default::default()),
+        &c.scene,
+        &view,
+        &Filter::default(),
+        &q,
+    );
+    queue.submit([encoder.finish()]);
+    let gpu = read_texture(&device, &queue, &color, view.size.0, view.size.1);
+    assert!(cpu == gpu, "the GPU and the CPU differ over {o:?}");
 }
 
 /// #437: the trace itself, printed (`--nocapture`): for each case the tree's cell against the

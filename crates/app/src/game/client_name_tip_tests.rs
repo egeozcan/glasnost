@@ -833,72 +833,56 @@ fn claim_26_the_text_is_chosen_again() {
 /// Puts a synthetic drawing of the local base unit at the middle of the
 /// battlefield view on top of the scene (the synthetic install draws no
 /// object art), and returns that point.
-fn draw_base_unit_at_middle(c: &mut Client) -> Point {
-    use glasnost_render::compose::{DepthTest, Paint, Profile};
-    use glasnost_render::scene::{Group, Item, ItemDepth};
+/// The screen pixel of the base unit's point (S-0214 Terms, *box point*).
+/// It takes no part in the body drawing here (its type was met before the
+/// import named it), so a pointer there finds it as its cell's occupant
+/// (S-0214 claim 35 (c)).
+fn base_unit_point(c: &mut Client) -> Point {
     let mcv = own(c, Kind::Vehicle)[0];
     let s = session_mut(c);
+    let o = s.play.world().obj(mcv).unwrap().pos;
+    let (qx, qy) = glasnost_render::projection::project_lifted(o.x, o.y, o.z);
     let m = s.map_rect();
-    let p = Point::new(m.x + m.w / 2, m.y + m.h / 2);
     let v = s.view();
-    let (x, y) = (v.origin.0 + p.x - m.x, v.origin.1 + p.y - m.y);
-    let image = s
-        .scene_mut()
-        .add_image(glasnost_fmt::image::IndexedImage::new(8, 8, vec![1; 64]).unwrap());
-    let row = s.scene_mut().add_row([0xFFFF; 256]);
-    s.scene_mut().items.push(Item {
-        image,
-        x: x - 4,
-        y: y - 4,
-        test: DepthTest::Ignore,
-        depth: ItemDepth::Profile {
-            profile: Profile::Flat,
-            bias: 0,
-            companion: None,
-        },
-        paint: Paint::Row(row),
-        group: Group::Vehicles,
-        provisional: false,
-        object: Some(crate::mapview::live::SIM_OBJECT | mcv.0),
-        stack: None,
-    });
-    p
+    Point::new(qx - v.origin.0 + m.x, qy - v.origin.1 + m.y)
 }
 
 /// design: render (#120) (the pointer's pick is made once in a drawn frame
 /// and handed to the marks, the cursor, the tip and the drawing): a pick
-/// lives only within its frame, so a scene changed between two frames is
+/// lives only within its frame, so a game changed between two frames is
 /// picked again, both by the next frame (the tip's text, chosen again in
 /// every frame, S-0111 claim 26) and by a pick outside any frame (an input
-/// handler's).
+/// handler's). (Since #435 the pick reads the candidates and the cell's
+/// occupants, S-0214 claim 35, not the drawn scene.)
 #[test]
 fn render_perf_120_a_pick_lives_only_within_its_frame() {
     let (mut c, _) = tip_game();
     // Selected, the base unit is not hovered (S-0111 Terms), so pointing
-    // at it changes no mark and the frame redraws no status extras, which
-    // would take the synthetic drawing off the scene.
+    // at it changes no mark.
     let mcv = own(&c, Kind::Vehicle)[0];
     session_mut(&mut c).play.selection = vec![mcv];
     let mut t = 10_000;
     c.update(t);
     let _ = c.frame();
-    let p = draw_base_unit_at_middle(&mut c);
+    let p = base_unit_point(&mut c);
     let _ = c.frame();
     c.pointer_moved(p);
-    // The rest ends in this frame; a tick before it redraws the scene, so
-    // the drawing is put on top again.
+    // The rest ends in this frame.
     t += 1000;
     c.update(t);
-    assert_eq!(draw_base_unit_at_middle(&mut c), p);
+    assert_eq!(base_unit_point(&mut c), p);
     let _ = c.frame();
     let first = shown(&mut c).expect("the base unit's tip shows");
     assert_eq!(first.text, u("the mcv"));
-    // The scene changes under the resting pointer without a tick: no item
-    // names an object any more.
+    // The game changes under the resting pointer without a tick: its cell
+    // no longer lists the unit.
     let s = session_mut(&mut c);
-    for item in &mut s.scene_mut().items {
-        item.object = None;
-    }
+    let cell = s.play.world().obj(mcv).unwrap().pos.cell();
+    s.play
+        .game
+        .world
+        .cells
+        .leave(cell, glasnost_sim::world::Layer::Ground, mcv);
     assert_eq!(s.under(p).1, None, "a pick outside a frame is made again");
     let _ = c.frame();
     // spec: S-0111 claim 21 (an explored cell without a pointer object has no text) and claim 26 (no text hides the tip)
