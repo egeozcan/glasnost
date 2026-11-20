@@ -163,7 +163,11 @@ fn a_put_aside_target_is_kept() {
     let o = w.obj(h).unwrap();
     assert_eq!(o.target, Some(Target::Object(y)), "the current target kept");
     assert_eq!(o.beh.current, Some(Behaviour::Attack), "no revert");
-    assert_eq!(o.beh.aside, Some((Some(Target::Object(x)), None)), "slot kept");
+    assert_eq!(
+        o.beh.aside,
+        Some((Some(Target::Object(x)), None)),
+        "slot kept"
+    );
 }
 
 // spec: S-0309 r149 claim 32 (*Memory*: the change leaves every attack-move memory as it is; a memory whose remembered target is the object still names it)
@@ -198,7 +202,11 @@ fn a_strike_target_is_kept_while_alive() {
         },
     );
     glasnost_sim::mind::set_owner(&mut w, x, Some(A));
-    assert_eq!(target(&w, d), Some(Target::Object(x)), "the designator keeps it");
+    assert_eq!(
+        target(&w, d),
+        Some(Target::Object(x)),
+        "the designator keeps it"
+    );
     assert_eq!(target(&w, plain), None, "another attacker drops it");
 }
 

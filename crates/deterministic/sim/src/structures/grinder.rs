@@ -193,8 +193,7 @@ pub fn vehicle_arrival(w: &mut World, u: ObjectId) -> bool {
 /// entrant still holds its destination. Returns whether it was consumed.
 pub fn jump_arrival(w: &mut World, u: ObjectId) -> bool {
     // spec: S-0603 r15 claim 16 (c) (an infantry unit and a vehicle alike; S-0207 claim 20 e, S-0208 claim 22)
-    if w
-        .obj(u)
+    if w.obj(u)
         .is_none_or(|o| !matches!(o.kind, Kind::Infantry | Kind::Vehicle))
     {
         return false;

@@ -286,7 +286,8 @@ fn take_destination_with(w: &mut World, id: ObjectId, forced: bool) {
 /// no such start (claim 16 e).
 fn landing_start(w: &mut World, id: ObjectId) {
     // spec: S-0603 r15 claim 16 (b) and Changes for S-0215 claim 12 (whatever gives the destination, an order or a behaviour's processing; only an infantry unit, ready under claim 11's infantry rules, with a queued behaviour)
-    if w.obj(id).is_none_or(|o| o.kind != Kind::Infantry || o.beh.queued.is_none())
+    if w.obj(id)
+        .is_none_or(|o| o.kind != Kind::Infantry || o.beh.queued.is_none())
         || !crate::process::ready(w, id)
     {
         return;
@@ -448,7 +449,12 @@ fn landing_point(w: &mut World, id: ObjectId, dc: CellXY) -> Option<Pos> {
 /// vehicle whose queued behaviour is *eaten*, with another one current, and
 /// whose destination is a recycling building is asked as if *eaten* were
 /// current, so row VP6 applies; no other choice changes.
-fn recycle_entry_outcome(w: &mut World, id: ObjectId, dc: CellXY, level: i32) -> occupancy::Outcome {
+fn recycle_entry_outcome(
+    w: &mut World,
+    id: ObjectId,
+    dc: CellXY,
+    level: i32,
+) -> occupancy::Outcome {
     let as_if_eaten = !w.rules().quirks.teleport_vehicle_recycle_lands_beside
         && w.obj(id).is_some_and(|o| {
             o.kind == Kind::Vehicle

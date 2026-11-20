@@ -2086,7 +2086,11 @@ fn taken_and_dropped(w: &mut World, tank: ObjectId, t: ObjectId, taker: u8, case
     // spec: S-0309 r149 claim 32 (every holder drops it at that moment, inside the change)
     assert_eq!(o.target, None, "{case}: dropped inside the change");
     // spec: S-0309 r149 claim 32 (*Behaviour and destination*: a holder in attack keeps it, with no target, until its next processing of attack)
-    assert_eq!(o.beh.current, Some(Behaviour::Attack), "{case}: attack kept");
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Attack),
+        "{case}: attack kept"
+    );
     // spec: S-0309 r149 claim 32 (*No timer draw*: the timer goes on counting down from its value before the change)
     assert_eq!(o.targeting_timer, timer, "{case}: the timer counts on");
     w.obj(t).unwrap().health
@@ -2111,7 +2115,11 @@ fn never_again(w: &mut World, tank: ObjectId, t: ObjectId, case: &str) {
         }
     }
     if let Some(h) = settled {
-        assert_eq!(w.obj(t).map(|o| o.health), Some(h), "{case}: fired on after the drop");
+        assert_eq!(
+            w.obj(t).map(|o| o.health),
+            Some(h),
+            "{case}: fired on after the drop"
+        );
     }
 }
 
@@ -2140,7 +2148,10 @@ fn s0309_issue_453_an_allys_takeover_is_dropped() {
         allies.push(HouseId(b));
         allies.sort();
     }
-    assert!(w.allied(Some(HouseId(BETA)), Some(HouseId(NEUTRAL))), "set-up");
+    assert!(
+        w.allied(Some(HouseId(BETA)), Some(HouseId(NEUTRAL))),
+        "set-up"
+    );
     taken_and_dropped(&mut w, tank, t, NEUTRAL, "ally");
     never_again(&mut w, tank, t, "ally");
 }

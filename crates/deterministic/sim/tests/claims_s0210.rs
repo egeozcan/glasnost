@@ -366,17 +366,35 @@ fn a_stolen_vehicle_is_first_dropped_as_at_the_start_of_cloaking() {
         o.beh.aside = Some((Some(Target::Object(c)), None));
     }
     crush::at_cell_centre(&mut w, c);
-    assert_eq!(w.obj(c).unwrap().owner, Some(HouseId(BETA)), "set-up: taken over");
+    assert_eq!(
+        w.obj(c).unwrap().owner,
+        Some(HouseId(BETA)),
+        "set-up: taken over"
+    );
     let o = w.obj(old).unwrap();
-    assert_eq!(o.target, None, "the old owner's holder: dropped at the owner change");
-    assert_eq!(o.targeting_timer, tick + 30, "the old owner's holder: no draw");
+    assert_eq!(
+        o.target, None,
+        "the old owner's holder: dropped at the owner change"
+    );
+    assert_eq!(
+        o.targeting_timer,
+        tick + 30,
+        "the old owner's holder: no draw"
+    );
     let o = w.obj(new).unwrap();
     assert_eq!(o.target, None, "the thief's house's holder: dropped");
     // spec: S-0309 claim 27 (one ranged draw over 4 to 8 ticks, both included)
     let left = o.targeting_timer - tick;
-    assert!((4..=8).contains(&left), "claim 28's timer reset: {left} ticks left");
+    assert!(
+        (4..=8).contains(&left),
+        "claim 28's timer reset: {left} ticks left"
+    );
     let o = w.obj(aside).unwrap();
-    assert_eq!(o.target, Some(Target::Object(old)), "the current target kept");
+    assert_eq!(
+        o.target,
+        Some(Target::Object(old)),
+        "the current target kept"
+    );
     assert_eq!(o.beh.aside, Some((None, None)), "the put-aside target lost");
 }
 

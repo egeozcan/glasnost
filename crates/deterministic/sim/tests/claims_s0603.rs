@@ -1147,7 +1147,11 @@ fn claim_16_b_d_an_invulnerable_building_lands_the_unit_beside() {
         landed_beside(&w, u, &cells, name);
         assert!(consumed(&fx).is_empty(), "{name}");
         assert_eq!(credits(&w, ALPHA), c0, "{name}: not paid");
-        assert_eq!(w.obj(u).unwrap().beh.current, Some(Behaviour::Guard), "{name}");
+        assert_eq!(
+            w.obj(u).unwrap().beh.current,
+            Some(Behaviour::Guard),
+            "{name}"
+        );
         round_trip(&w);
     }
 }
@@ -1183,7 +1187,11 @@ fn claim_16_f_the_fate_route_lands_a_self_teleporting_unit_beside() {
         }
         landed_beside(&w, u, &cells, name);
         assert_eq!(credits(&w, HouseId(2)), c0, "not paid");
-        assert_ne!(w.obj(u).unwrap().beh.current, Some(Behaviour::Eaten), "rest");
+        assert_ne!(
+            w.obj(u).unwrap().beh.current,
+            Some(Behaviour::Eaten),
+            "rest"
+        );
         round_trip(&w);
     }
 }
