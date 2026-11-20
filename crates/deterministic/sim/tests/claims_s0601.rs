@@ -2123,7 +2123,7 @@ fn never_again(w: &mut World, tank: ObjectId, t: ObjectId, case: &str) {
     }
 }
 
-// spec: S-0309 r149 claim 32 (Q-3298 answered, #453: a target that changes owner is dropped by every holder, holders of the new owner included, whatever gave it: an order or a search of its own; the drop is inside the change, attack is kept to its next processing, no timer draw, and the holder's firing step after the drop fires nothing at it); scenario A20 part a. Replaces S42's guard test of the pre-r149 rule
+// spec: S-0309 r149 claim 32 (Q-3298 answered, #453: a target that changes owner is dropped by every holder, holders of the new owner included, whatever gave it: an order or a search of its own; the drop is inside the change, attack is kept to its next processing, no timer draw, and the holder's firing step after the drop fires nothing at it); scenario A20 part a. Replaces S41's guard test of the pre-r149 rule
 #[test]
 fn s0309_issue_453_a_player_attacker_drops_a_target_its_house_took_over() {
     for given in [Given::Order, Given::Search] {
