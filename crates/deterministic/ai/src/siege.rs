@@ -307,6 +307,7 @@ impl Siege {
         let enemies = eyes.seen_enemies(w);
         let enemy_worth = self.army.remember(w, eyes.house, &enemies);
         let out_worth: i64 = self.army.out.iter().map(|&id| worth(w, id)).sum();
+        // nocite: design: own AI (#449): the level's recall is a percent of the remembered enemy army's worth
         if self.army.striking && t.recall > 0 && out_worth * 100 < t.recall * enemy_worth {
             // The strike is outmatched: it comes home to fight beside the
             // base and the new units, and the army gathers again.
@@ -346,6 +347,7 @@ impl Siege {
         let waited = t.patience > 0 && w.tick - self.army.ended >= t.patience;
         // nocite: design: own AI (#449): after the level's patience, goers worth 80 percent of the remembered enemy army are edge enough (with the guard and the base's defence behind them)
         let want = if waited { t.edge.min(80) } else { t.edge };
+        // nocite: design: own AI (#449): the edge is a percent of the remembered enemy army's worth
         let edge = want == 0 || goers_worth * 100 >= want * enemy_worth;
         let free_n = army.len().saturating_sub(self.army.out.len());
         let goes = if self.army.striking {
