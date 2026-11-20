@@ -3743,37 +3743,7 @@ impl Session {
                 d.line(a, b, [r, g, bl, 255]);
             }
         }
-        // spec: S-0601 claim 18 (the control ring on a controlled object, the permanent ring on a permanently controlled one, raised by the ring height; on a building in front of it). Seam: the ring animations' art is not drawn yet; a marker stands in at the ring's place.
-        // design: render (#122) only a victim or a permanently controlled object has a ring (`mind::ring`), so those records are walked, in object order, instead of every object
-        let ringed: std::collections::BTreeSet<ObjectId> = w
-            .mind
-            .victims
-            .keys()
-            .chain(&w.mind.permanent)
-            .copied()
-            .collect();
-        for o in ringed.into_iter().filter_map(|id| w.obj(id)) {
-            // Our own: no ring on objects in cells the local player has not
-            // explored (in a watch game, where nothing is shrouded, on every one).
-            let seen = self
-                .play
-                .local
-                .is_none_or(|h| glasnost_sim::econ::shroud::explored(w, h, o.pos.cell()));
-            if !o.on_map || !seen {
-                continue;
-            }
-            let Some(ring) = glasnost_sim::mind::ring(w, o.id) else {
-                continue;
-            };
-            let (qx, qy) = project_lifted(ring.at.x, ring.at.y, ring.at.z);
-            let (x, y) = world_to_screen(qx, qy);
-            let ink = if ring.permanent {
-                PERMA_RING_INK
-            } else {
-                RING_INK
-            };
-            ring_marker(&mut d, x, y, ink, m);
-        }
+        // The control rings (S-0601 claim 18) are the live view's animations (`Live::follow_rings`), drawn with the battlefield.
         if let Some(drag) = self.drag
             && drag.active
         {
@@ -3919,13 +3889,6 @@ const DASH_MS: i64 = 60;
 // nocite: our own line colour, S-0610 leaves its animation unspecified
 const INTENT_INK: [u8; 4] = [230, 60, 60, 255];
 
-/// The stand-in control ring's ink (our own; S-0601 claim 18's animation
-/// art is not drawn yet).
-// nocite: our own stand-in colour for the control ring
-const RING_INK: [u8; 4] = [200, 80, 230, 255];
-/// The stand-in permanent control ring's ink (our own).
-// nocite: our own stand-in colour for the permanent control ring
-const PERMA_RING_INK: [u8; 4] = [255, 120, 255, 255];
 /// The keyboard cell's mark (our own; the interface's focus colour, veiled).
 // nocite: our own client setting (keyboard aiming)
 const AIM_INK: [u8; 4] = [96, 208, 255, 90];
@@ -4069,30 +4032,6 @@ fn ellipse(d: &mut DrawList, c: (i32, i32), ab: (i32, i32), rgba: [u8; 4], clip:
             if clip.contains(Point::new(p.0, p.1)) && clip.contains(Point::new(q.0, q.1)) {
                 d.line(p, q, rgba);
             }
-        }
-    }
-}
-
-/// A small flat ring (an ellipse outline, 12 × 6 pixels) centred at
-/// `(x, y)`: the stand-in for the control ring animations (S-0601 claim
-/// 18).
-fn ring_marker(d: &mut DrawList, x: i32, y: i32, rgba: [u8; 4], clip: Rect) {
-    // nocite: our own stand-in shape
-    const PTS: [(i32, i32); 8] = [
-        (6, 0),
-        (4, 2),
-        (0, 3),
-        (-4, 2),
-        (-6, 0),
-        (-4, -2),
-        (0, -3),
-        (4, -2),
-    ];
-    for i in 0..PTS.len() {
-        let (a, b) = (PTS[i], PTS[(i + 1) % PTS.len()]);
-        let (p, q) = ((x + a.0, y + a.1), (x + b.0, y + b.1));
-        if clip.contains(Point::new(p.0, p.1)) && clip.contains(Point::new(q.0, q.1)) {
-            d.line(p, q, rgba);
         }
     }
 }

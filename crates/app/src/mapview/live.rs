@@ -615,6 +615,11 @@ pub struct Live {
     /// The serial of the teleport source marker shown to the viewer
     /// (S-0513 claim 33), while it plays.
     source_marker: Option<u32>,
+    /// The control rings shown (S-0601 claim 18), by ringed object. An
+    /// entry stays while the ring does, also after its animation has ended
+    /// (S-0109 claim 16), so that an ended ring starts again only after the
+    /// ring has ended and come back.
+    rings: BTreeMap<ObjectId, ShownRing>,
     /// Each building's running slot animations (S-0108; presentation
     /// state).
     slot_anims: BTreeMap<ObjectId, slot_play::Slots<SlotAnim>>,
@@ -775,6 +780,9 @@ struct LiveAnim {
     /// the simulation plays it, so its type and image frame are the
     /// simulation's.
     dominating: Option<ObjectId>,
+    /// The object whose control ring it is (S-0601 claim 18), if it is
+    /// one: it stands at the ring's point and goes when the ring ends.
+    ring: Option<ObjectId>,
     /// The image frame a burning walker shows (S-0615 F1, or its expiring
     /// stage), in place of the playback's.
     frame: Option<i32>,
@@ -795,6 +803,17 @@ struct LiveAnim {
     /// What made it, where the drawing knows beyond the fields above (#442,
     /// our own diagnostics); empty otherwise.
     cause: &'static str,
+}
+
+/// A control ring shown (S-0601 claim 18).
+#[derive(Clone, Copy, Debug)]
+struct ShownRing {
+    /// The permanent ring, not the controlled one.
+    permanent: bool,
+    /// Its object is a building: the ring is drawn in front of it.
+    building: bool,
+    /// The serial of its playing animation.
+    serial: u32,
 }
 
 /// What playback asks of the live game: the follow-up types, the
@@ -1520,6 +1539,7 @@ impl Live {
             move_flash,
             viewer: None,
             source_marker: None,
+            rings: BTreeMap::new(),
             slot_anims: BTreeMap::new(),
             anim_keys: Vec::new(),
             slot_defs: BTreeMap::new(),
@@ -1771,8 +1791,13 @@ impl Live {
         self.lines.flashes.clear();
         self.lines.bolts.clear();
         // design: render (#98) the drawing's own animations end; those that show the game's are kept and follow it
+        // design: render (R19) a control ring shows the game's control records (S-0601 claim 18), so it is kept and follows them too
         self.anims.retain(|a| {
-            a.sim.is_some() || a.walker.is_some() || a.maker.is_some() || a.dominating.is_some()
+            a.sim.is_some()
+                || a.walker.is_some()
+                || a.maker.is_some()
+                || a.dominating.is_some()
+                || a.ring.is_some()
         });
         if let Some(s) = self.source_marker
             && !self.anims.iter().any(|a| a.serial == s)
@@ -1789,6 +1814,7 @@ impl Live {
         self.follow_dominations(now);
         self.follow_drainers();
         self.follow_sim_anims();
+        self.follow_rings(now);
         self.update_slots();
         self.sync_layers(true);
         self.sync_ground();
@@ -2686,6 +2712,7 @@ impl Live {
             drainer: None,
             maker: None,
             dominating: None,
+            ring: None,
             frame: None,
             shooter: None,
             z_adjust: None,
@@ -2889,6 +2916,71 @@ impl Live {
             a.pos = o.pos;
             true
         });
+    }
+
+    /// The control rings (S-0601 claim 18): a controlled object carries the
+    /// rules' controlled-animation type and a permanently controlled one the
+    /// permanent type, played as an animation attached to it at the ring's
+    /// point, which the simulation gives (`glasnost_sim::mind::ring`). A ring
+    /// that ends disappears; one that comes back is a new animation (S-0109
+    /// *Changes for other specs*, the S-0601 claim 18 entry). Our ring
+    /// changes no game state and takes no scenario draw.
+    fn follow_rings(&mut self, now: i32) {
+        let w = &self.world;
+        // design: render (#122) only a victim or a permanently controlled object has a ring, so those records and the rings shown are walked, in object order, instead of every object
+        let ids: BTreeSet<ObjectId> = w
+            .mind
+            .victims
+            .keys()
+            .chain(&w.mind.permanent)
+            .chain(self.rings.keys())
+            .copied()
+            .collect();
+        let rings: BTreeMap<ObjectId, glasnost_sim::mind::Ring> = ids
+            .into_iter()
+            .filter_map(|id| Some((id, glasnost_sim::mind::ring(w, id)?)))
+            .collect();
+        // spec: S-0601 claim 18 (removed at release, gone when the object leaves the game) and S-0109 Changes for other specs (the S-0601 claim 18 entry: the ring ends at each event of claim 22's End with the owner list); a change between the two kinds of control ends the one ring, and the other starts below
+        self.rings
+            .retain(|id, s| rings.get(id).is_some_and(|r| r.permanent == s.permanent));
+        let shown = &self.rings;
+        self.anims.retain_mut(|a| {
+            let Some(id) = a.ring else { return true };
+            // spec: S-0109 claim 22 (an animation whose attachment ends disappears at once)
+            let Some(r) = rings
+                .get(&id)
+                .filter(|_| shown.get(&id).is_some_and(|s| s.serial == a.serial))
+            else {
+                return false;
+            };
+            // spec: S-0109 claim 22 (it follows its owner) and S-0601 claim 18 (at the ring's point: on a mobile object its position raised by the type's ring height)
+            a.pos = r.at;
+            true
+        });
+        for (id, r) in rings {
+            if self.rings.contains_key(&id) {
+                continue;
+            }
+            self.counts.anims += 1;
+            let serial = self.anim_serial;
+            // spec: S-0109 Changes for other specs (the S-0601 claim 18 entry: a ring shown again is a new animation, created and attached as at the start of the control, with no loop delay; its creation draws of claims 3 and 13 and every later playback draw come from the unsynchronised stream, our cosmetic stream). Seam: the first ring of a control is the original's own animation, whose draws S-0109 claim 28 puts on the scenario stream; the simulation does not play it yet, so the drawing plays it too, from the cosmetic stream.
+            // design: render (S-0601 claim 18) the drawing finds the ring after the tick, so the ring's first update (S-0109 claims 5 and 29) is in the tick it is found in, the excluded update that follows at once
+            self.create_anim(r.anim.as_bytes(), r.at, now, None, false);
+            if let Some(a) = anim_mut(&mut self.anims, serial) {
+                a.ring = Some(id);
+                // spec: S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
+                a.layer = super::slots::Layer::Ground;
+                a.cause = "a control ring";
+            }
+            self.rings.insert(
+                id,
+                ShownRing {
+                    permanent: r.permanent,
+                    building: r.building,
+                    serial,
+                },
+            );
+        }
     }
 
     /// The infantry-making animations (S-0611 claims 8 to 12): each drawn
@@ -3237,6 +3329,7 @@ impl Live {
         self.follow_dominations(now);
         self.follow_drainers();
         self.follow_sim_anims();
+        self.follow_rings(now);
         self.update_anims(now);
         let next_anim = self.anim_serial;
         for e in &effects {
@@ -4279,6 +4372,14 @@ impl Live {
                 && !items.is_empty()
             {
                 anim_items.insert(*serial, (*layer, items));
+            }
+        }
+        for s in self.rings.values().filter(|s| s.building) {
+            if let Some((_, items)) = anim_items.get_mut(&s.serial) {
+                for i in items {
+                    // spec: S-0601 claim 18 (on buildings the ring draws in front of the building); design: render (Q-3337) its pixels neither read nor write depth, so the building's body, a depth writer (S-0102 claim 10) drawn before it, hides none of them; the ground layer's later entrants still draw over it
+                    i.test = glasnost_render::compose::DepthTest::Ignore;
+                }
             }
         }
         self.counts.anims_drawn = anim_items.len();
