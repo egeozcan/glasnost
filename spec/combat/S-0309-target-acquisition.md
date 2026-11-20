@@ -2,15 +2,15 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 145
+revision: 149
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-19
+approved-on: 2026-11-20
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763, Q-2006, Q-2112, Q-2114, Q-2261,
 Q-2262, Q-2263, Q-2264, Q-2376, Q-2418, Q-2712, Q-2747, Q-2801, Q-2841, Q-2987,
-Q-2988, Q-3061, Q-3102, Q-3109, Q-3261]
+Q-2988, Q-3061, Q-3102, Q-3109, Q-3261, Q-3298]
 supersedes: []
 ---
 
@@ -23,7 +23,8 @@ search looks for, where and in which order it looks, which objects are candidate
 score* and the winner, plus the retaliation conditions, the rules for dropping or replacing a
 self-chosen target, the drop of a held target that is destroyed or removed, starts to cloak or
 goes underground, the periodic check that drops a held target the firing check refuses, the
-target drop and the reset of orders at a change of owner, and the owner rules that the neutral and special houses keep. S-0215 owns when
+target drop and the reset of orders at a change of owner, the drop by every holder of a target
+that changes owner, and the owner rules that the neutral and special houses keep. S-0215 owns when
 most searches run (claim 1 also names contexts owned by other specs). Skirmish only: network games and
 campaign missions are out of scope.
 
@@ -1365,7 +1366,11 @@ index 1. This is a design rule, not an additional claim about the original.
         building of an overpowerable type (S-0518).
 
       A holder of a human-controlled owner has no such drop: in our engine, the holders of every
-      player house keep an allied target here.
+      player house keep an allied target here. This part is separate from claim 32: at an object's
+      own change of owner every holder drops it, whatever the holder's owner, apart from an
+      attacker whose strike target it is (claim 32), so the allied
+      targets that this part reads are ones held by other means, such as an order, a revert, an
+      attack-move resumption or a change of the holder's own owner (claims 23 and 31).
     - These houses have no team members (S-0215, Terms), and campaign missions are out of scope, so
       the original's rules for those do not arise.
     - Backing: `measurable` through scenario A15, whose part a backs this claim's part f, part b
@@ -2089,7 +2094,10 @@ index 1. This is a design rule, not an additional claim about the original.
     enemy target, a target that the change makes
     an object of the holder's own house or of a house allied with it, and a target given by an order
     are all dropped. A change to the house the holder already belongs to is no change and drops
-    nothing (glossary, *building ownership change*).
+    nothing (glossary, *building ownership change*). This claim is about the holder's own change.
+    When the object that it holds changes owner, claim 32 gives the drop, by every holder of that
+    object; when both change owner in one action, each change acts as its own claim gives, in the
+    order of the changes (claim 32).
     - The drop takes no targeting-timer draw. Claim 27's reset over 4 to 8 ticks belongs to the
       drops of claims 27 and 28, not to this one, so the holder's targeting timer goes on counting
       down from its value before the change.
@@ -2178,9 +2186,12 @@ index 1. This is a design rule, not an additional claim about the original.
       to the new owner. This replaces a *guard* that the guard request made current; a *guard* that
       the request left queued stays queued (S-0215 claims 10 and 11). The aircraft gets none of
       S-0215 claim 13's common effects there, the attack-move refresh included. A restored target
-      that the change has made one of the aircraft's own house or of an ally is held like any other
+      that the aircraft's own change has made one of its house or of an ally is held like any other
       target: claim 29's check reads it as it reads any target, and claim 25 part k drops it only
-      for the houses that part covers. Any other object keeps the override in
+      for the houses that part covers. Here the relation changes because the holder changes owner.
+      A target whose own owner changes is dropped by all its holders at that change (claim 32).
+      A put-aside slot keeps it, so a revert can still give it back, and it is then held in the
+      same way (claim 27a). Any other object keeps the override in
       effect after the change, because its fall-back has no such row, and so does an aircraft that
       gets no fall-back here.
       S-0215 claim 10's causes revert a kept override later; each of them needs a held target, so the kept
@@ -2206,11 +2217,16 @@ index 1. This is a design rule, not an additional claim about the original.
       adds after the change (S-0601 claim 6, S-0215 claim 9) clears the destination and target that
       a resumption or an aircraft's revert gave, but it keeps the memory too, which then acts by
       claim 23. Switch `quirks.owner_change_keeps_attack_move` (Edge cases).
-      A remembered target resumed in this way that the change has made an object of the object's
-      own house or of a house allied with it is held like any other target. *Attack* approaches it
+      A remembered target resumed in this way that the object's own change has made one of its
+      house or of a house allied with it is held like any other target. *Attack* approaches it
       and fires on it, since neither *attack* nor the firing check (S-0301) refuses a target that
       is not hidden for its relation to the holder's owner. Claim 29's check and claim 25 part k
-      read it as they read any target.
+      read it as they read any target. When the remembered object changes owner too, its own
+      change drops it from every holder (claim 32) but leaves the memory as it is. So with both
+      changes in one action, the object holds the remembered target at the end of the action only
+      if the remembered object's change comes first; if the object's own change comes first, the
+      later change drops the target that the resumption gave, and the memory acts again by
+      claim 23. A trigger's change-owner action changes its carriers in creation order (Terms).
     - *Grand opening.* Last, a building that has not yet had its grand opening (S-0108 claim 11)
       has it inside the change, whatever the cause of the change: its slot animations start as
       that claim gives, and its ready mark is set (S-0215 claim 11). It gets no free unit then
@@ -2366,7 +2382,9 @@ index 1. This is a design rule, not an additional claim about the original.
       change-owner action changes, which the harvester follows, part f for a factory's rally point and a drive vehicle on its
       exit track, part g for the takeover of a vehicle-like building by a vehicle thief, part h for an engaged vehicle
       that resumes its attack move to a remembered destination, part i for a remembered target
-      resumed after the change has made it one of the holder's own house, part j for a building
+      resumed after the change has made it one of the holder's own house, its runs i1 and i2 for
+      the order of the two changes when the remembered object changes owner too, part j
+      for a building
       whose owner changes during its sale's build-down, part k for a unit that a vehicle factory
       has not yet sent out, the factory's next release and its door, part l for a vehicle
       docked at a repair depot, part m for a building being built up, its grand opening and its
@@ -2419,7 +2437,8 @@ index 1. This is a design rule, not an additional claim about the original.
       where it stands; the harvester docked but not yet unloading; the vehicle on a factory's exit
       and the locomotor split; the end of the factory's unloading at the change, which inherits
       S-0417 claim 2's readiness rules; the remembered target resumed after the change has made it
-      an own or allied one; the sale whose owner changes, the end of its build-down by an idle
+      an own or allied one, and the order of the two changes when that object changes owner in the
+      same action; the sale whose owner changes, the end of its build-down by an idle
       range with delay 0 or of at least two stages, and the sale left unchanged by a change before
       its build-down; the queued *unload* replaced, the unit left at its exit point, the next
       release taking its contact and the door left open; the depot's repair ended and the vehicle
@@ -2432,6 +2451,119 @@ index 1. This is a design rule, not an additional claim about the original.
       repairing, and for the cases left to the Open questions: where the naval vehicle factory's new
       rally point lies, and what the factory's apron requests and its next unloading do with a unit
       that it has not yet sent out
+
+### A held target that changes owner
+
+32. **A target that changes owner is dropped by every holder (Q-3298).** When an infantry unit,
+    vehicle, aircraft or building changes owner to another house, whatever the cause (claims 30
+    and 31 list them), every infantry unit, vehicle, building and aircraft that holds it as its
+    target drops it at that moment, inside the change. A change to the house the object already
+    belongs to is no change and drops nothing.
+    - *Every holder alike.* The drop does not depend on the holder's owner or on the object's old
+      and new owners. Holders of the new owner, of a house allied with it, of the old owner and of
+      any other house drop it, and so do holders of human-controlled and of computer-controlled
+      owners. It does not depend on how the holder came to hold the object either: a target given
+      by an order, with or without force-fire, found by a search of its own, taken at retaliation
+      (claim 18) or given back by a revert (S-0215 claim 10) or by an attack-move resumption
+      (claim 23) is dropped alike. The controller of a mind-control takeover drops the object as any
+      holder does when it still holds it as its target at the change.
+    - *Strike target.* An attacker whose strike target (S-0519 Terms) is the object keeps it while
+      the object is alive, as S-0215 claim 10 gives for the revert.
+    - *A stolen vehicle.* When a vehicle thief takes a vehicle over, the vehicle is first dropped as
+      at the start of cloaking (claim 28): every holder drops it, with claim 27's timer reset and
+      S-0215 claim 10's revert, unless the holder's house senses the vehicle's cell or the holder
+      has the vehicle's owner before the change. The owner change follows in the same action, and
+      this claim then drops the vehicle for the holders that kept it under those exceptions.
+    - *A spawner's controller target.* The controller target of a spawner (S-0506 claims 3 and 11)
+      is not a held target here. The spawner's own target and each launched object's target are,
+      and this claim drops them. The change was not found to act on the controller target itself,
+      and what the controller does with a controller target whose owner changed is S-0506's (Open
+      questions).
+    - *Override in effect.* A holder with an override in effect (S-0215 claim 10) first reverts, as
+      that claim's owner-change cause gives, and then drops the object if the revert has left it as
+      its target. A revert that gives back another target keeps that target. A holder whose current
+      target is another object and that has this object only as its put-aside target drops
+      nothing here: the change takes nothing out of the put-aside slots (claim 27a), so a later
+      revert gives the object back. For an aircraft holder, the adjustment of its behaviour that
+      follows belongs to the aircraft specs, as for claim 27's drop.
+    - *No timer draw.* The drop takes no targeting-timer draw. Claim 27's reset over 4 to 8 ticks
+      belongs to the drops of claims 27 and 28, not to this one, so the holder's targeting timer
+      goes on counting down from its value before the change.
+    - *Behaviour and destination.* Apart from a revert, the drop changes neither the holder's
+      behaviours nor its destination. A holder whose current behaviour is *attack* keeps it, with no
+      target, until its next processing of *attack*, which then does what *attack* does with no
+      target (S-0215). The holder's firing step after the drop asks no firing check about the object
+      and fires nothing at it, as claim 27's consequences give for that claim's drop, and a
+      building whose animation-delayed shot (S-0301 claim 14) is pending acts as those
+      consequences give.
+    - *Memory.* The change leaves every attack-move memory (claim 23) as it is. A memory whose
+      remembered target is the object still names it, so a later resumption (claim 23 (b)), or a
+      search of claim 23 (a) that finds nothing, makes the object the holder's target again.
+    - *Later.* After the drop a holder can hold the object again in the ordinary ways, for example
+      by an order, a revert, an attack-move resumption, or a search or retaliation that takes it
+      under the ordinary rules (claims 2, 12 and 18). An object that the change has made one of the
+      holder's own house or of an ally, held again in one of these ways, is held like any other
+      target: claim 29's check reads it as it reads any target, and claim 25 part k drops it only
+      for the houses that part covers.
+    - *Several changes in one action.* When several objects change owner in one action, each change
+      acts in turn, and the drop at each change acts on the holders as they are then. So an object
+      that changes owner after its target in the same action can be given that target again by its
+      own change (claim 31's attack-move resumption), and one whose own change comes first loses
+      such a target at the target's later change. A trigger's change-owner action changes its
+      carriers in creation order (Terms).
+
+    DECIDED (autonomy, 2026-11-20), for Q-3298: no quirk switch. The original's drop is the
+    behaviour players see and expect, and our engine copies it for every house. The memory and
+    put-aside slots that keep the object are copied as they are (an owner change is not among the
+    moments at which claim 27a empties the put-aside slot), since a
+    target held again in those ways is rare and is held like any other.
+    - Backing: `measurable` (scenario A20: part a for a vehicle holder of a vehicle target given by
+      an order, taken over by mind control, with the behaviour kept to a later processing and the
+      controller's drop; part b for a vehicle holder that took its target at retaliation, with the
+      revert; part c for a building target captured by an engineer; part d for a third house that
+      takes the target over by a trigger's change-owner action, with the targeting timer; part e
+      for a computer-controlled holder and for a release that returns the target to the holder's
+      house; part f for an ally's takeover; part g for force-fire; part h, the control, for the
+      target kept without a change; part i for a psychic domination). The other causes, the
+      occupation and return of a civilian garrison building, the takeover of a vehicle-like
+      building by an infantry unit and the change of an object in contact with a building that
+      changes owner, are `unmeasured`: no part of A20 gives a holder a target that changes owner by
+      one of them. The stolen vehicle is `unmeasured`: no part of A20 has a vehicle thief. The
+      spawner's controller target is `unmeasured`: no part of A20 has a spawner holder. The
+      strike-target exception is `unmeasured`, for S-0215 claim 10's reason: no setup here holds a
+      living object as a strike target at its change. The revert that gives back another target,
+      the put-aside slot kept and the attack-move memory kept are `unmeasured`: no part of A20
+      gives a holder an override with another put-aside target, or an attack-move memory of the
+      object, at the change. Infantry, aircraft and building holders are
+      `unmeasured`: every part of A20 has a vehicle holder. The kept destination is `unmeasured`: in
+      every part the holder stands within reach of the object, with no destination. The drop's
+      place inside the change is `unmeasured`: A20 reads only the ends of ticks, which do not tell
+      it from a drop later in the same tick. The order of several changes in one action: scenario
+      A19 part i, runs i1 and i2, for carriers that never left play, whose creation order and update
+      order agree. `unmeasured` that the order is creation order rather than update order: the two
+      differ only for an object that has left play and entered it again (Terms), and no scenario
+      here gives a carrier that history. The *Later* bullet is `unmeasured` here: no part of A20 gives a
+      holder the object again after the change.
+    - Confidence: high (the drop by the end of the tick of the change, by a vehicle holder of a
+      human-controlled owner, of a target given by an order or taken at retaliation, at a
+      mind-control takeover of a vehicle and at an engineer capture of a building; no shot at the
+      object after it). Medium: the drop's place inside the change; the *Later* bullet, which
+      applies claims 2, 12, 18, 25 and 29 to a target held again; a holder
+      in *attack* by an order keeping *attack* to a later processing, part a, whose falsifier
+      judges the five runs together; the drop at the other
+      causes and for the new owners of parts d and f, and at a psychic domination, part i; the
+      computer-controlled holder and the release
+      of part e; force-fire, part g; the controller's drop, since another rule of the takeover could
+      give the same record; the revert first for a holder with an override in effect, part b, which
+      rests on S-0215 claims 10 and 18 and on a reading of the record that does not show the
+      suspended behaviour; no timer draw, part d, because not every step of every cause was traced
+      for draws; the order of several changes in one action, A19 part i, and its being creation
+      order rather than update order, which no scenario separates; and each `unmeasured` part
+      above (the strike-target exception, the revert that keeps another target, the put-aside slot
+      and memory kept, infantry, aircraft and building holders, the kept destination, the other
+      causes, the stolen vehicle). Low: that the change does not act on a spawner's controller
+      target, which no step traced was found to touch, but not every step of every cause was
+      traced
 
 ## Formulas
 
@@ -4765,15 +4897,20 @@ Each part runs 5 times from a fresh game.
   part h, with the attack-move order given on *W* itself, so that *V*'s memory holds only *W*
   (S-0213 claim 6, a target only), *W* of a type with no weapon and carrying *V*'s tag, and a
   second map trigger on that tag, set off by elapsed time a few ticks after the first, whose
-  change-owner action gives its carriers back to *H*. Both changes then move *V* and *W* together.
-  Part h's conditions on *C* do not apply. Part h's targeting-timer condition must hold at both
-  changes, and a run decides something only
+  change-owner action gives its carriers back to *H*. Both changes then move *V* and *W* together,
+  one after the other in creation order (Terms; claim 32). Run i1 has *W* created before *V*, and
+  run i2 has *V* created before *W*; a run whose objects were not created in its named order
+  decides nothing. Part h's conditions on *C* do not apply. Part h's targeting-timer condition
+  must hold at both changes, and a run decides something only
   if *V* holds *W*, or has its memory of *W*, at the second change. Nothing is expected between
   the two changes, where the original's rule for a computer-controlled owner (claim 25 part k)
-  can drop *W*. *Expected:* at the end of the tick of the second change *V* and *W* belong to *H*,
-  *V* holds *W* with *attack* current or queued, and *V* fires at *W* after that tick. *Falsified
-  if:* *V* holds no target at the end of that tick, or holds *W* and never fires at it while *W*
-  stays in range.
+  and the drop at *W*'s first change (claim 32) can take *W* from *V*. *Expected:* at the end of
+  the tick of the second change *V* and *W* belong to *H*. In run i1, *V* holds *W* with *attack*
+  current or queued, and *V* fires at *W* after that tick. In run i2, *V* holds no target then,
+  since *W*'s change, after *V*'s own, drops the target that *V*'s resumption gave; what *V* does
+  later by its memory (claim 23) is recorded and judges nothing. *Falsified if:* in run i1, *V*
+  holds no target at the end of that tick, or holds *W* and never fires at it while *W* stays in
+  range; in run i2, *V* holds *W* at the end of that tick.
 - *Part j (a building whose owner changes during its sale, claim 31):* the map places a building
   *S* for the passive neutral house, of a type with a build-up of many stages, no free unit, no
   docking and no pack-up vehicle (S-0415), with a tag whose chain holds trigger 0 of part e (to
@@ -4864,8 +5001,93 @@ Each part runs 5 times from a fresh game.
   rally point that *N*0's grand opening gave it. The cells are recorded for the Open question.
   *Falsified if:* in a run with the triggers the ship heads for *R* or gets no destination.
 
+**A20: a target that changes owner (claim 32; Q-3298).** A tiny flat skirmish map, one human house
+*H* and computer houses *E* and *F*, all three at war with each other unless a part says
+otherwise, game speed 6, no engine add-on and no mods. A named test file raises the strength of
+the target object *T* and of the holder, only so that neither dies before the change. Record
+each tick, after the tick's logic: the owner, health, target, current and queued behaviours and
+destination of each test object; each fire event (tick, firer, what was aimed at); and the
+holder's targeting timer. Call *X* the tick at whose end *T*'s owner is first a new house (part h
+gives its own *X*). The holder may fire at *T* in tick *X* itself, in a turn before the change
+(S-0203 claim 3), so no part judges a fire event of tick *X*. Each
+part runs at least twice from a fresh game, with different seeds; part a runs 5 times. Each run
+ends at tick *X* + 200 unless its part says otherwise. Every part voids a run in which the holder
+holds a target other than *T* at the end of tick *X* − 1, in which *T* or the holder is destroyed
+before tick *X* + 20, or in which *T*'s owner changes again after tick *X* before the run ends
+(the death of a controller *M* releases *T*, S-0601 claims 9 and 10, and claim 32 then lets *V*
+take *T* again).
+- *Part a (an order, a mind-control takeover):* a vehicle *V* of *H* and a vehicle *T* of *E*,
+  about 4 cells apart and each within the other's weapon range, so that they fire at each other.
+  The player orders *V* to attack *T* in an early tick. A mind-controlling infantry unit *M* of *H*,
+  placed within its weapon range of *T*, takes *T* over by itself or on the player's order (S-0601
+  claim 6). A run decides something only if *V* holds *T* at the end of tick *X* − 1. *Expected:*
+  at the end of tick *X*, *V* holds no target and *M* holds no target; *V* has no fire event at
+  *T* from tick *X* + 1 on; *V*'s current behaviour is *attack* at the end of tick *X* in most runs,
+  and *guard* becomes current a few ticks later, with no order. *Falsified if:* *V* holds *T* at
+  the end of tick *X*, or fires at it from tick *X* + 1 on; or, over the five runs together, *V*'s
+  current behaviour at the end of tick *X* is never *attack* (the change itself would then end
+  it). *M* holding *T* at the end of tick *X* also falsifies the controller's drop.
+- *Part b (retaliation):* part a with no order: *V* rests in *guard* with no target until *T*'s
+  first hit on it, and *V* is of a type whose weapon reaches *T*, so that it retaliates at once
+  (claim 18, S-0215 claim 18). A run decides something only if *V* first holds *T* at the end of
+  the tick of that hit, with nothing queued, and holds *T* at the end of tick *X* − 1; a run in
+  which *V* holds *T* before that hit took *T* by a search and decides nothing. *Expected:* at the
+  end of tick *X*, *V* holds no target and *guard* is current; no fire event of *V* at *T* from
+  tick *X* + 1 on. *Falsified if:* *V* holds *T* at the end of tick *X*, *attack* is current then,
+  or *V* fires at *T* from tick *X* + 1 on.
+- *Part c (an engineer capture of a building):* part a with *T* a capturable building of *E*
+  (a power plant, for example) that *V* is ordered to attack, and *T* taken by an engineer of *H*
+  (S-0509 claim 8) in place of *M*. *Expected* and *Falsified if:* part a's for *V*'s target and
+  fire events.
+- *Part d (a third house, by a trigger, and the targeting timer):* part a with *T* carrying the
+  tag of a map trigger, set off by elapsed time once *V* has fired at *T* a few times, whose
+  change-owner action gives its carriers to *F* (S-0011 claim 24), and no *M*. *T* stays an enemy
+  of *H*. A run in which *V* loses health in tick *X* decides nothing about *V*'s target at the end
+  of tick *X*, since a hit after its turn could give *T* back to it by retaliation (claim 18). A
+  run decides something only if *V*'s targeting timer has more than 10 ticks left at the end of
+  tick *X* − 1, so that no search of its own can give *T* back in its turn of tick *X* (the
+  trigger acts before any object's turn, S-0203 claim 1). *Expected:* at the end of tick *X*, *V*
+  holds no target, and *V*'s targeting timer has gone on counting down from its value at the end
+  of tick *X* − 1. *V* holds *T* again only after a search of its own (a restart of its targeting
+  timer), retaliation or an order (claim 32's *Later* bullet). *Falsified if:* *V* holds *T* at the
+  end of tick *X*, or *V*'s targeting timer has 8 ticks or fewer left at the end of tick *X*.
+- *Part e (a computer-controlled holder, and a release):* run e1: a vehicle *V* of *E* that finds
+  a vehicle *T* of *H* by its own search and attacks it, and a mind-controlling infantry unit *M*
+  of *E* that takes *T* over, so that *T* becomes one of *V*'s own house. *V* and *M* are placed
+  by the map, so that *V*'s turn comes before *M*'s in every tick (S-0203 claim 3) and claim 25
+  part k's drop could act only in *V*'s turn of a later tick. Run e1 is a run of the original: in
+  our engine *E* is a player house, which claim 25 does not cover. Run e2: a vehicle *T* of
+  *H* that a mind-controlling infantry unit *M* of *E* has taken over, and a vehicle *V* of *H*
+  that the player orders to attack *T*; a second vehicle of *H* then destroys *M*, which releases
+  *T* to *H* (S-0601 claims 9 and 10), and that release is the change of tick *X*. A run decides
+  something only if *V* holds *T* at the end of tick *X* − 1. *Expected:* at the end of tick *X*,
+  *V* holds no target, and it has no fire event at *T* from tick *X* + 1 on. *Falsified if:* *V*
+  holds *T* at the end of tick *X*, or fires at it from tick *X* + 1 on.
+- *Part f (an ally's takeover):* part a with *E* replaced by *F* for *T*, and *M* a
+  mind-controlling infantry unit of a computer house *G* allied with *H* (the same team at set-up)
+  and at war with *F*. *Expected* and *Falsified if:* part a's for *V*'s target and fire events.
+- *Part g (force-fire):* part a with the order given with force-fire held. *Expected* and
+  *Falsified if:* part a's for *V*'s target and fire events.
+- *Part h (control):* part a without *M*, with *X* the tick 200 ticks after *V*'s first fire event
+  at *T*, and the run ending at tick *X* + 200. *Expected:* *V* holds *T* to the end of the run and
+  keeps firing at it. *Falsified if:* *V* drops *T* while *T* is in range and alive.
+- *Part i (a psychic domination):* part a, with *H* playing a country whose side has the psychic
+  domination superweapon, S-0612 scenario PD7's test files (zero domination damage), and no *M*.
+  Once *V* has fired at *T* a few times, *H* launches the domination on *T*'s area. *Expected*
+  and *Falsified if:* part a's for *V*'s target and fire events.
+
 ## Open questions
 
+- Claim 32: what a spawner's controller does with a controller target whose owner changes (S-0506
+  claims 3, 5 and 11) is not established (low). The change drops the spawner's own target and its
+  launched objects' targets, and was not found to act on the controller target. A run of scenario
+  A20 part a with a spawner as the holder, recording its launches and its launched objects'
+  targets after tick *X*, would decide it.
+- Claim 32: whether a projectile already in flight towards an object whose owner changes keeps
+  that object as its target, or loses it as S-0306 claim 17 gives for a target that becomes
+  untargetable, is not established (low). The change itself was not found to act on projectiles.
+  A run of scenario A20 part a with *V*'s shot in flight at tick *X*, recording where it
+  detonates, would decide it.
 - Claim 31: what a vehicle factory's apron requests (S-0417 claims 4 and 13) do to a unit that
   the factory has not yet sent out when its unloading ends at an owner change, in contact and
   tethered at its exit point, while the apron cell is blocked, is not established (low).
@@ -5477,6 +5699,51 @@ nothing for part (f2). S-0309 claim 27 keeps that destination at the drop, and w
 search can make it a cell next to the vehicle's own is open (S-0309 Open questions), so (f2)'s list
 of requests that can give such a destination does not cover it. Level and backing: medium,
 `measurable`, S-0309 scenario A18 part g.
+
+S-0601 claim 6: its list of change-of-owner consumers ("Every consumer of a change of owner
+applies") should name S-0309 claim 32: every object that holds *T* as its target drops it at the
+change, the controller *C* included, apart from an attacker whose strike target *T* is. With the
+pointer to S-0309 claims 30 and 31 asked above, the list then covers both *T*'s own target and
+the objects that hold *T*. S-0612 claim 14 takes these consumers from that list and needs no
+change. Level and backing: high, `measurable`, for the drop by a vehicle holder of a
+human-controlled owner (S-0309 scenario A20 part a); medium, `measurable`, for the controller's
+drop (part a) and for a computer-controlled holder (part e, run e1).
+
+S-0509 claim 12, its table of effects owned elsewhere: it gains the row "Every object that holds
+the building as its target drops it at the change, apart from an attacker whose strike target it
+is | S-0309 claim 32", beside the row for the building's own held target asked above. Level and
+backing: high, `measurable`, S-0309 scenario A20 part c, for a vehicle holder at an engineer
+capture; medium, `unmeasured`, for a trigger's change-owner action and a mind-control release
+of a building: A20 parts d and e play those causes on a vehicle only, and claim 32's drop does not
+depend on the object's kind (a psychic domination takes over no building, S-0612 claim 13, so it
+is not a case here); medium, `unmeasured`, for the
+occupation and return of a civilian garrison building and the takeover of a vehicle-like building,
+since no part of A20 gives a holder such a building as its target.
+
+S-0215 claim 10, its owner-change revert cause ("the target changes owner … except for an actor
+whose strike target is that living object"): it could add, as its locomotor-jump cause does, that
+the other attackers revert if overridden and then drop the object if it is still their target, a
+revert that restores another target keeping that restored target, and that an actor with no
+override in effect drops the object too (S-0309 claim 32). Its table row "attacked, retaliation
+allowed" is unchanged. Level and backing: medium, `measurable`, S-0309 scenario A20 part b for the
+revert to *guard* at the change; medium, `unmeasured`, for the restored other target kept, for
+S-0309 claim 32's reason.
+
+S-0506 claim 11: its list of events at which the controller target is lost does not name an
+owner change of the controller target, and that list is left open there (Open questions). At such
+a change the spawner's own target and each launched object's target are dropped (S-0309 claim
+32), and the spawner's own-target clear requests a pending clear as claim 25 gives; the change was
+not found to act on the controller target itself. S-0506 may record that, or keep the case among
+its Open questions. Level and backing: medium, `unmeasured`, for the drops of the spawner's and
+the launched objects' targets (no part of S-0309 scenario A20 has a spawner holder); low,
+`unmeasured`, for the controller target left as it is.
+
+S-0011 claim 24: the carriers change owner one after another, in creation order (S-0309 Terms),
+each change with all its consumers before the next carrier's. It matters where carriers hold one
+another as targets or in an attack-move memory (S-0309 claims 31 and 32). Level and backing:
+medium, `measurable`, S-0309 scenario A19 part i, runs i1 and i2, for carriers that never left
+play; medium, `unmeasured`, that it is creation order rather than update order, which differ only
+for an object that has left play and entered it again and which no scenario separates.
 
 ## Questions for the project lead
 
