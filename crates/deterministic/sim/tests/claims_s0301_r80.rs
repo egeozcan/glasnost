@@ -112,12 +112,7 @@ fn order_attack(w: &mut World, actor: ObjectId, t: ObjectId) -> bool {
 /// end the beam is first attached. The eraser then keeps its target, as in
 /// play.
 fn lock(w: &mut World, e: ObjectId, v: ObjectId) -> i32 {
-    assert!(glasnost_sim::combat::fire::shot(
-        w,
-        e,
-        0,
-        Target::Object(v)
-    ));
+    assert!(glasnost_sim::combat::fire::shot(w, e, 0, Target::Object(v)));
     for _ in 0..60 {
         let k = w.tick;
         glasnost_sim::tick::step(w);
@@ -174,7 +169,11 @@ fn claim_9_a_cell_target_gets_no_such_answer() {
     let e = attacker(&mut w, "ERASER", 0, at(-6, -6));
     let cell = Target::Cell(w.obj(x).unwrap().pos.cell());
     let before = ask(&w, s, cell);
-    assert_ne!(before, Answer::Illegal, "void unless the cell may be fired at");
+    assert_ne!(
+        before,
+        Answer::Illegal,
+        "void unless the cell may be fired at"
+    );
     lock(&mut w, e, x);
     assert!(temporal::erased(&w, x));
     assert_eq!(ask(&w, s, cell), before, "the cell's answer is unchanged");

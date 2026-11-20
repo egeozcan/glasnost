@@ -210,7 +210,10 @@ fn claim_44_e_a_stop_order_on_a_track_disguises_in_the_turn_it_comes_to_rest() {
     for _ in 0..30 {
         run(&mut w, 1);
         assert_eq!(w.obj(m).unwrap().pos, rest, "it stays at rest");
-        assert!(w.obj(m).unwrap().cloak.disguise.is_some(), "still disguised");
+        assert!(
+            w.obj(m).unwrap().cloak.disguise.is_some(),
+            "still disguised"
+        );
     }
 }
 
