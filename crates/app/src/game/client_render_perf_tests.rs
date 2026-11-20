@@ -85,6 +85,90 @@ fn render_perf_122_the_rings_in_object_order() {
     assert_eq!(ring_inks(&d), want);
 }
 
+/// spec: S-0601 claim 18 and S-0109 Changes for other specs (the S-0601
+/// claim 18 entry: while an object is controlled, our engine shows its ring
+/// again whenever it is on the map, not destroyed, neither cloaking nor
+/// cloaked; the ring shown again changes no game state and takes no draw
+/// from the scenario random stream). The ring's art is a seam, so the
+/// stand-in marker is what returns: it goes while the victim cloaks, is
+/// cloaked or is off the map, and comes back as it uncloaks and when it is
+/// back on the map, each time with no change to the game's state.
+#[test]
+fn claim_18_the_ring_marker_comes_back_with_each_return_of_the_ring() {
+    use glasnost_sim::cloak::CloakState;
+    use glasnost_sim::save::state_hash;
+    let mut c = client((800, 600), 100);
+    start_by_keyboard_with(&mut c, ring_rules());
+    let mcv = own(&c, Kind::Vehicle)[0];
+    let s = session_mut(&mut c);
+    let me = s.play.me();
+    let at = s.play.world().obj(mcv).unwrap().pos;
+    glasnost_sim::econ::shroud::area_reveal(&mut s.play.game.world, me, at, 8);
+    let base = at.cell();
+    let w = &mut s.play.game.world;
+    let unit = testkit::spawn(
+        w,
+        Kind::Vehicle,
+        "MINR",
+        me.0,
+        CellXY::new(base.x + 2, base.y + 1),
+        0,
+    );
+    w.mind.victims.insert(
+        unit,
+        Victim {
+            controller: mcv,
+            original_owner: None,
+            line_until: 0,
+        },
+    );
+    let ring = vec![RING; 8];
+    let check = |c: &mut Client,
+                 change: &dyn Fn(&mut glasnost_sim::world::World),
+                 want: &[[u8; 4]],
+                 what: &str| {
+        let s = session_mut(c);
+        change(&mut s.play.game.world);
+        let before = state_hash(&s.play.game.world);
+        let d = s.draw(DrawList::new());
+        assert_eq!(ring_inks(&d), want, "{what}");
+        assert_eq!(
+            state_hash(&session(c).play.game.world),
+            before,
+            "{what}: the ring's drawing changes no game state"
+        );
+    };
+    let cloak = |state: CloakState| {
+        move |w: &mut glasnost_sim::world::World| w.obj_mut(unit).unwrap().cloak.state = state
+    };
+    let on_map =
+        |on: bool| move |w: &mut glasnost_sim::world::World| w.obj_mut(unit).unwrap().on_map = on;
+    check(&mut c, &|_| {}, &ring, "the controlled unit");
+    check(&mut c, &cloak(CloakState::Cloaking), &[], "while it cloaks");
+    check(
+        &mut c,
+        &cloak(CloakState::Cloaked),
+        &[],
+        "while it is cloaked",
+    );
+    check(
+        &mut c,
+        &cloak(CloakState::Uncloaking),
+        &ring,
+        "as it uncloaks",
+    );
+    check(&mut c, &cloak(CloakState::Uncloaked), &ring, "uncloaked");
+    check(&mut c, &on_map(false), &[], "off the map");
+    check(&mut c, &on_map(true), &ring, "back on the map");
+    check(&mut c, &cloak(CloakState::Cloaked), &[], "cloaked again");
+    check(
+        &mut c,
+        &cloak(CloakState::Uncloaked),
+        &ring,
+        "and back again",
+    );
+}
+
 /// An invented shroud sprite: piece 15 (full cover) dark, every other
 /// piece clear, over the whole canvas.
 fn shroud_sprite() -> crate::mapview::cover::CoverSprites {
