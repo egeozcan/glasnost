@@ -232,17 +232,28 @@ fn script(c: &mut Client, tick: i32, n: &mut u64) -> usize {
 }
 
 /// The verdict on the two sides' state hashes, kept by tick, over ticks 1
-/// to `ticks`: the number of ticks that agree, or why the games count as
-/// apart.
+/// to `ticks`: the number of ticks both sides kept, all agreeing, or why
+/// the games count as apart. A client's update can run ticks before the
+/// lane first samples it (in the start's pump, or when a side waits), and
+/// those are never kept, so only the ticks both kept are compared; a game
+/// that went apart stays apart, so a later kept tick shows it. Our own
+/// test design: at least nine in ten of the ticks must be kept on both
+/// sides.
 fn compare<H: PartialEq>(hashes: &[BTreeMap<i32, H>; 2], ticks: i32) -> Result<usize, String> {
-    let agree = (1..=ticks)
-        .filter(|t| hashes[0].get(t) == hashes[1].get(t))
-        .count();
-    if agree == ticks as usize {
-        Ok(agree)
-    } else {
-        Err(format!("hashes agree on {agree} of {ticks} ticks"))
+    let both: Vec<i32> = (1..=ticks)
+        .filter(|t| hashes[0].contains_key(t) && hashes[1].contains_key(t))
+        .collect();
+    if let Some(t) = both.iter().find(|t| hashes[0][t] != hashes[1][t]) {
+        return Err(format!("the hashes differ at tick {t}"));
     }
+    let floor = ticks as usize * 9 / 10;
+    if both.len() < floor {
+        return Err(format!(
+            "only {} of {ticks} ticks kept on both sides, fewer than {floor}",
+            both.len()
+        ));
+    }
+    Ok(both.len())
 }
 
 #[test]
@@ -352,7 +363,12 @@ fn two_native_clients_play_through_the_relay() {
     let mut frames = [0u32, 0];
     let t = Instant::now();
     let deadline = t + Duration::from_secs(600);
-    while hashes.iter().any(|h| h.len() < ticks as usize) {
+    // Until each side has kept a tick at or past `ticks` (counting kept
+    // ticks would wait for ticks past it in place of those never kept).
+    while hashes
+        .iter()
+        .any(|h| h.last_key_value().is_none_or(|(&t, _)| t < ticks))
+    {
         for (k, c) in [&mut a, &mut b].into_iter().enumerate() {
             c.update(clock.now());
             let w = &c.session.as_ref().unwrap().play.game.world;
