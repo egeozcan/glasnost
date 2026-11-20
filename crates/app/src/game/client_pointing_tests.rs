@@ -294,7 +294,11 @@ fn claim_35_e_a_still_pointer_follows_a_unit_that_moves_away() {
     let (mut c, unit, p) = hovering();
     lift_away(&mut c, unit, p);
     let _ = c.frame();
-    assert_ne!(hovered(&mut c), Some(unit), "the next frame looks it up again");
+    assert_ne!(
+        hovered(&mut c),
+        Some(unit),
+        "the next frame looks it up again"
+    );
 }
 
 /// spec: S-0214 claim 35 (e) (while a left press is held the hover is not looked up again; a
@@ -311,7 +315,11 @@ fn claim_35_e_a_held_left_press_keeps_the_hover() {
     }
     c.pointer_up(Button::Left, p, Modifiers::default());
     let _ = c.frame();
-    assert_ne!(hovered(&mut c), Some(unit), "after the release it is looked up again");
+    assert_ne!(
+        hovered(&mut c),
+        Some(unit),
+        "after the release it is looked up again"
+    );
 }
 
 /// spec: S-0214 claim 35 (e) (while a left press is held the hover is not looked up again: also
@@ -328,7 +336,11 @@ fn claim_35_e_a_left_drag_keeps_the_hover() {
     assert_eq!(hovered(&mut c), Some(unit), "held through the drag");
     c.pointer_up(Button::Left, q, Modifiers::default());
     let _ = c.frame();
-    assert_ne!(hovered(&mut c), Some(unit), "after the release it is looked up again");
+    assert_ne!(
+        hovered(&mut c),
+        Some(unit),
+        "after the release it is looked up again"
+    );
 }
 
 /// spec: S-0214 claim 35 (e) (only a held left press keeps the hover: with the right button held
@@ -339,7 +351,11 @@ fn claim_35_e_a_held_right_press_does_not_keep_the_hover() {
     c.pointer_down(Button::Right, p);
     lift_away(&mut c, unit, p);
     let _ = c.frame();
-    assert_ne!(hovered(&mut c), Some(unit), "looked up again under a right press");
+    assert_ne!(
+        hovered(&mut c),
+        Some(unit),
+        "looked up again under a right press"
+    );
     c.pointer_up(Button::Right, p, Modifiers::default());
 }
 
@@ -355,7 +371,11 @@ fn claim_35_e_the_options_menu_keeps_the_hover() {
     assert_eq!(hovered(&mut c), Some(unit), "held while the menu is open");
     session_mut(&mut c).close_options();
     let _ = c.frame();
-    assert_ne!(hovered(&mut c), Some(unit), "looked up again once it closes");
+    assert_ne!(
+        hovered(&mut c),
+        Some(unit),
+        "looked up again once it closes"
+    );
 }
 
 /// spec: S-0214 claim 35 (e) (while the game takes no player input the hover is not looked up
