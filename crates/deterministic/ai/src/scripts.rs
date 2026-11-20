@@ -44,6 +44,7 @@ use glasnost_sim::world::{AiDifficulty, AiSeat, HouseId, ObjectId, World};
 use serde::{Deserialize, Serialize};
 
 use crate::brain::{self, Brain};
+use crate::siege::{self, Siege};
 
 /// What a script is given of the world: the house's seat. See the module's
 /// contract.
@@ -166,12 +167,20 @@ pub struct Entry {
 
 /// The scripts compiled in, in the order the setup screen offers them.
 // nocite: design: own AI (#449): the registry of our own scripts
-pub const REGISTRY: &[Entry] = &[Entry {
-    id: AiSeat::DEFAULT_SCRIPT,
-    key: "default",
-    name: "Default",
-    about: "the brain of glasnost_ai::brain: a build plan by role, harvesters kept, waves sent at the nearest seen enemy, the special abilities",
-}];
+pub const REGISTRY: &[Entry] = &[
+    Entry {
+        id: AiSeat::DEFAULT_SCRIPT,
+        key: "default",
+        name: "Default",
+        about: "the brain of glasnost_ai::brain: a build plan by role, harvesters kept, waves sent at the nearest seen enemy, the special abilities",
+    },
+    Entry {
+        id: siege::ID,
+        key: "siege",
+        name: "Siege",
+        about: "glasnost_ai::siege: the default's base without superweapons, one army gathered and sent as a strike at the enemy's economy and base when it has the edge, called home when outmatched, then a hunt for the last units",
+    },
+];
 
 /// The registry entry of id `id`.
 pub fn entry(id: u8) -> Option<&'static Entry> {
@@ -194,9 +203,14 @@ pub fn known(seat: AiSeat) -> AiSeat {
 
 /// A script's state, by registry entry (the enum dispatch of [`AiScript`]).
 #[derive(Clone, Debug, Serialize, Deserialize)]
+// The default's brain stays unboxed so that its seats are laid out and run
+// as before; the siege's state, which holds a brain and more, is boxed.
+#[allow(clippy::large_enum_variant)]
 pub enum ScriptState {
     /// Script 1, the default: [`Brain`].
     Default(Brain),
+    /// Script 2, the siege: [`Siege`].
+    Siege(Box<Siege>),
 }
 
 impl ScriptState {
@@ -206,18 +220,22 @@ impl ScriptState {
         // A new script adds its id's arm here; every id the build does not
         // know, and the default's, is the default script.
         debug_assert!(entry(known(seat).script).is_some());
-        Self::Default(Brain::with_plan(
-            w,
-            map,
-            house,
-            brain::plan_for(seat.difficulty),
-        ))
+        match known(seat).script {
+            siege::ID => Self::Siege(Box::new(Siege::start(w, map, house, seat.difficulty))),
+            _ => Self::Default(Brain::with_plan(
+                w,
+                map,
+                house,
+                brain::plan_for(seat.difficulty),
+            )),
+        }
     }
 
     /// The script's registry id.
     pub fn id(&self) -> u8 {
         match self {
             Self::Default(_) => AiSeat::DEFAULT_SCRIPT,
+            Self::Siege(_) => siege::ID,
         }
     }
 
@@ -225,6 +243,15 @@ impl ScriptState {
     pub fn brain(&self) -> Option<&Brain> {
         match self {
             Self::Default(b) => Some(b),
+            Self::Siege(_) => None,
+        }
+    }
+
+    /// The siege script's state, when this is it.
+    pub fn siege(&self) -> Option<&Siege> {
+        match self {
+            Self::Siege(s) => Some(s),
+            Self::Default(_) => None,
         }
     }
 }
@@ -233,6 +260,7 @@ impl AiScript for ScriptState {
     fn house(&self) -> HouseId {
         match self {
             Self::Default(b) => AiScript::house(b),
+            Self::Siege(s) => AiScript::house(&**s),
         }
     }
 
@@ -246,6 +274,7 @@ impl AiScript for ScriptState {
     ) -> Vec<Order> {
         match self {
             Self::Default(b) => AiScript::think(b, view, schedule, level, own, p),
+            Self::Siege(s) => AiScript::think(&mut **s, view, schedule, level, own, p),
         }
     }
 }

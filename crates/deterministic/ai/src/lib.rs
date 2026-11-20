@@ -64,6 +64,7 @@ pub mod psychic;
 pub mod radiation;
 pub mod scripted;
 pub mod scripts;
+pub mod siege;
 pub mod skirmish;
 pub mod special;
 pub mod tech_buildings;
