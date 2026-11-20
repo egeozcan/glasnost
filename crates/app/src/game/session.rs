@@ -169,6 +169,11 @@ pub struct Session {
     /// needs them, and outside a frame.
     // design: render (#435) (made once per drawn frame, as the picks are)
     pick_candidates: Option<PickCandidates>,
+    /// The hover: the cell and object the last drawn frame found under the
+    /// pointer for the cursor and the hover mark (S-0214 claim 35 (e)), kept
+    /// while it is not looked up again; `None` while the pointer is off the
+    /// battlefield view.
+    hover: Option<Picked>,
     /// The tips' rest and the tip that shows: the name tip (S-0111 claims
     /// 20 to 26) or a sidebar tip (S-0411 claims 20 to 22).
     name_tip: name_tip::NameTip,
@@ -584,6 +589,7 @@ impl Session {
             pointer: None,
             picks: None,
             pick_candidates: None,
+            hover: None,
             name_tip: name_tip::NameTip::default(),
             focus_tip: None,
             // spec: S-0111 claim 20 and Import mapping (the tooltip option is on unless the player's settings turn it off)
@@ -1441,6 +1447,40 @@ impl Session {
             v.push((key, hit));
         }
         hit
+    }
+
+    /// The hover of this drawn frame: the cell and object under the pointer
+    /// for the cursor and the hover mark (S-0214 claim 35 (e)), looked up
+    /// again unless [`Session::hover_held`] keeps the last one; `None` with
+    /// the pointer off the battlefield view.
+    fn frame_hover(&mut self) -> Option<Picked> {
+        let Some(p) = self.pointer.filter(|&p| self.map_rect().contains(p)) else {
+            // spec: S-0214 claim 35 (e) (the cursor's object is found while the pointer is over the battlefield view)
+            self.hover = None;
+            return None;
+        };
+        // spec: S-0214 claim 35 (e) (while a left press is held, and while the game takes no player input, the hover is not looked up again)
+        // design: render (Q-3321) (the whole last lookup is kept, the cell included; a hold that begins with no hover makes one lookup and keeps it)
+        if self.hover_held()
+            && let Some(h) = self.hover
+        {
+            return Some(h);
+        }
+        // spec: S-0214 claim 35 (e) (otherwise found again once for every drawn frame, whether the pointer has moved or not)
+        let h = self.under(p);
+        self.hover = Some(h);
+        Some(h)
+    }
+
+    /// Whether the hover is not looked up again now (S-0214 claim 35 (e)):
+    /// a left press is held, or the game takes no player input.
+    fn hover_held(&self) -> bool {
+        // spec: S-0214 claim 35 (e) (a held left press; a right press is not named, so it keeps nothing)
+        let left = self.press.is_some_and(|(_, b)| b == Button::Left);
+        // spec: S-0201 Terms (*cycle*: a cycle takes the player's input; *stand-still*: no cycles in a single-player game while the options menu is open, claim 8, or the window lacks the focus, claim 9) and claims 15 and 16 (in a network game the machine takes no input for the game while its menu is open or its window lacks the focus)
+        // design: render (Q-3321) (an order block's cycles are not frozen, so they take input and the hover is looked up; our client has no frozen cycles, S-0201 claim 10)
+        let no_input = self.paused || !self.focused;
+        left || no_input
     }
 
     /// [`Session::under`] made afresh.
@@ -2795,6 +2835,12 @@ impl Session {
     /// is shrouded; `None` keeps the system pointer.
     pub(crate) fn offer(&mut self, p: Point) -> Option<(Offer, bool)> {
         let (cell, object) = self.under(p);
+        self.offer_on(cell, object)
+    }
+
+    /// [`Session::offer`] for `object` (none for no object) over `cell`,
+    /// the cell under the cursor.
+    fn offer_on(&mut self, cell: CellXY, object: Option<ObjectId>) -> Option<(Offer, bool)> {
         let on = self.play.target(object, cell);
         let w = &self.play.game.world;
         let Some(local) = self.play.local else {
@@ -2929,12 +2975,13 @@ impl Session {
             self.animator.other(Some((frames, hot)));
             (frames, frames.first, hot)
         } else {
-            let Some(p) = self.pointer.filter(|&p| self.map_rect().contains(p)) else {
+            // spec: S-0214 claim 35 (e) (the cursor shows the frame's hover)
+            let Some((cell, object)) = self.frame_hover() else {
                 // spec: S-0214 claim 22 (the system pointer replaces the cursor; #85)
                 self.animator.other(None);
                 return;
             };
-            let Some((offer, shrouded)) = self.offer(p) else {
+            let Some((offer, shrouded)) = self.offer_on(cell, object) else {
                 // spec: S-0214 claim 22 (the system pointer replaces the cursor; #85)
                 self.animator.other(None);
                 return;
@@ -2978,10 +3025,10 @@ impl Session {
     /// The selection and hover marks of the live drawing (S-0111 claim 3),
     /// updated before a frame is drawn.
     pub fn update_marks(&mut self) {
+        // spec: S-0214 claim 35 (e) and S-0111 Terms (*hovered* and the pointer object are found as for clicks: the frame's hover)
         let hovered = self
-            .pointer
-            .filter(|&p| self.map_rect().contains(p))
-            .and_then(|p| self.under(p).1)
+            .frame_hover()
+            .and_then(|h| h.1)
             // spec: S-0516 claim 26 (a fully cloaked object the viewer neither owns nor senses, or a building at fade level 15 it does not sense, cannot be hovered; #66)
             .filter(|&id| {
                 glasnost_sim::cloak::view::clickable(&self.play.game.world, id, self.play.eye(id))
