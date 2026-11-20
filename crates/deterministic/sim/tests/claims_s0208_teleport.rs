@@ -211,7 +211,7 @@ fn landing(w: &World, id: ObjectId) -> Option<Pos> {
         .and_then(|t| t.landing)
 }
 
-// spec: S-0208 claim 19 (enter with a vehicle in C as destination: occupants ignored, the standing position of P's class without a draw; the entry outcome still decides)
+// spec: S-0208 r82 claim 19 (Q-3318: enter, one of capture, enter, eaten and patrol, with a vehicle in C as destination: occupants ignored, the standing position of P's class without a draw; the entry outcome still decides)
 #[test]
 fn claim_19_enter_destination_ignores_occupants() {
     use glasnost_sim::rules::Behaviour;

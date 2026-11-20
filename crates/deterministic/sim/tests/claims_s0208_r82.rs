@@ -337,6 +337,114 @@ fn w22_e_an_engineer_lands_in_the_cell_of_the_centre() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Claim 19 (Q-3318): the occupant-ignoring behaviours.
+
+/// Gives infantry unit `u` destination `x` with `beh` current and fixes its
+/// landing point at once (S-0208 claim 19). Returns the landing point and
+/// whether the choice took exactly one ranged draw over 0 to 3 (true), took
+/// none (false); any other count fails. With one draw, also returns the
+/// side position table O's centre row gives for it.
+fn landing_with(w: &mut World, u: ObjectId, beh: Behaviour, x: ObjectId) -> (Pos, Option<u8>) {
+    use glasnost_sim::cells::position;
+    let t = w.tick;
+    let o = w.obj_mut(u).unwrap();
+    o.beh.force(beh, t, true);
+    o.dest = Some(Target::Object(x));
+    let before = w.rng.clone();
+    let mut probe = before.clone();
+    let half = w.rules().quirks.ranged_draw_half_span;
+    let k = probe.ranged(0, 3, half);
+    glasnost_sim::teleport::take_destination(w, u);
+    let l = w
+        .obj(u)
+        .and_then(|o| o.teleport.as_ref())
+        .and_then(|s| s.landing)
+        .expect("a landing point");
+    if w.rng == before {
+        return (l, None);
+    }
+    assert_eq!(w.rng, probe, "one ranged draw");
+    // spec: S-0208 table O (the centre row: R0 and R1 right first, R2 left, R3 bottom)
+    let first = match k {
+        0 | 1 => position::RIGHT,
+        2 => position::LEFT,
+        _ => position::BOTTOM,
+    };
+    (l, Some(first))
+}
+
+fn centre_position() -> (i32, i32) {
+    glasnost_sim::walk::standing_point(glasnost_sim::cells::position::CENTRE)
+}
+
+/// A world with an infantry unit of type `name` at (0, 6) and, at (0, 0),
+/// building `b` of Beta, or an Alpha BUGGY when `b` is None.
+fn scene(name: &str, b: Option<&str>) -> (World, ObjectId, ObjectId) {
+    let mut w = game();
+    let x = match b {
+        Some(b) => place_b(&mut w, b, 1),
+        None => put(&mut w, Kind::Vehicle, "BUGGY", 0, 0, 0),
+    };
+    let u = put(&mut w, Kind::Infantry, name, 0, 0, 6);
+    testkit::run(&mut w, 2);
+    (w, u, x)
+}
+
+// spec: S-0208 r82 claim 19 (Q-3318, scenario W22 part e, the saboteur): sabotage is not among the occupant-ignoring behaviours, so a saboteur landing on the building it is to sabotage respects occupants; S-0209 row WP3 clears the cell of claim 27's point for its mission target, and claim 3's centre row gives a side position of that cell with its draw
+#[test]
+fn claim_19_a_saboteur_respects_occupants() {
+    let (mut w, u, b) = scene("WARPER", Some("CAPB"));
+    let (l, row) = landing_with(&mut w, u, Behaviour::Sabotage, b);
+    assert_eq!(l.cell(), expected(3, 2), "the cell of the centre");
+    let first = row.expect("claim 3's draw");
+    assert_eq!(
+        within(l),
+        glasnost_sim::walk::standing_point(first),
+        "the centre row's first side position"
+    );
+}
+
+// spec: S-0208 r82 claim 19 (Q-3318: sabotage respects occupants also with a vehicle in C as destination; the vehicle-present cell refuses the position choice, claim 3's first row, and the nearby-cell search's second choice takes the centre row's draw)
+#[test]
+fn claim_19_a_saboteur_respects_a_vehicles_cell() {
+    let (mut w, u, v) = scene("WARPER", None);
+    let (l, row) = landing_with(&mut w, u, Behaviour::Sabotage, v);
+    assert_ne!(l.cell(), at(0, 0), "refused in the vehicle's cell");
+    assert!(ring(l.cell(), at(0, 0)) == 1, "a neighbour, at {:?}", l.cell());
+    assert!(row.is_some(), "the second choice draws");
+}
+
+// spec: S-0208 r82 claim 19 (Q-3318: patrol is among the occupant-ignoring behaviours, with the same destination test, the building occupying C; an engineer type's patrol has its destination as mission target, S-0208 claim 26, so row WP3 gives clear; claim 4's choice: the centre position, no draw)
+#[test]
+fn claim_19_patrol_ignores_occupants_for_a_building() {
+    let (mut w, u, b) = scene("ENGT", Some("CAPB"));
+    let (l, row) = landing_with(&mut w, u, Behaviour::Patrol, b);
+    assert_eq!(l.cell(), expected(3, 2));
+    assert_eq!(row, None, "no draw");
+    assert_eq!(within(l), centre_position());
+}
+
+// spec: S-0208 r82 claim 19 (Q-3318: patrol with a vehicle in C as destination ignores occupants; for an engineer type row WP3 clears the vehicle's cell, and it lands at the centre position there without a draw)
+#[test]
+fn claim_19_patrol_ignores_occupants_for_a_vehicle() {
+    let (mut w, u, v) = scene("ENGT", None);
+    let (l, row) = landing_with(&mut w, u, Behaviour::Patrol, v);
+    assert_eq!(l.cell(), at(0, 0));
+    assert_eq!(row, None, "no draw");
+    assert_eq!(within(l), centre_position());
+}
+
+// spec: S-0208 r82 claim 19 (Q-3318: the destination test is the same for every type; a patrolling unit without the engineer flag has no mission target, S-0208 claim 26, so the vehicle's cell refuses the entry, and the nearby-cell search's second choice keeps the occupant-ignoring condition: the centre position of a neighbour, no draw)
+#[test]
+fn claim_19_patrol_ignores_occupants_in_the_second_choice() {
+    let (mut w, u, v) = scene("WARPER", None);
+    let (l, row) = landing_with(&mut w, u, Behaviour::Patrol, v);
+    assert_eq!(ring(l.cell(), at(0, 0)), 1, "a neighbour, at {:?}", l.cell());
+    assert_eq!(row, None, "no draw");
+    assert_eq!(within(l), centre_position());
+}
+
 // spec: S-0208 r82 claim 27 (Q-3317, scenario W22 part f): a building with the unit-reload flag and none of the helipad, unit-repair and vehicle-bunker flags gives its centre, not its docking place: an infantry unit and a vehicle's second order land in the centre's cell, not the docking place's
 #[test]
 fn w22_f_the_unit_reload_flag_alone_gives_the_centre() {
