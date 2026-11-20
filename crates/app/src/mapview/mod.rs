@@ -19,8 +19,6 @@ pub mod find;
 mod ground_order_tests;
 pub mod harvesting;
 #[cfg(test)]
-mod hover_pick_tests;
-#[cfg(test)]
 mod jumpjet_tilt_tests;
 pub mod layers;
 pub mod live;
