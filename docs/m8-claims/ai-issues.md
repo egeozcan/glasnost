@@ -368,7 +368,7 @@ seeds move: infantry mutated 23 → 22, berserk weapon orders 31 → 25, hostile
 **Arena**: every output file as on the base.
 
 **Quick lane** (seeds 7 to 14, maps 0, 2 and 8, sides 0,2 and 1,2, 48 games): every 0,2 game
-changes length, 3 of the 1,2 games change at all, and 7 winners change. Allied 11 (base 10), Soviet
+changes length, 4 of the 1,2 games change at all, and 7 winners change. Allied 11 (base 10), Soviet
 11 (11), Yuri 25 (25), not over at the cap 1 (2). Each was traced to its first differing tick
 (`GLASNOST_AI_HASH`, then `GLASNOST_AI_OBJS`):
 
@@ -382,9 +382,11 @@ changes length, 3 of the 1,2 games change at all, and 7 winners change. Allied 1
 | 1,2 map 0 seed 12 | not over → Soviet | 41836 | house 0's jumpjet 8287, hovering in attack on 7472 with no shot since 40157, is sent west to cell (65, 88) (#445) |
 | 1,2 map 8 seed 13 | Soviet → not over | 50116 | house 0's jumpjet 13069, in attack on 14678 with no shot since 47225, is sent to cell (40, 61) (#445) |
 
-In the five 0,2 games the after's type list counts one army type fewer (90 for 91), and the armed
-infantry type it no longer counts is the spy (#454: a spy is no longer an army unit), so the
-script's army pick lands on another infantry type where the base picked the spy.
+In the five 0,2 games the after's type list counts one army type fewer (90 for 91): the spy, by
+elimination, since the only role the batch changes is the spy's (#454: a spy is no longer an army
+unit). The script's army pick then lands on another infantry type, which suggests the base's pick
+there was the spy (type 16 is not otherwise identified). The after's houses still field spies: the
+Allied house's infiltration orders over the 24 0,2 games are 88 (base 65).
 
 **Bench** (map 9, 8 houses, seed 7, 9 000 ticks), base then after on a shared machine:
 `tick::step` 2328.5 / 1981.7 µs, AI time a tick 1490.6 / 1163.7 µs, AI share 39.0 / 37.0 %; every
