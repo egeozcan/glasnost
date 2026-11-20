@@ -423,3 +423,22 @@ by more). The rule stopped development after dev-7, dev-8 and dev-9.
 | fair play | the default's shroud filter (`Script::seen_enemies`), the house's explored and seen cells, the map's start cells; a person's rules and money at every level (S-0302 claim 3, S-0412 claim 5) | the siege reads nothing else and gives move, attack-move and build orders on its think ticks | as above |
 | the watch tool | — | `glasnost-headless siege-watch map= seed= a= b= [start= side= ticks= every=]`: one tournament game with a line per house every `every` ticks (credits, buildings, harvesters, army by type, cost got by kind, army lost by tenth of the way to the enemy and by killer's kind, lines, the siege's strikes, recalls and remembered worth) | — |
 | the setup screen | the screen lists `REGISTRY` | none here (crates/ui is outside this batch); its test `a_computer_row_chooses_its_script_and_difficulty` expects a single script and fails with two: the click on the Script cell now gives id 2, a second click 1 | to be updated by a batch that may touch crates/ui |
+
+**Certifying round cert-1** (HEAD 9bb84ad, 720 games, none failed): the goal is not met. Final Elo:
+`siege:hard` 1642.2, `siege:normal` 1605.7, `default:easy` 1602.9, `siege:easy` 1445.3,
+`default:hard` 1368.4, `default:normal` 1335.5. `siege:hard` won 152, lost 37 and drew 51 of 240
+games: against `default:easy` 25-5-18, `default:normal` 41-2-5, `default:hard` 34-5-9,
+`siege:easy` 30-8-10, `siege:normal` 22-17-9. By country index 0 76-26-18, 1 76-11-33. Of its 152
+wins 106 were victories and 46 worth at the cap. 2000 needs about 98 percent against the defaults
+and 95 against the siege's own lower levels; the draws (most on map 2, where equal armies stall)
+and the small lead over `siege:normal` keep it far short. The Elo is order-dependent: in this
+round `default:easy` rates above `default:hard`.
+
+**Lanes**, base d9f2750 against this branch, none moved: the quick lane (seeds 7 to 14, sides 0,2
+and 1,2, maps 0, 2 and 8; 48 games, every result and tick count the same), the M6c, M7a and M7b
+sweeps (seeds 1 to 16), `arena --record all` (every record file the same), the sim gate with
+ignored tests (17 passed), and `ai-bench game=install map=9 players=8 seed=7 ticks=9000` (the same
+hashes). The siege on both seats, which `ai-bench` cannot set (its install setup is built in
+crates/app), was played in the skirmish lane's AI mode with `GLASNOST_AI_SEATS=siege:hard,siege:hard`
+(map 0) and `siege:normal,siege:easy` (map 2): the replay reproduces the end and the mid-game save,
+loaded and continued, matches.
