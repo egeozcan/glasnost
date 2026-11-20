@@ -1910,6 +1910,59 @@ fn fires_a_paradrop_whose_troops_join_the_army() {
     );
 }
 
+// design: own AI (#449, B11): at easy the default script fires no superweapon, its country's own included, as it builds none (B10): a beginner does not use the powers. Normal and hard fire a ready one, as above
+#[test]
+fn easy_fires_no_superweapon() {
+    use glasnost_sim::world::{AiDifficulty, AiSeat};
+    let mut fired = Vec::new();
+    for level in AiDifficulty::ALL {
+        let mut setup = fixture::setup(5);
+        setup.ai = vec![
+            AiSeat {
+                script: AiSeat::DEFAULT_SCRIPT,
+                difficulty: level,
+            },
+            AiSeat::DEFAULT,
+        ];
+        let mut g = Game::new(
+            paradrop_rules(),
+            &fixture::map(),
+            "synthetic-paradrop",
+            fixture::catalogue(),
+            setup,
+        )
+        .expect("the synthetic skirmish loads");
+        assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()));
+        let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+        let free = |w: &World, c: glasnost_map::CellXY| {
+            w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c)
+        };
+        let airb_at = (2..12)
+            .map(|d| glasnost_map::CellXY::new(yard.x - d, yard.y))
+            .find(|&c| free(&g.world, c))
+            .expect("a free cell for the paradrop building");
+        testkit::spawn(&mut g.world, Kind::Building, "AIRB", 0, airb_at, 0);
+        let plane = |w: &World| {
+            w.objects.values().any(|o| {
+                o.kind == Kind::Aircraft
+                    && o.owner == Some(HouseId(0))
+                    && w.rules().aircraft[o.type_index as usize].name == "PDPLANE"
+            })
+        };
+        // nocite: test data of our own (the wait of the paradrop test above)
+        let limit = g.world.tick + 1000;
+        fired.push((level, step_until(&mut g, limit, plane)));
+    }
+    assert_eq!(
+        fired,
+        vec![
+            (AiDifficulty::Easy, false),
+            (AiDifficulty::Normal, true),
+            (AiDifficulty::Hard, true),
+        ]
+    );
+}
+
 /// House 0's first barracks once it stands, after `limit` ticks at most.
 fn barracks(g: &mut Game, limit: i32) -> ObjectId {
     assert!(

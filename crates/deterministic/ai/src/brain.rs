@@ -365,6 +365,10 @@ impl Brain {
             Some(own) => self.script.begin_think_with_own(own),
             None => self.script.begin_think(),
         }
+        // design: own AI (#449, B11): at easy the house builds no refinery by a new field once its home field runs dry, so its one planned harvester is its income: in the B11 level round easy ended with as many refineries and harvesters as normal (each refinery brings one), and normal could not out-earn it
+        if level == AiDifficulty::Easy {
+            self.script.stay_on_home_field();
+        }
         mark(p, "ai:script");
         let mut out = if thinks {
             self.script.think_with(w, p)
@@ -451,7 +455,10 @@ impl Brain {
             }
         }
         mark(p, "ai:fire_superweapons");
-        self.fire_superweapons(w, &mut out);
+        // design: own AI (#449, B11): at easy the house fires no superweapon, its country's own included, as it builds none (B10): a beginner does not use the powers. In the B11 level round easy on country index 0 beat normal on country index 1 by kill in 10 of 24 games, its country's paradrop at every level
+        if level != AiDifficulty::Easy {
+            self.fire_superweapons(w, &mut out);
+        }
         mark(p, "ai:rebuild_yard");
         self.rebuild_yard(w, &mut out);
         mark(p, "ai:find_deploy_spot");
