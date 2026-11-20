@@ -1533,7 +1533,11 @@ fn claim_16_back_in_after_release_both_positions() {
     for survives in [true, false] {
         for ignores in [true, false] {
             let back = released_comes_back(survives, ignores, 1);
-            assert_eq!(back, survives && !ignores, "survives {survives}, ignores {ignores}");
+            assert_eq!(
+                back,
+                survives && !ignores,
+                "survives {survives}, ignores {ignores}"
+            );
         }
     }
 }

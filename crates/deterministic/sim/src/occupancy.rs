@@ -298,7 +298,9 @@ pub fn mission_target(w: &World, mover: ObjectId) -> Option<Target> {
         // spec: S-0208 claim 26 (r75: guard, area guard and patrolling have the walker's destination as their mission target only for a type with the engineer flag, Terms *Engineer type* and Import mapping Engineer, absent no; no other type flag gives it) and S-0209 claim 4 Open questions (engineer-like unit)
         Some(Behaviour::Guard | Behaviour::AreaGuard | Behaviour::Patrol)
             if o.kind == Kind::Infantry
-                && w.rules().unit(o.kind, o.type_index).is_some_and(|u| u.engineer) =>
+                && w.rules()
+                    .unit(o.kind, o.type_index)
+                    .is_some_and(|u| u.engineer) =>
         {
             o.dest
         }

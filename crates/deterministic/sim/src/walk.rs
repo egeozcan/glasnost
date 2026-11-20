@@ -476,9 +476,8 @@ fn standing(w: &mut World, id: ObjectId) {
 /// the destination by S-0212 claim 23's third row
 /// ([`locomotor_destination_lost`]), and no assignment has come since.
 pub fn no_locomotor_destination(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| {
-        o.dest.is_some() && o.walk.as_ref().is_some_and(|s| s.lost == o.dest)
-    })
+    w.obj(id)
+        .is_some_and(|o| o.dest.is_some() && o.walk.as_ref().is_some_and(|s| s.lost == o.dest))
 }
 
 /// Whether walker `id` given a new destination now keeps its stored path

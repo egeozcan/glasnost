@@ -3119,7 +3119,8 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>) 
                 goal = c;
             }
         }
-        let walk = o.walk.is_some() && crate::lift::current_locomotor(w, id) == Some(Locomotor::Walk);
+        let walk =
+            o.walk.is_some() && crate::lift::current_locomotor(w, id) == Some(Locomotor::Walk);
         let searched = search_goal(w, id);
         if walk && searched != Some(goal) {
             // spec: S-0208 claim 26 (r75, Q-3264 and Q-3303: the substitute cell is assigned as the walker's destination, replacing a cell, an object, which it then no longer holds as its destination, or a kept locomotor destination, which the assignment ends; an absorbing building it is to enter included: the contact and a queued or current enter stay) and S-0212 claim 24

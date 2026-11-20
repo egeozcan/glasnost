@@ -165,7 +165,11 @@ fn r75_a_kept_cell_destination_is_not_searched_when_r_runs_out() {
     assert_eq!(dest(&w, g), Some(Target::Cell(near)), "kept (row 3)");
     assert!(!in_progress(&w, g), "its movement in progress ends");
     assert!(!fraction(&w, g), "speed fraction 0 (S-0310 Terms)");
-    assert_eq!(next_search(&mut w, g, 150), None, "no search after R (c = {c})");
+    assert_eq!(
+        next_search(&mut w, g, 150),
+        None,
+        "no search after R (c = {c})"
+    );
     assert_eq!(dest(&w, g), Some(Target::Cell(near)), "still kept");
 }
 
@@ -177,7 +181,11 @@ fn r75_a_failed_search_near_a_cell_destination_clears_it() {
     give(&mut w, g, Some(Target::Cell(near)));
     let (_, r) = next_search(&mut w, g, 5).expect("a search");
     assert_eq!(r, Search::SearchFailed, "void unless it passed the gate");
-    assert_eq!(dest(&w, g), None, "D (256) is less than the close-enough distance");
+    assert_eq!(
+        dest(&w, g),
+        None,
+        "D (256) is less than the close-enough distance"
+    );
     assert!(!in_progress(&w, g));
 }
 
@@ -196,7 +204,10 @@ fn r75_w20_a_walker_in_move_searches_every_tick() {
         assert_eq!(dest(&w, g), Some(Target::Cell(near)), "kept, tick {k}");
         assert_eq!(w.obj(g).unwrap().pos, home, "it stays, tick {k}");
         assert!(in_progress(&w, g), "movement in progress, tick {k}");
-        assert!(fraction(&w, g), "speed fraction 1 at the tick's end, tick {k}");
+        assert!(
+            fraction(&w, g),
+            "speed fraction 1 at the tick's end, tick {k}"
+        );
         // spec: S-0310 claim 8 (an infantry unit with a speed fraction of 1 is moving) and Terms (r75 Changes)
         assert_eq!(
             check::check(&w, g, Some(Target::Object(e)), 0, false),
@@ -226,7 +237,11 @@ fn r75_w20_a_own_cell_destination_in_move_is_kept_and_searched() {
     move_to(&mut w, g, Target::Cell(home.cell()));
     let (c, _) = next_search(&mut w, g, 5).expect("the walker searches its own cell");
     for k in 1..=10 {
-        assert_eq!(dest(&w, g), Some(Target::Cell(home.cell())), "kept, tick {k}");
+        assert_eq!(
+            dest(&w, g),
+            Some(Target::Cell(home.cell())),
+            "kept, tick {k}"
+        );
         assert_eq!(w.obj(g).unwrap().pos, home, "it stays, tick {k}");
         assert!(fraction(&w, g), "speed fraction 1, tick {k}");
         tick::step(&mut w);
@@ -313,8 +328,14 @@ fn loop_asks_get_up(fraidycat: bool) -> bool {
 // spec: S-0208 claim 25 (r75, After a failed search: each end-of-update assignment in move gives the destination the walker already holds, so a prone walker that S-0213 claim 21 makes eligible asks for get-up, S-0107 claim 15; a fraidycat type is not eligible, so nothing asks for it)
 #[test]
 fn r75_a_prone_walker_in_that_loop_asks_for_get_up() {
-    assert!(loop_asks_get_up(false), "the repeated assignment asks for get-up");
-    assert!(!loop_asks_get_up(true), "control: a fraidycat type, nothing else asks");
+    assert!(
+        loop_asks_get_up(false),
+        "the repeated assignment asks for get-up"
+    );
+    assert!(
+        !loop_asks_get_up(true),
+        "control: a fraidycat type, nothing else asks"
+    );
 }
 
 // spec: S-0208 claim 25 (r75, Every kind of destination: a kept locomotor destination with no destination, S-0507 claim 6a; a failed fresh search past the gate that does not clear leaves no locomotor destination, so no search follows)
@@ -371,7 +392,11 @@ fn r75_claim_26_a_substitute_replaces_an_object_destination() {
             ended = true;
             break;
         }
-        assert_eq!(dest(&w, g), Some(Target::Cell(c)), "it holds the substitute");
+        assert_eq!(
+            dest(&w, g),
+            Some(Target::Cell(c)),
+            "it holds the substitute"
+        );
     }
     assert!(ended, "its walk ends (claim 16)");
     assert_eq!(w.obj(g).unwrap().pos.cell(), c, "in the substitute cell");
@@ -416,7 +441,11 @@ fn r75_claim_26_guard_gives_a_mission_target_only_to_an_engineer_type() {
         assert_eq!(occupancy::mission_target(&w, g), Some(d), "engineer, {b:?}");
         let (mut w, g, _) = mission(false, true);
         behaviours(&mut w, g, Some(b), None);
-        assert_eq!(occupancy::mission_target(&w, g), None, "not an engineer, {b:?}");
+        assert_eq!(
+            occupancy::mission_target(&w, g),
+            None,
+            "not an engineer, {b:?}"
+        );
     }
 }
 
@@ -427,7 +456,11 @@ fn r75_claim_26_a_queued_enter_behind_guard_gives_no_mission_target() {
     behaviours(&mut w, g, Some(Behaviour::Guard), Some(Behaviour::Enter));
     assert_eq!(occupancy::mission_target(&w, g), None, "switch on");
     behaviours(&mut w, g, None, Some(Behaviour::Enter));
-    assert_eq!(occupancy::mission_target(&w, g), Some(d), "no current behaviour");
+    assert_eq!(
+        occupancy::mission_target(&w, g),
+        Some(d),
+        "no current behaviour"
+    );
 }
 
 // spec: S-0208 Edge cases (r75, quirks.walker_search_ignores_queued_enter off: while the walker's queued behaviour is enter and its current behaviour has no mission target, enter's mission target is the one S-0209 reads; a current behaviour with a mission target keeps its own)
@@ -437,10 +470,18 @@ fn r75_switch_off_a_queued_enter_gives_its_mission_target() {
     behaviours(&mut w, g, Some(Behaviour::Guard), Some(Behaviour::Enter));
     assert_eq!(occupancy::mission_target(&w, g), Some(d), "switch off");
     behaviours(&mut w, g, Some(Behaviour::Guard), Some(Behaviour::Move));
-    assert_eq!(occupancy::mission_target(&w, g), None, "only a queued enter");
+    assert_eq!(
+        occupancy::mission_target(&w, g),
+        None,
+        "only a queued enter"
+    );
     let t = Target::Object(g);
     w.obj_mut(g).unwrap().dest = None;
     w.obj_mut(g).unwrap().target = Some(t);
     behaviours(&mut w, g, Some(Behaviour::Guard), Some(Behaviour::Enter));
-    assert_eq!(occupancy::mission_target(&w, g), Some(t), "enter's target when it has no destination");
+    assert_eq!(
+        occupancy::mission_target(&w, g),
+        Some(t),
+        "enter's target when it has no destination"
+    );
 }

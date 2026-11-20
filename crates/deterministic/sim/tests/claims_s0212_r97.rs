@@ -173,11 +173,19 @@ fn claim_21_walker_kept_destination_waits_for_r() {
     let (t, near) = walker_kept(&mut w, g);
     let o = w.obj(g).unwrap();
     assert_eq!(o.dest, Some(Target::Cell(near)), "kept within 1 cell");
-    assert_ne!(o.beh.seen(), Some(Behaviour::Move), "void unless not in move");
+    assert_ne!(
+        o.beh.seen(),
+        Some(Behaviour::Move),
+        "void unless not in move"
+    );
     assert_eq!(o.path.retry_at, t + 90);
     assert!(path::delay_runs(&w, g));
     assert_eq!(next_search(&mut w, g, 120), None, "no search after R");
-    assert_eq!(w.obj(g).unwrap().dest, Some(Target::Cell(near)), "still kept");
+    assert_eq!(
+        w.obj(g).unwrap().dest,
+        Some(Target::Cell(near)),
+        "still kept"
+    );
 }
 
 // spec: S-0212 claim 21 (r97: a destination changed to a different one ends the running delay of a walker that kept its destination; the first search for it is not held back)
@@ -414,7 +422,10 @@ fn p25_e_real(to: impl Fn(CellXY) -> CellXY) -> RealRun {
 /// the destination (claim 23 row 3); at the end of the order's tick no
 /// delay runs.
 fn p25_e_real_expect(run: &str, got: RealRun) {
-    assert!(!got.runs_at_c, "{run}: the timer has run out at the end of c");
+    assert!(
+        !got.runs_at_c,
+        "{run}: the timer has run out at the end of c"
+    );
     assert!(!got.at_order.0, "{run}: no delay at the order's tick");
     assert!(got.ticks.len() >= 90, "{run}: ticks read");
     for (k, results) in &got.ticks {
