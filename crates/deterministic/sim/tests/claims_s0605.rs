@@ -1524,25 +1524,51 @@ fn claim_16_waiting_in_line_is_already_bound() {
     assert_eq!(absorb::waiting_for(&w, n), Some(b));
 }
 
-// spec: S-0605 claim 16 and Edge cases (quirks.enter_nearest_survives_absorption on: entry keeps the instruction and a neutral passenger let out walks back in at its next guard processing; off: entry clears it and the passenger stays out)
+// spec: S-0605 claim 16 and Edge cases (quirks.enter_nearest_survives_absorption on: entry keeps the instruction; off: entry clears it and the passenger stays out)
 // spec: S-0215 claim 24 (the guard processing of an instruction holder searches again)
+// spec: S-0208 claim 26 and Edge cases (r75, Changes for S-0605 claim 16: with quirks.walker_search_ignores_queued_enter on, a released passenger of a type that is not an engineer type, whose guard finds the building again, gets a substitute cell near it and does not walk back in; off, it walks back in)
+// spec: S-0215 claim 14 row 7 (a neutral house's infantry rests in guard while the area-guard threshold is above 0, as S-0605 claim 16's "falls back to rest in guard" has it)
 #[test]
 fn claim_16_back_in_after_release_both_positions() {
     for survives in [true, false] {
-        let mut w = neutral_game(&fate_rules(|q| {
-            q.enter_nearest_survives_absorption = survives
-        }));
-        let b = put(&mut w, Kind::Building, "BIO", 2, 0, 0);
-        let n = put(&mut w, Kind::Infantry, "WALKER", 2, 4, 0);
-        testkit::run(&mut w, 3);
-        assert!(absorb::bio_reactor_fate(&mut w, n));
-        assert!(until(&mut w, 600, |w| inside(w, n, b)), "went in");
-        assert_eq!(absorb::holds_instruction(&w, n), survives);
-        try_release(&mut w, b);
-        assert!(w.obj(n).unwrap().on_map, "let out");
-        let back = until(&mut w, 800, |w| inside(w, n, b));
-        assert_eq!(back, survives);
+        for ignores in [true, false] {
+            let back = released_comes_back(survives, ignores, 1);
+            assert_eq!(
+                back,
+                survives && !ignores,
+                "survives {survives}, ignores {ignores}"
+            );
+        }
     }
+}
+
+/// S-0605 claim 16's scene: a neutral WALKER sent into a BIO by the fate,
+/// let out, then run 800 ticks. `threshold` is the area-guard threshold
+/// that decides its rest (S-0215 claim 14 rows 7 and 9). Returns whether it
+/// went back in.
+fn released_comes_back(survives: bool, ignores: bool, threshold: i32) -> bool {
+    let mut r = fate_rules(|q| {
+        q.enter_nearest_survives_absorption = survives;
+        q.walker_search_ignores_queued_enter = ignores;
+    });
+    r.sim.general.iq_guard_area = Some(threshold);
+    let mut w = neutral_game(&r);
+    let b = put(&mut w, Kind::Building, "BIO", 2, 0, 0);
+    let n = put(&mut w, Kind::Infantry, "WALKER", 2, 4, 0);
+    testkit::run(&mut w, 3);
+    assert!(absorb::bio_reactor_fate(&mut w, n));
+    assert!(until(&mut w, 600, |w| inside(w, n, b)), "went in");
+    assert_eq!(absorb::holds_instruction(&w, n), survives);
+    try_release(&mut w, b);
+    assert!(w.obj(n).unwrap().on_map, "let out");
+    until(&mut w, 800, |w| inside(w, n, b))
+}
+
+// spec: S-0208 Edge cases (r75, quirks.walker_search_ignores_queued_enter off: the walker goes in under S-0605 claim 6 once enter is current); an armed neutral walker with an area-guard threshold of 0 rests in area guard (S-0215 claim 14 row 9), which is not ready while it walks (S-0215 claim 11), so its arrival in the building's cell comes in area guard; Q-3330 asks what follows
+#[test]
+#[ignore = "Q-3330"]
+fn claim_16_switch_off_back_in_from_area_guard() {
+    assert!(released_comes_back(true, false, 0));
 }
 
 // spec: S-0605 claim 8 (the vehicle's full acceptance test on arrival: refused when full, its destination cleared, guard queued, a forced scatter request)

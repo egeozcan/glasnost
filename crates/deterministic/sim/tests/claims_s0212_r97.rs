@@ -116,8 +116,25 @@ fn next_search(w: &mut World, id: ObjectId, n: i32) -> Option<(i32, Search)> {
     None
 }
 
+/// [`one`]'s walker with a close-enough distance of half a cell, below the
+/// distance of 256 to a neighbouring cell's centre, so that [`walker_kept`]'s
+/// failed search keeps its destination.
+// spec: S-0208 claim 25 (r75, Every kind of destination: a cell destination is cleared at a failed search when D is less than the close-enough distance; Changes for S-0212 P25: a test close-enough distance below D)
+fn one_near() -> (World, ObjectId) {
+    let mut r = ruleset_r90();
+    r.sim.general.close_enough = Some(Decimal("0.5".into()));
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let id = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, mid(SIZE, 0, 0), 0);
+    while w.tick < 4 {
+        tick::step(&mut w);
+    }
+    trace::switch_on(&mut w);
+    (w, id)
+}
+
 /// A walker one cell from `near`, whose fresh search for it failed at tick
-/// `t` and kept the destination (S-0212 claim 23, row 3).
+/// `t` and kept the destination (S-0212 claim 23, row 3); use [`one_near`]'s
+/// walker.
 fn walker_kept(w: &mut World, g: ObjectId) -> (i32, CellXY) {
     let c = w.obj(g).unwrap().pos.cell();
     let near = CellXY::new(c.x + 1, c.y);
@@ -148,26 +165,33 @@ fn claim_21_walker_gate_failure_leaves_no_delay() {
     assert!(s < t + 5, "searched at once, not at {}", t + 90);
 }
 
-// spec: S-0212 claim 21 (r97: a walker that keeps its destination after a failed search, claim 23 row 3, waits for R before searching that destination again)
+// spec: S-0212 claim 21 (r97: a walker that keeps its destination after a failed search, claim 23 row 3, has a retry delay of R running)
+// spec: S-0208 claim 25 (r75, After a failed search, and Changes for S-0212 claim 21: such a walker has no locomotor destination and makes no search when R runs out; in a behaviour other than move nothing assigns it again)
 #[test]
 fn claim_21_walker_kept_destination_waits_for_r() {
-    let (mut w, g) = one(Kind::Infantry, "WALKER");
+    let (mut w, g) = one_near();
     let (t, near) = walker_kept(&mut w, g);
     let o = w.obj(g).unwrap();
     assert_eq!(o.dest, Some(Target::Cell(near)), "kept within 1 cell");
+    assert_ne!(
+        o.beh.seen(),
+        Some(Behaviour::Move),
+        "void unless not in move"
+    );
     assert_eq!(o.path.retry_at, t + 90);
     assert!(path::delay_runs(&w, g));
+    assert_eq!(next_search(&mut w, g, 120), None, "no search after R");
     assert_eq!(
-        next_search(&mut w, g, 120),
-        Some((t + 90, Search::Found)),
-        "the kept destination is searched once R is over"
+        w.obj(g).unwrap().dest,
+        Some(Target::Cell(near)),
+        "still kept"
     );
 }
 
 // spec: S-0212 claim 21 (r97: a destination changed to a different one ends the running delay of a walker that kept its destination; the first search for it is not held back)
 #[test]
 fn claim_21_walker_different_destination_ends_the_delay() {
-    let (mut w, g) = one(Kind::Infantry, "WALKER");
+    let (mut w, g) = one_near();
     let (t, _) = walker_kept(&mut w, g);
     for _ in 0..20 {
         tick::step(&mut w);
@@ -185,7 +209,7 @@ fn claim_21_walker_different_destination_ends_the_delay() {
 // spec: S-0212 claim 21 (r98, Q-2896: for the walk locomotor the destination it already holds, the same cell, given again by another rule in a later tick ends the running delay, so it is searched for at once)
 #[test]
 fn claim_21_r98_the_same_destination_again_ends_the_delay() {
-    let (mut w, g) = one(Kind::Infantry, "WALKER");
+    let (mut w, g) = one_near();
     let (t, near) = walker_kept(&mut w, g);
     tick::step(&mut w);
     give(&mut w, g, Some(Target::Cell(near)));
@@ -253,7 +277,7 @@ fn claim_21_r98_others_keep_the_delay_at_the_same_destination() {
 /// order's tick (whether a delay runs, its tick) and the tick of the
 /// walker's first path computation after *c*, read up to *c* + 100.
 fn p25_e(to: impl Fn(CellXY) -> CellXY) -> (i32, (bool, i32), Option<i32>) {
-    let (mut w, g) = one(Kind::Infantry, "WALKER");
+    let (mut w, g) = one_near();
     let (c, near) = walker_kept(&mut w, g);
     assert_eq!(w.obj(g).unwrap().path.retry_at, c + 90);
     let mut first = None;
@@ -309,8 +333,16 @@ fn p25_e_run_2_an_order_to_the_second_tile_ends_the_delay() {
     p25_e_expect("run 2", p25_e(|near| CellXY::new(near.x, near.y + 1)));
 }
 
-/// What [`p25_e_real`] returns.
-type RealRun = ((i32, (bool, i32), Option<i32>), Vec<Search>, i32);
+/// What [`p25_e_real`] returns: *c*, the end-of-tick readings of the order's
+/// tick (whether a delay runs, its tick), the ticks after *c* up to *c* +
+/// 100 with the results of the walker's computations in each, and whether a
+/// delay ran at the end of tick *c*.
+struct RealRun {
+    c: i32,
+    at_order: (bool, i32),
+    ticks: Vec<(i32, Vec<Search>)>,
+    runs_at_c: bool,
+}
 
 /// Scenario P25(a, e) through the order and tick path, with no failure made
 /// by hand: the road land type of our ruleset gets a zero foot multiplier
@@ -318,12 +350,13 @@ type RealRun = ((i32, (bool, i32), Option<i32>), Vec<Search>, i32);
 /// the cell east of the walker and the one south of that become road. A
 /// move order to the first (part a) makes a search that passes the gate and
 /// fails, the destination next to the walker (claim 15); the walker keeps it
-/// (claim 23 row 3). In tick *c* + 10 a second move order goes to `to`.
-/// Checks that the walker stays in its cell from *c* to *c* + 100 and returns
-/// what [`p25_e`] returns, plus the results of the searches after *c* up to
-/// *c* + 100 and the timer's tick at the end of *c* + 100.
+/// (claim 23 row 3), with a close-enough distance of half a cell below its
+/// D. In tick *c* + 10 a second move order goes to `to`. Checks that the
+/// walker stays in its cell from *c* to *c* + 100.
+// spec: S-0208 claim 25 (r75, Changes for S-0212 P25 a: a test close-enough distance below D)
 fn p25_e_real(to: impl Fn(CellXY) -> CellXY) -> RealRun {
     let mut r = ruleset_r90();
+    r.sim.general.close_enough = Some(Decimal("0.5".into()));
     r.sim.land_types.insert(
         LandType::Road,
         LandRow {
@@ -353,10 +386,9 @@ fn p25_e_real(to: impl Fn(CellXY) -> CellXY) -> RealRun {
         "passed the gate, failed"
     );
     assert_eq!(w.obj(g).unwrap().dest, Some(Target::Cell(near)), "kept");
-    assert_eq!(w.obj(g).unwrap().path.retry_at, c + 90);
-    let mut first = None;
+    let runs_at_c = path::delay_runs(&w, g);
     let mut at_order = None;
-    let mut results = Vec::new();
+    let mut ticks = Vec::new();
     while w.tick <= c + 100 {
         let k = w.tick;
         if k == c + 10 {
@@ -364,10 +396,7 @@ fn p25_e_real(to: impl Fn(CellXY) -> CellXY) -> RealRun {
         }
         tick::step(&mut w);
         let found = searches(&trace::take(&w), g);
-        if first.is_none() {
-            first = found.first().map(|s| s.0);
-        }
-        results.extend(found.iter().map(|s| s.1));
+        ticks.push((k, found.iter().map(|s| s.1).collect()));
         assert_eq!(w.obj(g).unwrap().pos.cell(), home, "it stays, tick {k}");
         if k == c + 10 {
             assert_eq!(
@@ -378,35 +407,46 @@ fn p25_e_real(to: impl Fn(CellXY) -> CellXY) -> RealRun {
             at_order = Some((path::delay_runs(&w, g), w.obj(g).unwrap().path.retry_at));
         }
     }
-    let end = w.obj(g).unwrap().path.retry_at;
-    (
-        (c, at_order.expect("the order's tick"), first),
-        results,
-        end,
-    )
+    RealRun {
+        c,
+        at_order: at_order.expect("the order's tick"),
+        ticks,
+        runs_at_c,
+    }
 }
 
-/// The P25(e) expectation, and on our blocked tiles: one computation after
-/// *c*, which fails again (claim 15) and keeps the destination (claim 23
-/// row 3), so a new delay of R counts from it.
-fn p25_e_real_expect(run: &str, (got, results, end): RealRun) {
-    p25_e_expect(run, got);
-    let (_, _, first) = got;
-    assert_eq!(
-        results,
-        vec![Search::SearchFailed],
-        "{run}: one computation"
+/// The P25(a, e) expectation for a walker in *move* (S-0208 r75, Changes
+/// for S-0212 P25): the timer has run out at the end of tick *c*, and on
+/// every later tick, the order's tick included, the walker makes one
+/// computation, which fails again on our blocked tiles (claim 15) and keeps
+/// the destination (claim 23 row 3); at the end of the order's tick no
+/// delay runs.
+fn p25_e_real_expect(run: &str, got: RealRun) {
+    assert!(
+        !got.runs_at_c,
+        "{run}: the timer has run out at the end of c"
     );
-    assert_eq!(Some(end - 90), first, "{run}: a new delay from it");
+    assert!(!got.at_order.0, "{run}: no delay at the order's tick");
+    assert!(got.ticks.len() >= 90, "{run}: ticks read");
+    for (k, results) in &got.ticks {
+        assert!(*k > got.c, "{run}: after c");
+        assert_eq!(
+            results,
+            &vec![Search::SearchFailed],
+            "{run}: one computation in tick {k}"
+        );
+    }
 }
 
 // spec: S-0212 claim 21 (r98, Q-2896: a walker's running retry delay ends when it is given the destination it already holds, by an order in a later tick than the search that started it), claim 15 (a blocked destination next to the unit gives no path) and claim 23 row 3 (a walker keeps a destination within 1 cell); scenario P25 parts a and e run 1, through the order and tick path
+// spec: S-0208 claim 25 (r75, After a failed search, and Changes for S-0212 P25 a and e: for a walker in move the end-of-update assignment ends the delay in tick c, and it computes on every later tick)
 #[test]
 fn seams7b_p25_e_run_1_real_failed_search_an_order_to_the_held_cell() {
     p25_e_real_expect("run 1", p25_e_real(|near| near));
 }
 
 // spec: S-0212 claim 21 (a destination changed to a different cell ends a walker's running retry delay), claim 15 and claim 23 row 3; scenario P25 parts a and e run 2, through the order and tick path
+// spec: S-0208 claim 25 (r75, Changes for S-0212 P25 a and e, as for run 1)
 #[test]
 fn seams7b_p25_e_run_2_real_failed_search_an_order_to_the_second_tile() {
     p25_e_real_expect("run 2", p25_e_real(|near| CellXY::new(near.x, near.y + 1)));
@@ -415,7 +455,7 @@ fn seams7b_p25_e_run_2_real_failed_search_an_order_to_the_second_tile() {
 // spec: S-0212 claim 21 (r97: a destination cleared ends a running delay of the walk locomotor, so the cell it kept, ordered again, is a different destination from none and is searched at once)
 #[test]
 fn claim_21_a_stop_ends_the_delay() {
-    let (mut w, g) = one(Kind::Infantry, "WALKER");
+    let (mut w, g) = one_near();
     let (t, near) = walker_kept(&mut w, g);
     tick::step(&mut w);
     assert!(orders::issue(&mut w, HouseId(0), Order::Stop { actor: g }));

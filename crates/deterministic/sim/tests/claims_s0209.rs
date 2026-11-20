@@ -1071,6 +1071,8 @@ fn kept_after_failure(assign: bool) -> (World, ObjectId, i32, i32) {
                 ..Default::default()
             },
         );
+        // spec: S-0208 claim 25 (r75, Every kind of destination: a cell destination is cleared at a failed search when D is less than the close-enough distance; half a cell keeps the neighbouring cell, D = 256)
+        s.ruleset.sim.general.close_enough = Some(glasnost_rules::sim::Decimal("0.5".into()));
     });
     order_move(&mut w, m, cell(1, 0));
     stand_in(&mut w, m, cell(0, 0));
@@ -1102,8 +1104,8 @@ fn kept_after_failure(assign: bool) -> (World, ObjectId, i32, i32) {
     );
     let o = w.obj(m).unwrap();
     assert_eq!(o.dest, Some(Target::Cell(cell(1, 0))), "kept within 1 cell");
-    let r = w.rules().general.retry_delay;
-    assert_eq!(o.path.retry_at, failed + r, "S-0212 claim 21: it waits R");
+    // spec: S-0208 claim 25 (r75, After a failed search: the walker in move is given its destination again at the end of the update, which ends the retry delay)
+    assert!(!path::delay_runs(&w, m), "no retry delay left in move");
     if assign {
         let before = o.dest;
         glasnost_sim::econ::assign_destination(&mut w, m, before);
@@ -1117,7 +1119,9 @@ fn kept_after_failure(assign: bool) -> (World, ObjectId, i32, i32) {
 }
 
 // spec: S-0209 claim 10 (r76: the blockage delay starts afresh only after a walking step or at an assignment of a destination; a failed search after which the walker keeps its destination, S-0212 claim 23 row 3, is not an assignment, so the delay counts on from the first moving-blocker answer: the search that avoids the blocker comes no earlier than the blockage delay after that answer and earlier than the blockage delay after the failure); S-0209 claim 7 (a blocked answer at the first ask searches at once)
+// The walker here is in move, which S-0208 claim 25 (r75) gives an end-of-update assignment after that failure; Q-3329 asks whether that assignment restarts the delay.
 #[test]
+#[ignore = "Q-3329"]
 fn seams7b_a_failed_search_that_keeps_the_destination_leaves_the_blockage_delay_running() {
     let (mut w, m, first, failed) = kept_after_failure(false);
     let d = w.rules().general.blockage_delay;
