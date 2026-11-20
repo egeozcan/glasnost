@@ -231,6 +231,31 @@ fn script(c: &mut Client, tick: i32, n: &mut u64) -> usize {
     }])
 }
 
+/// The verdict on the two sides' state hashes, kept by tick, over ticks 1
+/// to `ticks`: the number of ticks both sides kept, all agreeing, or why
+/// the games count as apart. A client's update can run ticks before the
+/// lane first samples it (in the start's pump, or when a side waits), and
+/// those are never kept, so only the ticks both kept are compared; a game
+/// that went apart stays apart, so a later kept tick shows it. Our own
+/// test design: at least nine in ten of the ticks must be kept on both
+/// sides.
+fn compare<H: PartialEq>(hashes: &[BTreeMap<i32, H>; 2], ticks: i32) -> Result<usize, String> {
+    let both: Vec<i32> = (1..=ticks)
+        .filter(|t| hashes[0].contains_key(t) && hashes[1].contains_key(t))
+        .collect();
+    if let Some(t) = both.iter().find(|t| hashes[0][t] != hashes[1][t]) {
+        return Err(format!("the hashes differ at tick {t}"));
+    }
+    let floor = ticks as usize * 9 / 10;
+    if both.len() < floor {
+        return Err(format!(
+            "only {} of {ticks} ticks kept on both sides, fewer than {floor}",
+            both.len()
+        ));
+    }
+    Ok(both.len())
+}
+
 #[test]
 #[ignore = "local lane: needs GLASNOST_GAME_DIR and builds the relay"]
 fn two_native_clients_play_through_the_relay() {
@@ -338,7 +363,12 @@ fn two_native_clients_play_through_the_relay() {
     let mut frames = [0u32, 0];
     let t = Instant::now();
     let deadline = t + Duration::from_secs(600);
-    while hashes.iter().any(|h| h.len() < ticks as usize) {
+    // Until each side has kept a tick at or past `ticks` (counting kept
+    // ticks would wait for ticks past it in place of those never kept).
+    while hashes
+        .iter()
+        .any(|h| h.last_key_value().is_none_or(|(&t, _)| t < ticks))
+    {
         for (k, c) in [&mut a, &mut b].into_iter().enumerate() {
             c.update(clock.now());
             let w = &c.session.as_ref().unwrap().play.game.world;
@@ -357,18 +387,18 @@ fn two_native_clients_play_through_the_relay() {
         std::thread::sleep(Duration::from_millis(1));
     }
     let played = t.elapsed();
-    let agree = (1..=ticks)
-        .filter(|t| hashes[0].get(t) == hashes[1].get(t))
-        .count();
+    let verdict = compare(&hashes, ticks);
     println!(
         "played {ticks} ticks in {} ms ({} ticks/s); orders issued {issued:?}; \
-         hashes agree on {agree} of {ticks} ticks",
+         hashes: {verdict:?}",
         played.as_millis(),
         u128::from(ticks as u32) * 1000 / played.as_millis().max(1),
     );
     save(&mut a, &out, "game-host");
     save(&mut b, &out, "game-guest");
-    assert_eq!(agree, ticks as usize, "the games went apart");
+    if let Err(why) = verdict {
+        panic!("the games went apart: {why}");
+    }
     assert!(issued.iter().all(|&n| n > 0), "orders were given");
 
     // The guest leaves; the host is told.
@@ -660,4 +690,48 @@ fn a_killed_client_process_restarts_and_rejoins() {
     );
     assert_eq!(agree, both.len(), "the games went apart");
     assert!(after >= 200, "too few ticks after the readmission");
+}
+
+/// Invented hashes for ticks `from..=to`: tick t's hash is t, plus `apart`
+/// from tick `split` on (a game whose state went apart there stays apart).
+fn kept(from: i32, to: i32, split: i32, apart: i32) -> BTreeMap<i32, i32> {
+    (from..=to)
+        .map(|t| (t, if t >= split { t + apart } else { t }))
+        .collect()
+}
+
+/// Our own test design (the lane's verdict, on invented hashes, no install):
+/// ticks one side ran before its first sample, and so never kept, are left
+/// out of the comparison; the rest agree, so the games did not go apart.
+#[test]
+fn the_relay_verdict_leaves_out_ticks_one_side_did_not_keep() {
+    let ticks = 400;
+    let hashes = [kept(4, 403, i32::MAX, 0), kept(2, 401, i32::MAX, 0)];
+    assert_eq!(compare(&hashes, ticks), Ok(397));
+}
+
+/// Our own test design: a game whose state goes apart fails the verdict,
+/// also when the tick it went apart at is one that one side did not keep.
+#[test]
+fn the_relay_verdict_fails_when_one_game_goes_apart() {
+    let ticks = 400;
+    let whole = kept(1, ticks, i32::MAX, 0);
+    let late = [whole.clone(), kept(1, ticks, 250, 1)];
+    assert!(compare(&late, ticks).is_err(), "apart from tick 250");
+    let unseen = [kept(4, 403, i32::MAX, 0), kept(1, ticks, 2, 1)];
+    assert!(compare(&unseen, ticks).is_err(), "apart from tick 2");
+    let last = [whole, kept(1, ticks, ticks, 1)];
+    assert!(compare(&last, ticks).is_err(), "apart at the last tick");
+}
+
+/// Our own test design: too few ticks kept on both sides fail the verdict,
+/// even when those that were kept agree.
+#[test]
+fn the_relay_verdict_fails_when_too_few_ticks_were_kept_on_both_sides() {
+    let ticks = 400;
+    let odd: BTreeMap<i32, i32> = (1..=ticks).filter(|t| t % 2 == 1).map(|t| (t, t)).collect();
+    let hashes = [odd, kept(1, ticks, i32::MAX, 0)];
+    assert!(compare(&hashes, ticks).is_err());
+    let none: BTreeMap<i32, i32> = BTreeMap::new();
+    assert!(compare(&[none.clone(), none], ticks).is_err());
 }

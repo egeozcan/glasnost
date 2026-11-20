@@ -41,6 +41,8 @@ pub mod quirks;
 pub mod radar;
 #[cfg(test)]
 mod radar_tests;
+#[cfg(test)]
+mod ring_tests;
 pub mod rocking;
 #[cfg(test)]
 mod rocking_tests;
