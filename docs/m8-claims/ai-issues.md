@@ -353,9 +353,48 @@ change, before d19cd01).
 
 **Goldens.** All six AI duel goldens moved, as in batch 8 (the new state is hashed from the first
 tick): duel, duel-diagonal, duel-m6c, duel-m7a, duel-m7b, duel-naval (593454d). Each keeps its
-length. scripted, combat and skirmish did not move.
+length. scripted, combat and skirmish did not move. The difficulty levers (902cffb, 82cb228) add no
+state and leave normal as it was, so they moved no golden.
+
+**Sweeps** (seeds 1 to 16). M6c and M7a: every seed line as on the base. M7b passes, no gate below
+3; seeds 1 and 2 move and every other seed line is as before. A probe of the sweep's games showed
+that only the bombers' part acts there (seed 1 two orders, seed 2 six; no spy order): at tick 5626
+in both, Alpha's disc (a jumpjet hovering in attack on building 17, last shot at 5142 and 5018) is
+sent west of its target, then the other discs, and at 17 again at 5761 to 5776. Seed 1's drain
+counters 1800 → 1680 credits, seed 2's first link 6164 → 6284; the medians that hang on those two
+seeds move: infantry mutated 23 → 22, berserk weapon orders 31 → 25, hostile intent seen 1584 →
+1599, and the maxima of takeovers 4 → 5 and objects taken over 23 → 25.
+
+**Arena**: every output file as on the base.
+
+**Quick lane** (seeds 7 to 14, maps 0, 2 and 8, sides 0,2 and 1,2, 48 games): every 0,2 game
+changes length, 3 of the 1,2 games change at all, and 7 winners change. Allied 11 (base 10), Soviet
+11 (11), Yuri 25 (25), not over at the cap 1 (2). Each was traced to its first differing tick
+(`GLASNOST_AI_HASH`, then `GLASNOST_AI_OBJS`):
+
+| game | base → after | tick | first difference |
+|---|---|---|---|
+| 0,2 map 0 seed 7 | Yuri → Allied | 19306 | house 0's infantry factory starts infantry type 15 for type 16 |
+| 0,2 map 0 seed 8 | not over → Allied | 20686 | the same |
+| 0,2 map 8 seed 8 | Allied → Yuri | 13261 | the same |
+| 0,2 map 8 seed 10 | Allied → Yuri | 14626 | the same |
+| 0,2 map 0 seed 13 | Yuri → Allied | 20401 | the same |
+| 1,2 map 0 seed 12 | not over → Soviet | 41836 | house 0's jumpjet 8287, hovering in attack on 7472 with no shot since 40157, is sent west to cell (65, 88) (#445) |
+| 1,2 map 8 seed 13 | Soviet → not over | 50116 | house 0's jumpjet 13069, in attack on 14678 with no shot since 47225, is sent to cell (40, 61) (#445) |
+
+In the five 0,2 games the after's type list counts one army type fewer (90 for 91), and the armed
+infantry type it no longer counts is the spy (#454: a spy is no longer an army unit), so the
+script's army pick lands on another infantry type where the base picked the spy.
+
+**Bench** (map 9, 8 houses, seed 7, 9 000 ticks), base then after on a shared machine:
+`tick::step` 2328.5 / 1981.7 µs, AI time a tick 1490.6 / 1163.7 µs, AI share 39.0 / 37.0 %; every
+part fell alike, so the fall is the machine's load, not the change. The game differs (1634 / 1633
+objects at the end, the end hash moves): `special:spies` 27.9 → 60.2 ms (0.64 % of think-tick AI),
+the new `special:bombers` 6.7 ms (0.07 %). The bench plays at normal, so the difficulty levers do
+not reach it.
 
 | issue | confirmed | change | test |
 |---|---|---|---|
 | #454 spies disguise before they infiltrate | yes: a spy with a disguise weapon went in undisguised; a permanent disguiser is created disguised for a person's house and an AI house alike (S-0516 claim 32), so no simulation fault | `disguise.rs`, run by `Special::spies` once it has chosen the building: a disguiser (a weapon with the disguise-flag warhead, S-0516 claim 31) that does not fool the owner (claim 35) attacks the nearest seen infantry of the owner or an ally within `COPY_REACH` for up to `COPY_TIME`; with none in sight it goes in undisguised and turns to disguise once one comes into sight, which also re-disguises a spy a hit uncovered (claim 34 (a)); a fooling spy walks round the seen disc of a detector building of the owner or an ally (claim 40) when that crosses fewer covered cells, once per disguise; a spy is no longer an army unit; counters `disguises`, `spy_detours` | `tests/spy_disguise.rs`: `a_spy_disguises_as_the_victims_infantry_first`, `a_spy_goes_in_once_disguised`, `a_spy_with_no_infantry_to_copy_goes_in_undisguised`, `a_spy_without_a_disguise_weapon_goes_in_as_before`, `a_spy_whose_disguise_a_hit_cleared_disguises_again`, `a_disguised_spy_goes_round_a_seen_detector`, `a_spy_copies_only_infantry_it_sees`, `a_spy_avoids_only_detectors_it_sees` (every script and difficulty), `a_permanent_disguiser_is_created_disguised_for_every_owner` |
 | #445 a bomber that holds over its target without firing (AI side) | yes, on synthetic rules with person orders: a type without the mobile-fire flag never fires at its attack target (S-0310 claim 7) and hovered over the plant until the next wave, over 7000 ticks; a weapon without the fire-while-moving flag fired from over the point only after an approach flown towards map east (S-0502 claim 10, Q-3257), else held. What the AI relies on from the simulation since S40: a jumpjet sent at a building flies to its reference point (S-0502 r34 claim 16), bombs on its way in when its weapon fires while moving, keeps a vertical projectile's target as its destination (S-0307 claim 18) and does not re-aim (S-0310 claim 9); a held hover slot gives a neighbour step (S-0502 claim 12) | `bomber.rs` (`Special::bombers`, after `air_attack`): a jumpjet in attack on an object with no shot for `STALL` ticks since it came within `NEAR` cells of the target's point, and there still, is sent `ROUND` cells west of the point and then at the target again (an approach towards map east); the next time over the same target it is sent home and kept out of attacks and attack-moves for `BENCH` ticks; `Watch::filter_orders` in `Brain::think_from` keeps its orders; counters `bomber_rounds`, `bomber_retreats` | `tests/air_bomber_stall.rs`: `an_ai_bomber_that_never_fires_over_its_target_is_moved_on`, `an_ai_bomber_whose_bomb_needs_its_heading_comes_again_from_the_west`, `an_ai_bomber_that_fires_is_left_alone`; `tests/air_bomber.rs`'s four #445 tests stay green |
+| #449 follow-up, the difficulty levels told apart | not separated: in 144-game rounds on the install (maps 0, 2 and 8, seeds 7 to 10, cap 27 000) hard leads normal (0.58 to 0.66) and easy (0.55 to 0.61), easy and normal stay level (0.53 at the base, 0.56 after both levers); the side played decides more than the level (country index 0 scores 0.56 to 0.75), and normal v hard moved 0.08 between rounds with neither level changed, so about 0.08 is noise; tables in [ai-scripts.md](../dev/ai-scripts.md) | `Brain::think_from`: at easy the house acts on one of every `EASY_EVERY` (3) of its think ticks, read from the tick (902cffb); at easy it builds no superweapon, sensor, grinder, gattling defence, bunker, lifter or drainer (82cb228); normal and hard unchanged, no state added; the difficulty table and the rounds in ai-scripts.md | `tests/scripts.rs`: `easy_acts_on_one_think_tick_in_three` (a688b11, then 35970b1, a test change, before 902cffb), `easy_builds_no_superweapon_nor_special_buildings` (70d728b before 82cb228) |
