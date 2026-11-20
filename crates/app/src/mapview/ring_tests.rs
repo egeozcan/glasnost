@@ -135,7 +135,11 @@ struct Case {
 /// The import with both ring types and their art; HUTX's body an image of
 /// 120 × 120 from 60 left of and 60 above its draw point, so that it covers
 /// the whole foundation and the point above its centre.
-fn import() -> (glasnost_convert::Import, glasnost_convert::theater::Catalogue, Assets) {
+fn import() -> (
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    Assets,
+) {
     let rules = format!("{RULES}[Animations]\n0=RINGX\n1=PERMX\n");
     let art = format!("{ART}[RINGX]\nLoopCount=-1\n[PERMX]\n");
     let (mut import, catalogue, mut assets) = context_full(&rules, &art);
@@ -421,7 +425,10 @@ fn claim_18_the_ring_goes_at_release_and_with_its_object() {
     assert_eq!(c.rings().len(), 2);
     c.live.world.mind.victims.remove(&c.rv1);
     c.tick();
-    assert_eq!(c.ring().at, placed(Of::Ring, raised(c.pos(c.rv2), RV2_HEIGHT)));
+    assert_eq!(
+        c.ring().at,
+        placed(Of::Ring, raised(c.pos(c.rv2), RV2_HEIGHT))
+    );
     c.live.world.obj_mut(c.rv2).unwrap().combat.killed = true;
     c.tick();
     assert!(c.rings().is_empty(), "destroyed: no ring");
