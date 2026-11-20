@@ -427,3 +427,45 @@ both levers sit in `Brain::think_from`.
 | 1 why country index 1 loses | normal mirror (maps 0, 2 and 8, seeds 7 to 14, cap 27 000, 96 games): country index 0 scores 0.844 (63-32-1). Its country paradrop is about half of that: a probe that never fires it scores 0.667. The paradrop is a rules asymmetry, which #449 allows, and stays. The rest is play: in the probe, the capped games scored on army and aircraft worth alone give 0.714, and on map 2 country index 1 holds half the army worth at the cap. It sends no first wave in the base lane, and in one dump lost 2.2 times the army units (82 against 37). The map starts are swapped within each pair, and no simulation claim was found | none (findings) | lane files only: `tour-nn-base`, `tour-nn-p1`, `tour-nn-p1c` (worth by part), dumps d1 to d3 |
 | 2 the weaker side's play | not fixed. One fix was tried: a house that sees more enemy army aircraft than it has army units that hit them picks anti-air types per factory. It moved the probe mirror from 0.667 to 0.656, within one standard error (about 0.05), against an aim of at most 0.60 fixed before the round. Only 9 of the 82 losses were to aircraft. Not shipped; handed back with the numbers | none | its three synthetic tests went with it (described in the report) |
 | 3 the levels told apart | separated. Criterion fixed before the first round: each pair's stronger level scores at least 0.60 in the 144-game round (maps 0, 2 and 8, seeds 7 to 10), and the Elo order is hard, normal, easy. Base: normal over easy 0.552, hard over easy 0.615, hard over normal 0.667, Elo easy above hard above normal. E1 alone passed the pairs but not the Elo order. E1 and E2: 0.812, 0.823, 0.667, Elo 1631.3 / 1521.6 / 1347.1. On fresh seeds 11 to 14: 0.750, 0.750, 0.646, Elo 1606.8 / 1499.9 / 1393.3. B10's two levers stay | `Brain::think_from`: at easy the house fires no superweapon, its country's own included (E1). At easy it builds no refinery by a new field (E2: `Script::stay_on_home_field`, a flag of the think's memo, read by `Script::field_refinery`; a lost refinery is still rebuilt). Normal and hard unchanged | `tests/ai.rs`: `easy_fires_no_superweapon`; `tests/expansion.rs`: `easy_builds_no_refinery_by_a_new_field` (both failed on the base code first) |
+
+## Script AS1
+
+Issue #449: a second AI script, `siege` (registry id 2), our own design, notes in
+[ai-scripts.md](../dev/ai-scripts.md#siege-script-as1). The goal was its hard level at 2000 Elo in
+the tournament, playing fair. The default script and every code path it runs are unchanged; the
+siege calls the brain, never edits it. AI game format 146, save 167 and wire 13 unchanged: the
+siege's seat is a new variant, appended, and no existing encoding changed. Base d9f2750.
+
+**Measurement**, fixed before the first round: the certifying round is
+`ai-tournament game=install maps=0,2,8 seeds=11-14 ticks=27000 threads=2` with the six entrants
+`default:easy,default:normal,default:hard,siege:easy,siege:normal,siege:hard` (720 games), seeds
+11 to 14 never used in development. Development rounds: `siege:hard` against `default:hard` on
+seeds 7 to 10 (48 games). Stop rule: the goal met, or three development rounds in a row with no
+clear gain (a rise of at least 0.05 in the score or of 4 victories, neither country index falling
+by more). The rule stopped development after dev-7, dev-8 and dev-9.
+
+| part | confirmed | change | test |
+|---|---|---|---|
+| the siege script | the registry had one entry; "To add a script" in ai-scripts.md | `siege.rs`: `Siege` (the brain on a plan that holds its waves, the house's view, the army), `Tuning` by level, `ScriptState::Siege`, its start arm and `REGISTRY` entry; at normal and hard no superweapon building, the climb building in its place; one gathered strike with attack-moves and a guard, joined in groups; at hard the remembered enemy army, the edge, the recall, economy first and the hunt | `tests/siege.rs`: `the_registry_lists_the_siege_script`, `a_setup_choosing_siege_plays_it_at_every_level`, `the_brains_waves_are_held_at_every_level`, `the_levels_play_worse_to_better`, `the_strike_goes_at_its_count_and_leaves_the_guard`, `an_outmatched_strike_is_called_home`; `siege.rs`: `the_memory_forgets_a_unit_once_its_cell_is_seen_empty_or_after_a_while`, `a_level_without_superweapons_orders_no_superweapon_building`; `tests/scripts.rs`: `every_script_decides_only_on_what_it_sees` (now with the siege) |
+| fair play | the default's shroud filter (`Script::seen_enemies`), the house's explored and seen cells, the map's start cells; a person's rules and money at every level (S-0302 claim 3, S-0412 claim 5) | the siege reads nothing else and gives move, attack-move and build orders on its think ticks | as above |
+| the watch tool | — | `glasnost-headless siege-watch map= seed= a= b= [start= side= ticks= every=]`: one tournament game with a line per house every `every` ticks (credits, buildings, harvesters, army by type, cost got by kind, army lost by tenth of the way to the enemy and by killer's kind, lines, the siege's strikes, recalls and remembered worth) | — |
+| the setup screen | the screen lists `REGISTRY` | none here (crates/ui is outside this batch); its test `a_computer_row_chooses_its_script_and_difficulty` expects a single script and fails with two: the click on the Script cell now gives id 2, a second click 1 | to be updated by a batch that may touch crates/ui |
+
+**Certifying round cert-1** (HEAD 9bb84ad, 720 games, none failed): the goal is not met. Final Elo:
+`siege:hard` 1642.2, `siege:normal` 1605.7, `default:easy` 1602.9, `siege:easy` 1445.3,
+`default:hard` 1368.4, `default:normal` 1335.5. `siege:hard` won 152, lost 37 and drew 51 of 240
+games: against `default:easy` 25-5-18, `default:normal` 41-2-5, `default:hard` 34-5-9,
+`siege:easy` 30-8-10, `siege:normal` 22-17-9. By country index 0 76-26-18, 1 76-11-33. Of its 152
+wins 106 were victories and 46 worth at the cap. 2000 needs about 98 percent against the defaults
+and 95 against the siege's own lower levels; the draws (most on map 2, where equal armies stall)
+and the small lead over `siege:normal` keep it far short. The Elo is order-dependent: in this
+round `default:easy` rates above `default:hard`.
+
+**Lanes**, base d9f2750 against this branch, none moved: the quick lane (seeds 7 to 14, sides 0,2
+and 1,2, maps 0, 2 and 8; 48 games, every result and tick count the same), the M6c, M7a and M7b
+sweeps (seeds 1 to 16), `arena --record all` (every record file the same), the sim gate with
+ignored tests (17 passed), and `ai-bench game=install map=9 players=8 seed=7 ticks=9000` (the same
+hashes). The siege on both seats, which `ai-bench` cannot set (its install setup is built in
+crates/app), was played in the skirmish lane's AI mode with `GLASNOST_AI_SEATS=siege:hard,siege:hard`
+(map 0) and `siege:normal,siege:easy` (map 2): the replay reproduces the end and the mid-game save,
+loaded and continued, matches.

@@ -30,6 +30,7 @@ name for the setup screen and a line about it.
 | id | key | name | about |
 |---|---|---|---|
 | 1 | `default` | Default | the M5b–M8 brain (`brain::Brain`), unchanged at normal |
+| 2 | `siege` | Siege | the default's base without superweapons and one army sent as a strike (`siege::Siege`; see [Siege](#siege-script-as1)) |
 
 An unknown id (a setup from a later build) plays the default script (`scripts::known`).
 
@@ -169,6 +170,72 @@ specs give a computer-controlled house no other row, so no spec request was need
 `the_difficulty_row_is_a_persons_at_every_ai_difficulty` checks it: an AI house and a person's
 house of the same country have the same difficulty index, handicap, rate-of-fire and firepower
 factors and prices at every AI difficulty.
+
+## Siege (script AS1)
+
+`glasnost_ai::siege`, registry id 2, key `siege`. Our own second script, beside the default and
+sharing nothing with it but what it calls: it runs the default's brain (`Brain`) for the base on
+its own plan, and keeps the army for itself. Every number is tuning (`design: own AI (#449)`).
+
+**What it does.**
+
+- **The base** is the brain's: build plan, harvesters, base defence, special abilities. The plan
+  holds the brain's waves (`HELD`), so the brain never sends one.
+- **No superweapons** at normal and hard: the brain's orders for a building that gives a
+  superweapon (S-0512 Terms) are dropped, and since the brain orders such a building in place of
+  its tech-climb building, the climb building is ordered instead (`Siege::no_superweapons`). A
+  brain that owes money for a superweapon building holds its army lines while its base is safe;
+  a house that keeps its army at home is safe more often, so it saved and starved its army.
+- **One army.** Idle army units gather at home. At the level's count (`strike`) they go out as
+  one strike, minus a guard nearest home, with attack-move orders: first, at hard, to the seen
+  enemy harvester or refinery nearest home (`economy`), then from building to building of the
+  enemy house nearest home, then to an enemy start not yet seen empty. New units join the strike
+  in groups (`join`).
+- **The edge (hard).** The house remembers the enemy army units it has seen (`Army::remember`: by
+  their cost, S-0403 claim 2; one is forgotten when the house sees its last cell without it, or
+  after `MEMORY` ticks). A strike goes only when the units that would go are worth 120% of that;
+  after 3000 ticks without a strike, 80%. A strike worth less than half of it is called home with
+  plain moves, and the army gathers again.
+- **The hunt (hard).** Once every enemy start has been seen and no enemy building is in sight,
+  each unit goes to the nearest seen enemy, else the nearest cell the house does not see, so the
+  game ends by victory (S-0414 claim 3) and not at the tournament's cap.
+
+**Fair play.** It reads the house's view only: its own objects, the enemies it sees
+(`Script::seen_enemies`, the default's shroud filter) and what it remembers of them, the cells it
+has explored or sees, and the map's start cells (lobby knowledge, as the default). It gives move,
+attack-move and build orders, on its house's think ticks, and its house has a person's rules and
+money. `every_script_decides_only_on_what_it_sees` covers it with every registry entry.
+
+**Levels.**
+
+| level | harvesters (plan) | superweapons | strike / join / guard | acts on | edge, recall, economy first, hunt |
+|---|---|---|---|---|---|
+| easy | 1 | the brain builds none at easy | 6 / 6 / 1 | one think tick in three | no |
+| normal | 3 | none | 12 / 6 / 3 | every think tick | no |
+| hard | 3 | none | 10 / 3 / 2 | every think tick | yes (120%, 50%; 80% after 3000 ticks) |
+
+**Why hard wins against the default.** It spends nothing on superweapons, so its army lines run;
+it keeps its army together and sends it only with the edge, so the default's waves meet the whole
+army at home and are lost; its strike goes for the harvesters first; and it hunts, so most of its
+wins are victories. Development rounds against `default:hard` (maps 0, 2 and 8, seeds 7 to 10,
+48 games; score of siege:hard, win 1, draw ½):
+
+| round | change | W-L-D | score | country 0 / 1 | victories / worth |
+|---|---|---|---|---|---|
+| dev-1 | gathered strike, more harvesters | 13-13-22 | 0.500 | 0.771 / 0.229 | 5 / 8 |
+| dev-2 | no superweapons | 29-12-7 | 0.677 | 0.812 / 0.542 | 26 / 3 |
+| dev-3 | the climb building in their place | 28-10-10 | 0.688 | 0.833 / 0.542 | 25 / 3 |
+| dev-4 | remembered enemy army: edge 150%, recall 50% | 30-9-9 | 0.719 | 0.917 / 0.521 | 23 / 7 |
+| dev-5 | economy first, edge 120% | 33-4-11 | 0.802 | 0.938 / 0.667 | 25 / 8 |
+| dev-6 | the edge judged on the goers only | 36-3-9 | 0.844 | 0.958 / 0.729 | 29 / 7 |
+| dev-7 | enemy aircraft not counted (dropped) | 36-4-8 | 0.833 | 0.958 / 0.708 | 27 / 9 |
+| dev-8 | the costliest vehicle type (dropped) | 23-11-14 | 0.625 | 0.792 / 0.458 | 14 / 9 |
+| dev-9 | patience, the levels reworked (kept) | 37-4-7 | 0.844 | 0.917 / 0.771 | 29 / 8 |
+
+The levels among themselves (the same grounds, 144 games): with normal building superweapons,
+easy beat normal (normal 0.406) while hard led normal 0.833 and easy 0.760; with normal's
+superweapons dropped and easy on one harvester and strikes of six, the order holds: normal leads
+easy 0.635, hard leads normal 0.542 and easy 0.625.
 
 ## The tournament
 

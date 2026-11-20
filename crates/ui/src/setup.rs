@@ -1162,8 +1162,15 @@ mod tests {
         assert_eq!(s.slots[1].ai.difficulty, AiDifficulty::Hard);
         s.apply(&SetupHit::Difficulty(1, 1), &r, &maps());
         assert_eq!(s.slots[1].ai.difficulty, AiDifficulty::Easy, "round");
+        // The registry's scripts in its order, round: one step goes to the
+        // next entry, a full turn comes back to the default.
         s.apply(&SetupHit::Script(1, 1), &r, &maps());
-        assert_eq!(s.slots[1].ai.script, AiSeat::DEFAULT_SCRIPT, "one script");
+        let next = REGISTRY[1 % REGISTRY.len()].id;
+        assert_eq!(s.slots[1].ai.script, next, "the next script");
+        for _ in 1..REGISTRY.len() {
+            s.apply(&SetupHit::Script(1, 1), &r, &maps());
+        }
+        assert_eq!(s.slots[1].ai.script, AiSeat::DEFAULT_SCRIPT, "round");
         let lobby = s.lobby(&r, &maps()).unwrap();
         let easy = AiSeat {
             script: AiSeat::DEFAULT_SCRIPT,
