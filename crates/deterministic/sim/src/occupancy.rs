@@ -282,16 +282,40 @@ pub fn crushable_by(w: &World, crusher: ObjectId, obj: ObjectId) -> bool {
     (omni && o.kind != Kind::Building && !resistant) || (crushable && !deployed_uncrushable)
 }
 
-/// A unit's mission target (S-0209 Terms).
+/// A unit's mission target (S-0209 Terms): the current behaviour's, a
+/// queued one's only while none is current (S-0215 claim 1). *Guard*, *area
+/// guard* and *patrol* give an infantry unit of an engineer type its
+/// destination (S-0208 claim 26, r75). With
+/// `quirks.walker_search_ignores_queued_enter` off, a walker whose current
+/// behaviour gives none reads a queued *enter*'s.
 pub fn mission_target(w: &World, mover: ObjectId) -> Option<Target> {
     let o = w.obj(mover)?;
-    // spec: S-0209 Terms (mission target: the destination or target while in a behaviour with one)
-    match o.beh.seen() {
+    let of = |b: Option<Behaviour>| match b {
+        // spec: S-0209 Terms (mission target: the destination or target while in a behaviour with one)
         Some(Behaviour::Enter | Behaviour::Capture | Behaviour::Sabotage | Behaviour::Eaten) => {
             o.dest.or(o.target)
         }
+        // spec: S-0208 claim 26 (r75: guard, area guard and patrolling have the walker's destination as their mission target only for a type with the engineer flag, Terms *Engineer type* and Import mapping Engineer, absent no; no other type flag gives it) and S-0209 claim 4 Open questions (engineer-like unit)
+        Some(Behaviour::Guard | Behaviour::AreaGuard | Behaviour::Patrol)
+            if o.kind == Kind::Infantry
+                && w.rules().unit(o.kind, o.type_index).is_some_and(|u| u.engineer) =>
+        {
+            o.dest
+        }
         _ => None,
+    };
+    // spec: S-0208 claim 26 (r75: the current behaviour's mission target, a queued behaviour's only while no behaviour is current, S-0215 claim 1)
+    let own = of(o.beh.seen());
+    if own.is_none()
+        && !w.rules().quirks.walker_search_ignores_queued_enter
+        && o.walk.is_some()
+        && o.beh.current.is_some()
+        && o.beh.queued == Some(Behaviour::Enter)
+    {
+        // spec: S-0208 Edge cases (r75, quirks.walker_search_ignores_queued_enter off: while the walker's queued behaviour is enter and its current behaviour has no mission target, enter's mission target is read, in its searches and in its asks)
+        return of(Some(Behaviour::Enter));
     }
+    own
 }
 
 /// Whether the wall in `c` belongs to a house allied with the mover's

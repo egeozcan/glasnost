@@ -62,6 +62,12 @@ pub struct PathState {
     /// otherwise.
     #[serde(default)]
     pub yielding: Option<Yield>,
+    /// The destination a walker's move is held for (our design, C7 part 6
+    /// hold, `quirks.jammed_move_dropped` off): it waits for the retry delay
+    /// and is not given that destination again at the end of its update
+    /// (S-0215 claim 22). Cleared by an assignment and by a path found.
+    #[serde(default)]
+    pub held_for: Option<Target>,
 }
 
 /// A unit giving way in a deadlock with no way round (our design, C7 part
@@ -2338,6 +2344,18 @@ fn compute_at(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>) ->
 
 /// [`compute`] without the trace, from `start` else the unit's cell.
 fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>) -> Search {
+    let res = compute_tried(w, id, mode, start);
+    if res == Search::Found
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // design: C7-P6 hold (a path found ends the hold)
+        ob.path.held_for = None;
+    }
+    res
+}
+
+/// [`compute_untraced`]'s computation, with C7 part 4's second try.
+fn compute_tried(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>) -> Search {
     let res = compute_once(w, id, mode, start);
     if res == Search::Found || w.rules().quirks.unreachable_move_dropped {
         return res;
@@ -3101,11 +3119,17 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>) 
                 goal = c;
             }
         }
-        // spec: S-0212 claim 24 and departure D3 (the adopted cell replaces the unit's destination cell, so arrival is judged against it)
-        if let Some(Target::Cell(d)) = o.dest
+        let walk = o.walk.is_some() && crate::lift::current_locomotor(w, id) == Some(Locomotor::Walk);
+        let searched = search_goal(w, id);
+        if walk && searched != Some(goal) {
+            // spec: S-0208 claim 26 (r75, Q-3264 and Q-3303: the substitute cell is assigned as the walker's destination, replacing a cell, an object, which it then no longer holds as its destination, or a kept locomotor destination, which the assignment ends; an absorbing building it is to enter included: the contact and a queued or current enter stay) and S-0212 claim 24
+            crate::econ::assign_destination(w, id, Some(Target::Cell(goal)));
+        } else if !walk
+            && let Some(Target::Cell(d)) = o.dest
             && d != goal
             && let Some(ob) = w.obj_mut(id)
         {
+            // spec: S-0212 claim 24 and departure D3 (the adopted cell replaces the unit's destination cell, so arrival is judged against it)
             ob.dest = Some(Target::Cell(goal));
             // spec: S-0402 claim 10a (A chrono miner: an adopted substitute is a destination given while the miner holds contact, a qualified docking assignment, S-0207 claims 27 and 28)
             crate::refresh::adopted(w, id, o.dest);
@@ -3496,14 +3520,15 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 Behaviour::AreaGuard
             };
             let gives_up = search_gives_up(w, id);
-            // spec: S-0208 claim 25 (r68: a walker's failed fresh search past the gate for an object destination, not a re-path of S-0209 claim 10, clears the destination near its locomotor destination)
+            // spec: S-0208 claim 25 (r68; r75: for every kind of destination, a cell, an object, or none with a kept locomotor destination; a walker's failed fresh search past the gate, not a re-path of S-0209 claim 10, clears the destination near its locomotor destination)
             let near_clear = walker && !repath && crate::walk::cleared_near_point(w, id);
-            // spec: S-0208 claim 25 (r68: where S-0212 claim 23's third row keeps an object destination after a fresh search, the walker has no locomotor destination from then on)
+            // spec: S-0208 claim 25 (r68; r75 for every kind of destination: where S-0212 claim 23's third row keeps the destination after a fresh search, the walker has no locomotor destination from then on; the effect is the walk locomotor's)
             let point_lost = walker
                 && !repath
                 && !gives_up
                 && !near_clear
-                && crate::walk::object_locomotor_point(w, id).is_some();
+                && o.dest.is_some()
+                && crate::lift::current_locomotor(w, id) == Some(Locomotor::Walk);
             // design: C7-P6 hold (quirks.jammed_move_dropped off: a move that would be given up while only units stand in its way is kept; the unit stops, counts as blocked from now if it was not, and searches again after the retry delay); not for a walker that claim 25 has cleared
             if gives_up && !near_clear && holds(w, id) {
                 if let Some(ob) = w.obj_mut(id) {
@@ -3513,6 +3538,8 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                     if walker {
                         // design: C7-P6 hold (a held walker ends its movement in progress as one that keeps its destination after a failed search does)
                         ob.path.failed_for = ob.dest;
+                        // design: C7-P6 hold (a held walker keeps its locomotor destination and waits for the retry delay; S-0215 claim 22's end-of-update assignment, which would end that delay, is not given to it while it holds this destination)
+                        ob.path.held_for = ob.dest;
                     }
                 }
                 crate::trace::record(w, id, || {
@@ -3552,7 +3579,7 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 }
             }
             if point_lost {
-                crate::walk::locomotor_point_lost(w, id);
+                crate::walk::locomotor_destination_lost(w, id);
             }
             if gives_up && !human {
                 // spec: S-0212 claim 23a (a neutral or special house's unit gets the house-selected destination on the same tick: a nearby-cell result around the house's centre)

@@ -1287,8 +1287,22 @@ pub fn end_of_update_check(w: &mut World, id: ObjectId) {
     if o.beh.seen() != Some(Behaviour::Move) {
         return;
     }
-    // spec: S-0215 claim 22 (r132: no destination; a unit in move holding one, not moving, is left alone by our engine, Open questions)
-    if o.dest.is_some() {
+    if let Some(d) = o.dest {
+        // spec: S-0215 claim 22 (S-0208 r75 Changes and claim 25, After a failed search: an infantry unit in move that is not moving and holds a destination is given that destination again at the end of the update; the effect is given for the walk locomotor; a unit with another current locomotor is left alone by our engine, Open questions)
+        let walk = crate::lift::current_locomotor(w, id) == Some(crate::rules::Locomotor::Walk);
+        // design: C7-P6 hold (a walker held for this destination waits for its retry delay)
+        let held = o.path.held_for == Some(d);
+        if walk && !held && !moving(w, id) {
+            // spec: S-0208 claim 25 (r75: the assignment clears the stored path, ends the retry delay, gives the locomotor destination again, for an object its movement point at that moment, and makes a prone walker ask for get-up, S-0107 claim 15)
+            crate::econ::assign_destination(w, id, Some(d));
+            if let Some(ob) = w.obj_mut(id) {
+                ob.path.steps.clear();
+                if let Some(s) = ob.walk.as_mut() {
+                    // spec: S-0208 claim 25 (r75: the speed fraction is set to 1 with no walking step) and S-0310 Terms (r75 Changes)
+                    s.fraction = true;
+                }
+            }
+        }
         return;
     }
     // spec: S-0215 claim 22 (r132: not moving, the same test as the general rule of the move processing)
