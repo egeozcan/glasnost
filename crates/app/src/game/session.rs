@@ -168,7 +168,7 @@ pub struct Session {
     /// and window size they were made for; `None` until a pick in the frame
     /// needs them, and outside a frame.
     // design: render (#435) (made once per drawn frame, as the picks are)
-    pick_candidates: Option<((i32, i32), (i32, i32), Vec<(ObjectId, Point)>)>,
+    pick_candidates: Option<PickCandidates>,
     /// The tips' rest and the tip that shows: the name tip (S-0111 claims
     /// 20 to 26) or a sidebar tip (S-0411 claims 20 to 22).
     name_tip: name_tip::NameTip,
@@ -266,6 +266,10 @@ type Pick = (Point, (i32, i32), (i32, i32));
 
 /// What a pointer pick found: the cell and the object under the point.
 type Picked = (CellXY, Option<ObjectId>);
+
+/// A drawn frame's screen candidates for its picks: the view centre and
+/// window size they were made for, and the candidates in candidate order.
+type PickCandidates = ((i32, i32), (i32, i32), Vec<(ObjectId, Point)>);
 
 /// Host-clock times of one step's parts, in milliseconds, for the
 /// performance benchmark (M8 step C4; our own tooling, never game state).
