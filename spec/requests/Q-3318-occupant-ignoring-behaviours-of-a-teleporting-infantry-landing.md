@@ -1,9 +1,9 @@
 ---
 id: Q-3318
 title: Which behaviours make a teleporting infantry unit's landing choice ignore occupants
-status: open
+status: answered
 related: [S-0208, S-0603, S-0215]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need

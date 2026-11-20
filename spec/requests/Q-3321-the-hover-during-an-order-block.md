@@ -1,9 +1,9 @@
 ---
 id: Q-3321
 title: Is the object under the cursor looked up again during an order block, and what a held left press keeps
-status: open
+status: answered
 related: [S-0214, S-0201, S-0111]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need

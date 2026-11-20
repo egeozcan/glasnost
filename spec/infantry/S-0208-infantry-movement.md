@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 75
+revision: 82
 sources-class: [decomp, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-20
 measurements: [M-0023]
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142, Q-3236, Q-3262, Q-3264, Q-3301, Q-3303]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502, Q-2657, Q-2701, Q-2702, Q-2746, Q-2750, Q-2782, Q-3142, Q-3236, Q-3262, Q-3264, Q-3301, Q-3303, Q-3317, Q-3318]
 supersedes: []
 ---
 
@@ -62,6 +62,10 @@ claim 23's third row makes no search until an assignment, which the end-of-updat
 once for a walker in *move*, and a walker standing in its own destination cell searches. Claim
 26 answers Q-3303: a substitute cell replaces a building that the walker is to enter, which in
 the original leaves a walker sent by an enter-nearest instruction standing near the building.
+Claim 27 answers Q-3317: the point that a building gives a unit as its destination, which is its
+centre except for docking types, and the cell that holds it. Claim 19 answers Q-3318: its
+occupant-ignoring behaviours are *capture*, *enter*, *eaten* and *patrol*, with one destination
+test for all four.
 Skirmish only. Network games and campaigns are out of scope.
 
 Citations refer to the approved specs and their current correction-round drafts, including
@@ -201,7 +205,8 @@ used by this spec:
   its walk: while a unit walks under a move, the point that its destination gave when it was last
   assigned. For a cell destination it is the centre and height defined by claim 18. A destination
   that names an object gives the object's movement point at that assignment, raised as claim 18
-  says when that point's cell carries a high bridge. The point does not
+  says when that point's cell carries a high bridge. For a building that point is claim 27's.
+  The point does not
   follow the object as it moves; only a new assignment gives a new point. A walker's searches look
   for this point's cell, not for the object (claim 25). The point stays when
   the destination is lost without the locomotor being told, as when the object it names goes
@@ -1213,7 +1218,8 @@ used by this spec:
 ### Infantry landing with the teleporting locomotor
 
 19. **Landing-point choice (Q-0181).** S-0207 claim 20 owns the jump and its phasing in.
-    For infantry, let *P* be the destination point supplied to the locomotor, and *C* its cell.
+    For infantry, let *P* be the destination point supplied to the locomotor (for a building,
+    claim 27's point), and *C* its cell (for a point on a cell boundary, claim 27's rule).
     The desired standing position is the position class of *P*, not the position class of the
     unit's departure point. Occupants are normally respected: use claim 3's position-choice
     table with that desired class, including its draw and its refusal cases. For this choice,
@@ -1226,27 +1232,40 @@ used by this spec:
     occupancy even for a destination carrying a high bridge; the entry check below
     independently reads deck occupancy.
 
-    A ready queued behaviour can start when the landing point is chosen (S-0215); the current
-    behaviour below is the one then in force. Occupants are ignored when it is *capture*, *sabotage*, *enter*
-    or *eaten*, and the destination is a vehicle or aircraft in *C*, or the building occupying
-    *C*. This is a destination-object condition, not the broader mission-target rule of claim 4.
-    In that case use claim 4's position choice: the standing position of *P*'s class, without a
-    draw. A destination infantry unit does not give this exception. Whether the candidate cell
-    can be entered is still judged by S-0209's infantry entry outcomes. This check uses the
-    deck's objects and occupancy record on a high-bridge cell, and the ground's otherwise,
-    independently of the standing-position deck mode above. It has no connecting-step height
-    restriction. For a cell at terrain height level −6 or lower, the entry outcome is instead
-    *clear* without an occupant or terrain test: the check's initial reference level is −1,
-    more than four height levels above such a cell. Levels and this comparison are integers.
-    This bypass does not remove the preceding standing-position refusal
-    (`quirks.teleport_infantry_negative_level_entry`, Edge cases). An outcome other than
-    *clear* rejects the landing point even when occupants were ignored for position choice.
+    Fixing the landing point is a start (S-0603 claim 16 (b) and its S-0215 Changes entry): a unit
+    that is then ready under S-0215 claim 11's infantry rules makes its queued behaviour current
+    before the point is chosen, and the current behaviour below is the one in force after that
+    start. Occupants are ignored when it is *capture*, *enter*, *eaten* or *patrol*, and the
+    destination is a vehicle or aircraft in *C*, or the building occupying *C*. The destination test
+    is the same for each of the four behaviours. *Sabotage* is not one of them, so a saboteur
+    landing on the building it is to sabotage respects occupants. This is a destination-object
+    condition, not the broader mission-target rule of claim 4. In that case use claim 4's position
+    choice: the standing position of *P*'s class, without a draw. A destination infantry unit does
+    not give this exception. Whether the candidate cell can be entered is still judged by S-0209's
+    infantry entry outcomes. This check uses the deck's objects and occupancy record on a
+    high-bridge cell, and the ground's otherwise, independently of the standing-position deck mode
+    above. It has no connecting-step height restriction. For a cell at terrain height level −6 or
+    lower, the entry outcome is instead *clear* without an occupant or terrain test: the check's
+    initial reference level is −1, more than four height levels above such a cell. Levels and this
+    comparison are integers. This bypass does not remove the preceding standing-position refusal
+    (`quirks.teleport_infantry_negative_level_entry`, Edge cases). An outcome other than *clear*
+    rejects the landing point even when occupants were ignored for position choice.
+
+    **A building destination (Q-3317).** For a building that gives its centre (claim 27), *P*
+    lies at the centre of *C*, on one of its corners or at the midpoint of one of its edges,
+    whatever the foundation and wherever the unit starts. In every case its class is the centre
+    (claim 2). So with occupants ignored the unit's landing point, when *C*'s entry outcome is
+    *clear*, is the centre position of *C*, and with occupants respected claim 3's centre row
+    applies, with its draw.
 
     A refused position choice or entry outcome gives no landing point for a cell destination:
     the destination is removed and the unit does not jump. Only an object destination enables
     a nearby-cell search after that refusal. That search is S-0212 claim 25 with these choices:
-    - centre: the cell of the destination object's heading point (its next movement point, or
-      its own position when it has none),
+    - centre: the cell of the destination object's heading point as S-0506 claim 14 gives it,
+      asked with no particular mover: for a building whose type gives no docking point
+      (claim 27), its centre, not its position, also for a type with the unit-reload flag
+      alone; for an object that is not a building, its next
+      movement point, or its own position when it has none,
     - locomotion class and movement zone: the infantry type's own, without zone simplification,
     - reach region: that of the unit's own heading-point cell, using its present bridge-deck
       status; the teleporting locomotor reports its own position as its heading point,
@@ -1318,9 +1337,28 @@ used by this spec:
     conditions.
     - Backing: `measurable` (scenario W11, especially parts d and h for Q-0235,
       and part i for Q-0311's post-jump records and later clearing)
+    - Backing for the building destination: `measurable` (scenario W22, parts a and b for the
+      centre position in the cell of claim 27's point, part d for the search's centre at that
+      cell, part f's far-place run for that centre with the unit-reload flag alone, part e's
+      saboteur for *sabotage* not being among the four behaviours and for the
+      occupant-respecting choice towards a building).
     - Confidence: high for position choice, record choice, reservation, refused replacement,
-      the four behaviours, the cell/object distinction and draws; medium for the search
-      choices, post-jump record lifecycle and combined bridge consequences
+      *capture*, *enter* and *eaten* (scenario W11 (c)), the cell/object distinction and
+      draws; medium for the search choices, post-jump record lifecycle and combined bridge
+      consequences. Medium, `unmeasured`, for *patrol* being among them and for its
+      destination test being that of the other three: *patrol* comes from the original's team
+      logic, which is out of scope, and from route orders (S-0215 claim 34), and no scenario
+      here gives a patrolling walker an object destination at a landing-point choice. High for
+      the centre position in the cell of claim 27's point, for W22's subjects. Medium for
+      *sabotage* not being among the four behaviours and for the occupant-respecting choice
+      towards a building, which follows from claims 2 and 3: W22 part e is not yet run, and
+      its saboteur lands on the foundation only by S-0209 row WP3, which S-0209 rates low (a
+      run without that landing decides nothing). Medium for the search's centre at that cell
+      for a building destination, also for a type with the unit-reload flag alone (W22 part d
+      and part f's far-place run are not yet run). Low for a building whose type
+      gives a docking point, with no mover named (Open questions). Medium, `measurable` (S-0603
+      scenario G12 part b), for fixing the landing point being a start, as S-0603 claim 16 (b)
+      rates it.
 
     **Landing choice while a warp is pending (Q-3142).** Warp-pending immobilization
     (S-0207 Terms) does not leave an infantry unit's landing point unchanged, unlike the
@@ -1803,6 +1841,81 @@ used by this spec:
       with the engineer flag has its destination as mission target in these behaviours: its only
       effect rests on row WP3 of S-0209 claim 4, which that spec rates low.
 
+27. **A building's movement point (Q-3317).** When the destination of an infantry unit or a
+    vehicle is a building, the point that the building supplies to the unit's locomotion at each
+    assignment (Terms, *Locomotor destination*; S-0207 claim 25 for vehicles) is the building's
+    heading point of S-0506 claim 14, asked for that unit. For an aircraft, S-0501 gives a
+    building's heading point, and this claim does not change it.
+    - a building whose type has the helipad flag, the unit-repair flag or the vehicle-bunker flag
+      (Import mapping) gives its docking point for the unit: the point that S-0607 claim 7's
+      order of precedence gives, the one the building would give that unit itself. So a type
+      with the vehicle-bunker flag and neither the obsolete-unloading nor the resource-unloading
+      flag gives S-0606 claim 4's quadrant point, taken from the unit's position at the
+      assignment, which for a 2 × 2 foundation is the centre of one foundation cell. That holds
+      when the type also has the unit-repair flag (S-0606 claim 20, S-0314 claim 18). A type with
+      the helipad or unit-repair flag and none of those three other flags gives the docking-place
+      rule of S-0314 claim 18 and S-0404 claim 15, as S-0607 claim 7 states it for a seized unit.
+    - any other building gives its centre (S-0204 claim 4). This includes a building whose type
+      has the unit-reload flag but none of those three: it gives its centre, not a docking point,
+      to an infantry unit or a vehicle. The centre is its position moved by 128 × (*W* − 1)
+      leptons along the map *x* axis and 128 × (*H* − 1) along *y*, *W* × *H*
+      being its foundation.
+
+    Beyond the docking point's dependence on the unit's position, the point does not depend on
+    the behaviour that gives the destination (recycling, capture, entering or any other), nor on
+    whether the unit is an infantry unit or a vehicle, nor on its locomotor. A building that gives
+    its centre never gives its position, except with a 1 × 1 foundation, where the two are the
+    same point.
+
+    Its cell is the cell that holds it (S-0204 claim 2: for the non-negative coordinates of a
+    point on the map, the integer lepton coordinate divided by 256 and rounded down, on each
+    axis). On an axis where the foundation side is even, the centre lies on the
+    boundary between two cells, and this gives the cell on the larger-coordinate side. So for a
+    building that gives its centre, the cell is the foundation cell that lies
+    (⌊*W* / 2⌋, ⌊*H* / 2⌋) cells on from the position cell: for a 2 × 2 foundation, the cell
+    with both coordinates the larger.
+
+    For the teleporting locomotor this point fixes the landing:
+    - the destination cell of S-0207 claim 20 (b) is this cell, so a vehicle whose entry outcome
+      there is *clear* lands at its centre, and its nearby-cell search, when the outcome is not
+      *clear*, is centred on it,
+    - an infantry unit's *P* and *C* of claim 19 are this point and this cell.
+
+    So when its entry outcome there is *clear*, a vehicle sent into a vehicle bunker lands in the
+    foundation cell that holds the quadrant point (S-0606 claim 4), and an entrant sent into a
+    recycling building lands in the cell of the building's centre. S-0603 claim 16 (b) and (e) give
+    the cases in which a recycling building's entrant lands beside the foundation instead. For a
+    walker, the searches of claim 25 look for this point's cell.
+    - Backing: `measurable` (scenario W22: parts a and b for recycling buildings of six foundation
+      sizes and two kinds of unit, part c for a vehicle bunker from four sides, part e for a
+      capture and a sabotage, part f for a building with the unit-reload flag alone).
+      `unmeasured` for other behaviours: the point is computed from the building's type and the
+      unit's position alone, and W22 varies the type and plays four behaviours that give a
+      building itself as a destination (recycling, entering, capture and sabotage).
+      `unmeasured` for walking and driving locomotion: a walker or a driving vehicle sent to a
+      building of a type without a docking point reaches it at the first foundation cell that
+      S-0209 lets it into, so the cell that holds the point shows in its movement only through
+      its route search (claim 25, S-0212).
+    - Confidence: high for the cell that holds the point, the centre's cell on the
+      larger-coordinate side of an even side, for recycling buildings, for W22's subjects (a
+      teleporting infantry unit and a teleporting vehicle, the six foundations of parts a and b).
+      Medium, `unmeasured`, for the exact point within that cell: a teleporting vehicle lands at
+      its cell's centre, and every point that this claim gives (a cell's centre, corner or edge
+      midpoint) is of claim 2's class centre, so claim 19 lands an infantry unit at its cell's
+      centre position for each of them, and W22's landings show the cell and the class only.
+      High for the cell of the vehicle bunker's quadrant point as the teleporting vehicle's
+      landing cell
+      (part c). Medium for the capture and the sabotage (part e is
+      not yet run; a landing on the foundation there rests on S-0209 row WP3, which S-0209 rates
+      low). High for the centre of a building with the unit-reload flag alone as the landing cell,
+      for part f's infantry order and the vehicle's second order. Medium for other building types without a docking point, for other
+      behaviours and for walking and driving locomotion, which follow the same rule but are not
+      played. For a vehicle, the docking point of a type with the helipad or unit-repair flag,
+      or with more than one of the flags, carries the backing and confidence of S-0607 claim 7,
+      which defines its point as the one the building would give that vehicle itself (S-0606
+      claim 20 for a type with both the vehicle-bunker and unit-repair flags). Low for the
+      docking point given to an infantry unit (Open questions).
+
 ## Formulas
 
 **F1. Distance from the centre.** *r* = trunc(√̃((*u* − 128)² + (*v* − 128)²)), where √̃ is the
@@ -2182,6 +2295,7 @@ position stops on that same tick and does not ask for a next walking target (sce
 | Rules, infantry type section, `Engineer` | engineer type (Terms; claim 26) | boolean | no (S-0214) |
 | Rules, the combat-damage section, `PlayerScatter` | the player-scatter rule (claims 11 and 15) | boolean | no |
 | Rules, infantry type section, `Locomotor` | whether claims 19 and 20 apply, including claim 19's pre- and post-jump record rules, refused-replacement rule and landing choice while a warp is pending | identifier parsed and recognised by S-0207 claim 14 and its Import mapping | keeps the value in force; teleporting locomotor before any layer gives one |
+| Rules, building type section, `Helipad`, `UnitRepair`, `Bunker`, `UnitReload`, `Weeder`, `Refinery`; art, building image section, `Foundation` | whether a building gives a docking point (the helipad, unit-repair and vehicle-bunker flags) or its centre (any other type, also one with the unit-reload flag alone) as its movement point, which docking point (S-0607 claim 7's precedence, with the obsolete-unloading and resource-unloading flags), and *W* × *H* (claim 27) | booleans; foundation word as S-0108 claim 8 selects it | no, for each flag (owned by S-0404, S-0314, S-0606 and S-0607); foundation as S-0108 claim 8's selection and fallback give |
 | Rules, infantry type section, `SpeedType`, `MovementZone` | landing-search locomotion class and movement zone (claim 19) | named choices parsed by S-0211 Import mapping | S-0211's defaults and layering rules |
 | Rules, land-type sections, `Foot` | the walker speed percentage; only zero matters (claim 9) | percent | owned by S-0211 |
 | Map, `[CellTags]`, `[Tags]`, `[Triggers]`, `[Events]`, `[Actions]` | cell-tag attachment and entered-by event/action eligibility at claim 22's arrival | map records and event/action parameters parsed by S-0009 and S-0011 | no attached tag or trigger when absent, as those specs give; arrival timing is an engine rule, not an imported delay |
@@ -3025,40 +3139,37 @@ cases).**
   an unnamed bystander acts on a test object or enters the observed area.
 - *Procedure:* (a) Order empty cell centres, then cells with one, two and three allied infantry
   side positions taken. (b) Order a vehicle-occupied cell and an impassable cell, leaving empty
-  neighbours. (c) Use named test-map copies of infantry types whose imported properties allow them to enter a transport,
-  capture, sabotage or be absorbed by a building, changing only their locomotor to the
+  neighbours. (c) Use named test-map copies of infantry types whose imported properties allow them
+  to enter a transport, capture or be absorbed by a building, changing only their locomotor to the
   teleporting one. Give their corresponding object destinations and check the occupant-ignoring
-  choice. Also use a blocked object destination in a behaviour outside those four and compare
-  its search result with S-0212 claim 25. Repeat on a slope, a high bridge and with destination
-  and departure in different reach regions, logging the inputs to claim 19's search. The named
-  test data is removed afterwards. (d) Use a high bridge over enterable ground, with
-  different allied infantry side positions occupied in ground and deck records. Vary
-  departure elevation below and above claim 19's 312-lepton boundary using ground starts
-  and elevated banks, without writing game state. Record the applied destination to
-  exclude click substitution. Also use an empty ground record with all deck side positions
-  taken: below the boundary the position choice can succeed but the entry check refuses.
-  After each successful jump record deck status, listing and both occupancy records.
-  Once phasing in ends, issue a player scatter and record the centre and occupancy
-  conditions of the resulting destination choice. (e) Order across a cliff and to an isolated island.
-  (f) Place the infantry with the teleporting locomotor by a production release or map-trigger placement
-  with ground infantry occupants nearby. Identify any destination supplied during placement,
-  then compare that event with a later ordinary move, for human and non-player owners where
-  placement can be arranged. Do not manufacture a destination by writing game state.
-  (i) On a level high bridge above enterable ground, start with an otherwise empty
-  landing cell. Teleport there from ground height and record its ground and deck
-  standing-position entries at fixation, after landing and after phasing in. Then
-  order another teleport to an empty ground cell. Record both entries of the former
-  landing cell through the next fixation and jump. Repeat with a deck-height
-  departure. Use an ordinary ground walker under the former landing cell to test
-  the residual ground position's availability. No recorder writes game state.
-  (h) On flat ground give a move to empty cell *A*, then a replacement move to cell *B*
-  with all three allied infantry side positions taken, using scripted ordinary input.
-  Record each applied destination and movement update. A qualifying run must show *A*'s
-  reservation followed by *B*'s refusal before any jump; two inputs that collapse to one
-  destination or straddle a jump do not test replacement. Repeat with *B* impassable but
-  its standing positions free, to distinguish entry refusal from position refusal.
-  Seek three qualifying runs for each refusal kind; if normal input cannot arrange the
-  interval, report that limitation rather than writing game state.
+  choice. (The saboteur, which respects occupants, is W22 part e.) Also use a blocked object
+  destination in a behaviour outside those four and compare its search result with S-0212 claim 25.
+  Repeat on a slope, a high bridge and with destination and departure in different reach regions,
+  logging the inputs to claim 19's search. The named test data is removed afterwards. (d) Use a high
+  bridge over enterable ground, with different allied infantry side positions occupied in ground and
+  deck records. Vary departure elevation below and above claim 19's 312-lepton boundary using ground
+  starts and elevated banks, without writing game state. Record the applied destination to exclude
+  click substitution. Also use an empty ground record with all deck side positions taken: below the
+  boundary the position choice can succeed but the entry check refuses. After each successful jump
+  record deck status, listing and both occupancy records. Once phasing in ends, issue a player
+  scatter and record the centre and occupancy conditions of the resulting destination choice. (e)
+  Order across a cliff and to an isolated island. (f) Place the infantry with the teleporting
+  locomotor by a production release or map-trigger placement with ground infantry occupants nearby.
+  Identify any destination supplied during placement, then compare that event with a later ordinary
+  move, for human and non-player owners where placement can be arranged. Do not manufacture a
+  destination by writing game state. (i) On a level high bridge above enterable ground, start with
+  an otherwise empty landing cell. Teleport there from ground height and record its ground and deck
+  standing-position entries at fixation, after landing and after phasing in. Then order another
+  teleport to an empty ground cell. Record both entries of the former landing cell through the next
+  fixation and jump. Repeat with a deck-height departure. Use an ordinary ground walker under the
+  former landing cell to test the residual ground position's availability. No recorder writes game
+  state. (h) On flat ground give a move to empty cell *A*, then a replacement move to cell *B* with
+  all three allied infantry side positions taken, using scripted ordinary input. Record each applied
+  destination and movement update. A qualifying run must show *A*'s reservation followed by *B*'s
+  refusal before any jump; two inputs that collapse to one destination or straddle a jump do not
+  test replacement. Repeat with *B* impassable but its standing positions free, to distinguish entry
+  refusal from position refusal. Seek three qualifying runs for each refusal kind; if normal input
+  cannot arrange the interval, report that limitation rather than writing game state.
 - *Observable:* landing cell, standing position and height, refusals, occupants' destinations,
   ground and deck records and listings at assignment and after the jump, the unit's deck
   status, and draws attributable to position choice or scatter rather than other actors.
@@ -3503,7 +3614,102 @@ cases).**
   which it is outside *P* (S-0605 claim 16 and its Edge cases keep it there). Remove the test files
   afterwards.
 
+**Scenario W22: the point a building gives as a destination (claims 19 and 27; Q-3317).**
+- *Setup:* the set-up of S-0603 scenario G12: a tiny flat clear skirmish map, a human player whose
+  target building *B* stands with its position cell at a recorded cell on open ground, stock data
+  except the named test files below, game speed index 2, director off and mods off. Subjects: a
+  stock self-teleporting infantry unit, and a stock vehicle type changed only to the teleporting
+  locomotor (S-0603's test rules *teleport-vehicle-test*). Each subject starts at rest, alone,
+  six or more cells from the foundation on one side, once from each of the four sides. The
+  recorder reads, after each tick, each subject's position, cell, destination and current
+  behaviour while it is in the game, the position of each warp animation that is playing, *B*'s
+  owner and the house's credits. No recorder writes game state.
+- *Procedure:*
+  - (a) *B* is a recycling building of each of six foundations, 1 × 1, 2 × 2, 3 × 2, 3 × 3,
+    4 × 4 and 5 × 3: the stock recycling building where its foundation is one of them, and
+    otherwise a stock building type of that foundation given the grinding flag by named test
+    rules that change nothing else. No type used has the helipad, unit-repair, unit-reload or
+    vehicle-bunker flag. Give the infantry subject one recycle order on *B*.
+  - (b) The same buildings; give the vehicle subject two recycle orders on *B*, the second after
+    its first jump has ended its phasing in.
+  - (c) *B* is a vehicle bunker of the house: the stock vehicle-bunker type given a 2 × 2
+    foundation by named test rules that change nothing else. The subject is a stock vehicle type
+    that is bunker-eligible (S-0606 claim 1: the bunkerable and turret flags, a turret weapon and
+    a locomotion class other than *hover*), changed only to the teleporting locomotor by named
+    test rules. Give it an enter order on *B*.
+  - (d) *B* is the 2 × 2 recycling building of part a, made invulnerable as in S-0603 scenario G12
+    part e; give the infantry subject one recycle order on it.
+  - (e) *B* is an unarmed stock building of an enemy computer player, one that engineers can
+    capture and saboteurs can sabotage, with a foundation side larger than 1. The infantry
+    subjects are a stock engineer type and a stock saboteur type, each changed only to the
+    teleporting locomotor by named test rules. Give the engineer one capture order on *B*, and
+    in separate runs the saboteur one sabotage order on it.
+  - (f) *B* is the 3 × 3 recycling building of part a, given by named test rules the unit-reload
+    flag and one docking place, set by the docking-place keys that S-0404 claim 15 reads for a
+    pad building, whose point is the centre moved 256 leptons along the map *x* axis, in the
+    foundation cell next to the centre's cell, and nothing else. Give the infantry subject one
+    recycle order on *B*, as in part a, and in separate runs the vehicle subject two, as in part
+    b. In the far-place run, the docking place's point is the centre moved 1024 leptons along
+    the map *x* axis, four cells from the centre's cell, and *B*
+    is made invulnerable as in part d; give the infantry subject one recycle order on it.
+  Remove the test files afterwards.
+- *Observable:* the landing cell and the landing point in the jump tick, for each foundation, side
+  and subject, and the cell of *B*'s position. For a subject still in the game at the end of the
+  jump tick, the landing point is its position then. For a subject consumed in the jump tick
+  (S-0603 claim 16 (c)), whose position is no longer recorded, it is the position of the jump's
+  second warp animation in that tick, which plays at the landing point (S-0603 claim 16 (c)). The
+  jump's first warp animation plays at the subject's start point, six or more cells from the
+  foundation, so the second is the one at a position on or beside the foundation. A run in which
+  neither is recorded in the jump tick decides nothing.
+- *Expected (the original):*
+  - (a), the vehicle's second order in (b), and the engineer in (e): the landing cell is the cell (⌊*W* / 2⌋,
+    ⌊*H* / 2⌋) cells on from the position cell, the same from every side, and the landing point
+    is that cell's centre. Falsified by any other landing cell or point, in particular by the position cell for
+    a foundation larger than 1 × 1. The 1 × 1, the 4 × 4 and the 5 × 3 also separate the expected
+    cell from the position cell plus (1, 1).
+  - (b), first order: the vehicle lands outside the foundation in the first ring around the
+    expected cell of (a) that has a cell outside the foundation. Falsified by a landing cell
+    outside that ring (for the 2 × 2 and the 4 × 4 the rings around the expected cell and
+    around the position cell share no cell outside the foundation).
+  - (c): the landing cell is the foundation cell that holds S-0606 claim 4's quadrant point from
+    the vehicle's starting position, and the landing point is its centre. Falsified by another
+    foundation cell, or by another point in that cell. A run in which the vehicle lands outside the
+    foundation decides nothing for this part: S-0209 claim 5 decides the entry, and a refusal leads
+    to the nearby-cell search (S-0207 claim 20 b).
+  - (d): the unit lands outside the foundation, in the first ring around the expected cell of (a)
+    that has a cell outside the foundation. Falsified by a landing cell outside that ring. A run
+    in which the unit lands on the foundation decides nothing for this part (S-0209 row WP3).
+  - (e), the saboteur: the landing cell is that of (a), and the landing point is a side position
+    of that cell chosen by claim 3's centre row (claim 19: *sabotage* respects occupants).
+    Falsified by another landing cell, or by the cell's centre position.
+  - (e): a run in which a subject lands outside the foundation decides nothing, for either
+    subject, because a landing on the foundation rests on S-0209 row WP3 (claim 19's backing),
+    and a refusal there leads to the nearby-cell search.
+  - (f), the infantry subject's order and the vehicle's second order: the landing cell is the
+    cell of (a) for the 3 × 3 foundation, the centre's cell, and not the cell that holds the
+    docking place's point. Falsified by a landing in the docking place's cell. A run in which the
+    subject is not given the recycle order, or lands outside the foundation, or is reloaded or
+    repaired by *B* instead of being consumed, decides nothing for this part.
+  - (f), the far-place run: the unit lands outside the foundation, in the first ring around the
+    centre's cell that has a cell outside the foundation, as in (d). Falsified by a landing in
+    the docking place's cell or in a cell next to it, which that ring does not include. A run in
+    which the unit lands on the foundation decides nothing for this part (S-0209 row WP3).
+
 ## Open questions
+
+- Which point a building whose type has the helipad, unit-repair or vehicle-bunker flag gives
+  an infantry unit as its movement point (claim 27), such as an engineer sent to capture a
+  repair depot, was not established for infantry (low). Our engine gives the docking point that
+  claim 27 gives a vehicle, from the infantry unit's position and contact.
+- Whether an aircraft heading for a building whose type has the unit-reload flag but none of the
+  helipad, unit-repair and vehicle-bunker flags flies to its centre, as claim 27 gives for an
+  infantry unit or a vehicle, or to the docking position that S-0501 gives, was not established
+  for the aircraft's flight (low). Our engine follows S-0501.
+
+- The heading point of a building whose type has the helipad, unit-repair or vehicle-bunker flag,
+  asked with no particular mover, as claim 19's nearby-cell search asks it for an infantry
+  unit's object destination, was not established (low). Our engine uses the building's centre
+  there.
 
 - A walker that already has a walking target and accepts a scatter whose destination comes from the
   nearby-cell search (such as the requests without a threat point of W7 part r) has the same extra
@@ -3563,6 +3769,32 @@ cases).**
 
 ## Changes for other specs
 
+- **S-0207 (approved, revision 85), claim 20 (b).** Its "the destination cell" does not say which
+  point of an object destination gives the cell. After "When the object's entry outcome for the
+  destination cell" add "(the cell of the point that the destination supplies to locomotion,
+  and for a building S-0208 claim 27's point and cell)". So when its entry outcome for that cell
+  is *clear*, a teleporting vehicle sent into a recycling building or a vehicle bunker lands in
+  the cell of the building's centre or of its quadrant point (S-0208 claim 27, scenario W22,
+  high). When the outcome is not *clear*, as for a recycle order given with the vehicle's rest
+  behaviour current (S-0603 claim 16 (e); W22 part b, first order), it lands beside the
+  foundation by the nearby-cell search centred on that cell.
+- **S-0506 (approved, revision 45), claim 14.** Its "a building whose type is a helipad, a unit
+  repair or reload building, or a bunker gives its docking point" names the unit-reload flag,
+  which alone gives no docking point to an infantry unit or a vehicle. After it add "When an
+  infantry unit or a vehicle asks, and when no particular mover asks (S-0208 claim 19's
+  nearby-cell search), a building whose type has the unit-reload flag but none of the helipad,
+  unit-repair and vehicle-bunker flags gives its centre (S-0208 claims 19 and 27)" (scenario W22
+  part f: high for an infantry unit or a vehicle asking, for its subjects; medium with no mover,
+  whose far-place run is not yet run). The missile's aim point and an aircraft's heading point are
+  unchanged.
+- **S-0212 (approved, revision 107), claim 25's table, row "Infantry teleport object-destination fallback (S-0208 claim
+  19)".** Its centre "the cell of the destination object's heading point (its next movement
+  point, or its position if it has none)" reads, for a building, as the building's position.
+  Replace it with "the cell of the destination object's heading point as S-0506 claim 14 gives
+  it, with no particular mover: for a building whose type gives no docking point (S-0208 claim
+  27), its centre, also for a type with the unit-reload flag alone,
+  and for another object, its next movement point, or its position if it has none" (S-0208 claim
+  19, medium).
 - **S-0212, claim 20.** Its "when its destination changes" holds for the walk locomotor only once
   the step under way has ended: a walker with a walking target finishes that step and first searches
   for the new destination in the tick after its arrival tick (S-0208 claim 6). The same holds for

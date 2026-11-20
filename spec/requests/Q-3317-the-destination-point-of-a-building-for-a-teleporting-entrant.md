@@ -1,9 +1,9 @@
 ---
 id: Q-3317
 title: The destination point that a recycling building gives a teleporting entrant
-status: open
+status: answered
 related: [S-0603, S-0208, S-0207, S-0204, S-0212]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
