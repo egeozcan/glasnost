@@ -54,7 +54,9 @@ fn rules() -> Arc<SimRules> {
             },
         );
     }
-    r.sim.weapons.insert("PlantW".into(), weapon("PLANTH", false));
+    r.sim
+        .weapons
+        .insert("PlantW".into(), weapon("PLANTH", false));
     r.sim.weapons.insert("KamiW".into(), weapon("KAMIH", true));
     for n in SPENT {
         let mut u = r.sim.infantry["WALKER"].clone();
@@ -97,9 +99,18 @@ fn of(w: &World, n: &str) -> Vec<ObjectId> {
         .filter(|o| {
             let r = w.rules();
             let name = match o.kind {
-                Kind::Building => r.buildings.get(o.type_index as usize).map(|b| b.name.as_str()),
-                Kind::Vehicle => r.vehicles.get(o.type_index as usize).map(|u| u.name.as_str()),
-                Kind::Infantry => r.infantry.get(o.type_index as usize).map(|u| u.name.as_str()),
+                Kind::Building => r
+                    .buildings
+                    .get(o.type_index as usize)
+                    .map(|b| b.name.as_str()),
+                Kind::Vehicle => r
+                    .vehicles
+                    .get(o.type_index as usize)
+                    .map(|u| u.name.as_str()),
+                Kind::Infantry => r
+                    .infantry
+                    .get(o.type_index as usize)
+                    .map(|u| u.name.as_str()),
                 _ => None,
             };
             name == Some(n)
@@ -131,11 +142,7 @@ fn scene(spent: i32, walkers: i32) -> World {
     assert!(!of(&w, "GUNR").is_empty(), "house 0 has a gun vehicle");
     // The infantry line free: what it was building is taken off it.
     for l in w.econ.lines.lines.iter_mut() {
-        if l.house == HouseId(0)
-            && l.item
-                .as_ref()
-                .is_some_and(|i| i.t.kind == Kind::Infantry)
-        {
+        if l.house == HouseId(0) && l.item.as_ref().is_some_and(|i| i.t.kind == Kind::Infantry) {
             l.item = None;
         }
     }
