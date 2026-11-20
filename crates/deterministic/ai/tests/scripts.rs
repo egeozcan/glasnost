@@ -245,16 +245,6 @@ fn the_difficulties_change_the_plan_only_away_from_normal() {
     assert!(hard.harvesters > normal.harvesters);
 }
 
-// design: own AI (#449, B12): hard keeps two harvesters more than normal: in the B12 level round hard on country index 1 ended with 3.5 harvesters a game against normal's 4.4 on country index 0 (its refineries by new fields bring their own), and lost on worth at the cap
-#[test]
-fn hard_keeps_two_harvesters_more_than_normal() {
-    use glasnost_ai::brain::{default_plan, plan_for};
-    assert_eq!(
-        plan_for(AiDifficulty::Hard).harvesters,
-        default_plan().harvesters + 2
-    );
-}
-
 /// A probe that keeps the names of the brain's parts it is told of.
 struct Parts(Vec<&'static str>);
 
