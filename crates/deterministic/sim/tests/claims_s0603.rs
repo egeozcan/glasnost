@@ -1082,7 +1082,7 @@ fn landed_beside(w: &World, u: ObjectId, cells: &[CellXY], what: &str) {
     assert_eq!(o.dest, None, "{what}: the jump removes the destination");
 }
 
-// spec: S-0603 r15 claim 16 (b) and (c) (Q-3297 answered, #455): fixing the landing point is a start (Changes for S-0215 claim 12), so a ready self-teleporting infantry unit given the recycle order at rest makes eaten current before the point is chosen; S-0208 claim 19 then ignores occupants and S-0209 claim 4 row WP3 gives clear for the building that is its mission target, so it lands on the foundation, whichever side it starts from; landing is an arrival of its own kind whose effects include claim 5's consumption test while it still holds its destination (Changes for S-0207 claim 20 e), so it is consumed in the jump tick (it never ends a tick on the foundation), paid (claims 6 to 8) with the consumption effect (claim 7), and the second warp animation plays at the landing point although it has left the game. The landing cell is a foundation cell; which one is Q-3317's. The walking control TEMPI is consumed by walking in (claims 4 and 5)
+// spec: S-0603 r15 claim 16 (b) and (c) (Q-3297 answered, #455): fixing the landing point is a start (Changes for S-0215 claim 12), so a ready self-teleporting infantry unit given the recycle order at rest makes eaten current before the point is chosen; S-0208 claim 19 then ignores occupants and S-0209 claim 4 row WP3 gives clear for the building that is its mission target, so it lands on the foundation, whichever side it starts from; landing is an arrival of its own kind whose effects include claim 5's consumption test while it still holds its destination (Changes for S-0207 claim 20 e), so it is consumed in the jump tick (it never ends a tick on the foundation), paid (claims 6 to 8) with the consumption effect (claim 7), and the second warp animation plays at the landing point although it has left the game. The landing cell is the cell of the building's centre, the foundation cell with both coordinates the larger (S-0208 r82 claim 27, Q-3317). The walking control TEMPI is consumed by walking in (claims 4 and 5)
 #[test]
 fn claim_16_b_c_issue_455_a_self_teleporting_infantry_lands_on_the_foundation_and_is_consumed() {
     for (dx, dy) in [(3, 4), (-3, -2)] {
@@ -1119,9 +1119,10 @@ fn claim_16_b_c_issue_455_a_self_teleporting_infantry_lands_on_the_foundation_an
             let warps = warp_cells(&fx);
             assert_eq!(warps.len(), 2, "{what}: {warps:?}");
             assert_eq!(warps[0], at(dx, dy), "{what}: the first at the old point");
-            assert!(
-                on_foundation(warps[1]),
-                "{what}: the second at the landing point, on the foundation: {warps:?}"
+            assert_eq!(
+                warps[1],
+                at(1, 1),
+                "{what}: the second at the landing point, in the cell of the centre: {warps:?}"
             );
             round_trip(&w);
         }
