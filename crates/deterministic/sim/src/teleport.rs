@@ -663,7 +663,9 @@ fn infantry_landing(w: &mut World, id: ObjectId, dest: Target) -> Option<(Pos, L
     let p = match dest {
         Target::Cell(_) => path::heading_point(w, id)?,
         // spec: S-0208 r82 claims 19 and 27 (Q-3317: for a building, P is claim 27's point, a docking point for the helipad, unit-repair and vehicle-bunker flags, its centre otherwise, the unit-reload flag alone included; for a docking type our engine gives the infantry unit the docking point a vehicle gets, Open questions; C is the cell that holds P, the larger-coordinate side of an even side)
-        Target::Object(x) if w.obj(x)?.kind == Kind::Building => crate::lift::lifter_point(w, x, id),
+        Target::Object(x) if w.obj(x)?.kind == Kind::Building => {
+            crate::lift::lifter_point(w, x, id)
+        }
         Target::Object(x) => w.obj(x)?.pos,
     };
     let c = p.cell();

@@ -265,7 +265,10 @@ fn w22_b_a_vehicle_searches_round_and_lands_in_the_cell_of_the_centre() {
             testkit::run(&mut w, 2);
             let e = expected(fw, fh);
             let first = jump(&mut w, v, Behaviour::Eaten, b).cell();
-            assert!(!on_foundation(first, fw, fh), "{what}: beside, at {first:?}");
+            assert!(
+                !on_foundation(first, fw, fh),
+                "{what}: beside, at {first:?}"
+            );
             assert_eq!(
                 ring(first, e),
                 first_outside_ring(e, fw, fh),
@@ -411,7 +414,11 @@ fn claim_19_a_saboteur_respects_a_vehicles_cell() {
     let (mut w, u, v) = scene("WARPER", None);
     let (l, row) = landing_with(&mut w, u, Behaviour::Sabotage, v);
     assert_ne!(l.cell(), at(0, 0), "refused in the vehicle's cell");
-    assert!(ring(l.cell(), at(0, 0)) == 1, "a neighbour, at {:?}", l.cell());
+    assert!(
+        ring(l.cell(), at(0, 0)) == 1,
+        "a neighbour, at {:?}",
+        l.cell()
+    );
     assert!(row.is_some(), "the second choice draws");
 }
 
@@ -440,7 +447,12 @@ fn claim_19_patrol_ignores_occupants_for_a_vehicle() {
 fn claim_19_patrol_ignores_occupants_in_the_second_choice() {
     let (mut w, u, v) = scene("WARPER", None);
     let (l, row) = landing_with(&mut w, u, Behaviour::Patrol, v);
-    assert_eq!(ring(l.cell(), at(0, 0)), 1, "a neighbour, at {:?}", l.cell());
+    assert_eq!(
+        ring(l.cell(), at(0, 0)),
+        1,
+        "a neighbour, at {:?}",
+        l.cell()
+    );
     assert_eq!(row, None, "no draw");
     assert_eq!(within(l), centre_position());
 }
@@ -466,7 +478,11 @@ fn w22_f_the_unit_reload_flag_alone_gives_the_centre() {
         jump(&mut w, v, Behaviour::Eaten, b);
         until_phased_in(&mut w, v);
         let l = jump(&mut w, v, Behaviour::Eaten, b);
-        assert_eq!(l.cell(), expected(3, 3), "{what}: the vehicle's second order");
+        assert_eq!(
+            l.cell(),
+            expected(3, 3),
+            "{what}: the vehicle's second order"
+        );
     }
 }
 

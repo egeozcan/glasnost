@@ -422,9 +422,7 @@ fn hold_off_a_held_walker_waits_for_its_retry_delay() {
     });
     ready(&mut w);
     let tanks: Vec<_> = (0..3)
-        .map(|i| {
-            glasnost_sim::testkit::spawn(&mut w, Kind::Vehicle, "TANK", 1, at(12 + i, -1), 0)
-        })
+        .map(|i| glasnost_sim::testkit::spawn(&mut w, Kind::Vehicle, "TANK", 1, at(12 + i, -1), 0))
         .collect();
     let u = glasnost_sim::testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at(-9, 0), 0);
     glasnost_sim::testkit::run(&mut w, 1);
@@ -466,14 +464,21 @@ fn hold_off_a_held_walker_waits_for_its_retry_delay() {
     let (held_at, failed) = last.expect("the hold follows a search");
     assert_eq!(failed, Search::SearchFailed);
     let r = o.path.retry_at;
-    assert!(r > held_at + 1, "a retry delay to wait for: {held_at} to {r}");
+    assert!(
+        r > held_at + 1,
+        "a retry delay to wait for: {held_at} to {r}"
+    );
 
     // An assignment ends the hold: a copy given a move to its own cell.
     let mut c = s.w.clone();
     let here = c.obj(u).unwrap().pos.cell();
     glasnost_sim::orders::issue(&mut c, HouseId(0), mv(u, here));
     glasnost_sim::tick::step(&mut c);
-    assert_ne!(c.obj(u).unwrap().path.held_for, Some(goal), "an assignment ends it");
+    assert_ne!(
+        c.obj(u).unwrap().path.held_for,
+        Some(goal),
+        "an assignment ends it"
+    );
 
     // A found path ends the hold: a copy with the vehicles taken away.
     let mut c = s.w.clone();
@@ -498,7 +503,11 @@ fn hold_off_a_held_walker_waits_for_its_retry_delay() {
     let (t, res) = found.expect("it searches again");
     assert!(t >= r, "not before its retry tick: {t} < {r}");
     assert_eq!(res, Search::Found);
-    assert_eq!(c.obj(u).unwrap().path.held_for, None, "a found path ends it");
+    assert_eq!(
+        c.obj(u).unwrap().path.held_for,
+        None,
+        "a found path ends it"
+    );
 
     // While it holds, it waits: no search before its retry tick, and each
     // update ends with its delay, its destination and the mark.
@@ -511,7 +520,11 @@ fn hold_off_a_held_walker_waits_for_its_retry_delay() {
             break;
         }
         let o = s.w.obj(u).unwrap();
-        assert_eq!(o.path.held_for, Some(goal), "the mark is kept while it waits");
+        assert_eq!(
+            o.path.held_for,
+            Some(goal),
+            "the mark is kept while it waits"
+        );
         assert_eq!(o.path.retry_at, r, "the delay is not ended");
         assert_eq!(o.dest, Some(goal), "the destination is kept");
         assert_eq!(o.beh.current, Some(Behaviour::Move));
