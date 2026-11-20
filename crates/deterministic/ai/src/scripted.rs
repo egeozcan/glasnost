@@ -110,6 +110,12 @@ pub struct Names {
 /// The kinds of army the round-robin builds from, one counter each.
 const ARMY_KINDS: [Kind; 3] = [Kind::Vehicle, Kind::Infantry, Kind::Aircraft]; // nocite: the three kinds of army unit
 
+/// The round offers the types a house sends alone ([`spent_alone`]) only
+/// while its spend on them, times this, is under its spend on the rest of
+/// its army: at most about a fifth of the army's credits go to units that
+/// never join a wave.
+const SPENT_SHARE: i64 = 4; // design: own AI (#449, B12): a person's army is mostly units that fight together
+
 /// Ticks between two thinks.
 pub const THINK_PERIOD: i32 = 15; // nocite: tuning of our own opponent
 
@@ -374,6 +380,34 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
 /// weapons are the slot list, often with no primary weapon set).
 pub(crate) fn armed(u: &glasnost_sim::rules::UnitRules) -> bool {
     u.primary.is_some() || (u.combat.gattling && u.combat.slots[0].is_some())
+}
+
+/// Whether the house sends units of type `t` alone and loses them on use:
+/// an engineer (S-0509: spent on the building it enters), or a type whose
+/// primary weapon plants a bomb (S-0519 claim 2) or is a suicide weapon
+/// (S-0519 claim 11), whose infantry carry explosive charges (S-0519 claim
+/// 12) or that designates air strikes (S-0519 Terms: a positive team size
+/// and a strike aircraft type). The special attacks (`terror`) and the
+/// engineers' step (`special`) give each such unit its own order, so none
+/// joins a wave.
+pub fn spent_alone(w: &World, t: TypeRef) -> bool {
+    let r = w.rules();
+    let Some(u) = r.unit(t.kind, t.index) else {
+        return false;
+    };
+    if u.engineer || (t.kind == Kind::Infantry && u.raw.c4.unwrap_or(false)) {
+        return true;
+    }
+    let Some(tc) = glasnost_sim::combat::veterancy::type_combat_in(r, t.kind, t.index) else {
+        return false;
+    };
+    // spec: S-0519 Terms (a designator's type has a positive normal team size and a strike aircraft type)
+    if tc.airstrike_team > 0 && tc.airstrike_team_type[0].is_some() {
+        return true;
+    }
+    tc.slots[0].is_some_and(|wp| {
+        r.combat.weapon(wp).suicide || r.combat.warhead_of(wp).is_some_and(|h| h.ivan_bomb)
+    })
 }
 
 /// Whether type `t` is listed in a paradrop payload (S-0522 claim 2): the
@@ -2485,12 +2519,39 @@ impl Script {
                 .filter(|&&id| w.obj(id).is_some_and(|o| tech::type_of(o) == t))
                 .count()
         };
+        // design: own AI (#449, B12): the types the house sends alone and
+        // loses on use (`spent_alone`) are offered only while what it has
+        // spent on them (S-0407 claim 10's ever-built counts at the types'
+        // costs) is under a share of what it has spent on the rest of its
+        // army, where a kind has another type to build. Ranked by what
+        // stands on the map, such a type was first again at every free line
+        // once used: in the paradrop-off normal mirror the second country
+        // spent most of its army's credits on units that never joined a
+        // wave.
+        let (spent, fought) = w.houses[usize::from(house.0)]
+            .econ
+            .tech
+            .ever_built
+            .iter()
+            .filter(|&(&t, _)| role_of(w, t) == Some(Role::Army))
+            .fold((0i64, 0i64), |(s, f), (&t, &n)| {
+                let c = i64::from(n) * i64::from(production::cost_field(w, t));
+                if spent_alone(w, t) {
+                    (s + c, f)
+                } else {
+                    (s, f + c)
+                }
+            });
+        let spent_open = spent * SPENT_SHARE < fought;
         for (k, kind) in ARMY_KINDS.into_iter().enumerate() {
-            let of_kind: Vec<TypeRef> = army_types
+            let mut of_kind: Vec<TypeRef> = army_types
                 .iter()
                 .copied()
                 .filter(|t| t.kind == kind)
                 .collect();
+            if !spent_open && of_kind.iter().any(|&t| !spent_alone(w, t)) {
+                of_kind.retain(|&t| !spent_alone(w, t));
+            }
             let n = of_kind.len();
             let pick = (0..n)
                 .filter(|&i| !self.busy(w, of_kind[i]))
