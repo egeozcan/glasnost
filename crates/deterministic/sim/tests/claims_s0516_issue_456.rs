@@ -164,7 +164,10 @@ fn issue_456_the_fake_blink_does_not_let_a_human_defence_pick_it() {
 }
 
 // spec: S-0516 claim 33 (a) and (c) (moving clears the disguise; it takes one again on a still tick with no contact and its lockout run out) and claim 35; S-0309 claim 12, table C, disguise row: in each state between ticks after the stop, the search follows claim 35's predicate (whether a still, undisguised state is seen between ticks depends on the tick pipeline: the re-disguise is taken in the vehicle's own turn of its first still tick)
+// The test prints its observation for Q-3313 (a test harness line, not
+// simulation output).
 #[test]
+#[allow(clippy::disallowed_macros)]
 fn issue_456_a_just_stopped_mirage_follows_the_predicate() {
     let (_, mut w, m, tower) = scene();
     move_to(&mut w, m, at(-3, 2));
