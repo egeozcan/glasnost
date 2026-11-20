@@ -159,6 +159,8 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
         if thief && ob.dest == Some(Target::Object(id)) && !train {
             // spec: S-0210 claim 5 (the crusher is taken over instead: the thief disappears, the owner changes at once)
             crate::objects::remove(w, x);
+            // spec: S-0309 r149 claim 32 (*A stolen vehicle*: first dropped as at the start of cloaking, claim 28, with claim 27's timer reset, S-0215 claim 10's revert and claim 27a's put-aside loss, unless the holder's house senses the vehicle's cell or the holder has the vehicle's owner before the change; the owner change follows in the same action)
+            crate::cloak::machine::drop_attackers(w, id);
             // spec: S-0210 claim 5 and S-0414 claim 4 (a change of owner with every change-of-owner consumer, whatever its cause)
             crate::mind::set_owner(w, id, ob.owner);
             // spec: S-0109 claim 22 (End with the owner: a vehicle taken over by a vehicle thief)

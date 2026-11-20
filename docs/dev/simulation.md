@@ -1175,8 +1175,12 @@ destination are kept apart from a revert. Put-aside slots and attack-move memori
 touched, so a later revert or resumption can give the object back. An attacker whose strike
 holds the living object as its strike target keeps it. A spawner's controller target is not a
 held target and is left alone. Before r149 a player house's holders kept such a target (S42's
-guard test, now inverted). Tests: `claims_s0309_r149.rs` and the `s0309_issue_453_*` tests in
-`claims_s0601.rs`.
+guard test, now inverted). A vehicle thief's takeover (`crush.rs`) first runs the cloak drop
+(`cloak::machine::drop_attackers`, claim 28 with claim 27's draw and claim 27a's put-aside loss)
+for holders that neither sense the vehicle's cell nor have its old owner, then changes the owner,
+which drops it for the rest with no draw. Tests: `claims_s0309_r149.rs`, the
+`s0309_issue_453_*` tests in `claims_s0601.rs` and
+`a_stolen_vehicle_is_first_dropped_as_at_the_start_of_cloaking` in `claims_s0210.rs`.
 
 ## Simulation (M8 A3 intake 116: building work at an owner change)
 

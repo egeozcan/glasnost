@@ -225,8 +225,9 @@ pub fn grant_own_flag(w: &mut World, id: ObjectId) {
 /// same owner or its house senses the target (S-0516 claim 14, S-0215
 /// claim 10: an overridden attacker reverts first, then drops it if it is
 /// still its target); each one that drops it takes S-0309 claim 28's timer
-/// reset first.
-fn drop_attackers(w: &mut World, id: ObjectId) {
+/// reset first. A vehicle thief's takeover uses the same drop before the
+/// owner change (S-0309 r149 claim 32, *A stolen vehicle*).
+pub(crate) fn drop_attackers(w: &mut World, id: ObjectId) {
     let Some(owner) = w.obj(id).map(|o| o.owner) else {
         return;
     };
