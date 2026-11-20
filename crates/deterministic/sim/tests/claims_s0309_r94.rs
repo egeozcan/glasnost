@@ -228,7 +228,7 @@ fn p9b_a_computer_owned_holder_drops_a_target_of_its_own_house_off_the_check_pha
     }
 }
 
-// spec: S-0309 claim 25 part k (a holder of a human-controlled owner has no such drop: in our engine the holders of every player house keep an allied target) and scenario A6 part p run p9b's control
+// spec: S-0309 r149 claim 25 part k (a holder of a human-controlled owner has no such drop: in our engine the holders of every player house keep an allied target) and scenario A6 part p run p9b's control; claim 32 (r149, Q-3298) drops a target only at its owner change, which this target never has
 #[test]
 fn p9b_control_a_player_holder_keeps_a_target_of_its_own_house() {
     let mut w = game();

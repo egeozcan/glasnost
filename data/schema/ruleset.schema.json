@@ -11069,6 +11069,11 @@
           "type": "boolean",
           "default": true
         },
+        "teleport_vehicle_recycle_lands_beside": {
+          "description": "A vehicle with the teleporting locomotor chooses the landing point of a first recycle order with its rest behaviour current, so it lands beside the recycling building and stays in eaten, unmoved and not consumed, until another order; off: while eaten is queued and its destination is a recycling building, the vehicle entry row for a grinding destination is applied as if eaten were current, so the first order lands in the building and consumes it when eaten is current then.",
+          "type": "boolean",
+          "default": true
+        },
         "thinning_hits_waypoint_only": {
           "description": "The waypoint-thinning action takes every bale from the waypoint's own cell only.",
           "type": "boolean",

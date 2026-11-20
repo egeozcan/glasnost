@@ -2176,6 +2176,10 @@ pub struct Quirks {
     // spec: S-0603 claim 5 and Edge cases
     #[serde(default = "on")]
     pub grinder_no_arrival_recheck: bool,
+    /// A vehicle with the teleporting locomotor chooses the landing point of a first recycle order with its rest behaviour current, so it lands beside the recycling building and stays in eaten, unmoved and not consumed, until another order; off: while eaten is queued and its destination is a recycling building, the vehicle entry row for a grinding destination is applied as if eaten were current, so the first order lands in the building and consumes it when eaten is current then.
+    // spec: S-0603 claim 16 (e) and Edge cases
+    #[serde(default = "on")]
+    pub teleport_vehicle_recycle_lands_beside: bool,
     /// An infantry entrant that reaches an absorbing building goes in whatever the passenger count, the switch or its size, so with two or more link places the building can hold more than its capacity; off: at completion the building applies claim 1's acceptance test again, and a refused entrant is treated as a refused vehicle.
     // spec: S-0605 claim 6 and Edge cases
     #[serde(default = "on")]
@@ -2936,6 +2940,7 @@ impl Default for Quirks {
             lift_standin_stays_seized: true,
             lift_standin_unmarked_cell: true,
             grinder_no_arrival_recheck: true,
+            teleport_vehicle_recycle_lands_beside: true,
             absorber_contact_no_capacity_recheck: true,
             absorber_release_bridge_ends_search: true,
             absorber_release_second_round_skips_rear: true,
@@ -4344,6 +4349,10 @@ impl Quirks {
             (
                 "grinder_no_arrival_recheck",
                 self.grinder_no_arrival_recheck,
+            ),
+            (
+                "teleport_vehicle_recycle_lands_beside",
+                self.teleport_vehicle_recycle_lands_beside,
             ),
             (
                 "absorber_contact_no_capacity_recheck",

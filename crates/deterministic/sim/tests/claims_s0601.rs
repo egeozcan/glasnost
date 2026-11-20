@@ -2014,20 +2014,46 @@ fn s0309_full_controller_does_not_search() {
     assert_eq!(w.obj(c1).unwrap().target, None);
 }
 
+/// How the holder came to hold its target (S-0309 r149 claim 32, *Every
+/// holder alike*).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Given {
+    /// An attack order.
+    Order,
+    /// The target and *attack* given directly, as a search of its own would.
+    Search,
+    /// The attack order of a force-fire click.
+    ForceFire,
+}
+
 /// A TANK of house `holder` attacking a BOX of house `victim` three cells
-/// away, which a CTRL3 of house `holder` then takes over. With `by_order`
-/// the attack is ordered; otherwise the target and *attack* are given
-/// directly, as a search would. Returns the world, the tank, the box and
-/// the box's health just after the takeover.
-fn attacked_then_taken(holder: u8, victim: u8, by_order: bool) -> (World, ObjectId, ObjectId, i32) {
+/// away, the attack given as `given` says, two ticks on. Returns the world,
+/// the tank and the box.
+fn attacking(holder: u8, victim: u8, given: Given) -> (World, ObjectId, ObjectId) {
     let mut w = testkit::game_with_non_players(&rules(), SIZE, 1);
     let tank = veh(&mut w, "TANK", holder, 0, 0);
     let t = veh(&mut w, "BOX", victim, 3, 0);
-    let c = veh(&mut w, "CTRL3", holder, 0, 4);
     while glasnost_sim::orders::blocked(&w) {
         testkit::run(&mut w, 1);
     }
-    if by_order {
+    if given == Given::Search {
+        let tick = w.tick;
+        let o = w.obj_mut(tank).unwrap();
+        o.beh.force(Behaviour::Attack, tick, false);
+        o.target = Some(Target::Object(t));
+    } else {
+        if given == Given::ForceFire {
+            use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
+            let forced = Modifiers {
+                force_fire: true,
+                ..Modifiers::default()
+            };
+            assert_eq!(
+                targeting::action(&w, HouseId(holder), tank, ClickOn::Object(t), forced),
+                Action::Attack,
+                "set-up: the force-fire click gives the attack order"
+            );
+        }
         let o = glasnost_sim::orders::Order::Behaviour {
             actor: tank,
             behaviour: Behaviour::Attack,
@@ -2036,49 +2062,123 @@ fn attacked_then_taken(holder: u8, victim: u8, by_order: bool) -> (World, Object
             dest: None,
         };
         assert!(glasnost_sim::orders::issue(&mut w, HouseId(holder), o));
-    } else {
-        let tick = w.tick;
-        let o = w.obj_mut(tank).unwrap();
-        o.beh.force(Behaviour::Attack, tick, false);
-        o.target = Some(Target::Object(t));
     }
-    assert!(
-        !w.allied(Some(HouseId(holder)), Some(HouseId(victim))),
-        "set-up: enemies"
-    );
     testkit::run(&mut w, 2);
     assert_eq!(
         w.obj(tank).unwrap().target,
         Some(Target::Object(t)),
         "set-up"
     );
-    assert!(mind::take(&mut w, c, t));
-    assert_eq!(owner(&w, t), Some(holder), "set-up: taken");
-    let health = w.obj(t).unwrap().health;
-    (w, tank, t, health)
+    (w, tank, t)
 }
 
-// spec: S-0309 claim 30 (only a holder that changes owner drops its target; the change of the target's owner is not this claim's), claim 29 (the periodic check drops only on illegal or impossible, every check tick), S-0301 claim 9 (no reason refuses a target for its relation to the holder's owner) and S-0309 claim 25 part k (in our engine the holders of every player house keep an allied target, their own house's included), as claim 31 puts it for a target an owner change made own or allied ("held like any other target"): #453, Q-3298, today's behaviour kept. A player house's attacker keeps the target that its own controller took over, through four check ticks, and goes on firing on it
-#[test]
-fn s0309_issue_453_a_player_attacker_keeps_a_target_its_house_took_over() {
-    // spec: S-0309 claim 29 (the check reads only the held target, whatever gave it: an order or a search)
-    for by_order in [true, false] {
-        let (mut w, tank, t, health) = attacked_then_taken(BETA, ALPHA, by_order);
-        for _ in 0..64 {
-            testkit::run(&mut w, 1);
-            if w.obj(t).is_none() {
-                break;
-            }
-            let o = w.obj(tank).unwrap();
-            let at = (by_order, w.tick);
-            assert_eq!(o.target, Some(Target::Object(t)), "{at:?}");
-            assert_eq!(o.beh.current, Some(Behaviour::Attack), "{at:?}");
+/// A CTRL3 of house `taker` appears and takes the box `t` over at once (so
+/// that no search of its own comes first). Checks the change's drop on
+/// `tank`: no target inside the change, *attack* kept to its next
+/// processing and the targeting timer counting on from its value. Returns
+/// the box's health just after the takeover.
+fn taken_and_dropped(w: &mut World, tank: ObjectId, t: ObjectId, taker: u8, case: &str) -> i32 {
+    let c = veh(w, "CTRL3", taker, 0, 4);
+    let timer = w.obj(tank).unwrap().targeting_timer;
+    assert!(mind::take(w, c, t), "{case}: set-up");
+    assert_eq!(owner(w, t), Some(taker), "{case}: set-up: taken");
+    let o = w.obj(tank).unwrap();
+    // spec: S-0309 r149 claim 32 (every holder drops it at that moment, inside the change)
+    assert_eq!(o.target, None, "{case}: dropped inside the change");
+    // spec: S-0309 r149 claim 32 (*Behaviour and destination*: a holder in attack keeps it, with no target, until its next processing of attack)
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Attack),
+        "{case}: attack kept"
+    );
+    // spec: S-0309 r149 claim 32 (*No timer draw*: the timer goes on counting down from its value before the change)
+    assert_eq!(o.targeting_timer, timer, "{case}: the timer counts on");
+    w.obj(t).unwrap().health
+}
+
+/// Runs 64 ticks (four check ticks of claim 29) and checks that `tank`
+/// never holds `t` again and that `t` loses no health after the first 16
+/// ticks, which a shot already on its way may take.
+fn never_again(w: &mut World, tank: ObjectId, t: ObjectId, case: &str) {
+    let mut settled = None;
+    for i in 0..64 {
+        testkit::run(w, 1);
+        let Some(x) = w.obj(t) else { break };
+        assert_ne!(
+            w.obj(tank).unwrap().target,
+            Some(Target::Object(t)),
+            "{case}: held again at tick {}",
+            w.tick
+        );
+        if i == 16 {
+            settled = Some(x.health);
         }
-        assert!(
-            w.obj(t).is_none_or(|o| o.health < health),
-            "by order {by_order}: fired on after the takeover"
+    }
+    if let Some(h) = settled {
+        assert_eq!(
+            w.obj(t).map(|o| o.health),
+            Some(h),
+            "{case}: fired on after the drop"
         );
     }
+}
+
+// spec: S-0309 r149 claim 32 (Q-3298 answered, #453: a target that changes owner is dropped by every holder, holders of the new owner included, whatever gave it: an order or a search of its own; the drop is inside the change, attack is kept to its next processing, no timer draw, and the holder's firing step after the drop fires nothing at it); scenario A20 part a. Replaces S41's guard test of the pre-r149 rule
+#[test]
+fn s0309_issue_453_a_player_attacker_drops_a_target_its_house_took_over() {
+    for given in [Given::Order, Given::Search] {
+        let case = format!("{given:?}");
+        let (mut w, tank, t) = attacking(BETA, ALPHA, given);
+        assert!(
+            !w.allied(Some(HouseId(BETA)), Some(HouseId(ALPHA))),
+            "set-up: enemies"
+        );
+        taken_and_dropped(&mut w, tank, t, BETA, &case);
+        // spec: S-0309 claim 29 and S-0309 r149 claim 32 (*Later*: the box is now of the holder's own house, which its search does not take)
+        never_again(&mut w, tank, t, &case);
+    }
+}
+
+// spec: S-0309 r149 claim 32 (*Every holder alike*: holders of a house allied with the new owner drop it too); scenario A20 part f
+#[test]
+fn s0309_issue_453_an_allys_takeover_is_dropped() {
+    let (mut w, tank, t) = attacking(BETA, ALPHA, Given::Order);
+    for (a, b) in [(BETA, NEUTRAL), (NEUTRAL, BETA)] {
+        let allies = &mut w.houses[usize::from(a)].allies;
+        allies.push(HouseId(b));
+        allies.sort();
+    }
+    assert!(
+        w.allied(Some(HouseId(BETA)), Some(HouseId(NEUTRAL))),
+        "set-up"
+    );
+    taken_and_dropped(&mut w, tank, t, NEUTRAL, "ally");
+    never_again(&mut w, tank, t, "ally");
+}
+
+// spec: S-0309 r149 claim 32 (*Every holder alike*: a target given with force-fire is dropped alike, and so are holders of the old owner); scenario A20 part g
+#[test]
+fn s0309_issue_453_a_force_fired_own_target_is_dropped_at_its_takeover() {
+    let (mut w, tank, t) = attacking(ALPHA, ALPHA, Given::ForceFire);
+    taken_and_dropped(&mut w, tank, t, BETA, "force-fire");
+}
+
+// spec: S-0309 r149 claim 32 (*Every holder alike*: holders of computer-controlled owners, in our engine the neutral and special houses, drop it too); scenario A20 part e
+#[test]
+fn s0309_issue_453_a_computer_owned_holder_drops_it() {
+    let (mut w, tank, t) = attacking(NEUTRAL, ALPHA, Given::Search);
+    taken_and_dropped(&mut w, tank, t, BETA, "computer");
+}
+
+// spec: S-0309 r149 claim 32 (the controller of a mind-control takeover drops the object as any holder does when it still holds it as its target at the change)
+#[test]
+fn s0309_issue_453_the_controller_drops_its_victim_if_it_holds_it() {
+    let mut w = game();
+    let c = veh(&mut w, "CTRL3", BETA, 0, 0);
+    let t = veh(&mut w, "BOX", ALPHA, 3, 0);
+    w.obj_mut(c).unwrap().target = Some(Target::Object(t));
+    assert!(mind::take(&mut w, c, t));
+    assert_ne!(w.obj(c).unwrap().target, Some(Target::Object(t)));
 }
 
 // ---------------------------------------------------------------------------

@@ -261,6 +261,7 @@ fn take_destination_with(w: &mut World, id: ObjectId, forced: bool) {
             }
             return;
         }
+        landing_start(w, id);
         // spec: S-0208 claim 19 (Landing choice while a warp is pending, r66, Q-3142: chosen, entry-tested and reserved as for any destination, replacing an earlier landing point; no jump follows while the warp is pending, S-0513 claims 48 and 51)
         take_infantry_destination(w, id, dest, st);
         return;
@@ -273,6 +274,29 @@ fn take_destination_with(w: &mut World, id: ObjectId, forced: bool) {
         },
     };
     fix_landing(w, id, dest, dc, st);
+}
+
+/// The start at an infantry unit's landing-point choice (S-0603 r15 claim
+/// 16 b and its Changes for S-0215 claims 11 and 12): fixing the point is
+/// itself a start, before the point is chosen, so a unit that is ready
+/// makes its queued behaviour current at once. It is not a start of the
+/// unit's update: S-0215 claim 2's exclusions and S-0513 claim 51's
+/// suppression do not apply to it, so a choice while a warp is pending can
+/// make a queued behaviour current. Vehicles, aircraft and buildings have
+/// no such start (claim 16 e).
+fn landing_start(w: &mut World, id: ObjectId) {
+    // spec: S-0603 r15 claim 16 (b) and Changes for S-0215 claim 12 (whatever gives the destination, an order or a behaviour's processing; only an infantry unit, ready under claim 11's infantry rules, with a queued behaviour)
+    if w.obj(id)
+        .is_none_or(|o| o.kind != Kind::Infantry || o.beh.queued.is_none())
+        || !crate::process::ready(w, id)
+    {
+        return;
+    }
+    let (tick, stale) = (w.tick, w.rules().quirks.stale_suspended_revert); // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0215 claim 8 (a start-next: the queued behaviour becomes current) and S-0603 Changes for S-0215 claim 12 (processed in the unit's first update after an order, as after a first per-tick start, claim 3 a)
+        ob.beh.start_next(tick, stale);
+    }
 }
 
 /// A teleporting stand-in takes the lifter's point as its movement
@@ -392,7 +416,7 @@ fn landing_point(w: &mut World, id: ObjectId, dc: CellXY) -> Option<Pos> {
     let level =
         w.cells.cell(dc).map_or(0, |c| i32::from(c.level)) + if high { DECK_LEVELS } else { 0 };
     // spec: S-0207 claim 20 (b) (a clear entry outcome: the centre of the destination cell at height H)
-    if occupancy::vehicle_outcome(w, id, dc, level) == occupancy::Outcome::Clear {
+    if recycle_entry_outcome(w, id, dc, level) == occupancy::Outcome::Clear {
         return Some(Pos::centre(dc, h));
     }
     crate::regions::ensure(w);
@@ -417,6 +441,41 @@ fn landing_point(w: &mut World, id: ObjectId, dc: CellXY) -> Option<Pos> {
     let p = Pos::centre(c, 0);
     // spec: S-0207 claim 20 (b) (L: the chosen cell's centre at the height H there)
     Some(Pos::centre(c, w.surface_at(p.x, p.y)))
+}
+
+/// The vehicle entry outcome of claim 20 (b)'s first test on cell `dc` at
+/// `level` (S-0209 claim 5). With
+/// `quirks.teleport_vehicle_recycle_lands_beside` off (S-0603 Edge cases), a
+/// vehicle whose queued behaviour is *eaten*, with another one current, and
+/// whose destination is a recycling building is asked as if *eaten* were
+/// current, so row VP6 applies; no other choice changes.
+fn recycle_entry_outcome(
+    w: &mut World,
+    id: ObjectId,
+    dc: CellXY,
+    level: i32,
+) -> occupancy::Outcome {
+    let as_if_eaten = !w.rules().quirks.teleport_vehicle_recycle_lands_beside
+        && w.obj(id).is_some_and(|o| {
+            o.kind == Kind::Vehicle
+                && o.beh.queued == Some(Behaviour::Eaten)
+                && o.beh.current != Some(Behaviour::Eaten)
+                && matches!(o.dest, Some(Target::Object(b)) if crate::structures::grinder::is_recycler(w, b))
+        });
+    if !as_if_eaten {
+        // spec: S-0603 r15 claim 16 (e) and Edge cases (quirks.teleport_vehicle_recycle_lands_beside on: the choice reads the behaviour current then, so a first recycle order given at rest meets row VP19)
+        return occupancy::vehicle_outcome(w, id, dc, level);
+    }
+    let saved = w.obj(id).and_then(|o| o.beh.current);
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0603 Edge cases (quirks.teleport_vehicle_recycle_lands_beside off: row VP6 applied as if eaten were current)
+        ob.beh.current = Some(Behaviour::Eaten);
+    }
+    let v = occupancy::vehicle_outcome(w, id, dc, level);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.beh.current = saved;
+    }
+    v
 }
 
 /// Whether `id` is a teleporting infantry unit (S-0208 claim 19's
@@ -859,6 +918,14 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     } else if o.kind == Kind::Infantry {
         // spec: S-0207 claim 22 (the jump tick's arrival update, any object kind) and S-0417 claim 10 (a released, tethered teleporting infantry unit reports clear on its jump's arrival update, before the entered-by raise; no foundation-exit or destination test, no run-away reply)
         crate::econ::release::arrival(w, id);
+    }
+    // spec: S-0603 r15 claim 16 (c) and its Changes for S-0207 claim 20 (e) (the arrival effects include claim 5's consumption test while the destination is still held, for an infantry unit and a vehicle alike, after the departure effects, the placement and the arrival sound)
+    if crate::structures::grinder::jump_arrival(w, id) {
+        // spec: S-0603 r15 claim 16 (c) (the later effects still follow for the consumed entrant; of them only the second warp animation is observable, at L) and S-0207 claim 20 (e) and (i)
+        if let Some(warp) = r.warp_out.clone() {
+            crate::combat::effects::anim(w, &warp, Pos::new(l.x, l.y, z));
+        }
+        return;
     }
     // spec: S-0516 claims 13 and 22 (a teleporting mover of any kind has its cell-arrival update at the destination in the jump tick, after position, height and layer placement and a vehicle's arrival reporting and crushing, before the landing cell's entered-by actions and crate pickup: the sensor disc moves, then the adjacent sensor test; no cell between departure and landing gets one)
     crate::cloak::machine::cell_movement_completed(w, id);

@@ -346,6 +346,58 @@ fn a_vehicle_thief_takes_the_crusher_over() {
     assert_eq!(w.obj(c).unwrap().owner, Some(HouseId(1)));
 }
 
+// spec: S-0309 r149 claim 32 (*A stolen vehicle*: the vehicle is first dropped as at the start of cloaking, claim 28: every holder drops it with claim 27's timer reset and S-0215 claim 10's revert, unless its house senses the vehicle's cell or it has the vehicle's owner before the change; then the owner change drops it for the holders that kept it, with no draw) and claim 27a (r140: at claim 28's moments a put-aside target that is the object is lost unless the holder's house senses its cell)
+#[test]
+fn a_stolen_vehicle_is_first_dropped_as_at_the_start_of_cloaking() {
+    let (mut w, c, _, _) = thief_world("MASHER", true);
+    let old = glasnost_sim::testkit::spawn(&mut w, Kind::Vehicle, "MASHER", ALPHA, cell(4, 0), 0);
+    let new = glasnost_sim::testkit::spawn(&mut w, Kind::Vehicle, "MASHER", BETA, cell(0, 4), 0);
+    let aside = glasnost_sim::testkit::spawn(&mut w, Kind::Vehicle, "MASHER", BETA, cell(4, 4), 0);
+    let tick = w.tick;
+    for h in [old, new] {
+        let o = w.obj_mut(h).unwrap();
+        o.target = Some(Target::Object(c));
+        o.targeting_timer = tick + 30;
+    }
+    {
+        let o = w.obj_mut(aside).unwrap();
+        o.target = Some(Target::Object(old));
+        o.beh.suspended = Some(glasnost_sim::rules::Behaviour::Guard);
+        o.beh.aside = Some((Some(Target::Object(c)), None));
+    }
+    crush::at_cell_centre(&mut w, c);
+    assert_eq!(
+        w.obj(c).unwrap().owner,
+        Some(HouseId(BETA)),
+        "set-up: taken over"
+    );
+    let o = w.obj(old).unwrap();
+    assert_eq!(
+        o.target, None,
+        "the old owner's holder: dropped at the owner change"
+    );
+    assert_eq!(
+        o.targeting_timer,
+        tick + 30,
+        "the old owner's holder: no draw"
+    );
+    let o = w.obj(new).unwrap();
+    assert_eq!(o.target, None, "the thief's house's holder: dropped");
+    // spec: S-0309 claim 27 (one ranged draw over 4 to 8 ticks, both included)
+    let left = o.targeting_timer - tick;
+    assert!(
+        (4..=8).contains(&left),
+        "claim 28's timer reset: {left} ticks left"
+    );
+    let o = w.obj(aside).unwrap();
+    assert_eq!(
+        o.target,
+        Some(Target::Object(old)),
+        "the current target kept"
+    );
+    assert_eq!(o.beh.aside, Some((None, None)), "the put-aside target lost");
+}
+
 // spec: S-0210 claim 5 (the crusher changes owner to the thief's house), S-0414 claim 4 (a change of owner counts as leaving the map for the old owner and entering it for the new one, whatever its cause) and S-0309 claim 30 (a holder that changes owner drops its target)
 #[test]
 fn a_take_over_is_a_full_change_of_owner() {
