@@ -24,7 +24,8 @@ fn ring_rules() -> Arc<SimRules> {
     Arc::new(SimRules::new(&r, "synthetic-skirmish"))
 }
 
-/// The stand-in ring markers' inks (our own, `session.rs`).
+/// The stand-in ring markers' inks (our own, `session.rs` up to render
+/// batch R19, which drew the rings' art in their place).
 const RING: [u8; 4] = [200, 80, 230, 255];
 const PERMA: [u8; 4] = [255, 120, 255, 255];
 
@@ -167,6 +168,45 @@ fn claim_18_the_ring_marker_comes_back_with_each_return_of_the_ring() {
         &ring,
         "and back again",
     );
+}
+
+/// spec: S-0601 claim 18 (the ring is the rules' ring animation type, played by the live view):
+/// the game's drawing has no stand-in marker for a ring any more, for a controlled or a
+/// permanently controlled object, and drawing changes no game state. (The fixture's import has no
+/// art for the invented ring types, so nothing is drawn for them.)
+#[test]
+fn claim_18_no_stand_in_marker_is_drawn_for_a_ring() {
+    use glasnost_sim::save::state_hash;
+    let mut c = client((800, 600), 100);
+    start_by_keyboard_with(&mut c, ring_rules());
+    let mcv = own(&c, Kind::Vehicle)[0];
+    let s = session_mut(&mut c);
+    let me = s.play.me();
+    let at = s.play.world().obj(mcv).unwrap().pos;
+    glasnost_sim::econ::shroud::area_reveal(&mut s.play.game.world, me, at, 8);
+    let base = at.cell();
+    let w = &mut s.play.game.world;
+    let units: Vec<ObjectId> = (1..=2)
+        .map(|dx| {
+            let cell = CellXY::new(base.x + dx, base.y + 1);
+            testkit::spawn(w, Kind::Vehicle, "MINR", me.0, cell, 0)
+        })
+        .collect();
+    w.mind.victims.insert(
+        units[0],
+        Victim {
+            controller: mcv,
+            original_owner: None,
+            line_until: 0,
+        },
+    );
+    w.mind.permanent.insert(units[1]);
+    assert!(glasnost_sim::mind::ring(w, units[0]).is_some());
+    assert!(glasnost_sim::mind::ring(w, units[1]).is_some());
+    let before = state_hash(w);
+    let d = s.draw(DrawList::new());
+    assert_eq!(ring_inks(&d), Vec::<[u8; 4]>::new(), "no marker");
+    assert_eq!(state_hash(&session(&c).play.game.world), before);
 }
 
 /// An invented shroud sprite: piece 15 (full cover) dark, every other
