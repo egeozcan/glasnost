@@ -673,10 +673,10 @@ fn infantry_landing(w: &mut World, id: ObjectId, dest: Target) -> Option<(Pos, L
     let deck = high(w, c) && o.pos.z > h.wrapping_add(DECK_MODE_ABOVE);
     // spec: S-0208 claim 19 (the standing-position choice reads the deck record only in standing deck mode, the ground record otherwise; the fallback choice keeps that mode)
     let choice = if deck { Layer::Deck } else { Layer::Ground };
-    // spec: S-0208 claim 19 (occupants ignored in capture, sabotage, enter or eaten with a vehicle or aircraft in C, or the building occupying C, as destination)
+    // spec: S-0208 r82 claim 19 (Q-3318: occupants ignored in capture, enter, eaten or patrol, with the same destination test for each of the four: a vehicle or aircraft in C, or the building occupying C; sabotage is not one of them and respects occupants)
     let ignore = matches!(
         o.beh.seen(),
-        Some(Behaviour::Capture | Behaviour::Sabotage | Behaviour::Enter | Behaviour::Eaten)
+        Some(Behaviour::Capture | Behaviour::Enter | Behaviour::Eaten | Behaviour::Patrol)
     ) && match dest {
         Target::Object(x) => w.obj(x).is_some_and(|m| match m.kind {
             Kind::Vehicle | Kind::Aircraft => m.pos.cell() == c,
