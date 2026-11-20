@@ -1,9 +1,9 @@
 ---
 id: Q-3322
 title: Can the owner hover, click and pick its own building at fade level 15 that it does not sense
-status: open
+status: answered
 related: [S-0214, S-0516]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need
