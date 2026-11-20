@@ -2832,7 +2832,9 @@ impl Session {
     }
 
     /// What the pointer offers at `p` for table C, and whether the target
-    /// is shrouded; `None` keeps the system pointer.
+    /// is shrouded; `None` keeps the system pointer. A fresh lookup at `p`
+    /// (tests); the cursor uses the frame's hover ([`Session::offer_on`]).
+    #[cfg(test)]
     pub(crate) fn offer(&mut self, p: Point) -> Option<(Offer, bool)> {
         let (cell, object) = self.under(p);
         self.offer_on(cell, object)
