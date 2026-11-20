@@ -369,6 +369,10 @@ impl Brain {
         if level == AiDifficulty::Easy {
             self.script.stay_on_home_field();
         }
+        // design: own AI (#449, B12): at hard the round keeps the units the house sends alone to a smaller share of the army's spend (`HARD_SPENT_SHARE`), so more of hard's money fights in its waves: with the round's share at normal, normal drew hard's third harvester, and in the B12 level round hard on country index 1 won none of its 24 games against normal
+        if level == AiDifficulty::Hard {
+            self.script.spend_less_alone();
+        }
         mark(p, "ai:script");
         let mut out = if thinks {
             self.script.think_with(w, p)

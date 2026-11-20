@@ -116,6 +116,10 @@ const ARMY_KINDS: [Kind; 3] = [Kind::Vehicle, Kind::Infantry, Kind::Aircraft]; /
 /// never join a wave.
 const SPENT_SHARE: i64 = 4; // design: own AI (#449, B12): a person's army is mostly units that fight together
 
+/// [`SPENT_SHARE`] at the hard level ([`Script::spend_less_alone`]): about
+/// a ninth of the army's credits at most.
+const HARD_SPENT_SHARE: i64 = 8; // design: own AI (#449, B12): a stronger player throws fewer units away
+
 /// Ticks between two thinks.
 pub const THINK_PERIOD: i32 = 15; // nocite: tuning of our own opponent
 
@@ -850,6 +854,11 @@ struct Kept {
     /// ([`Script::stay_on_home_field`]; design: own AI, #449, B11). Read
     /// from the difficulty the think is given, so it is no state.
     home_field_only: bool,
+    /// Whether the round keeps the types sent alone to the hard level's
+    /// smaller share this think ([`Script::spend_less_alone`]; design: own
+    /// AI, #449, B12). Read from the difficulty the think is given, so it is
+    /// no state.
+    less_alone: bool,
 }
 
 impl PlaceMemo {
@@ -1036,6 +1045,15 @@ impl Script {
     pub(crate) fn stay_on_home_field(&self) {
         if let Some(m) = self.placed.0.borrow_mut().as_mut() {
             m.home_field_only = true;
+        }
+    }
+
+    /// For the rest of the think that has begun, the round keeps the types
+    /// the house sends alone to [`HARD_SPENT_SHARE`]: the hard level
+    /// (design: own AI, #449, B12). Outside a think it does nothing.
+    pub(crate) fn spend_less_alone(&self) {
+        if let Some(m) = self.placed.0.borrow_mut().as_mut() {
+            m.less_alone = true;
         }
     }
 
@@ -2542,7 +2560,18 @@ impl Script {
                     (s, f + c)
                 }
             });
-        let spent_open = spent * SPENT_SHARE < fought;
+        let less_alone = self
+            .placed
+            .0
+            .borrow()
+            .as_ref()
+            .is_some_and(|m| m.less_alone);
+        let share = if less_alone {
+            HARD_SPENT_SHARE
+        } else {
+            SPENT_SHARE
+        };
+        let spent_open = spent * share < fought;
         for (k, kind) in ARMY_KINDS.into_iter().enumerate() {
             let mut of_kind: Vec<TypeRef> = army_types
                 .iter()
