@@ -1165,6 +1165,19 @@ seized vehicle refuses the candidate as its destination) and `scatter::vehicle_c
 gripped unit with the jumpjet stand-in uses `jump::heading_cell`); tests `claims_s0207_r85.rs`.
 Save format 115, AI game format 80.
 
+**A target that changes owner (S-0309 r149 claim 32, Q-3298, #453; sim issues batch S44).**
+`econ::events::owner_changed` calls `held::owner_change_drop` right after claim 30's own drop,
+when the owner really changes. Every infantry unit, vehicle, building and aircraft that holds
+the object as its target drops it there, of whatever house and however it came to hold it. An
+overridden holder reverts first, as S-0215 claim 10's owner-change cause gives, and drops the
+object only if the revert left it as its target. There is no timer draw. Behaviours and the
+destination are kept apart from a revert. Put-aside slots and attack-move memories are not
+touched, so a later revert or resumption can give the object back. An attacker whose strike
+holds the living object as its strike target keeps it. A spawner's controller target is not a
+held target and is left alone. Before r149 a player house's holders kept such a target (S42's
+guard test, now inverted). Tests: `claims_s0309_r149.rs` and the `s0309_issue_453_*` tests in
+`claims_s0601.rs`.
+
 ## Simulation (M8 A3 intake 116: building work at an owner change)
 
 S-0309 r126 claim 31 (Q-2801 answered) extends `structures::ownership::reset_orders`; the

@@ -273,6 +273,62 @@ pub(crate) fn note_revert(w: &mut World, holder: ObjectId) {
     }
 }
 
+/// Object `id` has changed owner to another house (S-0309 r149 claim 32,
+/// Q-3298): every infantry unit, vehicle, building and aircraft holding it
+/// as its target drops it now, inside the change, whatever the holder's
+/// house and however it came to hold it. An overridden holder reverts first
+/// (S-0215 claim 10's owner-change cause) and drops it only if the revert
+/// left it as its target. No timer draw; behaviours and destination are
+/// kept apart from a revert; put-aside slots and attack-move memories are
+/// untouched. An attacker whose strike target is the living object keeps it.
+pub(crate) fn owner_change_drop(w: &mut World, id: ObjectId) {
+    let Some(alive) = w.obj(id).map(|o| !crate::combat::damage::dead(o)) else {
+        return;
+    };
+    // spec: S-0309 r149 claim 32 (every infantry unit, vehicle, building and aircraft that holds it as its target, of any house, human- or computer-controlled; the controller of a mind-control takeover too; a spawner's controller target is not a held target)
+    let ids: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| holder_kind(o) && o.target == Some(Target::Object(id)))
+        .map(|o| o.id)
+        .collect();
+    for x in ids {
+        // spec: S-0309 r149 claim 32 (*Strike target*: an attacker whose strike target is the object keeps it while the object is alive) and S-0215 claim 10 (the exception also holds after a strike ends: it keeps its strike target)
+        if alive && w.strike.strikes.get(&x).and_then(|s| s.target) == Some(id) {
+            continue;
+        }
+        let Some(ob) = w.obj_mut(x) else { continue };
+        let mut restored = None;
+        if ob.beh.suspended.is_some()
+            && let Some((t, d)) = ob.beh.revert()
+        {
+            // spec: S-0309 r149 claim 32 (*Override in effect*: the holder first reverts, as S-0215 claim 10's owner-change cause gives)
+            crate::spawn::set_own_target(ob, t);
+            if ob.kind.is_mobile() {
+                restored = Some(ob.dest);
+                ob.dest = d;
+            }
+            // spec: S-0301 claim 5, Moment of a retarget's let-go (revision 67, Q-2246: at the change of the firer's target)
+            crate::emitters::retarget_let_go(w, x);
+            note_revert(w, x);
+        }
+        let Some(ob) = w.obj_mut(x) else { continue };
+        if ob.target == Some(Target::Object(id)) {
+            // spec: S-0309 r149 claim 32 (then drops the object if the revert has left it as its target; a revert that gives back another target keeps it; *No timer draw*)
+            crate::spawn::clear_own_target(ob);
+        }
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        // spec: S-0107 r46 claim 11, Changes of target (the loss of the target, or the earlier target put back when the override ends, ends an infantry holder's attack state and makes its request at once)
+        crate::infantry::watch_test(w, x);
+        if let Some(before) = restored {
+            // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, x, before);
+        }
+        // spec: S-0519 claim 19 (revision 3: a designator's loss of its target cancels its strike in the tick of the cancelling event)
+        crate::strike::turn(w, x);
+    }
+}
+
 /// Whether tick number `t` is a check tick of claim 29: a multiple of the
 /// check period, the same ticks for every object (shared phase).
 pub fn check_tick(t: i32) -> bool {

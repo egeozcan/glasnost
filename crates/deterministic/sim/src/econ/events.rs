@@ -130,6 +130,10 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
+    if old != new {
+        // spec: S-0309 r149 claim 32 (Q-3298: a target that changes owner to another house, whatever the cause, is dropped by every holder at that moment, inside the change; a change to the same house drops nothing)
+        crate::combat::held::owner_change_drop(w, id);
+    }
     // spec: S-0414 claim 4 (a change of owner on the map: a leaving for the old owner, an entry for the new)
     crate::econ::victory::owner_changed(w, id, old);
     // spec: S-0414 claims 21 and 22 (an ownership gain's kill and score)
