@@ -1,9 +1,9 @@
 ---
 id: Q-3313
 title: Retaliation and acquisition against a disguised vehicle that fires
-status: open
+status: answered
 related: [S-0516, S-0309, S-0214]
-answered-by: []
+answered-by: [S-0516]
 ---
 
 ## Need

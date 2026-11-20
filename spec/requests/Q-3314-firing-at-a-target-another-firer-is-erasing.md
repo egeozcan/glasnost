@@ -1,9 +1,9 @@
 ---
 id: Q-3314
 title: Firing at a target that another firer's temporal beam is erasing
-status: open
+status: answered
 related: [S-0301, S-0302, S-0309, S-0514]
-answered-by: []
+answered-by: [S-0301]
 ---
 
 ## Need
