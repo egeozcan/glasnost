@@ -2357,3 +2357,48 @@ Seams left:
 - The first tick of item 1's effect in the quick lane is not located.
 
 The P3 census rule: the batch adds two saved fields that can name an object, `PathState::held_for` and `WalkState::lost` (each an `Option<Target>`, as `failed_for` is). Neither is a kind of reference the census notes (aircraft, spawn controllers, bombs, chargers, droppers), so the batch makes or moves no back-reference of `World::census`.
+
+## Batch S46: the point a building gives a teleporting unit, the occupant-ignoring behaviours, the held walker and S45's first quick-lane tick (Q-3317, Q-3318)
+
+Base main 30f2165, not rebased. The batch builds two answers in S-0208 r82:
+- Q-3317's, in claim 27 and W22: a building gives a teleporting unit its centre, a docking type its docking point;
+- Q-3318's, in claim 19: the behaviours whose landing ignores occupants are *capture*, *enter*, *eaten* and *patrol*; *sabotage* is not one of them.
+
+It also gives S45's `held_for` seam a scene test (item 3), and finds the first tick at which S45's item 1 parts quick-lane game s7g9 (item 4).
+
+The work went in this order:
+1. The design (a5340f9).
+2. Item 1's tests (24e8d8f) and fix with the format bump (166a8e3).
+3. Item 2's tests (4bc532c) and fix (73b13e1).
+4. Item 3's test (474d638) and its design note (50738bc), then a rustfmt commit (42d14b6).
+
+No fix commit changes a test. Each red was shown in a separate base worktree checked out at the test commit (`t1-red-base.txt`, `t2-red-base.txt`). Logs are in `local-lane/sim-issues/s46/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| Q-3317, a vehicle's destination cell at a building (S-0208 r82 claims 19 and 27, W22) | A teleporting vehicle sent to a building took the building's position, the centre of its top-left cell, as its destination cell. r82: a building gives its centre, (W−1, H−1) half cells from that position, or the docking point for the helipad, unit-repair and vehicle-bunker flags; the unit-reload flag alone gives the centre | fixed (166a8e3; tests 24e8d8f, red there: 6 of 7 W22 tests and `claims_s0603.rs` claim 16 b/c; the far-place test passes before the fix too, as its rings meet) | `teleport.rs`'s vehicle branch takes `lift::lifter_point(w, building, unit)`'s cell: the docking point for a docking type (the refinery, the vehicle bunker's quadrant, the docking-place rule), the reference point otherwise | `claims_s0208_r82.rs` (new): W22 a (infantry, the centre's cell), b (a vehicle searches round and lands in the centre's cell, 1×1 to 5×3 grinders), c (a vehicle bunker's quadrant cell), d (an invulnerable building, the search centred on the centre), e (an engineer), f (the unit-reload flag alone gives the centre; a far place). `claims_s0603.rs` claim 16 asserts the centre's cell |
+| Q-3317, an infantry unit's point and the search centre (claims 19 and 27) | An infantry unit's P was the building's position, and claim 19's search round a building centred on the cell the unit heads for | fixed (166a8e3, counted above) | P for a building target is `lift::lifter_point`; the search centre for a building is the cell of `World::reference_point` | as above (W22 a, d, e and f) |
+| Q-3317, walking and driving (claim 27) | A walker's object point (`walk::take_destination`) and a driver's heading point (`path::heading_point`) still give a building's position | seam, left | none | none |
+| Q-3318, the occupant-ignoring behaviours (S-0208 r82 claim 19) | Our list was *capture*, *enter*, *eaten* and *sabotage*. r82: *capture*, *enter*, *eaten* and *patrol* | fixed (73b13e1; tests 4bc532c, red there: the 5 new tests) | `teleport.rs`'s list is `Capture \| Enter \| Eaten \| Patrol` | `claims_s0208_r82.rs`: a saboteur respects a building's occupants and a vehicle's cell (a neighbour, one draw); patrol ignores occupants for a building and a vehicle, and in the second choice (no draw). `claims_s0208_teleport.rs`'s enter test recites r82 claim 19 |
+| Item 3, a held walker (C7-P6's `held_for`, S45's seam) | No scene test showed that a held walker waits | tested; no fault | none | `pathing_c7p4.rs::hold_off_a_held_walker_waits_for_its_retry_delay`: an unarmed walker meets moving enemy vehicles in a hall one cell wide (S-0209 claim 4 row WP22 blocks their cells), so its search fails and it is held. Until its retry tick it makes no search, and it keeps its retry tick, destination, *move* and the mark at each update's end. An assignment ends the hold, and so does a found path, which comes at the retry tick once the vehicles are removed. An armed walker is never held: no moving ground unit blocks a cell for it (rows WP16 to WP18, WP26, WP28). A probe of armed infantry scenes held none in 3000 ticks |
+| Item 4, S45's first quick-lane tick (s7g9) | S45 found that its item 1 parts seed 7's game 9 (map 8, sides 1 and 2) by tick 21491 | traced, 5 steps | none | none. Builds of d9f2750 and 450c0c4 were compared with `GLASNOST_AI_OBJS` dumps with `, held_for: None` and `, lost: None` removed. At 10745 they differ, at 5372 they do not, and a dump of 9300 to 9320 gives the first differing tick, 9316. There, only infantry 573's `retry_at` (0 against 9315) and `retry_for` differ: a failed search in tick 9315 started a retry delay that its destination's clearing ended at once. That state is dormant. With those two fields removed too, 10030 differs, and a dump of 9316 to 10030 gives the first behavioural difference, tick 9583, infantry 613: its `WalkState::dest_deck` reads (52,79) against (51,78). In tick 9582 its fresh search adopted S-0212 claim 24's substitute (51,78) for (52,79). d9f2750 writes the destination directly. 450c0c4 assigns it (S-0208 r75 claim 26: the substitute is assigned as the walker's destination), so `walk::take_destination` records the new cell. This is still the only difference at 10030 and 10745 |
+
+**Formats** (166a8e3): save goes from 168 to 215 and AI game from 148 to 195, the brief's numbers. The AI game bump is forced by the sim change. Wire stays 13. The rules schema does not change.
+
+**Goldens**: regenerated, and none moves. The fix changes no gate scenario.
+
+Lanes compare base 30f2165, run in this worktree before any change, with the batch at 42d14b6.
+
+**Oracle arena** (`--record all`, two threads): output and record files are as base. M-0001 10 of 96 (win test 2), M-0002 4 of 24 (win test 0), M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 checked, M-0021 10 of 50.
+
+**Sweeps** (seeds 1 to 16): m6c, m7a and m7b print the same as base. The smallest minima stay 0, 2 and drain 3, and all three pass.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games): every game ends on the same tick with the same winner.
+
+**Suites.** The AI suite with its ignored tests passes 403 on base and after. The sim gate with its ignored tests passes 17 on base and after. The final checks run on the commit that adds this section and are in the hand-back.
+
+Seams left:
+- Claim 27 for the walking and driving locomotors (a building's position, not its centre).
+- Item 4 stopped at the first behavioural tick. It did not trace whether the `dest_deck` difference changes behaviour on map 8 before tick 21491.
+
+The P3 census rule: the batch adds no saved field, so it makes or moves no back-reference of `World::census`.
