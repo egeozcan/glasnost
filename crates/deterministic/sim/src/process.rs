@@ -698,6 +698,10 @@ pub fn late_start(w: &mut World, id: ObjectId) {
     if !matches!(kind, Kind::Infantry | Kind::Vehicle) || o.health <= 0 {
         return;
     }
+    // spec: S-0208 Edge cases (r89, Q-3330: a walker that goes in at its arrival with enter queued goes in with the behaviours it has and keeps the queued enter until S-0605 claim 13's queued move replaces it) and S-0605 claim 9 (inside it takes no turns): no late start once it has gone into an absorber in this update
+    if o.structure.absorbed_in.is_some() {
+        return;
+    }
     let empty = o.beh.current.is_none() && o.beh.queued.is_none();
     if o.beh.queued.is_none() && !(kind == Kind::Infantry && empty) {
         return;

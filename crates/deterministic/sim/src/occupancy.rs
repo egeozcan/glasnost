@@ -290,7 +290,17 @@ pub fn crushable_by(w: &World, crusher: ObjectId, obj: ObjectId) -> bool {
 /// behaviour gives none reads a queued *enter*'s.
 pub fn mission_target(w: &World, mover: ObjectId) -> Option<Target> {
     let o = w.obj(mover)?;
-    let of = |b: Option<Behaviour>| match b {
+    if reads_queued_enter(w, mover) {
+        // spec: S-0208 Edge cases (r75, quirks.walker_search_ignores_queued_enter off: while the walker's queued behaviour is enter and its current behaviour has no mission target, enter's mission target is read, in its searches and in its asks)
+        return behaviour_target(w, o, Some(Behaviour::Enter));
+    }
+    // spec: S-0208 claim 26 (r75: the current behaviour's mission target, a queued behaviour's only while no behaviour is current, S-0215 claim 1)
+    behaviour_target(w, o, o.beh.seen())
+}
+
+/// The mission target that behaviour `b` gives object `o` (S-0209 Terms).
+fn behaviour_target(w: &World, o: &Object, b: Option<Behaviour>) -> Option<Target> {
+    match b {
         // spec: S-0209 Terms (mission target: the destination or target while in a behaviour with one)
         Some(Behaviour::Enter | Behaviour::Capture | Behaviour::Sabotage | Behaviour::Eaten) => {
             o.dest.or(o.target)
@@ -305,19 +315,21 @@ pub fn mission_target(w: &World, mover: ObjectId) -> Option<Target> {
             o.dest
         }
         _ => None,
-    };
-    // spec: S-0208 claim 26 (r75: the current behaviour's mission target, a queued behaviour's only while no behaviour is current, S-0215 claim 1)
-    let own = of(o.beh.seen());
-    if own.is_none()
-        && !w.rules().quirks.walker_search_ignores_queued_enter
+    }
+}
+
+/// Whether the off form of `quirks.walker_search_ignores_queued_enter`
+/// gives the walker its queued *enter*'s mission target (S-0208 Edge
+/// cases): the switch is off, *enter* is queued behind a current behaviour,
+/// and the behaviour that S-0215 claim 1 sees gives no mission target.
+pub fn reads_queued_enter(w: &World, mover: ObjectId) -> bool {
+    let Some(o) = w.obj(mover) else { return false };
+    // spec: S-0208 Edge cases (r75, quirks.walker_search_ignores_queued_enter off: while the walker's queued behaviour is enter and its current behaviour has no mission target)
+    !w.rules().quirks.walker_search_ignores_queued_enter
         && o.walk.is_some()
         && o.beh.current.is_some()
         && o.beh.queued == Some(Behaviour::Enter)
-    {
-        // spec: S-0208 Edge cases (r75, quirks.walker_search_ignores_queued_enter off: while the walker's queued behaviour is enter and its current behaviour has no mission target, enter's mission target is read, in its searches and in its asks)
-        return of(Some(Behaviour::Enter));
-    }
-    own
+        && behaviour_target(w, o, o.beh.seen()).is_none()
 }
 
 /// Whether the wall in `c` belongs to a house allied with the mover's
