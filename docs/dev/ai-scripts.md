@@ -329,9 +329,11 @@ about tick 3 500, took its base apart.
   claim 6), as a person with money to spare builds a second war factory. With at least `rich`
   credits in hand, the siege orders the cheapest factory it can build, place and pay for, of
   the kind (infantry or vehicles) it owns fewer of, vehicles on a tie, up to three of each
-  kind. The first factory of each kind stays the brain's own plan. It does so only when the
-  new factory would not leave the house short of power, no building is ordered this think and
-  the building line is free.
+  kind. The first factory of each kind stays the brain's own plan. It does so only when no
+  building is ordered this think and the building line is free. When the new factory would
+  leave the house short of power, it orders the power plant the plan builds next instead, as a
+  person builds the plant first (on the synthetic skirmish every factory was held so, the
+  brain building plants only once the house is short).
 
 ## The tournament
 
