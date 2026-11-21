@@ -1,9 +1,9 @@
 ---
 id: Q-3361
 title: How the permanent control ring is created at a permanent takeover
-status: open
+status: answered
 related: [S-0601, S-0109, S-0612]
-answered-by: []
+answered-by: [S-0601]
 ---
 
 ## Need
