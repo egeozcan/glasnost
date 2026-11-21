@@ -1,9 +1,9 @@
 ---
 id: Q-3329
 title: Whether the end-of-update assignment in move restarts a walker's blockage delay
-status: open
+status: answered
 related: [S-0208, S-0209, S-0212, S-0215]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
