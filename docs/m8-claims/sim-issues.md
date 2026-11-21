@@ -2402,3 +2402,51 @@ Seams left:
 - Item 4: the r75 rule at tick 9316 is not identified. At tick 10745 every object's position and behaviour is the same in both builds, so what parts s7g9 most likely lies in (10745, 21491]; it is not traced.
 
 The P3 census rule: the batch adds no saved field, so it makes or moves no back-reference of `World::census`.
+
+## Batch S47: the blockage delay at a failed re-path, a queued enter at the arrival, and a building's point for walking and driving (Q-3329, Q-3330, S-0208 claim 27)
+
+Base main c985680, not rebased. The batch builds two answers in S-0208 r89 and S46's seam:
+- Q-3329's, in claim 25 and W20: a re-path that fails within one cell keeps the walker's movement in progress, so the blockage and retry delays run;
+- Q-3330's: with `quirks.walker_search_ignores_queued_enter` off, a walker in area guard with enter queued goes in at its arrival (S-0605 claim 16);
+- S-0208 claim 27 (r82, Q-3317) for the walking and driving locomotors: a building gives its centre, or its docking point for the helipad, unit-repair and vehicle-bunker flags.
+
+The work went in this order:
+1. Item 1: design (dfde8bd), tests (978f672), fix (029490c).
+2. Item 2: design (e230a19, 3c51d72), test (f5c9e66), fix (f05c54c).
+3. Item 3: design (3e83650), request Q-3353 (a83f1d9), tests (965e532), fix (21c96dc).
+4. Formats: design note (1842eb0) and bump (1e88ac5), then a rustfmt commit (ff69093).
+5. The M6c gate seed (1be9bfa) and the goldens (5b5d8ad).
+
+No fix commit changes a test of its own item; 21c96dc moves two set-ups of `claims_s0603.rs` that claim 27 changes (below). Each red was shown in a separate base worktree checked out at the test commit (`r1.txt`, `r2.txt`, `r3.txt`). Logs are in `local-lane/sim-issues/s47/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| Q-3329, a failed re-path within one cell (S-0208 r89 claim 25, W20 c1) | A re-path of S-0209 claim 10 that failed within one cell ended the walker's movement in progress, and the end-of-update assignment of S-0215 claim 22 then ended the retry delay | fixed (029490c; tests 978f672, red there: the W20 c1 test at "the retry delay runs at the end of F") | `path.rs`'s failure keeps the movement in progress for a walker's re-path; `process.rs`'s end-of-update check reads "not moving" as `occupancy::in_progress` (S-0208 Terms), so a walker in *move* whose path is exhausted gets no assignment while its movement is in progress | `claims_s0209.rs`: `r89_w20_c1_a_failed_re_path_within_one_cell_keeps_movement_in_progress` (new); `r89_the_end_of_update_assignment_after_a_failed_search_restarts_the_blockage_delay` (W20 c2, the seams7b test no longer ignored); `seams7b_the_control_…` |
+| Q-3330, a walker in area guard with enter queued (S-0208 r89, S-0605 claims 6, 9 and 16) | With the switch off the walker walked back to the building but did not go in while enter was only queued | fixed (f05c54c; test f5c9e66, red there: "it walks back in from area guard") | `occupancy::reads_queued_enter` is the off form's condition; the mission target and the absorber's arrival (`absorb.rs`) both read it; the late start of that update makes no start for a unit inside an absorber (`process.rs`) | `claims_s0605.rs`: `claim_16_switch_off_back_in_from_area_guard` (no longer ignored), `claim_16_switch_on_no_back_in_from_area_guard` (control) |
+| S-0208 claim 27 for walking and driving (S46's seam) | A walker's object point and a driver's heading point gave a building's position, the centre of its top-left cell | fixed (21c96dc; tests 965e532, red there: 0 of 7 pass) | `path::object_point`: for a walker or driver and a building target, `lift::lifter_point` (the docking point for a docking type by S-0607 claim 7's precedence, the centre otherwise); `drive::supplied_point` takes it. The readers of the heading point (S-0402 claims 8 and 26, the C7-P5 yield, S-0209 claim 8, the driver's searches, refresh and braking) follow | `claims_s0208_c27.rs` (new, 7 tests): 1×1 to 5×3 foundations from four sides for a walker and a driver; the unit-reload flag alone gives the centre; a unit-repair dock offset; a helipad with no contact gives the centre; a vehicle bunker's docking point for a walker and a crusher; a capturing engineer keeps the centre for 10 ticks and through a save. `claims_s0603.rs` claims 4/5 and 15: the set-ups moved onto the centre cell's row (a diagonal step to a 2×2 centre arrives after the timed sale) |
+| Q-3353, when a driver's docking point is taken | A driver's readings would recompute a position-dependent docking point at each reading; claim 27 takes it at the assignment | requested (a83f1d9) | none: the point is taken at each reading, as `lift::lifter_point` gives it, until answered | none |
+
+**Formats** (1e88ac5): save goes from 169 to 217 and AI game from 149 to 197, the brief's numbers. The AI game bump is forced by the sim change. Wire stays 13. The rules schema does not change.
+
+**Goldens** (5b5d8ad): all eight move. duel-m6c is seed 2 now (below). duel-m7a moves from the hash after tick 350 and duel-m7b from tick 620 on. duel-diagonal (8 hashes), duel-naval (3), duel (1), scripted (2) and skirmish (3) move in isolated hashes only, the next hash equal again: a walker that arrives with its path exhausted keeps its movement in progress for that update.
+
+**M6c gate seed** (1be9bfa): seed 3 now ends at tick 8528 instead of playing its 12000 ticks; its hashes part from base between ticks 10 and 20. Seed 2 is the first of 1 to 16 that plays all its ticks (smallest counter 4) and exercises every ability (`try_seeds`), as at S20.
+
+Lanes compare base c985680, run in this worktree before any change, with the batch at ff69093 (sweeps and suites at 5b5d8ad).
+
+**Oracle arena** (`--record all`, two threads): six M-0001 rows move, each by one or two games towards our side A; failing counts stay M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0020 0 of 25 checked, M-0021 10 of 50. In M-0020 part 1 one differing game's winner end moves from row end 1216 to row end 912, still 3 of 6.
+
+**Sweeps** (seeds 1 to 16), all three pass. m6c: the smallest minimum stays 0, but six seeds end early where one did (seeds 1, 3, 6, 7, 9 and 13 at 8116, 8528, 7933, 7128, 7206 and 7964; seed 15, which ended at 7028, now plays 12000), and eight seeds have a counter below 3 where two did. These are not traced: the M6c harness has no per-tick hash or object dump. m7a: the smallest minimum goes from 2 to 1 (seed 14's psychic sensor orders), and the bunker counters fall to 2 on seeds 1 and 7; no game ends early. m7b: its own counters stay at 3 or more on every seed.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games): 11 games change winner (house 0 wins 26 before, 19 after). Each was traced by per-tick hashes and `GLASNOST_AI_OBJS` dumps to its first differing tick, where exactly one object differs:
+- the 7 on map 2 part at tick 2198 (seed 8's at 2371) at an infantry unit headed for building 494, whose object point moves by (+128, +128) to the 2×2 centre: claim 27;
+- the 4 on maps 0 and 8 part at an infantry unit that arrived the tick before with its path exhausted: its movement stays in progress, so it gets no end-of-update assignment: item 1's reading of S-0215 claim 22.
+
+**Suites.** The AI suite with its ignored tests passes on base and after with the same per-binary counts, and no AI golden moves. The sim gate with its ignored tests passes 17 on base and after. The final checks run on the batch's last commit and are in the hand-back.
+
+Seams left:
+- Q-3353 (open): when a driver's position-dependent docking point is taken.
+- The m6c sweep's six new early ends are not traced to a first tick and object.
+- Item 4 (S45's s7g9 parting in (10745, 21491]) was not started.
+
+The P3 census rule: the batch adds no saved field, so it makes or moves no back-reference of `World::census`.
