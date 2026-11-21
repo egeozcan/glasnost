@@ -310,3 +310,54 @@ fn an_outmatched_strike_is_called_home() {
         .collect();
     assert!(!called.is_empty(), "the strike is called home: {got:?}");
 }
+
+/// House 0's harvesters on the map.
+fn harvesters(w: &World) -> usize {
+    let Some(i) = w.rules().index_of(Kind::Vehicle, "MINR") else {
+        return 0;
+    };
+    w.objects
+        .values()
+        .filter(|o| {
+            o.owner == Some(HouseId(0)) && o.on_map && o.kind == Kind::Vehicle && o.type_index == i
+        })
+        .count()
+}
+
+/// The infantry build orders house 0 gives at `level` from the start
+/// while fewer harvesters than its plan's stand, over `ticks`.
+fn infantry_before_harvesters(level: AiDifficulty, ticks: i32) -> usize {
+    let mut w = game(AiSeat::DEFAULT).world.clone();
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    let plan = plan_for(level).harvesters;
+    let mut n = 0;
+    while w.tick < ticks {
+        let early = harvesters(&w) < plan;
+        let schedule = Schedule::of(HouseId(0), w.tick);
+        let view = View::new(&w, HouseId(0));
+        let got = AiScript::think(&mut s, &view, schedule, level, None, &mut ());
+        for o in got {
+            if early && matches!(o, Order::Build { what } if what.kind == Kind::Infantry) {
+                n += 1;
+            }
+            orders::issue(&mut w, HouseId(0), o);
+        }
+        testkit::run(&mut w, 1);
+    }
+    n
+}
+
+// design: own AI (#449): at hard the house builds infantry for its base while its plan's harvesters do not yet stand, and stops at the level's early guard; at normal and easy the army waits for the harvesters, as the brain's round does
+#[test]
+fn hard_guards_its_base_before_its_harvesters_stand() {
+    assert_eq!(tuning(AiDifficulty::Normal).early, 0);
+    assert_eq!(tuning(AiDifficulty::Easy).early, 0);
+    // nocite: test data of our own (long enough for the base and the guard)
+    let ticks = 6000;
+    let normal = infantry_before_harvesters(AiDifficulty::Normal, ticks);
+    assert_eq!(normal, 0, "normal waits for its harvesters");
+    let got = infantry_before_harvesters(AiDifficulty::Hard, ticks);
+    assert!(got > 0, "hard guards its base early");
+    let hard = tuning(AiDifficulty::Hard).early;
+    assert!(got <= hard, "no more than the guard: {got} > {hard}");
+}
