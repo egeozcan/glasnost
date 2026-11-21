@@ -144,7 +144,10 @@ fn the_order_free_ratings_do_not_depend_on_the_games_order() {
     assert_eq!(free, ai_tournament::order_free_ratings(3, &reversed));
     let sum: f64 = free.iter().sum();
     // nocite: test data of our own (a rounding margin)
-    assert!((sum - 3.0 * ai_tournament::START_RATING).abs() < 1e-6, "{free:?}");
+    assert!(
+        (sum - 3.0 * ai_tournament::START_RATING).abs() < 1e-6,
+        "{free:?}"
+    );
     assert_eq!(
         ai_tournament::order_free_ratings(2, &games[..1]),
         ai_tournament::ratings(2, &games[..1])
