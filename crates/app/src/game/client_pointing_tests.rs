@@ -520,11 +520,11 @@ fn empty_at(c: &mut Client, p: Point, d: (i32, i32)) -> Point {
     q
 }
 
-/// Q-3321. spec: S-0214 r96 claim 35 (e) (while a left battlefield press is held, the cursor shows
-/// the image that the press's own resolution at its pixel gave it, wherever the pointer goes and
-/// whatever happens to the object under it, its removal from play included; when claim 18's band
-/// box starts, outside route-editing mode, it becomes the ordinary arrow until the release) and
-/// scenario T27 parts (g) and (h)
+/// Q-3321. spec: S-0214 r101 claim 35 (e) (while a left battlefield press is held, the cursor
+/// shows the image that the press's own resolution at its pixel gave it, wherever the pointer goes
+/// and whatever happens to the object under it, its removal from play included; when claim 18's
+/// band box starts it becomes the ordinary arrow until the release) and scenario T27 parts (g) and
+/// (h)
 #[test]
 fn claim_35_e_a_held_left_press_keeps_its_image() {
     let (mut c, unit, p) = hovering_with_cursor();
@@ -569,8 +569,9 @@ fn claim_35_e_a_held_left_press_keeps_its_image() {
     );
 }
 
-/// Q-3321. spec: S-0214 r96 claim 35 (e) (the press's own resolution at its pixel, not the last
-/// lookup before the press, chooses the image a held left press keeps) and scenario T27 part (i)
+/// Q-3321. spec: S-0214 r101 claim 35 (e) (the press's own resolution at its pixel, not the last
+/// lookup before the press, chooses the image a held left press keeps; a right press keeps the
+/// last lookup's, as the test after the next shows) and scenario T27 part (i)
 #[test]
 fn claim_35_e_a_press_keeps_the_image_of_its_own_pixel() {
     let (mut c, _, p) = hovering_with_cursor();
@@ -590,7 +591,7 @@ fn claim_35_e_a_press_keeps_the_image_of_its_own_pixel() {
     );
 }
 
-/// Q-3321. spec: S-0214 r96 claim 35 (e) (during an order block the game hides the cursor, S-0111
+/// Q-3321. spec: S-0214 r101 claim 35 (e) (during an order block the game hides the cursor, S-0111
 /// claim 20) and S-0201 Terms (*order block*: the game hides the mouse pointer)
 #[test]
 fn claim_35_e_an_order_block_hides_the_cursor() {
@@ -610,6 +611,365 @@ fn claim_35_e_an_order_block_hides_the_cursor() {
     let w = &mut session_mut(&mut c).play.game.world;
     w.orders_blocked_through = w.tick - 1;
     assert!(cursor_now(&mut c, 1_032).is_some(), "shown again after it");
+}
+
+/// Q-3349. spec: S-0214 r101 claim 35 (e) (before its scroll drag a right press chooses no image
+/// of its own: the cursor keeps the image that the last lookup before the press gave, wherever the
+/// pointer goes within F8's bound and whatever happens to the object under it, its removal from
+/// play included, and that image's frames still advance as claim 22 gives) and scenario T27 part
+/// (j)
+#[test]
+fn claim_35_e_a_right_press_keeps_the_image_of_the_last_lookup() {
+    let (mut c, unit, p) = hovering_with_cursor();
+    // T27 (j): (0, −19) from the point lies in its region, (0, −21) and (0, −23) out of it.
+    let rest = Point::new(p.x, p.y - 19);
+    c.pointer_moved(rest);
+    assert_eq!(
+        cursor_now(&mut c, 1_000),
+        Some(*SELECT.start()),
+        "the select cursor in the frame before the press"
+    );
+    // Within one cycle's input, before a frame is drawn: move, then press.
+    let press = empty_at(&mut c, p, (0, -21));
+    c.pointer_moved(press);
+    c.pointer_down(Button::Right, press);
+    assert_eq!(
+        cursor_now(&mut c, 1_016),
+        Some(*SELECT.start()),
+        "the image of the last lookup, not the move cursor of the press pixel"
+    );
+    // 2 pixels from the press pixel, within F8's bound: no scroll drag.
+    let near = empty_at(&mut c, p, (0, -23));
+    c.pointer_moved(near);
+    assert_eq!(
+        cursor_now(&mut c, 1_032),
+        Some(*SELECT.start()),
+        "kept as the pointer moves"
+    );
+    // Four clock units of 16 ms after the first frame (claim 22).
+    assert_eq!(
+        cursor_now(&mut c, 1_080),
+        Some(*SELECT.start() + 1),
+        "its frames advance"
+    );
+    session_mut(&mut c)
+        .play
+        .game
+        .world
+        .obj_mut(unit)
+        .unwrap()
+        .on_map = false;
+    assert!(
+        cursor_now(&mut c, 1_096).is_some_and(|f| SELECT.contains(&f)),
+        "kept after the vehicle left play"
+    );
+}
+
+/// Q-3349. spec: S-0214 r101 claim 35 (e) (when claim 18's band box starts the cursor becomes the
+/// ordinary arrow, with the route-mode key held too, where an ordinary press, S-0213 claim 16b,
+/// starts one, and it stays the arrow until the release) and scenario T27 part (l)
+#[test]
+fn claim_35_e_a_band_box_in_route_mode_shows_the_arrow() {
+    let (mut c, _, p) = hovering_with_cursor();
+    // Nothing selected: in the route mode the press is an ordinary one (S-0213 claim 16d).
+    session_mut(&mut c).play.selection.clear();
+    c.key(Key::Char('z'), true);
+    assert!(session_mut(&mut c).route_held(), "set-up: route mode");
+    let press = Point::new(p.x, p.y - 19);
+    c.pointer_moved(press);
+    assert!(
+        cursor_now(&mut c, 1_000).is_some_and(|f| SELECT.contains(&f)),
+        "the control: the select cursor over the vehicle"
+    );
+    c.pointer_down(Button::Left, press);
+    assert!(
+        cursor_now(&mut c, 1_016).is_some_and(|f| SELECT.contains(&f)),
+        "the press's image before the band box"
+    );
+    // 29 pixels from the press pixel: the band box starts.
+    c.pointer_moved(Point::new(p.x + 20, p.y - 40));
+    assert_eq!(
+        cursor_now(&mut c, 1_048),
+        Some(ARROW),
+        "the arrow once the band box starts"
+    );
+}
+
+/// The window pixel of route point `n` (S-0213 claim 16b, *Click areas*).
+fn point_screen(c: &mut Client, n: u32) -> Point {
+    let s = session_mut(c);
+    let q = s.route_point_screen(n).expect("set-up: a point");
+    assert!(s.map_rect().contains(q), "set-up: the point is on the view");
+    q
+}
+
+/// How a route-mode left press of S-0214 scenario T27 part (k) is made.
+#[derive(Clone, Copy, Debug)]
+enum TakenOrRefused {
+    /// The route holder selected, a press on its own first point: it takes
+    /// the point for a loop close (run k1).
+    LoopClose,
+    /// A building selected, a press outside every click area: refused for
+    /// kind at the press (run k2).
+    KindRefused,
+    /// A GUNR with no route selected, a press on the holder's first point:
+    /// it takes the point for a join (run k3).
+    Join,
+    /// The route holder selected, a press on its last point: refused by
+    /// the point-click test (run k4).
+    PointClick,
+}
+
+/// Q-3349. spec: S-0214 r101 claim 35 (e) and Terms (*battlefield press*: a left press that the
+/// route mode takes or refuses at the press, S-0213 claims 16b and 16d, a press that takes a point
+/// for a join or a loop close, or one refused for kind or by the point-click test, is not one and
+/// does not stop the lookup: while it is held the hover is looked up for every drawn frame, the
+/// cursor follows that lookup, and the object it finds gets the hover mark, as with no press) and
+/// scenario T27 part (k)
+#[test]
+fn claim_35_e_a_press_the_route_mode_takes_or_refuses_does_not_hold_the_hover() {
+    use TakenOrRefused::{Join, KindRefused, LoopClose, PointClick};
+    for how in [LoopClose, KindRefused, Join, PointClick] {
+        let (mut c, mcv) = game();
+        let (ids, pts) = super::play_notes_tests::routed(&mut c);
+        c.focused = true;
+        let s = session_mut(&mut c);
+        s.set_test_cursor(504, (8, 8));
+        // V, at least 3 cells from every route point and from the presses.
+        let v = place(s, mcv, Kind::Vehicle, "GUNR", (-3, -1));
+        s.step();
+        let at_v = pixel(s, v, (0, 0));
+        let empty = empty_at(&mut c, at_v, (0, -45));
+        let (select, press) = match how {
+            LoopClose => (vec![ids[0]], point_screen(&mut c, pts[0])),
+            KindRefused => {
+                let s = session_mut(&mut c);
+                let hut = place(s, mcv, Kind::Building, "POWR", (6, 6));
+                (vec![hut], empty_at(&mut c, at_v, (0, 45)))
+            }
+            Join => (vec![ids[1]], point_screen(&mut c, pts[0])),
+            PointClick => (vec![ids[0]], point_screen(&mut c, pts[2])),
+        };
+        session_mut(&mut c).play.selection = select;
+        c.key(Key::Char('z'), true);
+        assert!(session_mut(&mut c).route_held(), "{how:?}: route mode");
+        // The control: V's image with no press.
+        c.pointer_moved(at_v);
+        let control = cursor_now(&mut c, 1_000);
+        assert!(control.is_some(), "{how:?}: a cursor over V");
+        c.pointer_moved(press);
+        let _ = cursor_now(&mut c, 1_016);
+        let _ = c.frame();
+        c.pointer_down(Button::Left, press);
+        c.pointer_moved(at_v);
+        let _ = c.frame();
+        assert_eq!(hovered(&mut c), Some(v), "{how:?}: V gets the mark");
+        assert_eq!(
+            cursor_now(&mut c, 1_032),
+            control,
+            "{how:?}: the cursor follows the lookup"
+        );
+        c.pointer_moved(empty);
+        let _ = c.frame();
+        assert_eq!(hovered(&mut c), None, "{how:?}: looked up again");
+        c.pointer_moved(at_v);
+        let _ = c.frame();
+        assert_eq!(hovered(&mut c), Some(v), "{how:?}: and again");
+        c.pointer_up(Button::Left, at_v, Modifiers::default());
+    }
+}
+
+/// Q-3350. spec: S-0214 r101 claim 35 (e) (a lookup gives the hover mark to the object it finds
+/// and takes it from every other object, and a lookup that finds no object leaves no object with
+/// it; a drawn frame that makes no lookup, as with the pointer off the battlefield view, changes
+/// no mark, so the object found last keeps it until the next tick clears it) and Terms (*hover
+/// mark*)
+#[test]
+fn claim_35_e_one_object_has_the_mark_until_the_tick() {
+    let (mut c, unit, p) = hovering();
+    let mcv = own(&c, Kind::Vehicle)
+        .into_iter()
+        .find(|&v| v != unit)
+        .expect("the base unit");
+    let other = place(session_mut(&mut c), mcv, Kind::Vehicle, "GUNR", (-2, 0));
+    tick_in_place(&mut c, unit, p);
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), Some(unit), "set-up: the vehicle's mark");
+    let at_other = pixel(session_mut(&mut c), other, (0, 0));
+    c.pointer_moved(at_other);
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), Some(other), "the lookup moves the mark");
+    let empty = empty_at(&mut c, at_other, (0, 45));
+    c.pointer_moved(empty);
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), None, "a lookup that finds nothing");
+    c.pointer_moved(p);
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), Some(unit), "found again");
+    let m = session_mut(&mut c).map_rect();
+    c.pointer_moved(Point::new(m.x + m.w + 20, m.y + m.h / 2));
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), Some(unit), "no lookup off the view");
+    session_mut(&mut c).step();
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), None, "the tick clears it");
+}
+
+/// Q-3350. spec: S-0214 r101 claim 35 (e) (at an order block the cursor becomes the ordinary arrow
+/// and is then hidden, and it stays the arrow while hidden; an animated image that the first
+/// lookup after the block offers is a change of kind from the arrow, claim 22, so it starts at its
+/// first frame) and scenario T27 run m1
+#[test]
+fn claim_35_e_after_an_order_block_an_animated_image_starts_at_its_first_frame() {
+    let (mut c, _, p) = hovering_with_cursor();
+    c.pointer_moved(Point::new(p.x, p.y - 19));
+    let first = *SELECT.start();
+    assert_eq!(cursor_now(&mut c, 1_000), Some(first), "set-up: select");
+    assert_eq!(cursor_now(&mut c, 1_064), Some(first + 1), "it advances");
+    assert_eq!(cursor_now(&mut c, 1_128), Some(first + 2), "and again");
+    let w = &mut session_mut(&mut c).play.game.world;
+    w.orders_blocked_through = w.tick + 50;
+    assert_eq!(cursor_now(&mut c, 1_144), None, "hidden in the block");
+    let w = &mut session_mut(&mut c).play.game.world;
+    w.orders_blocked_through = w.tick - 1;
+    assert_eq!(
+        cursor_now(&mut c, 1_216),
+        Some(first),
+        "the first frame after the block"
+    );
+}
+
+/// Runs one tick in which an order block begins (S-0201 Terms), and puts
+/// the hovering vehicle back at height 1000 (claim 35 (a)).
+fn block_begins(c: &mut Client, unit: ObjectId) {
+    let s = session_mut(c);
+    assert!(!glasnost_sim::orders::blocked(s.play.world()), "set-up");
+    s.step_by(|g| {
+        g.step();
+        g.world.orders_blocked_through = g.world.tick + 50;
+        true
+    });
+    s.play.game.world.obj_mut(unit).unwrap().pos.z = 1000;
+    assert!(glasnost_sim::orders::blocked(s.play.world()), "a block");
+}
+
+/// Ends the order block: the next tick is past it.
+fn block_ends(c: &mut Client) {
+    let w = &mut session_mut(c).play.game.world;
+    w.orders_blocked_through = w.tick - 1;
+}
+
+/// The selection.
+fn selected(c: &mut Client) -> Vec<ObjectId> {
+    session_mut(c).play.selection.clone()
+}
+
+/// Q-3321. spec: S-0214 r101 claim 35 (e) (when an order block begins, a battlefield press that is
+/// held is abandoned as in claim 34 (e): no click results and the later release gives none; a
+/// button that is still down when the block ends holds no press, so the hover is looked up again
+/// from the block's end) and scenario T27 run m1
+#[test]
+fn claim_35_e_an_order_block_abandons_a_held_click() {
+    let (mut c, unit, p) = hovering_with_cursor();
+    let s0 = selected(&mut c);
+    c.pointer_down(Button::Left, p);
+    let _ = c.frame();
+    block_begins(&mut c, unit);
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), None, "no mark in the block");
+    block_ends(&mut c);
+    let _ = c.frame();
+    assert_eq!(
+        hovered(&mut c),
+        Some(unit),
+        "looked up again with the button still down"
+    );
+    c.pointer_up(Button::Left, p, Modifiers::default());
+    assert_eq!(selected(&mut c), s0, "the release gives no click");
+}
+
+/// Q-3321. spec: S-0214 r101 claim 35 (e) (when an order block begins, an active band box of a
+/// held press disappears and no box results; with the button still down after the block the cursor
+/// follows the lookup) and scenario T27 run m3
+#[test]
+fn claim_35_e_an_order_block_abandons_a_band_box() {
+    let (mut c, unit, p) = hovering_with_cursor();
+    let s0 = selected(&mut c);
+    let press = empty_at(&mut c, p, (-40, -30));
+    let end = empty_at(&mut c, p, (40, 20));
+    c.pointer_moved(press);
+    c.pointer_down(Button::Left, press);
+    c.pointer_moved(end);
+    assert_eq!(cursor_now(&mut c, 1_000), Some(ARROW), "set-up: a band box");
+    block_begins(&mut c, unit);
+    block_ends(&mut c);
+    assert!(
+        cursor_now(&mut c, 1_016).is_some_and(|f| MOVE.contains(&f)),
+        "the lookup's move cursor with the button still down"
+    );
+    c.pointer_up(Button::Left, end, Modifiers::default());
+    assert_eq!(selected(&mut c), s0, "the release gives no box");
+}
+
+/// Q-3321. spec: S-0214 r101 claim 35 (e) (when an order block begins, the scroll drag of a held
+/// right press stops and does not go on after the block, even with the button still down; its
+/// release gives nothing), claim 27 and scenario T27 run m4
+#[test]
+fn claim_35_e_an_order_block_stops_a_scroll_drag() {
+    let (mut c, unit, p) = hovering_with_cursor();
+    let s0 = selected(&mut c);
+    let press = empty_at(&mut c, p, (0, -23));
+    c.pointer_moved(press);
+    c.pointer_down(Button::Right, press);
+    // 20 pixels to the right, beyond F8's bound: the scroll drag starts.
+    let held = Point::new(press.x + 20, press.y);
+    c.pointer_moved(held);
+    let before = session_mut(&mut c).view().origin;
+    session_mut(&mut c).scroll_cycle(2_000, [false; 4], true);
+    let moved = session_mut(&mut c).view().origin;
+    assert_ne!(moved, before, "set-up: the drag scrolls the view");
+    block_begins(&mut c, unit);
+    block_ends(&mut c);
+    for k in 0..3 {
+        session_mut(&mut c).scroll_cycle(2_100 + 100 * k, [false; 4], true);
+    }
+    assert_eq!(
+        session_mut(&mut c).view().origin,
+        moved,
+        "no drag after the block"
+    );
+    c.pointer_up(Button::Right, held, Modifiers::default());
+    assert_eq!(selected(&mut c), s0, "the release gives nothing");
+}
+
+/// Q-3321. spec: S-0214 r101 claim 35 (e) (when an order block begins, a held right press with no
+/// scroll drag is abandoned: no right click results and the later release gives none) and claim 26
+/// and scenario T27 run m5
+#[test]
+fn claim_35_e_an_order_block_abandons_a_right_press() {
+    let (mut c, unit, p) = hovering_with_cursor();
+    let s0 = selected(&mut c);
+    assert!(!s0.is_empty(), "set-up: S is selected");
+    let press = empty_at(&mut c, p, (0, -23));
+    c.pointer_moved(press);
+    c.pointer_down(Button::Right, press);
+    block_begins(&mut c, unit);
+    block_ends(&mut c);
+    c.pointer_up(Button::Right, press, Modifiers::default());
+    assert_eq!(selected(&mut c), s0, "no right click");
+}
+
+/// Q-3369. design: render (Q-3369) (a press that begins during an order block is held until its
+/// release as before S-0214 r101: only a press held when a block begins is abandoned, claim 35
+/// (e))
+#[test]
+fn a_press_that_begins_during_an_order_block_is_held_until_its_release() {
+    let (mut c, unit, p) = hovering_with_cursor();
+    block_begins(&mut c, unit);
+    c.pointer_down(Button::Left, p);
+    block_ends(&mut c);
+    c.pointer_up(Button::Left, p, Modifiers::default());
+    assert_eq!(selected(&mut c), vec![unit], "the release is a click");
 }
 
 /// Q-3322. spec: S-0516 r36 claim 26 (none of the refusals applies to an object that V owns: V

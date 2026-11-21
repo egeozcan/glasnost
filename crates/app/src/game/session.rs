@@ -177,10 +177,16 @@ pub struct Session {
     /// The object with the hover mark (S-0214 Terms, *hover mark*): given
     /// by a hover lookup that finds it, cleared in every tick (claim 35 (e)).
     hover_mark: Option<ObjectId>,
-    /// The cursor image a held battlefield press's own resolution at its
-    /// pixel gave (S-0214 claim 35 (e)); `None` within for the system
-    /// pointer. Read only while [`Session::held_press`] holds the press.
+    /// The cursor image a held battlefield press keeps (S-0214 r101 claim
+    /// 35 (e)): for a left press the image its own resolution at its pixel
+    /// gave, for a right press the image the last lookup before it gave;
+    /// `None` within for the system pointer. Read only while
+    /// [`Session::held_press`] holds the press.
     press_image: Option<Option<cursor::Choice>>,
+    /// The cursor image the last hover lookup gave (S-0214 r101 claim 35
+    /// (e)), what a right battlefield press keeps before its scroll drag;
+    /// `None` before any lookup, and `None` within for the system pointer.
+    lookup_image: Option<Option<cursor::Choice>>,
     /// The tips' rest and the tip that shows: the name tip (S-0111 claims
     /// 20 to 26) or a sidebar tip (S-0411 claims 20 to 22).
     name_tip: name_tip::NameTip,
@@ -602,6 +608,7 @@ impl Session {
             hover: None,
             hover_mark: None,
             press_image: None,
+            lookup_image: None,
             name_tip: name_tip::NameTip::default(),
             focus_tip: None,
             // spec: S-0111 claim 20 and Import mapping (the tooltip option is on unless the player's settings turn it off)
@@ -801,6 +808,7 @@ impl Session {
         let lap = || clock.map_or(0.0, |c| c());
         let start = lap();
         let mut tick_ms = 0.0;
+        let was_blocked = glasnost_sim::orders::blocked(&self.play.game.world);
         let ran = self.play.step_by(|g| {
             let t = lap();
             let r = tick(g);
@@ -812,6 +820,9 @@ impl Session {
         }
         // spec: S-0214 r96 claim 35 (e) (the hover mark is cleared in every tick, and only a later lookup that finds the object gives it again)
         self.hover_mark = None;
+        if !was_blocked && glasnost_sim::orders::blocked(&self.play.game.world) {
+            self.abandon_at_block();
+        }
         if self.network {
             // spec: S-0201 claim 17, Our engine (a network game is paced at the index in force from the cycle after a speed order is carried out)
             self.speed = self.play.game.world.game_speed;
@@ -1498,10 +1509,11 @@ impl Session {
     }
 
     /// The held battlefield press (S-0214 Terms, *battlefield press*):
-    /// [`Session::battlefield_press`] unless the route mode took the left
-    /// press at the press.
+    /// [`Session::battlefield_press`] unless the route mode took or refused
+    /// the left press at the press (a refusal for kind has already ended
+    /// the press).
     fn held_press(&self) -> Option<(Point, Button)> {
-        // spec: S-0214 r96 Terms (*battlefield press*: a left press that the route mode takes at the press, S-0213 claim 16b, is not one)
+        // spec: S-0214 r101 Terms and claim 35 (e) (*battlefield press*: a left press that the route mode takes or refuses at the press, S-0213 claims 16b and 16d, is not one and does not stop the lookup)
         self.battlefield_press().filter(|_| {
             !self
                 .route
@@ -1753,6 +1765,24 @@ impl Session {
         }
     }
 
+    /// An order block began in the last tick (S-0201 Terms): a held
+    /// battlefield press is abandoned as in S-0214 claim 34 (e), so an
+    /// active band box disappears, a scroll drag stops, and the later
+    /// release gives nothing. A button still down when the block ends holds
+    /// no press, so the hover is looked up again from the block's end.
+    fn abandon_at_block(&mut self) {
+        // spec: S-0214 r101 claim 35 (e) (when the block begins, a battlefield press that is held is abandoned as in claim 34 (e): an active band box disappears, a scroll drag stops, no box, click, right click or order results, and the later release gives none) and Terms (*battlefield press*: held until an order block begins)
+        // design: render (Q-3369) a press that begins while a block is in force is not abandoned: it is held until its release, as before r101
+        if self.held_press().is_some() {
+            self.press = None;
+            self.drag = None;
+            self.right = None;
+            self.press_image = None;
+            self.route.pressed = None;
+            // Seam: S-0111 claim 20 as it stands ends the tip's button block at the release, so `view_button_held` stays; S-0214 r101 *Changes for other specs* proposes that the block end here too.
+        }
+    }
+
     /// The middle button went down or up: it does nothing in the game but
     /// hide the name tip and stop its wait (S-0111 claim 20).
     pub fn middle_button(&mut self, p: Point) {
@@ -1813,9 +1843,25 @@ impl Session {
             // spec: S-0111 r49 claim 20 (Blocked, Q-2736 answered: in the route mode a held left button does not block the tip when its press was refused at the press, for kind, S-0213 claim 16d, or by the point-click test, S-0213 claim 16b, or took a point, a join or a loop close, S-0213 claim 16b, or with no object selected took an own point that the click selects, S-0213 claims 16b and 16e; a press that is an ordinary click blocks it, and every block ends at the release)
             self.view_button_held = false;
         }
-        // spec: S-0214 r96 claim 35 (e) (while a left battlefield press is held, the cursor shows the image that the press's own resolution at its pixel, claim 26, gave it)
-        // design: render (Q-3349) (a right battlefield press keeps its own pixel's image too, until its scroll drag starts)
-        self.press_image = self.held_press().map(|(start, _)| self.choice_at(start));
+        self.press_image = match self.held_press() {
+            // spec: S-0214 r101 claim 35 (e) (while a left battlefield press is held, the cursor shows the image that the press's own resolution at its pixel, claim 26, gave it)
+            Some((start, Button::Left)) => Some(self.choice_at(start)),
+            // spec: S-0214 r101 claim 35 (e) (before its scroll drag a right press chooses no image of its own: the cursor keeps the image that the last lookup before the press gave)
+            // design: render (S-0214 r101 claim 35 (e)) with no lookup made yet in the game, the press pixel's image
+            Some((start, _)) => Some(match self.lookup_image {
+                Some(image) => image,
+                None => self.choice_at(start),
+            }),
+            None => None,
+        };
+    }
+
+    /// The cursor image of this frame's hover (S-0214 claims 21 and 35
+    /// (e)): `None` for the system pointer, also with the pointer off the
+    /// battlefield view.
+    fn hover_choice(&mut self) -> Option<cursor::Choice> {
+        let (cell, object) = self.frame_hover()?;
+        self.offer_choice(cell, object)
     }
 
     /// The cursor image of the resolution at screen pixel `p` (S-0214
@@ -2994,8 +3040,10 @@ impl Session {
         self.cursor_shown = None;
         self.cursor_hidden = false;
         if !self.paused && glasnost_sim::orders::blocked(&self.play.game.world) {
-            // spec: S-0214 r96 claim 35 (e) (during an order block the game hides the cursor, S-0111 claim 20) and S-0201 Terms (*order block*: the game hides the mouse pointer)
-            // design: render (Q-3350) (the hidden cursor leaves claim 22's animation as it was)
+            // spec: S-0214 r101 claim 35 (e) (during an order block the game hides the cursor, S-0111 claim 20) and S-0201 Terms (*order block*: the game hides the mouse pointer)
+            // spec: S-0214 r101 claim 35 (e) (the cursor becomes the ordinary arrow and is then hidden, and it stays the arrow while hidden: an animated image after the block is a change of kind from the arrow, claim 22, and a kept image is the arrow)
+            self.animator
+                .frame(cursor::Choice::Show(cursor::Frames::ARROW), self.clock_ms);
             self.cursor_hidden = true;
             return;
         }
@@ -3008,6 +3056,9 @@ impl Session {
             return;
         };
         let size = art.size;
+        // spec: S-0214 r101 claim 35 (e) (a lookup is made in this frame: the pointer is over the battlefield view, outside a hold; its image is what a right press made before the next lookup keeps)
+        let looked_up =
+            !self.hover_held() && self.pointer.is_some_and(|p| self.map_rect().contains(p));
         // spec: S-0101 claim 17 (each permitted active drag update shows the static drag-scroll image, not an edge-scroll image)
         let drag = self
             .drag_refused
@@ -3028,28 +3079,30 @@ impl Session {
         let (frames, frame, hot) = if let Some((frames, hot)) = edge {
             // spec: S-0214 claim 22 (the edge-scroll and drag images are kinds of their own: an action image after them starts at its first frame, and a kept image is the one shown; #85)
             self.animator.other(Some((frames, hot)));
+            if looked_up {
+                // design: render (S-0214 r101 claim 35 (e)) a lookup is made in every drawn frame, so the lookup of a frame that shows an edge-scroll image is the last lookup a later right press keeps the image of; r101 does not say whether such a frame's lookup counts
+                self.lookup_image = Some(self.hover_choice());
+            }
             (frames, frames.first, hot)
         } else {
             let choice = if let Some((_, b)) = self.held_press()
                 && let Some(image) = self.press_image
             {
-                // spec: S-0214 r96 claim 35 (e) (when claim 18's band box starts, outside route-editing mode, the cursor becomes the ordinary arrow until the release)
-                // design: render (Q-3349) (in route-editing mode a band box keeps the press's image)
-                let band = b == Button::Left
-                    && self.drag.as_ref().is_some_and(|d| d.active)
-                    && !self.route.held;
+                // spec: S-0214 r101 claim 35 (e) (when claim 18's band box starts the cursor becomes the ordinary arrow until the release, with the route-mode key held too, where an ordinary press, S-0213 claim 16b, starts one)
+                let band = b == Button::Left && self.drag.as_ref().is_some_and(|d| d.active);
                 if band {
                     Some(cursor::Choice::Show(cursor::Frames::ARROW))
                 } else {
-                    // spec: S-0214 r96 claim 35 (e) (the press's image, wherever the pointer goes and whatever happens to the object under it; its frames still advance as claim 22 gives)
+                    // spec: S-0214 r101 claim 35 (e) (the press's image, wherever the pointer goes and whatever happens to the object under it; its frames still advance as claim 22 gives)
                     image
                 }
             } else {
                 // spec: S-0214 claim 35 (e) (the cursor shows the frame's hover)
-                match self.frame_hover() {
-                    Some((cell, object)) => self.offer_choice(cell, object),
-                    None => None,
+                let choice = self.hover_choice();
+                if looked_up {
+                    self.lookup_image = Some(choice);
                 }
+                choice
             };
             let Some(choice) = choice else {
                 // spec: S-0214 claim 22 (the system pointer replaces the cursor; #85)
@@ -3098,8 +3151,7 @@ impl Session {
             // spec: S-0516 r36 claim 26 (a fully cloaked object the viewer neither owns nor senses, or a building at fade level 15 it neither owns nor senses, cannot be hovered; #66)
             .filter(|&id| pointing::cloak_clickable(&self.play.game.world, id, self.play.eye(id)));
         if looked_up {
-            // spec: S-0214 r96 claim 35 (e) and Terms (*hover mark*: a hover lookup that finds an object gives it the mark)
-            // design: render (Q-3350) (one object has the mark at a time: a lookup takes it from any other, and one that finds nothing leaves none; with no lookup the mark stays until the tick clears it)
+            // spec: S-0214 r101 claim 35 (e) and Terms (*hover mark*: a lookup gives the mark to the object it finds and takes it from every other object, and a lookup that finds no object leaves no object with it; a drawn frame that makes no lookup changes no mark, so the object found last keeps it until the next tick clears it)
             self.hover_mark = found;
         }
         let hovered = self.hover_mark;

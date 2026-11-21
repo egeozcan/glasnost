@@ -620,11 +620,10 @@ pub struct Live {
     /// (S-0109 claim 16), so that an ended ring starts again only after the
     /// ring has ended and come back.
     rings: BTreeMap<ObjectId, ShownRing>,
-    /// The controls whose ring has been shown, by object: whether the
-    /// control is permanent. An entry stays while that control lasts, so
-    /// that a ring created while it is there is a ring shown again (S-0601
-    /// claim 18).
-    ringed: BTreeMap<ObjectId, bool>,
+    /// The controls whose ring has been shown, by object. An entry stays
+    /// while that control lasts, so that a ring created while it is there
+    /// is a ring shown again (S-0601 claim 18).
+    ringed: BTreeMap<ObjectId, Control>,
     /// Each building's running slot animations (S-0108; presentation
     /// state).
     slot_anims: BTreeMap<ObjectId, slot_play::Slots<SlotAnim>>,
@@ -813,10 +812,32 @@ struct LiveAnim {
 /// A control ring shown (S-0601 claim 18).
 #[derive(Clone, Copy, Debug)]
 struct ShownRing {
-    /// The permanent ring, not the controlled one.
-    permanent: bool,
+    /// The control it belongs to.
+    control: Control,
     /// The serial of its playing animation.
     serial: u32,
+}
+
+/// One control of an object, for its ring (S-0601 claim 18): permanent
+/// control (claim 13), or control by one controller (claims 6 and 9). A
+/// release and a takeover by another controller end the one control and
+/// start the other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Control {
+    Permanent,
+    By(ObjectId),
+}
+
+impl Control {
+    /// The control of `id` now, as `glasnost_sim::mind::ring` chooses its
+    /// ring: permanent control first.
+    fn of(w: &glasnost_sim::world::World, id: ObjectId) -> Option<Self> {
+        if glasnost_sim::mind::permanent(w, id) {
+            Some(Self::Permanent)
+        } else {
+            w.mind.victims.get(&id).map(|v| Self::By(v.controller))
+        }
+    }
 }
 
 /// What playback asks of the live game: the follow-up types, the
@@ -2945,17 +2966,12 @@ impl Live {
             .into_iter()
             .filter_map(|id| Some((id, glasnost_sim::mind::ring(w, id)?)))
             .collect();
-        // spec: S-0601 claim 18 (removed at release, gone when the object leaves the game; the ring ends at each event of S-0109 claim 22's End with the owner list); a change between the two kinds of control ends the one ring, and the other starts below
+        // spec: S-0601 r32 claim 18 (removed at release, gone when the object leaves the game; the ring ends at each event of S-0109 claim 22's End with the owner list); a change of control, between the two kinds or from one controller to another, ends the one ring, and the takeover's ring starts below
         self.rings
-            .retain(|id, s| rings.get(id).is_some_and(|r| r.permanent == s.permanent));
-        // spec: S-0601 claim 18 (a ring shown again is one created while the same control lasts: permanent control, claim 13, or control by a controller, claims 6 and 9)
-        self.ringed.retain(|id, permanent| {
-            if glasnost_sim::mind::permanent(w, *id) {
-                *permanent
-            } else {
-                !*permanent && w.mind.victims.contains_key(id)
-            }
-        });
+            .retain(|id, s| rings.contains_key(id) && Control::of(w, *id) == Some(s.control));
+        // spec: S-0601 r32 claim 18 (a ring shown again is one created while the same control lasts: permanent control, claim 13, or control by one controller, claims 6 and 9)
+        self.ringed
+            .retain(|id, control| Control::of(w, *id) == Some(*control));
         let shown = &self.rings;
         self.anims.retain_mut(|a| {
             let Some(id) = a.ring else { return true };
@@ -2974,13 +2990,17 @@ impl Live {
             if self.rings.contains_key(&id) {
                 continue;
             }
+            // A ring of `mind::ring` always has a control.
+            let Some(control) = Control::of(&self.world, id) else {
+                continue;
+            };
             self.counts.anims += 1;
             let serial = self.anim_serial;
             // spec: S-0601 claim 18 (the takeover creates the controlled ring with a repeat factor of 1, so a ring type of loop count −1 plays until the ring ends; a ring shown again is a new animation, created and attached as at the start of that control, with no loop delay; its creation draws of S-0109 claims 3 and 13 and every later playback draw come from the unsynchronised stream, our cosmetic stream). design: render (Q-3361) the permanent ring is created as the controlled one: no loop delay, repeat factor 1, no reverse request. Seam: the first ring of a control is the original's own animation, whose draws S-0109 claim 28 puts on the scenario stream; the simulation does not play it yet, so the drawing plays it too, from the cosmetic stream.
             // design: render (S-0601 claim 18) the drawing finds the ring after the tick, so the ring's first update (S-0109 claims 5 and 29) is in the tick it is found in, the excluded update that follows at once
             self.create_anim(r.anim.as_bytes(), r.at, now, None, false);
-            let again = self.ringed.get(&id) == Some(&r.permanent);
-            self.ringed.insert(id, r.permanent);
+            let again = self.ringed.get(&id) == Some(&control);
+            self.ringed.insert(id, control);
             if let Some(a) = anim_mut(&mut self.anims, serial) {
                 a.ring = Some(id);
                 // spec: S-0601 claim 18 and S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
@@ -2995,13 +3015,7 @@ impl Live {
                     a.player.play.next = None;
                 }
             }
-            self.rings.insert(
-                id,
-                ShownRing {
-                    permanent: r.permanent,
-                    serial,
-                },
-            );
+            self.rings.insert(id, ShownRing { control, serial });
         }
     }
 
