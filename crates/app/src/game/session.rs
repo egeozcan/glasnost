@@ -3080,7 +3080,7 @@ impl Session {
             // spec: S-0214 claim 22 (the edge-scroll and drag images are kinds of their own: an action image after them starts at its first frame, and a kept image is the one shown; #85)
             self.animator.other(Some((frames, hot)));
             if looked_up {
-                // spec: S-0214 r101 claim 35 (e) (the lookup of a frame that shows an edge-scroll image still gives its image to a later right press)
+                // design: render (S-0214 r101 claim 35 (e)) a lookup is made in every drawn frame, so the lookup of a frame that shows an edge-scroll image is the last lookup a later right press keeps the image of; r101 does not say whether such a frame's lookup counts
                 self.lookup_image = Some(self.hover_choice());
             }
             (frames, frames.first, hot)
