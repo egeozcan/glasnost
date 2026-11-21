@@ -1,9 +1,9 @@
 ---
 id: Q-3337
 title: Where the control ring of a building stands, and what drawing it in front of the building means
-status: open
+status: answered
 related: [S-0601, S-0109, S-0102]
-answered-by: []
+answered-by: [S-0601]
 ---
 
 ## Need

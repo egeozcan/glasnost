@@ -2,13 +2,13 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 23
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-07
+approved-on: 2026-11-21
 measurements: []
-requests: [Q-1150, Q-1200, Q-1201, Q-1202, Q-1203, Q-2717]
+requests: [Q-1150, Q-1200, Q-1201, Q-1202, Q-1203, Q-2717, Q-3337]
 supersedes: []
 ---
 
@@ -233,7 +233,9 @@ The glossary also defines *trigger*, used here.
    - if *C*'s capacity is exactly 1, *C* first releases its current victim (claim 7),
    - *T*'s original owner is recorded as its owner at this moment,
    - *T* changes owner to *C*'s house. Every consumer of a change of owner applies (S-0414 claims 4,
-     5 and 21; S-0311 claim 13; S-0506 claim 13; S-0516 claim 34),
+     5 and 21; S-0311 claim 13; S-0506 claim 13; S-0516 claim 34; S-0309 claims 30 and 31 for
+     *T*'s own target and orders; S-0309 claim 32: every object that holds *T* as its target
+     drops it at the change, *C* included, apart from an attacker whose strike target *T* is),
    - *T* becomes controlled by *C* and is appended to the end of *C*'s victim list,
    - *T*'s link-line timer starts (claim 17),
    - *T* gets a guard reset (S-0215 claim 9): its target, destination and guard spot are cleared
@@ -260,8 +262,15 @@ The glossary also defines *trigger*, used here.
    - Backing: `measurable` (MC1 and MC3, MC9 for a building including the announcement,
      MC11 for the simple-deployer, temporal-attacker, passenger-target and construction-yard
      variants; S-0215 scenario B3 case i for the *wait* exception). Team membership is
-     `unmeasured` here: original scripted teams are outside the skirmish tests
-   - Confidence: high
+     `unmeasured` here: original scripted teams are outside the skirmish tests. The effects of
+     S-0309 claims 30 to 32 named in the list are those claims' own, and carry their backing
+     there (S-0309 scenarios A19 and A20)
+   - Confidence: high, except that the effects of S-0309 claims 30 to 32 carry those claims' own
+     ratings. For S-0309 claim 32 that is high only for a vehicle holder of a human-controlled
+     owner, of a target given by an order or taken at retaliation; medium for *C*'s own drop of *T*,
+     for a computer-controlled holder, for infantry, aircraft and building holders and for the
+     strike-target exception, the holders of those three kinds and the strike-target exception
+     being `unmeasured` there
 
 7. **Capacity 1 replaces.** A controller of capacity exactly 1 that already holds a victim may
    still fire at a new legal target (claim 3). When the new takeover lands, the old victim is
@@ -339,10 +348,13 @@ The glossary also defines *trigger*, used here.
    current behaviour is *attack* is then *attack* without a target, which its movement does not hold
    back (S-0215 claim 11), so with an interruptible current sequence it starts *guard* at once.
    Every other readiness condition applies as usual: an infantry victim moving under *move*, for
-   example, is not ready, and *guard* stays queued for a later per-tick start. It does not promise
+   example, is not ready, and *guard* stays queued for a later per-tick start unless S-0309 claim
+   31's fall-back queues another behaviour in its place. It does not promise
    preservation of the last order. A simple-deployer vehicle currently in *unload* skips that guard
    request. The owner-independent effects of claim 6 also apply on release: leaving a team, letting
-   go of a temporal target and clearing open-topped passenger targets.
+   go of a temporal target and clearing open-topped passenger targets. S-0309 claim 31 gives
+   the further effects of this owner change, with its exceptions; this claim does not restate
+   them.
 
    The release of a building asks for the capture or loss announcement in the same way as its
    takeover does (claim 6), with the controlling house as the old owner and the original owner as
@@ -352,9 +364,10 @@ The glossary also defines *trigger*, used here.
      the release exceptions). Scripted-team departure remains `unmeasured` for the reason in claim
      6. `unmeasured` for an infantry victim in the attack state with no target: no MC part times a
      release inside an attack-move discard
-   - Confidence: high; medium for the at-once start of a standing infantry victim in the attack
-     state that holds a target, which rests on S-0107 claim 11's end of that state at once at a
-     change of target (medium there), medium for the at-once start of a walking infantry victim
+      - Confidence: high; the fall-back of S-0309 claim 31 that the queued *guard* sentence names
+     carries that claim's ratings; medium for the at-once start of a standing infantry victim in the
+     attack state that holds a target, which rests on S-0107 claim 11's end of that state at once at
+     a change of target (medium there), medium for the at-once start of a walking infantry victim
      under *attack*, which also needs its current sequence to be interruptible (S-0215 claim 11),
      and medium for the attack state with no target
 
@@ -580,14 +593,102 @@ The glossary also defines *trigger*, used here.
 
 18. **Control rings.** A controlled object carries the rules' controlled-animation type, and a
     permanently controlled object carries the permanent-controlled-animation type, attached to it
-    and following it. The ring is raised above a mobile object by its type's ring height in leptons.
-    On buildings it uses a building-height-based placement and draws in front of the building.
-    The exact vertical conversion is not established here.
-    The ring is removed at release (claim 9). When the object leaves the game the ring goes with it.
-    - Backing: `measurable` (MC1 for mobile rings; MC9 for building foreground placement; MC13
-      for the exact building-height conversion)
-    - Confidence: high for animation choice; medium for placement and exact building-height
-      conversion
+    and following it (S-0109 claim 22). The ring is raised above a mobile object by its type's ring
+    height in leptons. The takeover creates the controlled ring with a repeat factor of 1 (S-0109
+    Terms), so a ring type whose loop count is −1 plays until the ring ends by the rules below
+    (S-0109 claim 7). This claim does not give the creation of the permanent ring of a permanent
+    takeover (claim 13). The ring is removed at release (claim 9). It also ends at each event of
+    S-0109 claim 22's *End with the owner* list.
+
+    **A ring shown again.** In the original, a controlled object whose ring ended that way shows
+    no ring again while it stays controlled, even after it is back on the map or uncloaks. Our
+    engine fixes this display bug with no switch, in a form that changes no game state and takes
+    no draw from the scenario random stream, so a game plays out as in the original. While an
+    object is controlled or permanently controlled, it shows the ring of this claim for that kind
+    of control whenever it is on the map, not destroyed, not sinking or crashing, neither cloaking
+    nor cloaked, and not underground. The ring shown again is a new animation, created and
+    attached as at the start of that control, at the moment the last of those conditions holds
+    again. It is a display-only animation: the draws S-0109 claims 3 and 13 give an animation
+    created with no loop delay, and every later draw of its playback, come from the
+    unsynchronised random stream (glossary), and they affect only its stage timing and drawing.
+    Its start and middle events make no sound, damage, crater, resource chain reaction or object,
+    its end makes no follow-up switch or infantry, and it is not an object that any rule of the
+    game counts or finds. It is drawn, advances and ends as S-0109 gives for the ring's type
+    otherwise.
+
+    **A building's ring (Q-3337).** A building is never permanently controlled (claim 13), so its
+    ring is the controlled one. It stands at the building's centre point (S-0204 claim 4: its
+    foundation's top corner plus (128*W*, 128*H*) leptons for a *W* × *H* foundation without a bib
+    row), raised above the building's own height by 104 leptons (one height level) times the
+    building's art height field (Import mapping), the field S-0111 reads for the building box. The
+    ring-height field of the building's type takes no part. The ring is then an ordinary attached
+    animation in the ground render layer (S-0109 claim 22) and a depth reader (S-0102 claim 10),
+    with one change made for a building only: the takeover replaces the ring's animation depth
+    adjustment (S-0102 claim 13) by −1024 depth units, whatever the ring type's own depth
+    adjustment is. So for a ring type drawn with the ordinary animation row, its depth bias is the
+    ring type's vertical draw shift − 1024 − *L(z)* − 2. Its sort key is X + Y of the centre point
+    plus the ring type's sort adjustment (S-0102 claim 5). So "in front of the building" covers two
+    different things:
+    - **Depth writers** (S-0102 claim 10: the building's body, bib and shadow, other buildings'
+      bodies, terrain tiles, overlays and terrain objects that are not animated) hide a ring pixel
+      only where their stored depth is not greater than the ring pixel's depth (S-0102 F2). The
+      ground's depth changes by only 1 per screen row (S-0102 F1), so an upright writer could hide
+      the ring only if the bottom row of its drawing, where its depth is anchored (S-0102 F2), lay
+      several hundred screen rows lower than the ring's: about 1024 rows for a writer with a
+      companion depth image, and about 768 rows (three quarters of the bias difference) for one
+      without (S-0102 F2, Comparing two drawings). A flat writer, whose depth follows the ground row
+      by row, could hide it only where it lay about 1024 − *s* depth units nearer than the ground
+      under the ring, *s* being the ring type's vertical draw shift. The two row bounds are for a
+      writer depth adjustment, ring vertical draw shift and companion depth value of 0, and each
+      moves with those signed values (S-0102 claim 13 and F2): it grows by the writer's own depth
+      adjustment and shrinks by the shift and by the writer's companion depth value at the pixel
+      (−128 to 127, S-0102 Terms). For a writer with a companion depth image the least gap needed,
+      at the ring's bottom row, is about 1024 + *n* − *s* − *a* rows, and higher ring pixels need
+      more, *n* being that adjustment and *a* the companion value, so a writer whose own adjustment
+      is negative enough needs no gap at all; for an upright writer without one the least gap is
+      about three quarters of 1024 + *n* − *s*. In particular,
+      with the ring type's vertical draw shift and the building's own depth adjustments at their
+      absent-key value of 0 (S-0102 Import mapping), the building's own shadow, and its own body or
+      bib wherever that drawing is less than 700 rows tall, do not hide any of the ring: where the
+      body or the bib overlaps the ring, its bottom row lies less than its own height below the
+      ring's.
+    - **Depth readers** (units, other animations, particles, animated terrain objects, and the parts
+      of any building drawn in the object pass, its voxel turret among them, and its slot
+      animations) never hide the ring through depth, nor the ring them. Where they overlap and both
+      pass the depth test against the stored depth, the one drawn later shows: the later one in the
+      ground layer's order (S-0102 claim 6), or the one in the later layer (S-0102 claim 1). The
+      building's own object-pass parts sort with the building's key, which is smaller than the
+      ring's by 128 × (*W* + *H*) leptons plus the ring type's sort adjustment, less 32 for a voxel
+      turret and plus 16 for a gate (S-0102 claim 5), so the ring is drawn after them unless that
+      sort adjustment cancels the difference (in the original, once its limited per-tick sorting has
+      settled, S-0102 claim 6). A building's slot animation is ordered by its own key (S-0102 claim
+      17), and a unit standing in front of the building draws over the ring, where its pixels pass
+      the depth test, when its key is larger than the ring's.
+    - Backing: `measurable` (MC1 for mobile rings and the animation choice; MC13 part a for a
+      building ring's point and height and for the repeat factor of 1 of a building's ring, which
+      also backs it for other controlled objects, created by the same takeover; part b for the ring
+      against its building's body, bib, shadow and voxel turret and against a unit in front; part c
+      for the replaced depth adjustment and its value to within 2 depth units). For the other
+      writers and readers listed above (other buildings, terrain tiles, overlays, terrain objects,
+      slot animations, particles and other animations), MC13 plays none: their outcome is S-0102's
+      rule for them (claims 1, 5, 6 and 10) applied to the ring's bias and key above, and carries
+      those claims' backing. The ring's end at the events of S-0109 claim 22 carries that claim's
+      backing; the original's missing ring after an uncloak is `measurable` by S-0109 scenario AN30
+      part a; the ring shown again is `unmeasured`, a design rule.
+    - Confidence: high for the animation choice, for the repeat factor of 1 of a building's ring,
+      for a building ring's point and height, for the replaced depth adjustment and for its value to
+      within 2 depth units, for the ring drawn over its building's body and for its order against a
+      unit, where S-0102 rates building bodies, units and the ground layer's order high (claims 5, 6
+      and 10); medium for the bib, the shadow and the voxel turret, as S-0102 claim 10 rates the
+      other building images medium. For the other writers and readers: high for terrain tiles,
+      overlays, other buildings' bodies and terrain objects that are not animated, as S-0102 claim
+      10 rates them; medium for the other building images, slot animations, particles, other
+      animations and animated terrain objects. Medium for the exact value within those 2 units,
+      `unmeasured`: in the original, which multiple of 3 the ring's depth is rounded to depends on
+      the view's position at its creation (S-0102 F1), so one pixel's change places the value only
+      to within 2 units. The ring's end at the events of S-0109 claim 22 carries that claim's
+      ratings; medium for the repeat factor of 1 of other objects' controlled rings, which part a
+      does not play, for the original's missing ring after an uncloak and for the ring shown again.
 
 ## Formulas
 
@@ -649,6 +750,8 @@ F3 uses exact integer additions and integer draws, with no rounding.
 | alternate anchors cycled by link lines | 5 | anchors | F5 |
 | default link height | 70 | leptons | absent type key, claim 17 |
 | default ring height | 140 | leptons | absent type key, claim 18 |
+| building ring height per art height level | 104 | leptons | one height level, claim 18 |
+| building ring depth adjustment | −1024 | depth units | replaces the ring type's, claim 18 |
 
 ## State and ordering
 
@@ -728,7 +831,8 @@ F3 uses exact integer additions and integer draws, with no rounding.
 | `YuriMindControlSound` | `[AudioVisual]` | sound name | none | take-over sound (claim 5) |
 | `MasterMindOverloadDeathSound` | `[AudioVisual]` | sound name | none | overload sound (claim 16) |
 | `LeptonMindControlOffset` | type | integer, leptons | 70 | link-line end height (claim 17) |
-| `MindControlRingOffset` | type | integer, leptons | 140 | mobile ring height (claim 18) |
+| `MindControlRingOffset` | type | integer, leptons | 140 | mobile ring height (claim 18); not read for a building |
+| `Height` | building's art section | integer, height levels | 2 | building ring height (claim 18); S-0111 and S-0306 read the same field |
 | `AlternateFLH0` through `AlternateFLH4` | type's art section | integer triples, forward/lateral/height in leptons | zero triple | five alternate link anchors (claim 17, F5) |
 | `ControlledAnimationType` | `[CombatDamage]` | animation name | none | control ring (claim 18) |
 | `PermaControlledAnimationType` | `[CombatDamage]` | animation name | none | permanent control ring (claim 18) |
@@ -878,9 +982,9 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   third house: no announcement). Repeat for a building whose type has the needs-engineer flag and an
   imported capture announcement, naming the type in the setup (S-0701 claim 39 gives the custom entry only to such buildings). Then let B kill the Yuri Prime that holds the power plant: the plant returns to B
   and the release announcement goes to whichever of A and B is local, none to a third local
-  player. A missing or different announcement, or one for a third house, falsifies claim 6 or 9. Observe the building's ring in front of its sprite. For a captured
-  construction yard test packing up: the controlled yard cannot do so. A power change from
-  capture, or an attempted pack-up, must not silently remove the control link.
+  player. A missing or different announcement, or one for a third house, falsifies claim 6 or 9.
+  For a captured construction yard test packing up: the controlled yard cannot do so. A power
+  change from capture, or an attempted pack-up, must not silently remove the control link.
 - **MC10. Permanent control** (claims 13, 14). Three houses A, B and C. C's Yuri Clone controls
   one of B's tanks; A's psychic dominator then hits that tank and other tanks of B. Expected: all
   become A's, the controlled tank's release sound plays first, and killing C's clone afterwards
@@ -965,16 +1069,84 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   uses with the controlling house at zero money and with a badly damaged victim. The original's
   result is not determined, so any outcome is recorded without falsifying claim 8, and it never
   changes claim 8's design rule; repeat on a fresh game start to see whether it varies.
-- **MC13. Building control-ring height** (claim 18). On a named test map, have a named test copy of Yuri Prime
-  (versus nonzero against the building's armour by test data) control a building with a visible controlled animation. Record the building sprite and ring
-  pixels in a fixed-resolution capture, and compare the ring's vertical position against the
-  building's height and the corresponding mobile ring-height setting. Repeat with named test
-  variants that change only the building height and the ring-height field, three valid runs per
-  variant. Expected: the ring stays in front of the building and its vertical placement follows
-  the original's building-height conversion. A pixel position inconsistent with the same
-  measured conversion across repeats, or a change caused by altering an unrelated field,
-  falsifies the placement rule. Record the measured conversion in the measurement record before
-  stating a numeric formula.
+- **MC13. A building's control ring** (claim 18). On a flat named test map, a named test copy of
+  Yuri Prime (versus nonzero against the building's armour by test data) controls a building that
+  test data marks not psionics-immune. The test rules name, as the controlled-animation type, a
+  named test copy of an animation type with visible frames whose loop count is −1, so that, created
+  with the repeat factor of 1 that claim 18 gives, its playback never ends (S-0109 claim 7), whose
+  flat, tiled and shadow flags are off and whose translucency is none, so that it is drawn with
+  S-0102 claim 13's ordinary animation row, with no shadow and no blending, and whose vertical draw
+  shift, depth adjustment and sort adjustment are set to 0 by test data (S-0102 Import mapping),
+  except where a part says otherwise. Every test building type has its normal depth adjustment and
+  slot values at 0 in the same way. Record the building and ring pixels in a fixed-resolution
+  capture with the view held still and every ring compared fully inside it (S-0102 F2). A valid run
+  is one in which the takeover happens, so that the building is then shown in the controller's house
+  colour; make three valid runs per variant. In part a and with part b's building with a bib and a
+  voxel turret, a valid run in which no pixel of the building's ring shows falsifies claim 18's
+  depth rule for that ring.
+  - **Part a (point and height).** Use named test copies of a 1 × 1 building type that differ only
+    in the art height field, set to two values *e*₁ and *e*₂ at least 2 apart, and a third copy that
+    differs only in the ring-height field of its type, by at least 208 leptons. As the reference, a
+    named test copy of a vehicle type, standing still at a cell centre on the same flat ground, is
+    controlled in two variants whose ring-height field is 104 × *e*₁ and 104 × *e*₂ leptons. Compare
+    captures that show the same frame of the ring, and measure each ring's displacement in screen
+    pixels from the ground projection (S-0101 claim 1) of its object's cell centre. Expected: the
+    building's ring for each art height *e* has the displacement of the vehicle's ring in the
+    variant whose ring-height field is 104 × *e* leptons, to within 1 pixel on each screen axis, and
+    the ring-height copy has the displacement of its original. Then repeat with building copies that
+    differ only in foundation (1 × 1, 2 × 2 and 3 × 2). Expected: the ring keeps the same
+    displacement, to within 1 pixel, from the ground projection of the foundation's centre point,
+    not from its top corner or its position cell. A move with the ring-height field, a building ring
+    that differs from the matching vehicle ring by more than 1 pixel, or a displacement that follows
+    the top corner or the position cell falsifies the point or height rule. Finally, in each
+    building run of part a, keep the ring in view until more than 254 of its passes (S-0109 claim 7)
+    have played since the takeover, and record whether it still shows. A run decides nothing for
+    this check when the building's control ends before then (its house colour returns to the
+    original owner's, or it leaves the map), or when an event of S-0109 claim 22's *End with the
+    owner* list happens to it. Expected: the ring still shows. A ring that showed and then ended in
+    a run that this check decides falsifies the repeat factor of 1 of claim 18. By S-0109 claim 7 a
+    loop count of −1 with a factor *m* gives at most 254 passes unless *m* is below 1, which counts
+    as 1 (S-0109 Terms), or is 1 more than a multiple of 256, and every such factor gives the same
+    passes as 1 for every loop count, so the check tells the factor's effect apart from every other.
+  - **Part b (writers and readers).** Use a building type with a bib and a voxel turret, with its
+    art height field set by test data so that the turret's pixels overlap the ring on screen, and
+    record where the ring overlaps the body, the bib, the building's shadow and the turret. Then use
+    a named test copy of a 1 × 1 building type with no weapon whose art height field is 0, and park
+    a vehicle in the cell one further on both map axes, whose sort key is larger than the ring's.
+    Keep every drawing compared fully inside the view (S-0102 F2), and park the vehicle, owned by
+    the controller's own house, before the takeover. The original's limited per-tick sorting can
+    leave overlaps misordered for several ticks (S-0102 claim 6), so capture only after no object on
+    the test map has moved for 300 ticks (a turning turret counts as moving, so the building is
+    given no target, and a run in which no such stretch begins within 2000 ticks of the takeover
+    decides nothing), and again at the first tick at least 100 ticks later that shows the same frame
+    of the ring. On the original a run whose two captures differ in which drawing shows at a
+    compared pixel decides nothing; on our engine, which orders every frame fully (S-0102 claim 6),
+    such a difference falsifies the order. Expected, in both captures: the ring shows over the body,
+    bib, shadow and turret, and the vehicle shows over the ring where they overlap. A body, bib,
+    shadow or turret pixel over a ring pixel, or a ring pixel over the vehicle, falsifies the
+    corresponding part. Each image decides only where its pixels overlap the ring's in the capture.
+    Record which ones do, and a run in which one does not decides nothing for that image.
+  - **Part c (the replaced depth adjustment).** Use part b's 1 × 1 building type, chosen so that its
+    body image frames are compressed: the original ignores the companion values of an uncompressed
+    body (S-0102 claim 31). Keep the ring's and the body's drawings fully inside the view, since the
+    original anchors a clipped drawing at its last visible row (S-0102 F2); a run in which either is
+    clipped decides nothing and is run again with the view moved. Variants set the building's normal
+    depth adjustment *n* by test data. For a screen pixel *p* where its body and the ring overlap in
+    part b, let *n*ₚ be the value of *n* at which the ring's depth at *p* equals the body's under
+    S-0102 F2, with the ring's bias at −1024 − *L(z)* − 2 and the body's at *n* − *L(z)* − 2 minus
+    the companion depth value at *p*, both drawings placed from their image files as S-0102 F2, F5
+    and F6 and S-0105 place them, using the actual anchor rows of the two drawings. Pick *p* with
+    −1522 < *n*ₚ < −526. Under S-0102 F2 with F1's depth reference the ring shows at *p* exactly
+    when *n* > *n*ₚ; in the original the change can lie up to 2 from *n*ₚ (c2). (c1) *n* = −524 and
+    *n* = −1524, each once with the ring type's own depth adjustment at 0 and once at 2000.
+    Expected: at *n* = −524 the ring shows at *p*, at *n* = −1524 the body shows at *p*, and the
+    ring type's own value changes nothing. (c2) Between those two values of *n*, find by halving the
+    *n* at which *p* changes from ring to body. Expected: the change lies within 2 of *n*ₚ, so at
+    *n*ₚ + 3 the ring shows and at *n*ₚ − 2 the body shows. The margin is the original's rounding of
+    the ring's depth to a multiple of 3, which depends on the view's position (S-0102 F1 and F2).
+    Any other outcome in c1, a change in c2 outside those bounds, or any effect of the ring type's
+    own depth adjustment falsifies the replacement or its value. Part c decides nothing when no
+    overlapping pixel has −1522 < *n*ₚ < −526.
 
 - **MC14. Attack events and the overload turn** (claims 5 and 16). Part a (claim 5): on a named
   test map attach one repeating tag (repeat type 2, which no raise removes) to a B tank. The tag
@@ -1009,8 +1181,6 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
 
 ## Open questions
 
-- The exact height of a control ring above a building (claim 18) is not settled; it is
-  presentation only.
 - Whether a controller can change owner in a skirmish without named test data (claim 11).
   MC11 uses an explicitly capturable test type rather than assuming such a case exists.
 - What the original does when the damage or frames list of the overload is shorter than the count
@@ -1031,6 +1201,9 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   Q-1150. The *quirk switch* entry's "no switch" rule, which now covers only bad data and host or
   real-time dependence, takes the same case. This claim (claim 5) is the first case.
 - S-0011: no change needed; it names no switch for this case.
+- S-0102 claim 13 and S-0109 claim 22: no change needed. S-0102's animation depth adjustment
+  "unless the creator of the animation replaced it" covers the −1024 of a building's ring, and
+  S-0109's attachment keeps the ring's displacement from its building (claim 18).
 
 ## Questions for the project lead
 
