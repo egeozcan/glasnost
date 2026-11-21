@@ -620,6 +620,11 @@ pub struct Live {
     /// (S-0109 claim 16), so that an ended ring starts again only after the
     /// ring has ended and come back.
     rings: BTreeMap<ObjectId, ShownRing>,
+    /// The controls whose ring has been shown, by object: whether the
+    /// control is permanent. An entry stays while that control lasts, so
+    /// that a ring created while it is there is a ring shown again (S-0601
+    /// claim 18).
+    ringed: BTreeMap<ObjectId, bool>,
     /// Each building's running slot animations (S-0108; presentation
     /// state).
     slot_anims: BTreeMap<ObjectId, slot_play::Slots<SlotAnim>>,
@@ -810,8 +815,6 @@ struct LiveAnim {
 struct ShownRing {
     /// The permanent ring, not the controlled one.
     permanent: bool,
-    /// Its object is a building: the ring is drawn in front of it.
-    building: bool,
     /// The serial of its playing animation.
     serial: u32,
 }
@@ -1540,6 +1543,7 @@ impl Live {
             viewer: None,
             source_marker: None,
             rings: BTreeMap::new(),
+            ringed: BTreeMap::new(),
             slot_anims: BTreeMap::new(),
             anim_keys: Vec::new(),
             slot_defs: BTreeMap::new(),
@@ -2922,9 +2926,10 @@ impl Live {
     /// rules' controlled-animation type and a permanently controlled one the
     /// permanent type, played as an animation attached to it at the ring's
     /// point, which the simulation gives (`glasnost_sim::mind::ring`). A ring
-    /// that ends disappears; one that comes back is a new animation (S-0109
-    /// *Changes for other specs*, the S-0601 claim 18 entry). Our ring
-    /// changes no game state and takes no scenario draw.
+    /// that ends disappears; one that comes back is a new animation, which
+    /// makes no follow-up switch. A building's ring is a depth reader whose
+    /// depth adjustment is −1024 (S-0601 claim 18). Our ring changes no game
+    /// state and takes no scenario draw.
     fn follow_rings(&mut self, now: i32) {
         let w = &self.world;
         // design: render (#122) only a victim or a permanently controlled object has a ring, so those records and the rings shown are walked, in object order, instead of every object
@@ -2940,9 +2945,17 @@ impl Live {
             .into_iter()
             .filter_map(|id| Some((id, glasnost_sim::mind::ring(w, id)?)))
             .collect();
-        // spec: S-0601 claim 18 (removed at release, gone when the object leaves the game) and S-0109 Changes for other specs (the S-0601 claim 18 entry: the ring ends at each event of claim 22's End with the owner list); a change between the two kinds of control ends the one ring, and the other starts below
+        // spec: S-0601 claim 18 (removed at release, gone when the object leaves the game; the ring ends at each event of S-0109 claim 22's End with the owner list); a change between the two kinds of control ends the one ring, and the other starts below
         self.rings
             .retain(|id, s| rings.get(id).is_some_and(|r| r.permanent == s.permanent));
+        // spec: S-0601 claim 18 (a ring shown again is one created while the same control lasts: permanent control, claim 13, or control by a controller, claims 6 and 9)
+        self.ringed.retain(|id, permanent| {
+            if glasnost_sim::mind::permanent(w, *id) {
+                *permanent
+            } else {
+                !*permanent && w.mind.victims.contains_key(id)
+            }
+        });
         let shown = &self.rings;
         self.anims.retain_mut(|a| {
             let Some(id) = a.ring else { return true };
@@ -2963,20 +2976,29 @@ impl Live {
             }
             self.counts.anims += 1;
             let serial = self.anim_serial;
-            // spec: S-0109 Changes for other specs (the S-0601 claim 18 entry: a ring shown again is a new animation, created and attached as at the start of the control, with no loop delay; its creation draws of claims 3 and 13 and every later playback draw come from the unsynchronised stream, our cosmetic stream). Seam: the first ring of a control is the original's own animation, whose draws S-0109 claim 28 puts on the scenario stream; the simulation does not play it yet, so the drawing plays it too, from the cosmetic stream.
+            // spec: S-0601 claim 18 (the takeover creates the controlled ring with a repeat factor of 1, so a ring type of loop count −1 plays until the ring ends; a ring shown again is a new animation, created and attached as at the start of that control, with no loop delay; its creation draws of S-0109 claims 3 and 13 and every later playback draw come from the unsynchronised stream, our cosmetic stream). design: render (Q-3361) the permanent ring is created as the controlled one: no loop delay, repeat factor 1, no reverse request. Seam: the first ring of a control is the original's own animation, whose draws S-0109 claim 28 puts on the scenario stream; the simulation does not play it yet, so the drawing plays it too, from the cosmetic stream.
             // design: render (S-0601 claim 18) the drawing finds the ring after the tick, so the ring's first update (S-0109 claims 5 and 29) is in the tick it is found in, the excluded update that follows at once
             self.create_anim(r.anim.as_bytes(), r.at, now, None, false);
+            let again = self.ringed.get(&id) == Some(&r.permanent);
+            self.ringed.insert(id, r.permanent);
             if let Some(a) = anim_mut(&mut self.anims, serial) {
                 a.ring = Some(id);
-                // spec: S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
+                // spec: S-0601 claim 18 and S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
                 a.layer = super::slots::Layer::Ground;
                 a.cause = "a control ring";
+                if r.building {
+                    // spec: S-0601 claim 18 and Constants (on a building the takeover replaces the ring's animation depth adjustment, S-0102 claim 13, by −1024 depth units, whatever the ring type's own is; the ring stays a depth reader, S-0102 claim 10). design: render (Q-3362) the replacement holds through a follow-up switch
+                    a.z_adjust = Some(-1024);
+                }
+                if again {
+                    // spec: S-0601 claim 18 (a ring shown again is a display-only animation: its end makes no follow-up switch; it is drawn, advances and ends as S-0109 gives otherwise)
+                    a.player.play.next = None;
+                }
             }
             self.rings.insert(
                 id,
                 ShownRing {
                     permanent: r.permanent,
-                    building: r.building,
                     serial,
                 },
             );
@@ -4372,14 +4394,6 @@ impl Live {
                 && !items.is_empty()
             {
                 anim_items.insert(*serial, (*layer, items));
-            }
-        }
-        for s in self.rings.values().filter(|s| s.building) {
-            if let Some((_, items)) = anim_items.get_mut(&s.serial) {
-                for i in items {
-                    // spec: S-0601 claim 18 (on buildings the ring draws in front of the building); design: render (Q-3337) its pixels neither read nor write depth, so the building's body, a depth writer (S-0102 claim 10) drawn before it, hides none of them; the ground layer's later entrants still draw over it
-                    i.test = glasnost_render::compose::DepthTest::Ignore;
-                }
             }
         }
         self.counts.anims_drawn = anim_items.len();
