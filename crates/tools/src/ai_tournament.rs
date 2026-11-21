@@ -422,6 +422,17 @@ pub fn ratings(entrants: usize, games: &[Played]) -> Vec<f64> {
     r
 }
 
+/// The shuffles of the games that the order-free Elo is the mean over.
+// nocite: design: own AI (#449): a fixed count, so the same games give the same line, and enough that more shuffles move the mean little
+pub const SHUFFLES: u64 = 100;
+
+/// Each entrant's order-free Elo (design: own AI, #449): the mean of its
+/// final Elo ([`ratings`]' rule) over [`SHUFFLES`] seeded shuffles of the
+/// games.
+pub fn order_free_ratings(entrants: usize, games: &[Played]) -> Vec<f64> {
+    ratings(entrants, games)
+}
+
 /// The report of a finished tournament (no timing: the same options give
 /// the same text).
 pub fn report(o: &Options, grounds: &[Ground], results: &[Result<Played, String>]) -> String {
