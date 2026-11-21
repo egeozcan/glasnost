@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 85
+revision: 92
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-07
+approved-on: 2026-11-21
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131, Q-1160, Q-1759, Q-2781]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131, Q-1160, Q-1759, Q-2781, Q-3353]
 supersedes: []
 ---
 
@@ -142,7 +142,8 @@ The *order-level destination* is the destination that behaviours and factory rep
 - **Move destination.** The point the vehicle's current move order leads to, in leptons. It is used
   for braking (claim 10) and for giving up a move (claim 15). When the destination cell is a
   high-bridge cell, its height is the deck's height. This is not a test for the
-  presence of the separate locomotor destination point.
+  presence of the separate locomotor destination point. For a driving vehicle its point is the
+  locomotor destination point, as installed at the last assignment (claim 29).
 - **Locomotor destination point.** A world point in integer leptons accepted by locomotion
   as its movement goal, distinct from both the order-level destination and the active
   track's heading point. It can be present without a path or track, including while
@@ -1329,6 +1330,10 @@ The *order-level destination* is the destination that behaviours and factory rep
       plays at *L*. Entering *L*'s cell has the arrival effects of the object's own kind: for a
       vehicle these are the effects of reaching a track target in a new cell, not a rule imposed
       on infantry or aircraft. The respective movement and combat specs own those effects.
+      They include the consumption of an entrant by a recycling building, for an infantry unit
+      and a vehicle alike, while the destination is still held (S-0603 claims 5 and 16). For a
+      consumed entrant the crate attempt, the stop, the destination removal and the second warp
+      animation below still follow; only the animation is then observable, at *L*.
       After the cell-arrival effects, the object attempts to collect any crate in the landing
       cell under S-0520 claims 7–11. The pickup happens after placement and does not undo the
       landing when its result would refuse an ordinary ground step. Speed bonuses and feedback
@@ -1336,10 +1341,13 @@ The *order-level destination* is the destination that behaviours and factory rep
       own-locomotor pickup; its superweapon-transport exclusion is a separate rule.
       It stops moving and its
       destination is removed. A behaviour that ends once its destination is gone, such as
-      *move*, then falls back to rest (S-0215 claim 13), but not within the jump tick: the
-      behaviour is processed before the locomotion (part d), so the fall-back comes at a later
-      tick, at the behaviour's next processing or at the end of phasing in with no target
-      (part f), whichever is first. After a
+      *move*, then falls back to rest (S-0215 claim 13). For any object but an infantry unit this
+      does not happen within the jump tick: the behaviour is processed before the locomotion
+      (part d), so the fall-back comes at a later tick, at the behaviour's next processing or at
+      the end of phasing in with no target (part f), whichever is first. An infantry unit whose
+      *move* is current falls back to rest at the end of its jump tick instead: the jump stops
+      its movement and removes its destination before S-0215 claim 22's end-of-update check,
+      which then queues its rest behaviour. After a
       docking jump its *enter* behaviour goes on instead while its refinery accepts it, and
       falls back to rest if the refinery refuses it or the contact ends (claim 28). A second
       warp animation plays at *L*.
@@ -1438,7 +1446,11 @@ The *order-level destination* is the destination that behaviours and factory rep
       reservation layers, replacement clearing and post-jump marks; run 14 for Q-0310's
       aircraft two-record landing, next destination and destruction cleanup; run 15
       for part k's actual-cell-only removal and retained pending reservations; run 16 for
-      landing-cell crate pickup after placement). `unmeasured`:
+      landing-cell crate pickup after placement; S-0215 B49 part d for an infantry unit's
+      fall-back at the end of its jump tick; S-0603 scenario G12 parts b and d for part e's
+      consumption by a recycling building). The place of that consumption among the jump tick's
+      other effects is `unmeasured`: they fall in one tick, and once the entrant has left the
+      game only the animation of the later ones can be seen. `unmeasured`:
       the airstrike target-retention exception, because no stock setup establishes an airstrike
       aimed at a living object making its own locomotor jump. Part a's vehicle destination
       restriction uses S-0517 claim 9's backing (P3 a and P4 b); jumpjet landing cancellation
@@ -1476,7 +1488,11 @@ The *order-level destination* is the destination that behaviours and factory rep
       and for Q-0240's vehicle ground reservation,
       retained-point clearing and two-record post-jump result; for part a's list of disabling
       states, for part d's same-tick consequence, for part e's fall-back to rest in a later tick
-      than the jump (D22 run 1) and for part h's consequences; low for part g's consecutive jumps,
+      than the jump (D22 run 1) and for part h's consequences; medium for an infantry unit's
+      fall-back at the end of its jump tick, as S-0215 claim 22 rates it; high for part e's
+      consumption by a recycling building in the jump tick, for an infantry unit and a vehicle,
+      for the subjects of S-0603 scenario G12; medium for that consumption's place among the jump
+      tick's other effects and for the animation after it; low for part g's consecutive jumps,
       which are `unmeasured` and follow from part a's immediate take-up and the absence of phasing
       in for a harvester-flag object; part c
       inherits S-0208 claims 19–20's confidence, high for
@@ -1669,7 +1685,7 @@ The *order-level destination* is the destination that behaviours and factory rep
     | Accepted instruction with a point | supplied point, replacing the old one; a high-bridge target adds 416 leptons to the supplied height |
     | Accepted instruction with no point | absent |
     | Stop or cancellation that stops locomotion, including removal of the order destination through the normal destination-setting rule | absent immediately, even while an already begun track finishes under claim 11 |
-    | Completion of a track with an order destination still present, vehicle in that destination's supplied movement-point cell, and absolute difference between vehicle world height and locomotor destination height strictly below 208 leptons | absent before the cell-arrival report of claim 12 |
+    | Completion of a track with an order destination still present, vehicle in the cell of the movement point that destination supplies at that moment (claim 29), and absolute difference between vehicle world height and locomotor destination height strictly below 208 leptons | absent before the cell-arrival report of claim 12 |
     | Other track completion, or standing in the goal cell without completing a track | unchanged by arrival alone; claim 26's separate order-removal rules can still apply |
     | Give-up with no approach destinations (claim 15) | absent through the normal removal of the order destination |
     | Give-up with approach destinations | fall back to rest under S-0215 claim 13; any resulting stop clears the point and any newly supplied movement goal replaces it, rather than treating give-up as successful track arrival |
@@ -1702,7 +1718,8 @@ The *order-level destination* is the destination that behaviours and factory rep
       replacements and effective stops excluded inherits that claim's `unmeasured`
       limitation: no finite trace establishes perpetual retention.
     - Confidence: high for assignment, independent presence, stopping and track-completion clearing,
-      medium for the resulting lifetime across approach-destination fallback and the
+      except the completion row's fresh point (claim 29), which is medium; medium for the
+      resulting lifetime across approach-destination fallback and the
       composed post-exit restoration consequences
 
 26. **Removing the order-level goal at rest (Q-0797, Q-0830).** For driving and ship vehicles,
@@ -2230,6 +2247,78 @@ The *order-level destination* is the destination that behaviours and factory rep
       for the composed consequences: contact broken by every order kind and after unloading. Medium
       for the refusal case until D34 part g runs. Low for the exclusions, the nested replacement
       cases, the third window and the window after S-0607 claim 4's restoration (Open questions).
+
+### Which point a driving vehicle measures to
+
+29. **The point installed at the assignment (Q-3353).** For a vehicle with the driving locomotor,
+    the movement readings that need its destination's point use the locomotor destination point of
+    claim 25: the point that the last assignment to install one supplied, until claim 25's table
+    clears it. For a building destination it is the point that S-0208 claim 27 gives the vehicle at
+    that assignment. These readings do not ask the destination for its point again, whatever the
+    vehicle's position or contacts are later:
+    - Every path search of S-0212 claims 20 to 23 looks for the cell of that point, the
+      recomputation of S-0212 claim 20 included.
+    - The distance of more than 512 leptons that starts that recomputation is measured to it.
+    - The braking test of claim 10 and the give-up test of claim 15 (F5, F7) measure from the
+      vehicle to it, so it is the vehicle's move destination (Terms).
+    - The replacement of a blocked destination and the nearby-cell search of S-0212 claims 24 and
+      25, which work from the searched cell before the search, start from that cell.
+
+    So for a bunker destination the vehicle keeps looking for the docking cell of S-0606 claim 4's
+    quadrant on its side at the assignment while it drives round the bunker, until a new
+    assignment supplies a new point. For the helipad and unit-repair flags the docking place
+    taken at the assignment stays the goal in the same way. A contact gained or lost later changes
+    it only through a new assignment (Open questions).
+
+    **Two tests that ask again.** The completion row of claim 25's table and the bunker's arrival
+    test (S-0606 claim 5) ask the destination for its point at the moment they are made, from the
+    vehicle's position and contacts then. The completion row is tested when a track ends, the
+    arrival test when the vehicle's movement brings it into a cell. In a 2 × 2 bunker the point
+    asked from the centre of a foundation cell lies in that cell. So a vehicle that ends a track
+    in any foundation cell meets the completion row's cell condition there (its height condition
+    holds on level ground), and arrives there when it is in contact with the bunker, even when its
+    stored path goes on to the docking cell installed at the assignment.
+
+    **Readings of the heading point.** The heading point of Terms is the target of the track the
+    vehicle is on. The destination does not supply it. The vehicle scatter centre cell (Terms, claim
+    16) and S-0402 claim 8's connection test read that heading point, or the vehicle's own position
+    when it has none, so for them no point of the destination is taken at all. The same holds for a
+    walking unit: S-0402 claim 26's connection test of a slave, which walks, reads the slave's
+    walking target (S-0208 Terms), or its own position when it has none, and never the point of its
+    destination.
+
+    This is the original's rule, and our engine keeps it with no switch.
+    - Backing: `measurable` for a driving vehicle sent into a vehicle bunker by D35: part a for the
+      searches, by the stored paths recorded before and after the recomputation of S-0212 claim 20,
+      and for braking, part b for the give-up test. Part a decides the recomputation, which starts
+      where the two readings give different docking cells. The other searches (the first one, made
+      where both readings give *SW*, the fresh searches of S-0212 claim 21 and the re-path searches
+      after a blocked step of claims 22 and 23) read the same point, but D35 does not decide them.
+      The 512-lepton distance that starts the recomputation is `measurable` by D35 part a3, where
+      the vehicle begins its last stored step in the one corridor cell from which the installed
+      point is more than 512 leptons away and the point asked again is not. For the helipad and
+      unit-repair flags the claim is `unmeasured`: their point is stored and read in the same way,
+      but no run can tell the installed point from the point asked again unless the vehicle's
+      contact changes during the approach without a new assignment, and whether that can happen is
+      an Open question. The completion row's fresh point is `unmeasured` for the same kind of
+      reason. No run with a vehicle in contact can tell it from the installed point: at a bunker it
+      passes in a foundation cell exactly where the arrival test passes as well, and the arrival
+      stops the vehicle in the same tick, which clears its point too (claim 25). S-0606 claim 3's
+      destination-setting route gives a bunker destination only with a contact, and at a building
+      that gives its centre both points are the same. A vehicle that keeps a bunker destination
+      after its contact has ended is the one case that could show the difference (Open questions).
+      The readings of the heading point are `unmeasured`. S-0402 makes claim 8's choice while the
+      harvester has no destination (S-0402 claim 9), or, for a chrono miner, while it moves to a
+      queueing cell (S-0402 claim 17), so in no run is there a building's point for that test to
+      read. S-0402 claims 8 and 26 already rate their heading-point cases `unmeasured`, since no run
+      tells the heading-point cell from the unit's current cell. The scatter centre cell carries
+      claim 16's backing.
+    - Confidence: high for the recomputation, braking and the give-up test of a driving vehicle sent
+      into a vehicle bunker, for D35's subjects. Medium for the other searches, which D35 does not
+      decide, and for the 512-lepton distance, which no run of D35 part a3 has yet confirmed. Medium
+      for the helipad and unit-repair flags, which D35 does not play. Medium for the completion
+      row's fresh point. Medium for the readings of the heading point in S-0402 claims 8 and 26, as
+      S-0402 rates those cases. The scatter centre cell takes claim 16's ratings.
 
 ## Formulas
 
@@ -4455,6 +4544,88 @@ conditional diagnostic for that combination and assignment-time restoration.
   docking.
 - *Runs:* 3 for each part.
 
+**D35. The point a driving vehicle measures to (claim 29; Q-3353).**
+- *Setup:* a tiny flat revealed skirmish map, stock data, speed index 2, no engine add-on and no
+  mods (the named test files of a part excepted), one human house and one distant bystander computer
+  player. Every cell is clear ground at one height, except blocked cells, which are of land type
+  *rock* (S-0211). Test data set the rock land type's multiplier to 0 for the wheel and track
+  locomotion classes, so that no vehicle of those classes enters them (S-0211 claim 10). Cells are
+  named by their (east, south) distance in cells along the map axes from *P*, the north cell of
+  *B*'s foundation. *B* is a vehicle bunker of the human player, of a test copy of a stock vehicle
+  bunker type whose test art gives it a 2 × 2 foundation. Its test data give it a power field of 0,
+  the construction yard as its only prerequisite and an adjacency of 10 cells (S-0406 claim 4), and
+  make it buildable by the human player's country at the game's tech level. The human player's
+  starting credits cover its cost. A pocket of clear ground covers columns 0 to 14 from row −10, the
+  map's northmost row, to row −5, and no route from the cells south of row −4 reaches it. The game's
+  bases setting is on and its unit-count setting is 0, so each house receives its base unit and no
+  other starting units (S-0009 claim 45). The human house's start position, its base cell, is (4,
+  −8), so its base unit, a construction vehicle, stands there. Before any order to *V*, scripted
+  input deploys it in place, so that the yard covers (4, −8), within 11 cells of the foundation
+  (S-0406 claim 4), builds *B* and places it with its foundation on (0, 0) to (1, 1), since a map's
+  own structures of a human house are dropped (S-0009 claim 27). *SW* is (0, 1) and *SE* is (1, 1).
+  Blocked cells lie on column −1 and on column 15 from the map's north edge to row 3, on row 3 from
+  column −1 to column 13, and on every cell of columns 0 to 14 from row −4 to row 1 that is not in
+  the foundation. So the only way from the west to *B* runs south of row 3, through (14, 3) into a
+  corridor one cell wide on row 2, and west along it. *V* is a bunker-eligible vehicle of the human
+  player (S-0606 claim 1), of a stock driving type without the teleport-capable flag, placed by the
+  map. Its locomotion class is wheel (scenario introduction). It starts at rest in *guard* at the
+  centre of (−6, 1), west of *B*, so that S-0606 claim 4's quadrant at the order gives *SW*. A
+  read-only recorder logs, after each tick's logic, *V*'s position, cell, behaviour, destination,
+  stored path and speed fraction *ρ* (as D17's recorder reads destinations and stored paths), and
+  the position and cell of every other unit of the human player.
+- *Procedure:* on tick *T*, after *B*'s build-up has finished (S-0606 claim 2), scripted input gives
+  *V* the *enter* order onto *B*. Nothing else is given to *V*.
+- (a) Searches and braking. Test data give *V*'s type D4's speed field, the acceleration flag on, a
+  slowdown distance of 768 leptons and D4's acceleration and deceleration factors, so that *V* moves
+  about 80 leptons a tick at full speed (D4). The route runs south round column −1, east along row 4
+  and west along row 2, longer than the 24 steps a stored path keeps (S-0212 claim 20), so the first
+  stored path holds 24 steps and ends short of *B*, and *V* makes the recomputation when it begins
+  the last of them. *Expected:* the path that the recomputation installs, and every stored path
+  recorded after it until *V* enters a foundation cell of *B*, ends in *SW*. *Falsified if:* one of
+  them ends in *SE*, as for a search that asks again. Braking: let *t* be the first tick, after *V*
+  has passed the centre of (10, 2), after which *ρ* is lower than after the tick before. Along row
+  2, *SE*'s centre comes within 768 leptons of *V* about one cell before *SW*'s centre does, at
+  about 1013 leptons from *SW*'s centre. *Expected:* *V*'s distance (F5) from *SW*'s centre is at
+  least 768 leptons after tick *t* − 2 and less than 768 after tick *t*. *Falsified if:* it is less
+  than 768 after tick *t* − 2, as for no braking or a late start, or at least 768 after tick *t*, as
+  for braking measured to *SE*.
+  - (a2) Control: as a, with *V* starting at rest in *guard* at the centre of (10, 2), so that the
+    quadrant at the order gives *SE*. *Expected:* every stored path recorded until *V* enters a
+    foundation cell of *B* ends in *SE*, whether or not it holds 24 steps. A run of a2 with a path
+    ending in *SW* makes part a's search result decide nothing.
+  - (a3) The 512-lepton distance: as a, but with row 3's blocked cells ending at column 9, so that
+    row 2 is entered from row 3 east of column 9, and with *V* starting at rest in *guard* at the
+    centre of a cell of row 4 west of column 1, so that the quadrant at the order gives *SW*. The
+    start cell is chosen by trial so that the first stored path holds 24 steps and its last step
+    begins at (2, 2). From the centre of (2, 2) *SW*'s centre is 572 leptons away and *SE*'s 362
+    (F5), and the quadrant there gives *SE*. *Expected:* on the tick on which *V* begins that step
+    its stored path is replaced by a path that ends in *SW*. *Falsified if:* after that tick *V* has
+    no stored path, or its stored path still ends in the first path's last cell, as for a start test
+    measured to *SE*, or it ends in *SE*, as for a search that asks again.
+- (b) Give-up test. Test data set the close-enough distance (S-0209 F2) to 3.5 cells (896 leptons).
+  An unarmed vehicle *H* of the human player, of a stock driving type whose locomotion class is
+  wheel or track, is placed by the map in *sticky* in (3, 2), so it refuses every scatter request
+  (claim 16, case a) and stays there. When *V* stands in (4, 2), its step into (3, 2) gives
+  *stationary friendly* (T4), so on every tick on which it faces that step it makes the give-up
+  test. From the centre of (4, 2), *SE*'s centre is 809 leptons away and *SW*'s 1055 (F5), so a
+  give-up test measured to *SW* does not pass and one measured to *SE* does. Let *T*₁ be the first
+  tick after which *V* stands in (4, 2). *Expected:* *V* has a destination after every tick from
+  *T*₁ to *T*₁ + 300 and stays in (4, 2). *Falsified if:* after some tick in that span *V* has no
+  destination, as for a vehicle that has given up (Terms, *Giving up the move*).
+  - (b2) Control: as b, with a close-enough distance of 4.5 cells (1152 leptons), which both points
+    are within. *Expected:* after some tick from *T*₁ to *T*₁ + 300 *V* has no destination. A run of
+    b2 in which *V* has a destination after every tick in that span makes part b decide nothing, as
+    it would if *V*'s *enter* behaviour gave it a destination again on the tick it gives up.
+- *Void:* a run in which any input other than the setup's and the part's own is given to a unit of
+  the human player, or in which *V* enters a foundation cell of *B* before the event its part
+  records. In parts a and a3, also a run whose first stored path does not hold 24 steps, or whose
+  last step begins elsewhere than the part names: in part a at a cell for which S-0606 claim 4's
+  quadrant gives *SE* and from which both points are more than 512 leptons away, in part a3 at (2,
+  2). In part a, also a run in which *V* moves more than 100 leptons in a tick on row 2, since
+  braking measured to *SE* starts about 1013 leptons from *SW*'s centre and must still lie 768
+  leptons or more from it two ticks later.
+- *Runs:* 3 for each part.
+
 ## Cross-spec changes
 
 - Q-1759: S-0402 Terms (*chrono miner*), claim 17 and scenario H8 assume that a chrono miner
@@ -4616,6 +4787,25 @@ conditional diagnostic for that combination and assignment-time restoration.
   says, and what that *move* does once current, while the vehicle is seized and after its
   restoration.
 
+- Q-3353: S-0212 Terms (*heading point*) gives "normally the position of its destination". For a
+  vehicle with the driving locomotor, the point that S-0212's searches look for, and that claim 20's
+  512-lepton distance is measured to, is the locomotor destination point of claim 25 here. It is
+  installed at the last assignment and not asked for again (claim 29 here). It is not the heading
+  point of this spec's Terms, which is the track's target. S-0212 should say so in its Terms.
+- Q-3353: S-0402 claim 8's connection test reads the harvester's heading point as S-0212's Terms
+  give it, or its own position when it is not moving. The point it reads is the heading point of
+  this spec's Terms, the track's target, or the harvester's own position when it has none (claim 29
+  here). It is not S-0212's heading point. S-0402 claim 8 should cite this spec's Terms. S-0402
+  claim 26's slave connection test reads from the slave's walking target (S-0208 Terms), or from its
+  own position when it has none (claim 29 here), and S-0402 claim 26 could say so.
+- Q-3353: S-0606 claim 4 says that the direction "is taken from the vehicle's position at the
+  time the point is asked for, so the docking cell can change while the vehicle drives around the
+  bunker". By claim 29 here the route's goal is asked for at each assignment only (S-0208 claim
+  27). The completion row of claim 25 and S-0606 claim 5's arrival test ask again, from the
+  vehicle's position when they are made. So the cell the searches lead to changes only at a new
+  assignment, while the cell the vehicle can arrive in follows its position. This settles S-0606
+  Open question 3, and claim 4's rating of when the point is asked again can follow claim 29's.
+
 ## Open questions
 
 - Whether any speed field of a country or of a difficulty level other than the country's vehicle
@@ -4702,3 +4892,11 @@ conditional diagnostic for that combination and assignment-time restoration.
 - (Claim 21.) How the original handles a jump pending when temporary driving is installed:
   claim 28's sale branches reach it, but no scenario records the pending jump there. Our
   engine's cancellation is a design rule.
+- (Claim 29.) Whether a driving vehicle's contact with a building of the helipad or unit-repair
+  flag can be gained or lost during its approach without a new assignment, and whether a vehicle
+  keeps a bunker destination after its contact has ended (S-0606 claim 3's refusal by a bunker
+  that is switched off). Only in those cases could a run tell the point the vehicle keeps looking
+  for from the point that the completion row of claim 25 and the arrival test ask for. Low.
+- (Claim 29.) Q-3353 names a "C7-P5 yield heading" among the readings of a unit with a building
+  destination. No spec defines that name. If it is the vehicle scatter centre cell (Terms, claim
+  16), claim 29 settles it. Which reading it names otherwise is not known here. Low.
