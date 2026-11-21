@@ -850,6 +850,88 @@ fn claim_18_a_ring_shown_again_makes_no_follow_up_switch() {
     assert!(c.rings().is_empty(), "it ends after its pass");
 }
 
+/// The object `id`'s controller becomes `by` in one tick: a release and a
+/// takeover by another controller (S-0601 claims 6 and 9).
+fn new_controller(c: &mut Case, id: ObjectId, by: ObjectId) {
+    let v = c.live.world.mind.victims.get_mut(&id).expect("controlled");
+    assert_ne!(v.controller, by, "set-up: another controller");
+    v.controller = by;
+}
+
+/// spec: S-0601 r32 claim 18 (the ring is removed at release, and the takeover creates the
+/// controlled ring): a release and another controller's takeover in one tick end the one ring and
+/// start a new playback, with the object on the map throughout
+#[test]
+fn claim_18_a_new_controller_starts_a_new_ring() {
+    let mut c = case(BOTH);
+    c.control(c.rv1);
+    c.tick();
+    let first = c.ring().image;
+    c.ticks(6);
+    assert_ne!(c.ring().image, first, "the ring has advanced");
+    assert_eq!(c.live.counts.anims, 1);
+    let (rv1, rv2) = (c.rv1, c.rv2);
+    new_controller(&mut c, rv1, rv2);
+    c.tick();
+    assert_eq!(c.live.counts.anims, 2, "a new animation");
+    assert_eq!(c.ring().image, first, "a new playback");
+}
+
+/// spec: S-0601 r32 claim 18 (only a ring shown again while the same control lasts makes no
+/// follow-up switch; the takeover's ring is an ordinary animation, S-0109 claim 15): the first ring
+/// of a new control switches to its follow-up type, the controller changing with the object on the
+/// map
+#[test]
+fn claim_18_the_first_ring_of_a_new_control_switches() {
+    first_ring_of_a_new_control_switches(false);
+}
+
+/// spec: S-0601 r32 claim 18 (as above): the controller changing while the object is off the map,
+/// where no ring shows, then the object coming back
+#[test]
+fn claim_18_the_first_ring_of_a_control_changed_off_the_map_switches() {
+    first_ring_of_a_new_control_switches(true);
+}
+
+/// A ring type of one pass with the follow-up PERMX: the first control's
+/// ring switches and ends, the controller changes (with the object off the
+/// map then, when `off_map`), and the new control's ring switches too.
+fn first_ring_of_a_new_control_switches(off_map: bool) {
+    {
+        let mut c = case_with(BOTH, "", "LoopCount=1\nNext=PERMX\n");
+        c.control(c.rv1);
+        c.tick();
+        let mut switched = false;
+        for _ in 0..40 {
+            c.tick();
+            switched |= c.rings().iter().any(|d| d.of == Of::Perma);
+        }
+        assert!(switched, "off map {off_map}: the first ring switches");
+        assert!(c.rings().is_empty(), "off map {off_map}: and ends");
+        let (rv1, rv2) = (c.rv1, c.rv2);
+        if off_map {
+            c.live.world.obj_mut(rv1).unwrap().on_map = false;
+            c.tick();
+            new_controller(&mut c, rv1, rv2);
+            c.tick();
+            c.live.world.obj_mut(rv1).unwrap().on_map = true;
+        } else {
+            new_controller(&mut c, rv1, rv2);
+        }
+        c.tick();
+        assert_eq!(c.ring().of, Of::Ring, "off map {off_map}: the new ring");
+        let mut switched = false;
+        for _ in 0..40 {
+            c.tick();
+            switched |= c.rings().iter().any(|d| d.of == Of::Perma);
+        }
+        assert!(
+            switched,
+            "off map {off_map}: the new control's first ring switches too"
+        );
+    }
+}
+
 /// spec: S-0601 r32 claim 18; S-0102 claims 10 and 13: the GPU map path draws a building's ring,
 /// a depth reader with the replaced depth adjustment, as the CPU reference does.
 /// Needs a GPU adapter (software is fine); skipped without one unless `GLASNOST_REQUIRE_GPU=1`.
