@@ -260,7 +260,8 @@ pub fn selectable(w: &World, id: ObjectId) -> bool {
 
 /// Whether house `v` can select the object (S-0214 Terms, *can be
 /// selected*, with S-0516 claims 26 and 36): [`selectable`], and not a
-/// fully cloaked object `v` neither owns nor senses, nor a unit disguised as
+/// fully cloaked object `v` neither owns nor senses, nor a building at fade
+/// level 15 `v` neither owns nor senses (r36), nor a unit disguised as
 /// scenery that appears disguised to `v`.
 pub fn selectable_by(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
     // spec: S-0214 Terms and S-0516 claims 26 and 36 (cloak and scenery selection exclusions)

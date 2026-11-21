@@ -653,9 +653,10 @@ fn claim_26_the_owner_hovers_and_targets_its_own_building_at_fade_15() {
         o.cloak.stage = 15;
     }
     let w = s.play.world();
+    // spec: S-0516 r36 claim 26 (none of the refusals applies to an object V owns: its owner clicks its own building at fade level 15 that it does not sense)
     assert!(
-        !glasnost_sim::cloak::view::clickable(w, own_b, Some(me)),
-        "fade level 15, not sensed by its owner"
+        glasnost_sim::cloak::view::clickable(w, own_b, Some(me)),
+        "fade level 15, not sensed by its owner, still clickable by it"
     );
     let (cell, found) = s.under(at);
     assert_eq!(found, Some(own_b), "the owner finds it (claim 35 (d))");

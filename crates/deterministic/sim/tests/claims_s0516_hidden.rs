@@ -81,7 +81,7 @@ fn claim_25_aircraft_drop_hidden_targets() {
     assert_eq!(w.obj(a).unwrap().target, Some(Target::Object(foe)));
 }
 
-// spec: S-0516 claim 26 (a fully cloaked object that V neither owns nor senses, allies included, cannot be picked; nor a building at level 15 that V does not sense; a start of cloak leaves non-owner selections, a re-evaluation those of non-owners that do not sense it)
+// spec: S-0516 claim 26 (a fully cloaked object that V neither owns nor senses, allies included, cannot be picked; nor a building at level 15 that V does not own and does not sense, r36; a start of cloak leaves non-owner selections, a re-evaluation those of non-owners that do not sense it)
 #[test]
 fn claim_26_clicks_and_selection() {
     let mut r = ruleset();
@@ -95,9 +95,14 @@ fn claim_26_clicks_and_selection() {
     let veil = spawn(&mut w, "VEIL", ALPHA, 6, 6);
     run(&mut w, 20);
     assert_eq!(state(&w, veil), CloakState::Cloaked);
+    assert!(stage(&w, veil) >= 15, "at fade level 15");
     assert!(
-        !view::pickable(&w, veil, Some(ALPHA)),
-        "level 15, the owner too"
+        view::pickable(&w, veil, Some(ALPHA)),
+        "level 15, the owner can pick it (r36)"
+    );
+    assert!(
+        !view::pickable(&w, veil, Some(BETA)),
+        "level 15, an ally that does not sense it cannot"
     );
     spawn(&mut w, "SEEKER", ALPHA, 1, 1);
     assert!(view::pickable(&w, g, Some(ALPHA)), "sensed");
@@ -136,6 +141,98 @@ fn claim_26_clicks_and_selection() {
         CloakEvent::Reevaluated,
         Some(ALPHA)
     ));
+}
+
+// spec: S-0516 r36 claim 26 (none of the refusals applies to an object V owns: V hovers, clicks and picks its own building at fade level 15 that it does not sense, a left click selects it under the ordinary selection rules, and the selection changes never remove it from its owner's selection; another house's building at level 15 that V does not sense is still refused, allies included) and S-0214 claim 1 (with an empty selection the cursor offers select over an object that can be selected)
+#[test]
+fn claim_26_r36_the_owner_picks_and_selects_its_own_building_at_level_15() {
+    let mut r = ruleset();
+    r.globals.quirks.cloak_flag_ground_mobile_only = false;
+    let mut w = game(&r);
+    let own = spawn(&mut w, "VEIL", ALPHA, 6, 6);
+    let theirs = spawn(&mut w, "VEIL", BETA, -6, -6);
+    run(&mut w, 20);
+    for (id, dx) in [(own, 6), (theirs, -6)] {
+        assert_eq!(state(&w, id), CloakState::Cloaked);
+        assert!(stage(&w, id) >= 15, "at fade level 15");
+        assert!(!sensed_at(&w, ALPHA, dx, dx), "not sensed by ALPHA");
+    }
+    let none = targeting::Modifiers::default();
+    // The owner.
+    assert!(view::clickable(&w, own, Some(ALPHA)), "the owner clicks it");
+    assert!(view::pickable(&w, own, Some(ALPHA)), "the owner picks it");
+    assert!(targeting::clickable_by(&w, own, Some(ALPHA)));
+    assert!(targeting::selectable_by(&w, own, Some(ALPHA)));
+    assert_eq!(
+        targeting::cursor(&w, ALPHA, &[], targeting::ClickOn::Object(own), none),
+        targeting::Action::Select,
+        "the select offer over it"
+    );
+    assert_eq!(
+        targeting::click(&w, ALPHA, &[], targeting::ClickOn::Object(own), none).selection,
+        Some(vec![own]),
+        "a left click selects it"
+    );
+    // Another house's, not allied and allied.
+    for allied in [false, true] {
+        if allied {
+            ally(&mut w, ALPHA, BETA);
+            ally(&mut w, BETA, ALPHA);
+        }
+        assert!(!view::clickable(&w, theirs, Some(ALPHA)), "allied {allied}");
+        assert!(!targeting::selectable_by(&w, theirs, Some(ALPHA)));
+        assert_eq!(
+            targeting::cursor(&w, ALPHA, &[], targeting::ClickOn::Object(theirs), none),
+            targeting::Action::Nothing
+        );
+        assert_eq!(
+            targeting::click(&w, ALPHA, &[], targeting::ClickOn::Object(theirs), none).selection,
+            None
+        );
+    }
+    // Held at level 15: it stays selectable by its owner, and no selection
+    // change removes it from the owner's selection.
+    run(&mut w, 30);
+    assert!(stage(&w, own) >= 15);
+    assert!(targeting::selectable_by(&w, own, Some(ALPHA)), "kept");
+    assert!(!view::deselects(
+        &w,
+        own,
+        CloakEvent::Reevaluated,
+        Some(ALPHA)
+    ));
+}
+
+// spec: S-0516 r36 claim 26 (an order of V's whose target is its own building at fade level 15 takes it as its target as at a lower fade level) and CS9 part e (the action and order over the own building at level 15 are those at a lower level unless another refusal applies: here both levels are hidden levels, S-0516 Terms, so S-0516 claim 24's refusal is alike at both)
+#[test]
+fn claim_26_r36_an_order_onto_the_own_building_at_level_15_is_as_at_a_lower_level() {
+    let r = ruleset();
+    let mut w = game(&r);
+    let own = spawn(&mut w, "VEIL", ALPHA, 6, 6);
+    let car = spawn(&mut w, "PLAIN", ALPHA, 0, 0);
+    let on = targeting::ClickOn::Object(own);
+    let level = |w: &mut glasnost_sim::world::World, n: i32| {
+        let o = w.obj_mut(own).unwrap();
+        o.cloak.state = CloakState::Cloaked;
+        o.cloak.stage = n;
+    };
+    let force_select = targeting::Modifiers {
+        force_select: true,
+        ..Default::default()
+    };
+    for mods in [targeting::Modifiers::default(), force_select] {
+        level(&mut w, 14);
+        let lower = (
+            targeting::cursor(&w, ALPHA, &[car], on, mods),
+            targeting::click(&w, ALPHA, &[car], on, mods),
+        );
+        level(&mut w, 15);
+        let top = (
+            targeting::cursor(&w, ALPHA, &[car], on, mods),
+            targeting::click(&w, ALPHA, &[car], on, mods),
+        );
+        assert_eq!(top, lower, "level 15 as level 14, {mods:?}");
+    }
 }
 
 // spec: S-0516 claim 27 (another house's cloaked object is on V's radar only where V senses its cell, an ally's included)

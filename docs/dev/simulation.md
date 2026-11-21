@@ -2775,3 +2775,19 @@ The forty-seventh batch takes the two answers of S-0208 r89 and S-0208 claim 27 
 - *Not changed.* Aircraft (S-0501), the hovering and jumpjet locomotors, which already give S-0607 claim 7's point through `lift::destination_point`, and the ship locomotor. A walker whose object destination was written without the assignment hook, which has no stored point, still compares against the object's position in `walk::end_of_walk`; that is no assignment, and claim 27 speaks only of assignments.
 - *Open (Q-3353).* A driver's searches and refresh read the heading point at the time of the search, so a docking point that depends on the vehicle (S-0606 claim 4's quadrant point when it holds no bunker contact, or the docking place it holds through a contact) is computed from its position or contact at that time. Claim 27 takes it at the assignment. Until Q-3353 is answered, the search reads the point anew.
 - No new state. Save format 217 and AI game format 197 mark the behaviour changes of the three items.
+
+## Simulation (sim issues S48: the owner's own building at fade level 15, S-0516 r36 claim 26)
+
+The forty-eighth batch builds S-0516 r36 claim 26's owner exemption (Q-3322's answer) and closes render batch R20's seam. The ledger is [docs/m8-claims/sim-issues.md](../m8-claims/sim-issues.md), section *Batch S48*.
+
+**The owner's building at fade level 15 (S-0516 r36 claim 26).** Claim 26 refuses hover, click and pick to viewing house *V* for two objects: a fully cloaked object *V* neither owns nor senses, allies included, and a building at fade level 15 that *V* does not own and does not sense. r36 adds the owner to the second refusal and says that none of them applies to an object *V* owns. *V* hovers, clicks and picks its own building at level 15 as at a lower level; a left click selects it under the ordinary selection rules (S-0214 Terms, *can be selected*); an order of *V*'s whose target is it takes it as its target as at a lower level; and the selection changes of the claim never remove it from its owner's selection.
+- *One test.* `cloak::view::clickable` is the single cloak test for the click: `targeting::clickable_by` (the clicked object) and, through `cloak::view::pickable`, `targeting::selectable_by` (can be selected) both ask it. Its level-15 test gains the owner exemption that its fully cloaked test already has, so `clickable` holds for every object *V* owns.
+- *Where it reaches.* Every reader of `selectable_by` passes the clicking or viewing house as *V*, so the change acts only where that house owns a building at level 15 it does not sense:
+  - the cursor's select offer with an empty selection (S-0214 claim 1), and the click's select, toggle and claim 3 rows (`targeting::cursor`, `targeting::click`);
+  - rows G2 and G10 of table G (`targeting::generic`), which ask whether the target can be selected;
+  - the type-select tap's candidates (S-0214 claim 32, `tap_candidate`), which asks the same of an own object;
+  - the client's per-tick selection filter, which keeps an object only while `selectable_by` holds.
+
+  Each of them asks "can be selected" of an object the house owns, which claim 26 settles. The selection events of claim 26 (`cloak::view::deselects`) already spare the owner.
+- *Not changed.* The firing check's hidden-target refusal (S-0516 claim 24, `cloak::hidden_from`) holds at levels 11 to 15 for the owner too. So for an armed actor an action that asks it differs between level 15 and level 0 as it already did between level 11 and level 0. CS9 part e counts that as another refusal. Our watch mode, where each object is seen as its own house sees it, follows the owner's view.
+- No new state. The AI's clicks go through the same queries, so a game where an AI house owns a building at level 15 it does not sense can play differently. The formats move only if the lanes or goldens show it.
