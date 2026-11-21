@@ -65,11 +65,11 @@ script plays, never a house's rules, credits or factors.
 
 What the default script does with it, and why a player sees it:
 
-| level | harvesters (plan, at most) | attack wave | acts on | base defence | superweapon and special buildings | what a player sees |
-|---|---|---|---|---|---|---|
-| easy | 1, at most 2, on the home field only | 3 units | one think tick in three (`EASY_EVERY`) | on its acting think ticks only | none built, none fired (its country's own included) | one or two harvesters and no refinery by a new field, small attacks, a base that grows and answers a raid slowly, no superweapon strikes or paradrops, no sensor, grinder, gattling defence, bunker, lifter or drainer |
-| normal | 2, at most 4 | 6 units | every think tick | every tick | built | today's AI |
-| hard | 3, at most 6 | 6 units | every think tick | every tick | built | a third harvester (up to six on a large field), so more money and a larger army sooner |
+| level | harvesters (plan, at most) | attack wave | acts on | base defence | superweapon and special buildings | units sent alone | what a player sees |
+|---|---|---|---|---|---|---|---|
+| easy | 1, at most 2, on the home field only | 3 units | one think tick in three (`EASY_EVERY`) | on its acting think ticks only | none built, none fired (its country's own included) | about a fifth of the army's spend (`SPENT_SHARE`) | one or two harvesters and no refinery by a new field, small attacks, a base that grows and answers a raid slowly, no superweapon strikes or paradrops, no sensor, grinder, gattling defence, bunker, lifter or drainer |
+| normal | 2, at most 4 | 6 units | every think tick | every tick | built | about a fifth of the army's spend (`SPENT_SHARE`) | today's AI |
+| hard | 3, at most 6 | 6 units | every think tick | every tick | built | about a ninth of the army's spend (`HARD_SPENT_SHARE`) | a third harvester (up to six on a large field), so more money and a larger army sooner, and fewer units thrown away alone |
 
 The plan's count is the harvesters kept; on a large explored field the house buys one more for
 every 20 resource cells within reach, up to twice the plan's count (`Script::harvesters_wanted`;
@@ -81,6 +81,18 @@ and plays as before). The home-field rule is a flag of the think's memo
 (`Script::stay_on_home_field`), set by `think_from` at easy; `Script::field_refinery` answers no
 under it. A refinery the house lost is still rebuilt (`Script::refinery_lost`). Without the rule
 the plan's count did not hold at easy: each refinery by a new field brings a harvester.
+
+**Units sent alone (batch 12).** Some army types never join a wave: an engineer, a type with a
+bomb, a suicide weapon or explosive charges, and an air-strike designator
+(`scripted::spent_alone`). Their special attacks and the engineers' step give each such unit its
+own order, and it is lost on use. The army round offers them only while the house's spend on
+them (ever built, times the type's cost), times the share, is under its spend on the rest of its
+army, and only where a kind has another type to build. Share 4 (`SPENT_SHARE`) holds them to about a fifth of
+the army's credits. At hard, `Brain::think_from` sets the memo flag `Script::spend_less_alone`,
+and the share is 8 (`HARD_SPENT_SHARE`), about a ninth. Without the limit, such a type was picked about as often as
+any fighting type. The round ranks by fewest living, and a spent-alone type has none on the map
+once used. Spent-alone units also cost more each. A side whose list holds several such types
+spent much of its army there (below).
 
 ### Telling the levels apart (batch 10)
 
@@ -159,7 +171,62 @@ ticks=27000 threads=2`, 96 games, each start and each country equally:
 - **One fix tried, no effect.** While the house saw more enemy army aircraft than it had army
   units that hit them, each factory's pick went to an anti-air type. The probe mirror went from
   0.667 to 0.656, within one standard error of about 0.05. It was not shipped. Why country index 1
-  fields half the army is open; no simulation claim was found.
+  fields half the army was left open (answered in batch 12, below); no simulation claim was found.
+
+### The two countries (batch 12)
+
+The same mirror and probe on base 2ce4555, results as country index 0's won-drawn-lost. The
+normal mirror scores 0.781 (55-40-1) and the paradrop-off probe 0.620 (37-45-14); B11 had 0.844
+and 0.667 on its base.
+
+- **Where the money went.** In the probe, both countries bought about the same army (20995
+  against 20646 credits a game), fired a first wave alike, and lost the fighting ground types at
+  the same rate. They differ in what they bought. Country index 1 spent 45.7 % of its army's
+  credits on units sent alone (`spent_alone`), and country index 0 spent 21.9 %. Country index 1's list holds four
+  such types: a bomb planter, a suicide vehicle, an air-strike designator and an engineer. Country
+  index 0's holds an engineer and two infantry types with charges. Its third line, army aircraft,
+  survives. So country index 1 stood with 5529 credits of army a game against 8867.
+- **The fix.** The spent-alone share (above) takes the probe from 0.620 to 0.516 (26-47-23), under
+  the 0.60 bar fixed before the round. Map 0 goes 12-11-9, map 2 13-13-6, map 8 1-23-8.
+  - Country index 1 now sends 2.99 waves a game (1.77 before) and stands with 6799 credits of
+    army.
+  - Its spent share is 0.247 and country index 0's 0.191. The share can pass a fifth because the
+    limit is checked before a pick, not after the pick's cost, and a kind with no other type is
+    not limited.
+  - The normal mirror goes from 0.781 to 0.771 (56-36-4). There the country paradrop, a rules
+    asymmetry that #449 allows, still decides.
+
+### Telling the levels apart (batch 12)
+
+B11's round, rerun because normal changed: 144 games on seeds 7 to 10, then the kept build on seeds
+11 to 14. Same criterion: each pair's stronger level scores at least 0.60, and the Elo order is
+hard, normal, easy. Stronger level's score (won-drawn-lost):
+
+| round | easy v normal: normal | easy v hard: hard | normal v hard: hard | Elo easy / normal / hard |
+|---|---|---|---|---|
+| base (2ce4555) | 0.719 (28-13-7) | 0.781 (34-7-7) | 0.594 (21-15-12) | 1390.9 / 1545.6 / 1563.5 |
+| the spent-alone share | 0.812 (33-12-3) | 0.812 (34-10-4) | 0.531 (14-23-11) | 1317.7 / 1571.8 / 1610.5 |
+| H1 (and share 8 at hard), kept | 0.812 (33-12-3) | 0.812 (36-6-6) | 0.552 (18-17-13) | 1305.0 / 1562.0 / 1633.0 |
+| H2 (and a plan of 4 harvesters at hard), dropped | 0.812 (33-12-3) | 0.771 (36-2-10) | 0.594 (19-19-10) | 1338.8 / 1539.6 / 1621.6 |
+| H1 on seeds 11-14 | 0.781 (32-11-5) | 0.812 (36-6-6) | 0.531 (15-21-12) | 1391.8 / 1498.5 / 1609.7 |
+
+- **Not met for hard over normal.** The other two pairs and the Elo order pass in every round.
+  Hard over normal was already under the bar on this base (0.594; B11's head had 0.667).
+- **The country again.** With H1, hard on country index 0 beats normal 16-7-1, and on country index 1
+  goes 2-10-12. On seeds 11 to 14 the results are 14-9-1 and 1-12-11. In the seeds 7 to 10 round,
+  hard on country index 1 lost 8 games at the cap on worth and 4 by kill. What is left is hard on
+  country index 1 against normal on country index 0, which is the country gap again.
+- **Two more tries, not kept.**
+  - **H2: a plan of four harvesters at hard.** It cost hard 9 of its 24 games against easy on
+    country index 0 (7 by kill), against 3 with H1. The army is held back while the house has
+    fewer harvesters than the plan, so it waited for the fourth.
+  - **Try 3: four harvesters wanted at hard, beside the army.** It does not bind where the field
+    is large, since normal already orders four there. It was dropped before any commit.
+  - The levels were handed back to the lead with H1 kept.
+- **Normal moved this time.** The quick lane, the M6c sweep, the bench and the M6c duel golden
+  moved, since they all seat normal. 19 quick-lane games changed winner, and each was traced to
+  its first differing tick: an infantry pick of the army round. The arena, the M7a and M7b sweeps
+  and the other eight goldens did not move.
 
 **The house difficulty row is not touched.** Every player house in a skirmish, person or AI, uses
 the normal row: S-0302 Terms (*Difficulty row*) and claim 3 ("AI difficulty comes from the AI's

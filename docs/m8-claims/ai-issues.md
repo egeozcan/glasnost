@@ -469,3 +469,37 @@ hashes). The siege on both seats, which `ai-bench` cannot set (its install setup
 crates/app), was played in the skirmish lane's AI mode with `GLASNOST_AI_SEATS=siege:hard,siege:hard`
 (map 0) and `siege:normal,siege:easy` (map 2): the replay reproduces the end and the mid-game save,
 loaded and continued, matches.
+
+## Batch 12
+
+Issue #449's next follow-up: why country index 1 fields half the army, the fix, and the levels
+told apart again around the new normal. Own design; notes in [ai-scripts.md](../dev/ai-scripts.md).
+AI game format 193 in its own commit (41201e4; renumbered to 150 at the merge): normal's army round picks differently, so replays
+resolve differently. Save 167 and wire 13 unchanged; no state added (the hard flag is a field of
+the think's memo, set each think). Base 2ce4555. Each failing test went in before its fix: 52b8710
+before caae09d, 812f5b0 before cb153f1.
+
+**Goldens.** `crates/sim-gate/golden/duel-m6c.txt` moved (the M6c duel seats normal; its hash first
+differs after tick 594) and was regenerated (157e2f2). The other eight are byte-equal.
+
+**Lanes**, base then after:
+- **Quick lane** (seeds 7 to 14, maps 0, 2 and 8, sides 0,2 and 1,2, 48 games). 19 games change
+  winner: 6 with sides 0,2 and 13 with sides 1,2. Each was traced with `GLASNOST_AI_HASH`, then
+  `GLASNOST_AI_OBJS`, to its first differing tick. In every one it is the infantry type a house's
+  line starts, with credits equal: the army round's pick at normal, the only place normal changed.
+  The first tick is 4703 to 5888 in 15 games. The other four are all with sides 0,2: seed 8 map 0
+  (33016), seed 9 map 2 (35063), seed 10 map 8 (8566) and seed 12 map 2 (23941).
+- **Sweeps.** M7a and M7b match apart from build lines. M6c passes on both, but its games move:
+  seeds 2, 10 and 13 end at other ticks, and counters move (suicide orders minimum 10 to 8). The
+  smallest minimum is 0 on both, from support beams on seeds 6 and 13.
+- **Arena.** Its nine output files match byte for byte.
+- **Sim gate.** It passes 17 of 17 with its ignored tests, as on the base, after the golden. The
+  sim-only scenarios and tests do not move.
+- **Bench** (map 9, 8 houses, seed 7, 9 000 ticks). The end state hash differs, since normal plays
+  otherwise. `tick::step` ran 1942.3 / 1846.6 µs on a shared machine.
+
+| item | confirmed | change | test |
+|---|---|---|---|
+| 1 why country index 1 fields half the army | **Setup.** The paradrop-off probe mirror (maps 0, 2 and 8, seeds 7 to 14, cap 27 000, 96 games) scores 0.620 (37-45-14) for country index 0; the normal mirror 0.781 (55-40-1). **What is alike.** Both countries buy about the same army (20995 against 20646 credits a game) and fire a first wave alike, and their fighting ground types survive alike. **What differs.** Country index 1 spends 45.7 % of its army's credits on units sent alone and lost on use (bomb, suicide, charge, designator, engineer), country index 0 21.9 %. So country index 1 stands with 5529 credits of army a game against 8867. **Cause.** The round ranks by fewest living, and a spent-alone type has none standing once used; country index 1's list holds four such types | none (findings) | lane files only: `tour-nn-base`, `tour-nn-p1`, `tour-nn-p1d` and `tour-nn-p2off` (probe reads: spend by type, tagged; hashes equal to `tour-nn-p1`'s) |
+| 2 the fix | fixed. Probe mirror 0.620 to 0.516 (26-47-23), under the 0.60 bar. Country index 1 sends 2.99 waves a game (1.77 before) and stands with 6799 credits of army. Standard mirror 0.781 to 0.771 (56-36-4): the country paradrop, a rules asymmetry, stays | `scripted.rs` army round: the types `spent_alone` names are offered only while their spend times `SPENT_SHARE` (4) is under the rest of the army's spend, where a kind has another type (about a fifth of the army's credits). A person's orders and economy only | `tests/spent_alone.rs`: `the_round_builds_a_fighter_once_the_spent_share_is_full` (failed on the base code first), `the_round_still_builds_a_spent_type_within_the_share` |
+| 3 the levels told apart | not met for one pair; handed back. Same criterion as B11 (each pair at least 0.60, Elo hard, normal, easy). Base: 0.719, 0.781, 0.594 (hard over normal already under), Elo 1390.9 / 1545.6 / 1563.5 (easy / normal / hard). With the fix: 0.812, 0.812, 0.531. H1 (kept): 0.812, 0.812, 0.552, Elo 1305.0 / 1562.0 / 1633.0; on seeds 11 to 14 0.781, 0.812, 0.531, Elo 1391.8 / 1498.5 / 1609.7. Hard over normal by hard's country: 16-7-1 on country index 0, 2-10-12 on country index 1 (seeds 11 to 14: 14-9-1, 1-12-11), so the country gap is what is left. H2 (a plan of 4 harvesters at hard) gave 0.594 but cost hard 9 of 24 games against easy on country index 0, since the army is held back until the plan's harvesters stand; dropped (2972f76 removed its test a690c74). Try 3 (four wanted at hard beside the army) did not bind on a large field; dropped before any commit. B11's E1 and E2 stay | H1: at hard `Brain::think_from` sets the memo flag `Script::spend_less_alone`, and the share is `HARD_SPENT_SHARE` (8, about a ninth). Easy and normal use 4 | `tests/spent_alone.rs`: `hard_keeps_a_smaller_spent_share_than_normal` (failed on the base code first) |
