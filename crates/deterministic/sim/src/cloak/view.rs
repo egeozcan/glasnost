@@ -108,8 +108,9 @@ pub fn pickable(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
 /// Whether a click of viewing house *V* can find the object at all (S-0214
 /// Terms, *clicked object* and *can be selected*; S-0516 claim 26): not a
 /// fully cloaked object *V* neither owns nor senses, nor a building at fade
-/// level 15 that *V* does not sense. A unit disguised as scenery is still
-/// found: claim 36 excludes it from selection only ([`pickable`]).
+/// level 15 that *V* neither owns nor senses. Every object *V* owns is
+/// found (r36). A unit disguised as scenery is still found: claim 36
+/// excludes it from selection only ([`pickable`]).
 pub fn clickable(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let sensed = senses(w, v, id);
@@ -118,8 +119,8 @@ pub fn clickable(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
     if o.cloak.state == CloakState::Cloaked && !owner && !sensed {
         return false;
     }
-    // spec: S-0516 claim 26 (a building at fade level 15 that V does not sense)
-    if o.kind == Kind::Building && o.cloak.stage >= 15 && !sensed {
+    // spec: S-0516 r36 claim 26 (a building at fade level 15 that V does not own and does not sense; none of the refusals applies to an object V owns, Q-3322)
+    if o.kind == Kind::Building && o.cloak.stage >= 15 && !owner && !sensed {
         return false;
     }
     true
