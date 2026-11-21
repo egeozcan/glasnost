@@ -1214,7 +1214,11 @@ fn r89_w20_c1_a_failed_re_path_within_one_cell_keeps_movement_in_progress() {
         if let Some(&(t, mode, res)) = c.first() {
             if res != path::Search::Found {
                 assert_eq!(c.len(), 1, "one computation in F");
-                assert_eq!(mode, path::Mode::Blocked, "a re-path for the moving blocker");
+                assert_eq!(
+                    mode,
+                    path::Mode::Blocked,
+                    "a re-path for the moving blocker"
+                );
                 assert_eq!(res, path::Search::SearchFailed, "past the gate");
                 f = Some(t);
                 break;
@@ -1223,11 +1227,21 @@ fn r89_w20_c1_a_failed_re_path_within_one_cell_keeps_movement_in_progress() {
     }
     let f = f.expect("a failed re-path");
     let o = w.obj(m).unwrap();
-    assert_eq!(o.dest, Some(Target::Cell(d)), "kept within one cell (row 3)");
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(d)),
+        "kept within one cell (row 3)"
+    );
     assert_eq!(o.beh.current, Some(Behaviour::Move), "move is current");
     assert!(o.path.steps.is_empty(), "the stored path is dropped");
-    assert!(path::delay_runs(&w, m), "the retry delay runs at the end of F");
-    assert!(occupancy::in_progress(&w, m), "movement in progress is kept");
+    assert!(
+        path::delay_runs(&w, m),
+        "the retry delay runs at the end of F"
+    );
+    assert!(
+        occupancy::in_progress(&w, m),
+        "movement in progress is kept"
+    );
     assert_eq!(
         o.path.blocked_since,
         Some(first),
@@ -1248,12 +1262,18 @@ fn r89_w20_c1_a_failed_re_path_within_one_cell_keeps_movement_in_progress() {
     }
     let (s, mode, res) = next.expect("a search once the delay has run out");
     assert!(s > f, "after F");
-    assert!(s >= f + r - 1, "not while the delay runs: {s} against F {f}, R {r}");
+    assert!(
+        s >= f + r - 1,
+        "not while the delay runs: {s} against F {f}, R {r}"
+    );
     assert_eq!(mode, path::Mode::Fresh, "a fresh search");
     assert_eq!(res, path::Search::SearchFailed);
     // Then the failed fresh search's rules: in move, a search on every tick with no retry delay left.
     for k in 1..=5 {
-        assert!(!path::delay_runs(&w, m), "no retry delay at the end, tick {k}");
+        assert!(
+            !path::delay_runs(&w, m),
+            "no retry delay at the end, tick {k}"
+        );
         assert_eq!(w.obj(m).unwrap().dest, Some(Target::Cell(d)));
         assert_eq!(w.obj(m).unwrap().pos, home, "it stays");
         tick::step(&mut w);

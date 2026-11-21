@@ -469,8 +469,8 @@ fn arrival_building(w: &World, u: ObjectId) -> Option<ObjectId> {
         return None;
     }
     // spec: S-0208 Edge cases (r89, Q-3330: for S-0605 claim 6's test a queued enter counts as current while the off form gives the walker enter's mission target)
-    let entering = o.beh.current == Some(Behaviour::Enter)
-        || crate::occupancy::reads_queued_enter(w, u);
+    let entering =
+        o.beh.current == Some(Behaviour::Enter) || crate::occupancy::reads_queued_enter(w, u);
     if !entering {
         return None;
     }

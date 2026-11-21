@@ -1580,8 +1580,16 @@ fn released_scene(
 fn claim_16_switch_off_back_in_from_area_guard() {
     let (mut w, n, b, back) = released_scene(true, false, 0);
     assert!(back, "it walks back in from area guard");
-    assert_eq!(cur(&w, n), Some(Behaviour::AreaGuard), "area guard current inside");
-    assert_eq!(queued(&w, n), Some(Behaviour::Enter), "enter still queued inside");
+    assert_eq!(
+        cur(&w, n),
+        Some(Behaviour::AreaGuard),
+        "area guard current inside"
+    );
+    assert_eq!(
+        queued(&w, n),
+        Some(Behaviour::Enter),
+        "enter still queued inside"
+    );
     try_release(&mut w, b);
     assert!(w.obj(n).unwrap().on_map, "let out again");
     assert_eq!(

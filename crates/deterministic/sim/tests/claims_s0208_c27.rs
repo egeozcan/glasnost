@@ -145,7 +145,10 @@ fn cell_of((x, y): (i32, i32)) -> CellXY {
 /// The walker's points after the assignment: its stored object point (the
 /// locomotor destination, S-0208 Terms), its searches' goal cell (claim
 /// 25) and its heading point (S-0212 Terms).
-fn walker_points(w: &World, u: ObjectId) -> (Option<(i32, i32)>, Option<CellXY>, Option<(i32, i32)>) {
+fn walker_points(
+    w: &World,
+    u: ObjectId,
+) -> (Option<(i32, i32)>, Option<CellXY>, Option<(i32, i32)>) {
     (
         walk::object_locomotor_point(w, u).map(xy),
         path::search_goal(w, u),
@@ -155,7 +158,10 @@ fn walker_points(w: &World, u: ObjectId) -> (Option<(i32, i32)>, Option<CellXY>,
 
 /// The driver's points after the assignment: its installed goal (S-0207
 /// claim 25), its searches' goal cell and its heading point.
-fn driver_points(w: &World, v: ObjectId) -> (Option<(i32, i32)>, Option<CellXY>, Option<(i32, i32)>) {
+fn driver_points(
+    w: &World,
+    v: ObjectId,
+) -> (Option<(i32, i32)>, Option<CellXY>, Option<(i32, i32)>) {
     (
         drive::goal(w, v).map(xy),
         path::goal_cell(w, v),
@@ -266,7 +272,11 @@ fn claim_27_a_vehicle_bunker_gives_the_quadrant_point_from_the_position() {
             let q = xy(bunker::docking_point(&w, b, u));
             assign(&mut w, u, b);
             assert_ne!(q, centre(&w, b, 2, 2), "{what}: not the centre");
-            assert_eq!((q.0.rem_euclid(256), q.1.rem_euclid(256)), (128, 128), "{what}: a cell centre");
+            assert_eq!(
+                (q.0.rem_euclid(256), q.1.rem_euclid(256)),
+                (128, 128),
+                "{what}: a cell centre"
+            );
             let got = if kind == Kind::Infantry {
                 walker_points(&w, u)
             } else {
@@ -312,7 +322,11 @@ fn claim_27_a_capturing_walker_is_given_the_centre_and_keeps_it() {
     assert!(seen, "the capture gives the building as the destination");
     let c = centre(&w, b, 3, 2);
     assert_eq!(cell_of(c), at(1, 1));
-    assert_eq!(walk::object_locomotor_point(&w, u).map(xy), Some(c), "the centre");
+    assert_eq!(
+        walk::object_locomotor_point(&w, u).map(xy),
+        Some(c),
+        "the centre"
+    );
     for _ in 0..10 {
         tick::step(&mut w);
     }
