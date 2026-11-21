@@ -1,9 +1,9 @@
 ---
 id: Q-3349
 title: The cursor under a held right press before its scroll drag, and the hover under a left press the route mode takes
-status: open
+status: answered
 related: [S-0214, S-0213, S-0101, S-0111]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need
