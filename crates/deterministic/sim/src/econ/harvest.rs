@@ -701,21 +701,17 @@ fn cells_connected(w: &mut World, id: ObjectId, a: CellXY, b: CellXY) -> bool {
 }
 
 /// Whether a harvester is connected to a refinery (S-0402 claim 8): the
-/// cell of its heading point (its own position when it is not moving) and
-/// the cell of the refinery's reference point lie in the same reach region
-/// for the movement zone of its type, read for the deck when it is on a
-/// bridge deck. A heading-point cell outside the usable area counts as
-/// connected to every refinery.
+/// cell of its heading point (S-0207 Terms: the target of the track it is
+/// on; its own position when it has none) and the cell of the refinery's
+/// reference point lie in the same reach region for the movement zone of
+/// its type, read for the deck when it is on a bridge deck. A heading-point
+/// cell outside the usable area counts as connected to every refinery.
 fn connected(w: &mut World, id: ObjectId, refinery: ObjectId) -> bool {
     let Some(z) = zone(w, id) else { return false };
     let Some(o) = w.obj(id) else { return false };
     let deck = o.layer == Layer::Deck;
-    // spec: S-0402 claim 8 (the cell of the heading point, S-0212 Terms; its own position when it is not moving)
-    let from = if crate::occupancy::in_progress(w, id) {
-        crate::path::heading_point(w, id).unwrap_or(o.pos).cell()
-    } else {
-        o.pos.cell()
-    };
+    // spec: S-0207 claim 29 (r92, Q-3353: S-0402 claim 8's connection test reads the heading point of S-0207 Terms, the track's target, or the vehicle's own position when it has none, as the vehicle scatter centre cell does; no point of the destination is taken) and S-0402 claim 8
+    let from = crate::scatter::vehicle_centre_cell(w, id).unwrap_or(o.pos.cell());
     // spec: S-0402 claim 8 (a heading-point cell outside the usable area: connected to every refinery)
     if !w.cells.usable(from) {
         return true;

@@ -170,11 +170,17 @@ fn move_destination(w: &World, id: ObjectId) -> Option<Pos> {
     measured_point(w, id)
 }
 
-/// The point a driving vehicle's movement readings measure to: its move
-/// destination (S-0207 Terms), the point its destination supplies.
+/// The point a driving vehicle's movement readings measure to (S-0207
+/// claim 29): the locomotor destination point installed at the last
+/// assignment ([`goal`]), which is also its move destination (S-0207
+/// Terms). Its searches, the start of the recomputation, braking and the
+/// give-up test read it; they do not ask the destination again.
 pub fn measured_point(w: &World, id: ObjectId) -> Option<Pos> {
-    // spec: S-0207 Terms (Move destination: on a high-bridge destination cell its height is the deck's height, the surface plus 416 leptons as for the supplied point of claim 25)
-    supplied_point(w, id, w.obj(id)?.dest?)
+    // spec: S-0207 claim 29 (r92, Q-3353: the readings use the locomotor destination point of claim 25, the point the last assignment installed, whatever the vehicle's position or contacts are later) and Terms (Move destination: the locomotor destination point as installed at the last assignment; on a high-bridge cell the 416-lepton lift it carries)
+    goal(w, id).or_else(|| {
+        // design: interim (Q-3373: with the installed point cleared while the order-level destination stays, the readings ask the destination as before claim 29)
+        supplied_point(w, id, w.obj(id)?.dest?)
+    })
 }
 
 /// The locomotor takes the order-level destination just assigned (S-0207
@@ -267,16 +273,19 @@ pub fn goal(w: &World, id: ObjectId) -> Option<Pos> {
 }
 
 /// The qualifying track completion of S-0207 claim 25: with an order
-/// destination still present, the vehicle in its supplied point's cell and
-/// its height within 208 leptons of the point's, the point is cleared.
+/// destination still present, the vehicle in the cell of the point that
+/// destination supplies now (claim 29: asked again, not the installed
+/// point's cell) and its height within 208 leptons of the installed
+/// point's, the point is cleared.
 fn completion_clears_goal(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let Some(p) = o.drive.as_ref().and_then(|d| d.goal) else {
         return;
     };
-    // spec: S-0207 claim 25 (an order destination still present, the vehicle in that destination's supplied movement-point cell, |vehicle height − point height| < 208, integer leptons)
-    let qualifies = o.dest.is_some()
-        && o.pos.cell() == p.cell()
+    // spec: S-0207 claim 29 (r92, Q-3353: the completion row asks the destination for its point at the moment the track ends, from the vehicle's position and contacts then)
+    let now = o.dest.and_then(|t| supplied_point(w, id, t));
+    // spec: S-0207 claim 25 (an order destination still present, the vehicle in the cell of the movement point that destination supplies at that moment, |vehicle height − locomotor destination height| < 208, integer leptons)
+    let qualifies = now.is_some_and(|n| o.pos.cell() == n.cell())
         && (o.pos.z - p.z).abs() < GOAL_HEIGHT_TOLERANCE;
     if qualifies && let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
         d.goal = None;
@@ -1097,10 +1106,12 @@ fn step_check_with(
 }
 
 /// Whether the recomputation of S-0212 claim 20 is due as the track that
-/// ends in `target_cell` begins: the heading point is more than 512 leptons
-/// away and not in that cell.
+/// ends in `target_cell` begins: the searched point, the one installed at
+/// the assignment (S-0207 claim 29), is more than 512 leptons away and not
+/// in that cell.
 fn refresh_due(w: &World, id: ObjectId, target_cell: CellXY) -> bool {
-    let (Some(hp), Some(pos)) = (path::heading_point(w, id), w.obj(id).map(|o| o.pos)) else {
+    // spec: S-0207 claim 29 (r92, Q-3353: the distance of more than 512 leptons that starts S-0212 claim 20's recomputation is measured to the installed point)
+    let (Some(hp), Some(pos)) = (measured_point(w, id), w.obj(id).map(|o| o.pos)) else {
         return false;
     };
     let r = w.rules();
@@ -1848,7 +1859,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             return false;
         }
         if no_steps {
-            let goal = path::goal_cell(w, id);
+            // spec: S-0207 claim 29 (r92, Q-3353: the cell the searches look for, the installed point's)
+            let goal = path::search_goal(w, id);
             if goal == Some(pos.cell()) || goal.is_none() {
                 // spec: S-0207 claim 26 (a building goal in its supplied point's cell is kept: cell equality alone removes neither destination)
                 arrive_or_rest(w, id);

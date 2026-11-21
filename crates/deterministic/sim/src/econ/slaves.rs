@@ -1258,11 +1258,8 @@ fn slave_accepts(w: &mut World, id: ObjectId, c: CellXY, reference: i32) -> bool
     else {
         return false;
     };
-    // spec: S-0209 claim 4 and S-0402 claim 26 (the connection is from the slave's heading-point cell: its own position when it has no destination)
-    let Some(from) = w
-        .obj(id)
-        .map(|o| crate::path::heading_point(w, id).unwrap_or(o.pos).cell())
-    else {
+    // spec: S-0207 claim 29 (r92, Q-3353: S-0402 claim 26's connection test of a slave, which walks, reads its walking target, S-0208 Terms, or its own position when it has none, never the point of its destination) and S-0402 claim 26
+    let Some(from) = crate::scatter::infantry_centre_cell(w, id) else {
         return false;
     };
     regions::ensure(w);
