@@ -2,13 +2,13 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 32
+revision: 37
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-11-21
 measurements: []
-requests: [Q-1150, Q-1200, Q-1201, Q-1202, Q-1203, Q-2717, Q-3337]
+requests: [Q-1150, Q-1200, Q-1201, Q-1202, Q-1203, Q-2717, Q-3337, Q-3361]
 supersedes: []
 ---
 
@@ -594,11 +594,17 @@ The glossary also defines *trigger*, used here.
 18. **Control rings.** A controlled object carries the rules' controlled-animation type, and a
     permanently controlled object carries the permanent-controlled-animation type, attached to it
     and following it (S-0109 claim 22). The ring is raised above a mobile object by its type's ring
-    height in leptons. The takeover creates the controlled ring with a repeat factor of 1 (S-0109
-    Terms), so a ring type whose loop count is −1 plays until the ring ends by the rules below
-    (S-0109 claim 7). This claim does not give the creation of the permanent ring of a permanent
-    takeover (claim 13). The ring is removed at release (claim 9). It also ends at each event of
-    S-0109 claim 22's *End with the owner* list.
+    height in leptons. The takeover creates the controlled ring, and a permanent takeover (claim 13)
+    the permanent ring, with no initial loop delay, a repeat factor of 1 and no reverse request
+    (S-0109 Terms), so a ring type whose loop count is −1 plays until the ring ends by the rules
+    below (S-0109 claim 7). The permanent ring is created as the controlled ring of a mobile object
+    is: at the object's position raised by its type's ring height, attached to it and following it
+    in the render layer that S-0109 claim 22 gives an attached animation, and with its type's own
+    depth adjustment (S-0102 claim 13). So the two rings of a mobile object differ only in their
+    animation type (Q-3361). An object that is dominated again while it is permanently controlled
+    keeps exactly one ring in our engine; the original shows two (S-0612 claim 14). The ring is
+    removed at release (claim 9). It also ends at each event of S-0109 claim 22's *End with the
+    owner* list.
 
     **A ring shown again.** In the original, a controlled object whose ring ended that way shows
     no ring again while it stays controlled, even after it is back on the map or uncloaks. Our
@@ -665,30 +671,43 @@ The glossary also defines *trigger*, used here.
       17), and a unit standing in front of the building draws over the ring, where its pixels pass
       the depth test, when its key is larger than the ring's.
     - Backing: `measurable` (MC1 for mobile rings and the animation choice; MC13 part a for a
-      building ring's point and height and for the repeat factor of 1 of a building's ring, which
-      also backs it for other controlled objects, created by the same takeover; part b for the ring
-      against its building's body, bib, shadow and voxel turret and against a unit in front; part c
-      for the replaced depth adjustment and its value to within 2 depth units). For the other
-      writers and readers listed above (other buildings, terrain tiles, overlays, terrain objects,
-      slot animations, particles and other animations), MC13 plays none: their outcome is S-0102's
-      rule for them (claims 1, 5, 6 and 10) applied to the ring's bias and key above, and carries
-      those claims' backing. The ring's end at the events of S-0109 claim 22 carries that claim's
-      backing; the original's missing ring after an uncloak is `measurable` by S-0109 scenario AN30
-      part a; the ring shown again is `unmeasured`, a design rule.
-    - Confidence: high for the animation choice, for the repeat factor of 1 of a building's ring,
-      for a building ring's point and height, for the replaced depth adjustment and for its value to
-      within 2 depth units, for the ring drawn over its building's body and for its order against a
-      unit, where S-0102 rates building bodies, units and the ground layer's order high (claims 5, 6
-      and 10); medium for the bib, the shadow and the voxel turret, as S-0102 claim 10 rates the
-      other building images medium. For the other writers and readers: high for terrain tiles,
-      overlays, other buildings' bodies and terrain objects that are not animated, as S-0102 claim
-      10 rates them; medium for the other building images, slot animations, particles, other
-      animations and animated terrain objects. Medium for the exact value within those 2 units,
-      `unmeasured`: in the original, which multiple of 3 the ring's depth is rounded to depends on
-      the view's position at its creation (S-0102 F1), so one pixel's change places the value only
-      to within 2 units. The ring's end at the events of S-0109 claim 22 carries that claim's
-      ratings; medium for the repeat factor of 1 of other objects' controlled rings, which part a
-      does not play, for the original's missing ring after an uncloak and for the ring shown again.
+      building ring's point and height and for the repeat factor of 1 of a building's ring; part b
+      for the ring against its building's body, bib, shadow and voxel turret and against a unit in
+      front; part c for the replaced depth adjustment and its value to within 2 depth units; MC15
+      part a for the loop delay, repeat factor and reverse request of the controlled and permanent
+      rings of vehicles and infantry and of the controlled rings of buildings and landed aircraft
+      (kinds 1 to 4), and, for vehicles and infantry, for the permanent ring standing where the
+      controlled ring does and for its depth adjustment (kinds 1 and 2: the displacement check and
+      the third variant); part b for their attachment). The permanent ring of an aircraft is
+      `unmeasured`: a domination usually does not take an aircraft on a landing pad, since the pad
+      building is its cell's start object (S-0612 claim 12). The permanent ring's render layer
+      carries S-0109 claim 22's backing, and the two rings that the original shows on a second
+      domination carry S-0612 claim 14's. For the other writers and readers listed above (other
+      buildings, terrain tiles, overlays, terrain objects, slot animations, particles and other
+      animations), MC13 plays none: their outcome is S-0102's rule for them (claims 1, 5, 6 and 10)
+      applied to the ring's bias and key above, and carries those claims' backing. The ring's end at
+      the events of S-0109 claim 22 carries that claim's backing. The original's missing ring after
+      an uncloak is `measurable` by S-0109 scenario AN30 part a, and the ring shown again is
+      `unmeasured`, a design rule.
+    - Confidence: high for the animation choice, for the loop delay, repeat factor, reverse request,
+      attachment and depth adjustment of the controlled and permanent rings of vehicles and infantry
+      and for their permanent ring standing where their controlled ring does, for the loop delay,
+      repeat factor and reverse request of a building's ring, for a building ring's point and
+      height, for the replaced depth adjustment and for its value to within 2 depth units, for the
+      ring drawn over its building's body and for its order against a unit, where S-0102 rates
+      building bodies, units and the ground layer's order high (claims 5, 6 and 10); medium for the
+      bib, the shadow and the voxel turret, as S-0102 claim 10 rates the other building images
+      medium. For the other writers and readers: high for terrain tiles, overlays, other buildings'
+      bodies and terrain objects that are not animated, as S-0102 claim 10 rates them; medium for
+      the other building images, slot animations, particles, other animations and animated terrain
+      objects. Medium for the exact value within those 2 units, `unmeasured`: in the original, which
+      multiple of 3 the ring's depth is rounded to depends on the view's position at its creation
+      (S-0102 F1), so one pixel's change places the value only to within 2 units. The ring's end at
+      the events of S-0109 claim 22 carries that claim's ratings; medium for the creation of an
+      aircraft's controlled ring, which MC15 plays only for a landed aircraft, and of its permanent
+      ring, for the original's missing ring after an uncloak and for the ring shown again. The
+      permanent ring's render layer carries the ratings of S-0109 claim 22, and the original's two
+      rings those of S-0612 claim 14.
 
 ## Formulas
 
@@ -1178,6 +1197,61 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   (expected: no, in the excluded ones and while inside a transport that is not open-topped; yes in the open-topped transport). Falsified by a heal
   applied before the pulse, a shot that leaves before the pulse, a heal or a shot after a lethal
   pulse, or a countdown step in an excluded update. Part b has no case for the superweapon warp. The warp part of claim 16 is measured by S-0513 scenario SW23 part f, an engine-only contract test, not an oracle expectation: it arranges a due overload update of an unlimited controller in each row of S-0513 claim 51, for each applicable kind, and expects no overload step in those rows through arrival effects, with the hold-end test first. Any overload step there falsifies the warp rule.
+
+- **MC15. Creation of the control rings** (claims 13 and 18; Q-3361). On a flat named test map, the
+  viewing human *A* has a ready psychic domination (S-0612 scenario PD1), whose damage test data
+  sets to 0 (S-0612 scenario PD10), and one MC13 test copy of Yuri Prime, *Y*, whose versus against
+  the armour of each test victim type is set nonzero by test data (claim 4). *A*'s psychic dominator
+  building stands far from the victims. The victims belong to the bystander computer player *B*,
+  which keeps other objects far from them so that it is not defeated; a run in which a victim moves
+  before its takeover is void. Each run plays one kind of victim: (1) two vehicles *V* and *W* of
+  one named test vehicle type with no weapon, (2) two infantry units *V* and *W* of one named test
+  infantry type with no weapon, (3) a building *W*, one 1 × 1 test building of MC13 part a with its
+  test data, or (4) an aircraft *W* of a named test aircraft type with no weapon, landed on a
+  landing building of *B*. The test vehicle, infantry and aircraft types are marked not
+  psionics-immune by test data and do not hover like a balloon, so they meet claim 13's conditions.
+  In kinds 1 and 2, *V* and *W* stand at cell centres on open ground, at least 6 cells from the map
+  edges and from every object but *Y*. In every kind the victims are in view and *Y* stands 3 cells
+  from *W* along the first map axis. In kinds 1 and 2 it stands on the side away from *V*, and *W*
+  and *Y* lie outside the swept cells (S-0612 claim 11) of a domination launched at *V*'s cell. The
+  test rules name, as the permanent-controlled-animation type and as the controlled-animation type,
+  two named test copies of one animation type that differ only in their names, set as MC13's ring
+  type (8 different image frames, a loop count of −1, no reverse or ping-pong flag, no follow-up
+  type, flat, tiled and shadow flags off, no translucency, vertical draw shift, depth adjustment and
+  sort adjustment 0), with a stage delay of 4 ticks, a random loop delay pair of 0 and 0, and a
+  named test start sound. *Y* is ordered to take over *W*; in kinds 1 and 2, once *W* is shown in
+  *A*'s colour, the domination is launched at *V*'s cell. Record, for every tick and with the view
+  held still, each victim's position and owner colour, a fixed-resolution capture of the tick's
+  drawn frame with each ring's image frame and screen position in it, and the ticks in which the
+  start sound plays. A valid run is one in which *Y* takes over *W* and, in kinds 1 and 2, *V*
+  becomes permanently controlled, each then shown in *A*'s colour. Make three valid runs per kind
+  and variant; kind 4 decides nothing if none of its runs is valid.
+  - (a) Creation, with the victims still. *Expected:* for each ring, the start sound plays in the
+    tick in which its victim is first shown in *A*'s colour, and, except in the third variant below,
+    the ring shows its type's start frame from that tick's drawn frame and then its image frames in
+    ascending order; in kinds 1 and 2, in captures that show the same image frame, the two rings
+    have the same displacement from the ground projection (S-0101 claim 1) of their victims'
+    positions, to within 1 pixel on each screen axis. Then keep the rings in view until more than
+    254 passes have played, and record whether they still show (as MC13 part a's last check, which
+    tells the repeat factor of 1 apart from every other). *Expected:* every ring still shows. In a
+    second variant both test types have a loop count of 2. *Expected:* each ring ends after its
+    second pass. In a third variant, in kinds 1 and 2, both test types have a depth adjustment of
+    +2000, which puts an animation's depth far behind the ground tiles under it, so that no pixel of
+    it shows (S-0102 claims 10 and 13). *Expected:* the start sounds still play, and no pixel of
+    either ring shows. *Falsified if:* for any ring, the start sound plays in a later tick, as a
+    loop delay given at creation would make it (S-0109 claims 11 and 13), or its frames play
+    downwards; in kinds 1 and 2 its displacement differs from the other ring's; it ends before more
+    than 254 passes in the first variant or after a pass count other than 2 in the second; or, in
+    the third variant, a pixel of it shows, as a replacement of its depth adjustment by a value that
+    clears the ground would make it.
+  - (b) Attachment, in kinds 1 and 2 and the first variant, after part a's last check. *A* orders
+    *V* and *W* to move 5 cells along the second map axis over open ground. *Expected:* in every
+    drawn frame each ring keeps, to within 1 pixel on each screen axis, the displacement from the
+    ground projection of its victim's position that it had at rest, and stops with its victim; *W*
+    is still shown in *A*'s colour after the move. *Falsified if:* a ring stays where it was created
+    or falls behind its victim.
+  - A run in which a victim leaves the map, or an event of S-0109 claim 22's *End with the owner*
+    list happens to it, decides nothing for the checks after that event.
 
 ## Open questions
 

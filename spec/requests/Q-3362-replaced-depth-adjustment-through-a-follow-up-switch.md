@@ -1,9 +1,9 @@
 ---
 id: Q-3362
 title: Does a replaced animation depth adjustment hold through a follow-up switch
-status: open
+status: answered
 related: [S-0601, S-0102, S-0109, S-0301]
-answered-by: []
+answered-by: [S-0109]
 ---
 
 ## Need

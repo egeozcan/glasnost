@@ -2,13 +2,13 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 45
+revision: 49
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-18
+approved-on: 2026-11-21
 measurements: []
-requests: [Q-0046, Q-0418, Q-0770, Q-0771, Q-1425, Q-1716, Q-1717, Q-3240]
+requests: [Q-0046, Q-0418, Q-0770, Q-0771, Q-1425, Q-1716, Q-1717, Q-3240, Q-3362]
 supersedes: []
 ---
 
@@ -431,6 +431,7 @@ pass* and *update order* as in S-0203.
     | stage delay *d* | chosen afresh from the follow-up type (claims 2 to 4, including a random draw and normalisation) |
     | clock of claim 5 | restarted at that tick, with no new first-update exclusion; the follow-up's initial stage lasts *d* ticks when *d* > 0 and subsequent updates are uninterrupted and not held, and does not advance when *d* = 0 |
     | damage accumulator (claim 17) | 0 |
+    | depth adjustment (S-0102 claim 13) | unchanged: the value set at the animation's creation, which is its creator's replacement where the creator replaced it, and otherwise the depth adjustment of the type it was created with. The follow-up type's own depth adjustment is not read (Q-3362) |
 
     The image frame at the old type's end limit is never drawn; the first image frame of the
     follow-up type is drawn from that update on. Because σ and the reversed test are separate:
@@ -444,11 +445,17 @@ pass* and *update order* as in S-0203.
       (claim 17),
     - an animation that was not reversed, whose follow-up type has the flag, keeps σ = +1 and is
       reversed from then on, so the reversed end rule and restart of claim 8 apply to it.
-    - Backing: `measurable` (AN11) for doubled start, kept negative step, restarted delay
-      and the tested zero loop count. Creator-requested reverse, a forward-to-reversed
-      follow-up, other follow-up pass counts and damage reset are `unmeasured` here:
-      neither pair in AN11 supplies those cases.
-    - Confidence: high
+    - Backing: `measurable` (AN11) for doubled start, kept negative step, restarted delay and the
+      tested zero loop count, and (AN31) for the kept depth adjustment, both the created type's own
+      value (part a) and a creator's replacement (part b, the control ring of a building, S-0601
+      claim 18). Creator-requested reverse, a forward-to-reversed follow-up, other follow-up pass
+      counts and damage reset are `unmeasured` here: neither pair in AN11 supplies those cases. The
+      kept depth adjustment of other creators' replacements, such as a building's shot animation
+      (S-0301 claim 22), is `unmeasured`: S-0301 claim 22 gives that replaced value itself as
+      `unmeasured`, for its reason there, and the follow-up switch keeps the stored value whoever
+      the creator is, as AN31 part b shows for the one creator it plays.
+    - Confidence: high, except for the kept depth adjustment of other creators' replacements, such
+      as a building's shot animation (S-0301 claim 22), which AN31 does not play: medium.
 
 16. **End of an animation.** An animation whose last pass ends and whose type names no follow-up
     type normally ends in that update and is removed. For every infantry-making animation, S-0611
@@ -1996,6 +2003,34 @@ layering allows.
     drawn in a frame of tick *T* or later, the recorder shows it after the logic of *T* + 1, or it
     lasts until the infantry unit leaves play.
 
+- **AN31 (claim 15; Q-3362: the depth adjustment after a follow-up switch).** Named test data: an
+  animation type *F* with visible frames, one pass, a depth adjustment of +2000 and follow-up type
+  *G*; *G* with visible frames, a loop count of −1 and a depth adjustment of 0; and *H*, a copy of
+  *G* with a depth adjustment of +2000. All three have 8 image frames, a stage delay of 4 ticks, a
+  random loop delay pair of 0 and 0 and no reverse or ping-pong flag, so that *F*'s pass lasts 32
+  ticks (claim 16), and their flat, tiled and shadow flags off, no translucency, and a vertical draw
+  shift and sort adjustment of 0, so that they are drawn with S-0102 claim 13's ordinary animation
+  row. A depth adjustment of +2000 puts an animation's depth far behind the ground tiles under it,
+  which are depth writers, so no pixel of it shows (S-0102 claims 10 and 13); one of 0 shows. Record
+  a fixed-resolution capture of the test cell every tick, with the view held still.
+  - (a) Created type's own value: a trigger action plays *F* at the test waypoint. Control a2: it
+    plays *G* there. *Expected:* in a, no pixel of *F* or of *G* shows from the creation until 300
+    ticks after *F*'s pass ends; in a2, *G* shows. *Falsified if:* in a, *G*'s frames show after the
+    switch, as for the follow-up type's own value. A run of a2 in which *G* does not show makes part
+    a decide nothing.
+  - (b) Creator's replacement: S-0601 scenario MC13's takeover of a 1 × 1 building, with the
+    controlled-animation type a test type *R* like MC13's ring type but with 8 image frames that
+    differ from *H*'s, a stage delay of 4 ticks, one pass, no reverse or ping-pong flag, a depth
+    adjustment of +2000 and *H* as its follow-up type, so that its pass lasts 32 ticks (claim 16)
+    and the switch comes 32 ticks after the first tick in which *R* shows. Control b2: a trigger
+    action plays *H* on open ground. *Expected:* in b, *R*'s frames show from the takeover, shown
+    over the ground although *R*'s own value is +2000, and after *R*'s pass ends *H*'s frames show
+    at the ring's place, still shown over the ground as the kept −1024 makes them; in b2, no pixel
+    of *H* shows. *Falsified if:* in b, no pixel of the ring shows after the switch, as for the
+    follow-up type's own +2000 or for the created type's own +2000. A run of b2 in which *H* shows,
+    or a run of b in which no pixel of *R* shows before the switch, makes part b decide nothing, and
+    a run of b in which the building's control ends or an event of claim 22's *End with the owner*
+    list happens to it before the switch is void.
 - **Companion scenarios (claims 5 and 13 to 17).** S-0611 scenario MU10 tests generic
   infantry-making animations, terminal-only creation and position-choice draws; its MU9
   tests refused placement and retries. Use those scenarios for claim 16's delegated contract.
@@ -2005,6 +2040,11 @@ layering allows.
 
 ## Changes for other specs
 
+- **S-0102 claim 13.** "The animation's own value: its type's, unless the creator of the animation
+  replaced it" should read that it is the depth adjustment of the type the animation was created
+  with, unless the creator replaced it, and that a follow-up switch keeps that value (claim 15 here,
+  Q-3362), for a building's control ring and a building's shot animation as for any other. Level and
+  backing: claim 15's.
 - **S-0301, the shot animation attached to a firer that is not a building.** "It disappears when
   the firer is removed from the game" should read that it disappears at each event of claim 22's
   *End with the owner* list here, for example when the firer is destroyed, goes off the map,
