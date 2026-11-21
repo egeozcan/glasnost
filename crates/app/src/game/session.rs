@@ -174,6 +174,13 @@ pub struct Session {
     /// while it is not looked up again; `None` while the pointer is off the
     /// battlefield view.
     hover: Option<Picked>,
+    /// The object with the hover mark (S-0214 Terms, *hover mark*): given
+    /// by a hover lookup that finds it, cleared in every tick (claim 35 (e)).
+    hover_mark: Option<ObjectId>,
+    /// The cursor image a held battlefield press's own resolution at its
+    /// pixel gave (S-0214 claim 35 (e)); `None` within for the system
+    /// pointer. Read only while [`Session::held_press`] holds the press.
+    press_image: Option<Option<cursor::Choice>>,
     /// The tips' rest and the tip that shows: the name tip (S-0111 claims
     /// 20 to 26) or a sidebar tip (S-0411 claims 20 to 22).
     name_tip: name_tip::NameTip,
@@ -229,6 +236,9 @@ pub struct Session {
     animator: cursor::Animator,
     /// The cursor frame drawn this frame and its hot spot.
     cursor_shown: Option<(u16, (i32, i32))>,
+    /// Whether this frame hides the cursor, the system pointer included
+    /// (an order block, S-0214 claim 35 (e)).
+    cursor_hidden: bool,
     /// The modifiers held, for the hovered action.
     pub mods: Modifiers,
     /// The type-select role's key (S-0214 claim 12).
@@ -590,6 +600,8 @@ impl Session {
             picks: None,
             pick_candidates: None,
             hover: None,
+            hover_mark: None,
+            press_image: None,
             name_tip: name_tip::NameTip::default(),
             focus_tip: None,
             // spec: S-0111 claim 20 and Import mapping (the tooltip option is on unless the player's settings turn it off)
@@ -612,6 +624,7 @@ impl Session {
             status_row: None,
             animator: cursor::Animator::default(),
             cursor_shown: None,
+            cursor_hidden: false,
             mods: Modifiers::default(),
             type_select: TypeSelect::default(),
             route: RouteMode::default(),
@@ -797,6 +810,8 @@ impl Session {
         if !ran {
             return false;
         }
+        // spec: S-0214 r96 claim 35 (e) (the hover mark is cleared in every tick, and only a later lookup that finds the object gives it again)
+        self.hover_mark = None;
         if self.network {
             // spec: S-0201 claim 17, Our engine (a network game is paced at the index in force from the cycle after a speed order is carried out)
             self.speed = self.play.game.world.game_speed;
@@ -1459,12 +1474,9 @@ impl Session {
             self.hover = None;
             return None;
         };
-        // spec: S-0214 claim 35 (e) (while a left press is held, and while the game takes no player input, the hover is not looked up again)
-        // design: render (Q-3321) (the whole last lookup is kept, the cell included; a hold that begins with no hover makes one lookup and keeps it)
-        if self.hover_held()
-            && let Some(h) = self.hover
-        {
-            return Some(h);
+        // spec: S-0214 r96 claim 35 (e) (while a battlefield press of either button is held, and during an order block, the hover is not looked up again: the last lookup is kept, or none)
+        if self.hover_held() {
+            return self.hover;
         }
         // spec: S-0214 claim 35 (e) (otherwise found again once for every drawn frame, whether the pointer has moved or not)
         let h = self.under(p);
@@ -1473,14 +1485,30 @@ impl Session {
     }
 
     /// Whether the hover is not looked up again now (S-0214 claim 35 (e)):
-    /// a left press is held, or the game takes no player input.
+    /// a battlefield press is held, an order block is in force, or the game
+    /// stands still.
     fn hover_held(&self) -> bool {
-        // spec: S-0214 claim 35 (e) (a held left press; a right press is not named, so it keeps nothing)
-        let left = self.press.is_some_and(|(_, b)| b == Button::Left);
-        // spec: S-0201 Terms (*cycle*: a cycle takes the player's input; *stand-still*: no cycles in a single-player game while the options menu is open, claim 8, or the window lacks the focus, claim 9) and claims 15 and 16 (in a network game the machine takes no input for the game while its menu is open or its window lacks the focus)
-        // design: render (Q-3321) (an order block's cycles are not frozen, so they take input and the hover is looked up; our client has no frozen cycles, S-0201 claim 10)
-        let no_input = self.paused || !self.focused;
-        left || no_input
+        // spec: S-0214 r96 claim 35 (e) (while a battlefield press, Terms, of either button is held the hover is not looked up again)
+        let press = self.held_press().is_some();
+        // spec: S-0214 r96 claim 35 (e) (during an order block, S-0201 Terms, the game makes no hover lookup in its drawn frames)
+        let block = glasnost_sim::orders::blocked(&self.play.game.world);
+        // spec: S-0201 Terms (*stand-still*: no drawn frame of the game; in a single-player game while the options menu is open, claim 8, or the window lacks the focus, claim 9) and claims 15 and 16 (in a network game no new battlefield frame while the menu is open or the window lacks the focus), so no frame's lookup
+        let still = self.paused || !self.focused;
+        press || block || still
+    }
+
+    /// The held battlefield press (S-0214 Terms, *battlefield press*):
+    /// [`Session::battlefield_press`] unless the route mode took the left
+    /// press at the press.
+    fn held_press(&self) -> Option<(Point, Button)> {
+        // spec: S-0214 r96 Terms (*battlefield press*: a left press that the route mode takes at the press, S-0213 claim 16b, is not one)
+        self.battlefield_press().filter(|_| {
+            !self
+                .route
+                .pressed
+                .as_ref()
+                .is_some_and(|p| *p != glasnost_sim::routes::Press::Ordinary)
+        })
     }
 
     /// [`Session::under`] made afresh.
@@ -1683,13 +1711,7 @@ impl Session {
     /// limited. Every other press ends here, as before.
     pub fn pointer_left(&mut self) {
         // spec: S-0214 claim 34 (a) and (f) (with a host that keeps reporting the pointer and the release, the press stays held: leaving the window is not an event of its own)
-        if self.battlefield_press().is_some()
-            && !self
-                .route
-                .pressed
-                .as_ref()
-                .is_some_and(|p| *p != glasnost_sim::routes::Press::Ordinary)
-        {
+        if self.held_press().is_some() {
             return;
         }
         self.pointer = None;
@@ -1791,6 +1813,30 @@ impl Session {
             // spec: S-0111 r49 claim 20 (Blocked, Q-2736 answered: in the route mode a held left button does not block the tip when its press was refused at the press, for kind, S-0213 claim 16d, or by the point-click test, S-0213 claim 16b, or took a point, a join or a loop close, S-0213 claim 16b, or with no object selected took an own point that the click selects, S-0213 claims 16b and 16e; a press that is an ordinary click blocks it, and every block ends at the release)
             self.view_button_held = false;
         }
+        // spec: S-0214 r96 claim 35 (e) (while a left battlefield press is held, the cursor shows the image that the press's own resolution at its pixel, claim 26, gave it)
+        // design: render (Q-3349) (a right battlefield press keeps its own pixel's image too, until its scroll drag starts)
+        self.press_image = self.held_press().map(|(start, _)| self.choice_at(start));
+    }
+
+    /// The cursor image of the resolution at screen pixel `p` (S-0214
+    /// claims 21, 26 and 35): `None` for the system pointer.
+    fn choice_at(&mut self, p: Point) -> Option<cursor::Choice> {
+        let (cell, object) = self.under(p);
+        self.offer_choice(cell, object)
+    }
+
+    /// The cursor image table C gives the offer for `object` over `cell`
+    /// (S-0214 claim 21): `None` for the system pointer.
+    fn offer_choice(&mut self, cell: CellXY, object: Option<ObjectId>) -> Option<cursor::Choice> {
+        let (offer, shrouded) = self.offer_on(cell, object)?;
+        let retain = self
+            .play
+            .game
+            .world
+            .rules()
+            .quirks
+            .damaging_entry_cursor_retained;
+        Some(cursor::table_c(offer, shrouded, retain))
     }
 
     /// A route-mode left press on the battlefield (S-0213 claims 16b, 16d
@@ -2946,6 +2992,13 @@ impl Session {
     /// placing a building, the system pointer shows.
     pub fn update_cursor(&mut self, painter: &mut Painter) {
         self.cursor_shown = None;
+        self.cursor_hidden = false;
+        if !self.paused && glasnost_sim::orders::blocked(&self.play.game.world) {
+            // spec: S-0214 r96 claim 35 (e) (during an order block the game hides the cursor, S-0111 claim 20) and S-0201 Terms (*order block*: the game hides the mouse pointer)
+            // design: render (Q-3350) (the hidden cursor leaves claim 22's animation as it was)
+            self.cursor_hidden = true;
+            return;
+        }
         if self.cursor_art.is_none() || self.paused {
             // spec: S-0214 claim 22 (the system pointer replaces the cursor: the next image is a change of kind; #85)
             self.animator.other(None);
@@ -2977,25 +3030,32 @@ impl Session {
             self.animator.other(Some((frames, hot)));
             (frames, frames.first, hot)
         } else {
-            // spec: S-0214 claim 35 (e) (the cursor shows the frame's hover)
-            let Some((cell, object)) = self.frame_hover() else {
+            let choice = if let Some((_, b)) = self.held_press()
+                && let Some(image) = self.press_image
+            {
+                // spec: S-0214 r96 claim 35 (e) (when claim 18's band box starts, outside route-editing mode, the cursor becomes the ordinary arrow until the release)
+                // design: render (Q-3349) (in route-editing mode a band box keeps the press's image)
+                let band = b == Button::Left
+                    && self.drag.as_ref().is_some_and(|d| d.active)
+                    && !self.route.held;
+                if band {
+                    Some(cursor::Choice::Show(cursor::Frames::ARROW))
+                } else {
+                    // spec: S-0214 r96 claim 35 (e) (the press's image, wherever the pointer goes and whatever happens to the object under it; its frames still advance as claim 22 gives)
+                    image
+                }
+            } else {
+                // spec: S-0214 claim 35 (e) (the cursor shows the frame's hover)
+                match self.frame_hover() {
+                    Some((cell, object)) => self.offer_choice(cell, object),
+                    None => None,
+                }
+            };
+            let Some(choice) = choice else {
                 // spec: S-0214 claim 22 (the system pointer replaces the cursor; #85)
                 self.animator.other(None);
                 return;
             };
-            let Some((offer, shrouded)) = self.offer_on(cell, object) else {
-                // spec: S-0214 claim 22 (the system pointer replaces the cursor; #85)
-                self.animator.other(None);
-                return;
-            };
-            let retain = self
-                .play
-                .game
-                .world
-                .rules()
-                .quirks
-                .damaging_entry_cursor_retained;
-            let choice = cursor::table_c(offer, shrouded, retain);
             let (frames, frame) = self.animator.frame(choice, self.clock_ms);
             (frames, frame, self.animator.hot(frames, size.0, size.1))
         };
@@ -3021,20 +3081,28 @@ impl Session {
     /// Whether this frame draws its own battlefield cursor, so the system
     /// pointer is hidden.
     pub fn draws_cursor(&self) -> bool {
-        self.cursor_shown.is_some()
+        // spec: S-0214 r96 claim 35 (e) (an order block hides the cursor, the system pointer included: S-0201 Terms, *order block*)
+        self.cursor_shown.is_some() || self.cursor_hidden
     }
 
     /// The selection and hover marks of the live drawing (S-0111 claim 3),
     /// updated before a frame is drawn.
     pub fn update_marks(&mut self) {
+        // spec: S-0214 r96 claim 35 (e) (a lookup is made while the pointer is over the battlefield view, outside a hold)
+        let looked_up =
+            !self.hover_held() && self.pointer.is_some_and(|p| self.map_rect().contains(p));
         // spec: S-0214 claim 35 (e) and S-0111 Terms (*hovered* and the pointer object are found as for clicks: the frame's hover)
-        let hovered = self
+        let found = self
             .frame_hover()
             .and_then(|h| h.1)
-            // spec: S-0516 claim 26 (a fully cloaked object the viewer neither owns nor senses, or a building at fade level 15 it does not sense, cannot be hovered; #66)
-            .filter(|&id| {
-                glasnost_sim::cloak::view::clickable(&self.play.game.world, id, self.play.eye(id))
-            });
+            // spec: S-0516 r36 claim 26 (a fully cloaked object the viewer neither owns nor senses, or a building at fade level 15 it neither owns nor senses, cannot be hovered; #66)
+            .filter(|&id| pointing::cloak_clickable(&self.play.game.world, id, self.play.eye(id)));
+        if looked_up {
+            // spec: S-0214 r96 claim 35 (e) and Terms (*hover mark*: a hover lookup that finds an object gives it the mark)
+            // design: render (Q-3350) (one object has the mark at a time: a lookup takes it from any other, and one that finds nothing leaves none; with no lookup the mark stays until the tick clears it)
+            self.hover_mark = found;
+        }
+        let hovered = self.hover_mark;
         self.update_name_tip();
         let selection = self.play.selection.clone();
         let digits = self.play.group_digits();
