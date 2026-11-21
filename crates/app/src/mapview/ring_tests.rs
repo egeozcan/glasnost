@@ -10,10 +10,10 @@ use std::sync::Arc;
 
 use glasnost_convert::kinds::Kind;
 use glasnost_map::{CellGrid, Map};
-use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE, DepthTest, Frame, Paint};
+use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE, DepthTest, Frame, Paint, Profile};
 use glasnost_render::palette::{PaletteQuirks, PaletteState};
-use glasnost_render::projection::project_lifted;
-use glasnost_render::scene::{Filter, Group, Item, Scene, View};
+use glasnost_render::projection::{height_lift, project_lifted};
+use glasnost_render::scene::{Filter, Group, Item, ItemDepth, Scene, View};
 use glasnost_rules::sim::{AnimationType, BuildingType, UnitType};
 use glasnost_sim::mind::Victim;
 use glasnost_sim::rules::{Kind as SimKind, SimRules};
@@ -53,8 +53,8 @@ const BOTH: Names = Names {
 };
 
 /// The simulation's rules: the synthetic combat ruleset with the ring
-/// types `names`, vehicle types RV1 (no ring height) and RV2 (its own), and
-/// HUTX, a 2 × 2 building. RINGX has a random rate whose delays run from 2
+/// types `names`, vehicle types RV1 (no ring height), RV2 (its own) and RV3
+/// (a ring height of 0), and HUTX, a 2 × 2 building. RINGX has a random rate whose delays run from 2
 /// to 4, so its creation takes a draw (S-0109 claim 3).
 fn rules(names: Names) -> Arc<SimRules> {
     let mut r = testkit::combat_ruleset();
@@ -69,7 +69,7 @@ fn rules(names: Names) -> Arc<SimRules> {
     );
     r.sim.general.controlled_animation_type = names.ring.map(Into::into);
     r.sim.general.perma_controlled_animation_type = names.perma.map(Into::into);
-    for (name, height) in [("RV1", None), ("RV2", Some(RV2_HEIGHT))] {
+    for (name, height) in [("RV1", None), ("RV2", Some(RV2_HEIGHT)), ("RV3", Some(0))] {
         r.registries.get_mut("vehicles").unwrap().push(name.into());
         let mut u = UnitType {
             strength: Some(300),
@@ -83,16 +83,23 @@ fn rules(names: Names) -> Arc<SimRules> {
         .get_mut("buildings")
         .unwrap()
         .push("HUTX".into());
-    r.sim.buildings.insert(
-        "HUTX".into(),
-        BuildingType {
-            strength: Some(400),
-            foundation: Some([2, 2]),
-            ..Default::default()
-        },
-    );
+    let mut hut = BuildingType {
+        strength: Some(400),
+        foundation: Some([2, 2]),
+        ..Default::default()
+    };
+    // spec: S-0601 r32 claim 18 (the ring-height field of the building's type takes no part) and
+    // Import mapping (MindControlRingOffset: not read for a building)
+    hut.combat.mind_control_ring_offset = Some(HUT_RING_FIELD);
+    r.sim.buildings.insert("HUTX".into(), hut);
     Arc::new(SimRules::new(&r, "synthetic-test"))
 }
+
+/// The ring-height field of building type HUTX, which its ring does not
+/// read (S-0601 r32 claim 18).
+const HUT_RING_FIELD: i32 = 500;
+/// The ring type RINGX's art fields by default: endless (S-0109 claim 7).
+const ENDLESS: &str = "LoopCount=-1\n";
 
 /// What the drawing reads.
 struct Data {
@@ -134,14 +141,19 @@ struct Case {
 
 /// The import with both ring types and their art; HUTX's body an image of
 /// 120 × 120 from 60 left of and 60 above its draw point, so that it covers
-/// the whole foundation and the point above its centre.
-fn import() -> (
+/// the whole foundation and the point above its centre. `hut` is added to
+/// HUTX's art section and `ring` is RINGX's.
+fn import(
+    hut: &str,
+    ring: &str,
+) -> (
     glasnost_convert::Import,
     glasnost_convert::theater::Catalogue,
     Assets,
 ) {
     let rules = format!("{RULES}[Animations]\n0=RINGX\n1=PERMX\n");
-    let art = format!("{ART}[RINGX]\nLoopCount=-1\n[PERMX]\n");
+    let art = ART.replacen("[HUTX]\n", &format!("[HUTX]\n{hut}"), 1);
+    let art = format!("{art}[RINGX]\n{ring}[PERMX]\n");
     let (mut import, catalogue, mut assets) = context_full(&rules, &art);
     import
         .arts
@@ -163,7 +175,12 @@ fn import() -> (
 }
 
 fn case(names: Names) -> Case {
-    let (import, catalogue, assets) = import();
+    case_with(names, "", ENDLESS)
+}
+
+/// The case with `hut` added to HUTX's art section and `ring` as RINGX's.
+fn case_with(names: Names, hut: &str, ring: &str) -> Case {
+    let (import, catalogue, assets) = import(hut, ring);
     let rules = rules(names);
     let setup = testkit::setup(7);
     let mut world = glasnost_sim::load::new_game(
@@ -544,7 +561,13 @@ struct Front {
 }
 
 fn front() -> Front {
-    let mut c = case(BOTH);
+    front_with("", ENDLESS)
+}
+
+/// The building case with `hut` added to HUTX's art section and `ring` as
+/// RINGX's.
+fn front_with(hut: &str, ring: &str) -> Front {
+    let mut c = case_with(BOTH, hut, ring);
     c.control(c.hut);
     c.tick();
     let ring = c.ring();
@@ -556,10 +579,16 @@ fn front() -> Front {
         .collect();
     assert_eq!(items.len(), 1);
     let at = glasnost_sim::mind::ring(&c.live.world, c.hut).unwrap().at;
+    let p = c.pos(c.hut);
+    // spec: S-0601 r32 claim 18 (the building's centre point, S-0204 claim 4: for a 2 × 2
+    // foundation its position plus (128, 128); the type's ring-height field takes no part). The
+    // simulation gives it at the building's own height: the raise by 104 leptons per art height
+    // level is a seam in `glasnost_sim::mind::ring`.
+    assert_eq!(at, Pos::new(p.x + 128, p.y + 128, p.z));
     assert_eq!(
         ring.at,
         placed(Of::Ring, at),
-        "at the simulation's point for the building (design: render (Q-3337))"
+        "the ring is drawn at the simulation's point for the building"
     );
     let white = c.scene.add_row([0xFFFF; 256]);
     let red = c.scene.add_row([0xF800; 256]);
@@ -606,8 +635,65 @@ fn shown(fr: &Front, f: &Frame) -> (usize, usize) {
     (ring.len(), showing)
 }
 
-/// spec: S-0601 claim 18 (on buildings the ring draws in front of the building); design: render
-/// (Q-3337) (at the simulation's point, ignoring depth, after the building's body)
+/// The depth a ring item of an ordinary animation row has at `at` with the
+/// depth adjustment `adjust` and no vertical draw shift (S-0102 claim 13).
+fn ring_depth(at: Pos, adjust: i32) -> ItemDepth {
+    ItemDepth::Profile {
+        profile: Profile::Upright,
+        bias: adjust - height_lift(at.z) - 2,
+        companion: None,
+    }
+}
+
+/// spec: S-0601 r32 claim 18 (a building's ring is an ordinary attached animation in the ground
+/// layer and a depth reader, S-0102 claim 10; the takeover replaces its animation depth adjustment
+/// by −1024, whatever the ring type's own is: its bias is the ring type's vertical draw shift −
+/// 1024 − L(z) − 2) and Constants (building ring depth adjustment −1024); S-0102 claim 13 (the
+/// animation's depth adjustment unless its creator replaced it): a mobile object's ring keeps its
+/// type's own
+#[test]
+fn claim_18_a_buildings_ring_takes_the_depth_adjustment_minus_1024() {
+    let mut c = case_with(BOTH, "", "LoopCount=-1\nZAdjust=2000\n");
+    c.control(c.hut);
+    c.control(c.rv1);
+    c.tick();
+    let hut_at = glasnost_sim::mind::ring(&c.live.world, c.hut).unwrap().at;
+    let rv1_at = raised(c.pos(c.rv1), 140);
+    let item = |at: Pos| {
+        let p = placed(Of::Ring, at);
+        let r = c
+            .rings()
+            .into_iter()
+            .find(|d| d.at == p)
+            .expect("the ring is drawn");
+        c.scene
+            .items
+            .iter()
+            .find(|i| i.group == Group::Effects && i.image == r.image && (i.x, i.y) == p)
+            .cloned()
+            .unwrap()
+    };
+    let hut = item(hut_at);
+    assert_eq!(
+        hut.test,
+        DepthTest::Reader,
+        "the building's ring reads depth"
+    );
+    // spec: S-0601 r32 Constants (building ring depth adjustment −1024 depth units)
+    assert_eq!(hut.depth, ring_depth(hut_at, -1024));
+    let rv1 = item(rv1_at);
+    assert_eq!(rv1.test, DepthTest::Reader);
+    assert_eq!(
+        rv1.depth,
+        ring_depth(rv1_at, 2000),
+        "a vehicle's ring keeps its type's own depth adjustment"
+    );
+}
+
+/// spec: S-0601 r32 claim 18 (in front of the building: its body, a depth writer, hides a ring
+/// pixel only where its stored depth is not greater than the ring pixel's, S-0102 F2; with the
+/// building's own depth adjustment at 0 its body less than 700 rows tall hides none of the ring;
+/// the ring is drawn after the body) and S-0102 claims 10 and 13
 #[test]
 fn claim_18_a_buildings_ring_is_drawn_in_front_of_it() {
     let fr = front();
@@ -618,18 +704,152 @@ fn claim_18_a_buildings_ring_is_drawn_in_front_of_it() {
         .position(|i| i.object == Some(sim_code(fr.c.hut)) && i.group == Group::Buildings)
         .expect("the building's body is drawn");
     assert!(body < fr.ring, "the ring is drawn after the body");
-    assert_eq!(s.items[fr.ring].test, DepthTest::Ignore);
+    assert_eq!(s.items[fr.ring].test, DepthTest::Reader);
     let (pixels, showing) = shown(&fr, &compose(s, s.items.clone(), fr.rect));
     assert!(pixels > 0, "the ring has pixels");
     assert_eq!(showing, pixels, "every ring pixel shows over the body");
-    // As a depth reader, the body's depth would hide it there (S-0102 claim 10).
+    // With the ring type's own depth adjustment (0) in place of −1024, the body's depth would
+    // hide some of it there (S-0102 claim 10).
+    let at = glasnost_sim::mind::ring(&fr.c.live.world, fr.c.hut)
+        .unwrap()
+        .at;
     let mut items = s.items.clone();
-    items[fr.ring].test = DepthTest::Reader;
-    let (_, read) = shown(&fr, &compose(s, items, fr.rect));
-    assert!(read < pixels, "as a reader the body would hide some of it");
+    items[fr.ring].depth = ring_depth(at, 0);
+    let (_, own) = shown(&fr, &compose(s, items, fr.rect));
+    assert!(
+        own < pixels,
+        "with its type's adjustment the body hides some of it"
+    );
 }
 
-/// Q-3337: the GPU map path draws a building's ring in front of it as the CPU reference does.
+/// spec: S-0601 r32 claim 18 (the ring's depth against the body's under S-0102 F2: the ring shows
+/// at a pixel where the building's normal depth adjustment n puts the body farther, and the body
+/// where n puts it nearer; the ring type's own depth adjustment changes nothing) and S-0601
+/// scenario MC13 part c (c1: n = −524 and n = −1524, the ring type's own adjustment at 0 and at
+/// 2000); S-0102 claim 13 (the body's bias −L(z) − 2 + the normal depth adjustment)
+#[test]
+fn claim_18_the_buildings_depth_adjustment_decides_against_its_ring() {
+    for ring in [ENDLESS, "LoopCount=-1\nZAdjust=2000\n"] {
+        let far = front_with("NormalZAdjust=-524\n", ring);
+        let s = &far.c.scene;
+        let (pixels, showing) = shown(&far, &compose(s, s.items.clone(), far.rect));
+        assert!(pixels > 0);
+        assert_eq!(showing, pixels, "n = −524 ({ring:?}): the ring shows");
+        let near = front_with("NormalZAdjust=-1524\n", ring);
+        let s = &near.c.scene;
+        let (pixels, showing) = shown(&near, &compose(s, s.items.clone(), near.rect));
+        assert!(pixels > 0);
+        assert_eq!(showing, 0, "n = −1524 ({ring:?}): the body hides the ring");
+    }
+}
+
+/// spec: S-0601 r32 claim 18 (a building's ring is a depth reader in the ground layer ordered by X +
+/// Y of the centre point plus the ring type's sort adjustment, S-0102 claim 5: where another depth
+/// reader overlaps it, the later one in the ground layer's order shows, S-0102 claim 6; a reader
+/// with a larger key, such as a unit in front of the building, is drawn after it) and S-0102 claim
+/// 10 (readers never store depth)
+#[test]
+fn claim_18_a_buildings_ring_orders_with_the_ground_layers_readers_by_its_key() {
+    let mut c = case(BOTH);
+    c.control(c.hut);
+    let at = glasnost_sim::mind::ring(&c.live.world, c.hut).unwrap().at;
+    // Vehicles with a ring height of 0 at the ring's point moved by d leptons on both map axes:
+    // their rings overlap the building's on screen, with keys 2d from its key.
+    let mut ringed = |d: i32, cell: i32| {
+        let id = testkit::spawn(
+            &mut c.live.world,
+            SimKind::Vehicle,
+            "RV3",
+            0,
+            testkit::mid(SIZE, cell, 6),
+            0,
+        );
+        c.live.world.obj_mut(id).unwrap().pos = Pos::new(at.x + d, at.y + d, at.z);
+        id
+    };
+    let behind = ringed(-32, -2);
+    let ahead = ringed(32, 2);
+    c.control(behind);
+    c.control(ahead);
+    c.tick();
+    let index = |p: Pos| {
+        let p = placed(Of::Ring, p);
+        c.scene
+            .items
+            .iter()
+            .position(|i| i.group == Group::Effects && (i.x, i.y) == p)
+            .expect("the ring is drawn")
+    };
+    let (b, h, a) = (index(c.pos(behind)), index(at), index(c.pos(ahead)));
+    assert!(
+        b < h,
+        "a reader with a smaller key is drawn before the building's ring"
+    );
+    assert!(
+        h < a,
+        "a reader with a larger key is drawn after the building's ring"
+    );
+    for i in [b, h, a] {
+        assert_eq!(c.scene.items[i].test, DepthTest::Reader);
+    }
+}
+
+/// spec: S-0601 r32 claim 18 (the takeover creates the controlled ring with a repeat factor of 1,
+/// so a ring type whose loop count is −1 plays until the ring ends) and S-0109 claim 7 (with a
+/// factor other than 1 it would stop after at most 254 passes) and S-0601 scenario MC13 part a
+/// (the ring still shows after more than 254 passes)
+#[test]
+fn claim_18_an_endless_ring_type_plays_on_past_254_passes() {
+    let mut c = case(BOTH);
+    c.control(c.hut);
+    c.tick();
+    let first = c.ring();
+    // RINGX's four stages last at most 4 ticks each, so 255 passes take at most 4080 ticks.
+    for _ in 0..4200 {
+        c.live.world.tick += 1;
+        c.live.after_tick();
+    }
+    let inputs = c.data.inputs();
+    c.live.redraw(&inputs, &mut c.scene);
+    assert_eq!(c.ring().at, first.at, "the ring still shows");
+    assert_eq!(c.live.counts.anims, 1, "the same ring");
+}
+
+/// spec: S-0601 r32 claim 18 (a ring shown again is a display-only animation: its end makes no
+/// follow-up switch; it is drawn, advances and ends as S-0109 gives for the ring's type otherwise)
+/// and S-0109 claim 15 (the ring of a control's start is an ordinary animation: its last pass ends
+/// with the follow-up switch). Seam: the ring of a control's start is the original's own
+/// animation, which the drawing plays in the simulation's place (S-0109 claim 28)
+#[test]
+fn claim_18_a_ring_shown_again_makes_no_follow_up_switch() {
+    let mut c = case_with(BOTH, "", "LoopCount=1\nNext=PERMX\n");
+    c.control(c.rv1);
+    c.tick();
+    assert_eq!(c.ring().of, Of::Ring);
+    let mut switched = false;
+    for _ in 0..40 {
+        c.tick();
+        switched |= c.rings().iter().any(|d| d.of == Of::Perma);
+    }
+    assert!(switched, "the first ring switches to its follow-up type");
+    assert!(c.rings().is_empty(), "and the follow-up type ends");
+    c.live.world.obj_mut(c.rv1).unwrap().on_map = false;
+    c.tick();
+    c.live.world.obj_mut(c.rv1).unwrap().on_map = true;
+    c.tick();
+    assert_eq!(c.ring().of, Of::Ring, "the ring is shown again");
+    for _ in 0..40 {
+        c.tick();
+        assert!(
+            c.rings().iter().all(|d| d.of == Of::Ring),
+            "a ring shown again does not switch to its follow-up type"
+        );
+    }
+    assert!(c.rings().is_empty(), "it ends after its pass");
+}
+
+/// spec: S-0601 r32 claim 18; S-0102 claims 10 and 13: the GPU map path draws a building's ring,
+/// a depth reader with the replaced depth adjustment, as the CPU reference does.
 /// Needs a GPU adapter (software is fine); skipped without one unless `GLASNOST_REQUIRE_GPU=1`.
 #[test]
 fn the_gpu_draws_a_buildings_ring_as_the_cpu_does() {
