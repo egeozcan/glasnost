@@ -1290,12 +1290,34 @@ pub fn heading_point(w: &World, id: ObjectId) -> Option<Pos> {
                 // spec: S-0503 claim 20 (r29, Q-3235: a hovering vehicle's searches, S-0212 claims 20 to 23, look for D's cell, not the cell the object is in at the time of the search)
                 return Some(p);
             }
-            // spec: S-0606 claim 4 (a vehicle approaching a bunker heads for the docking point)
-            crate::depot::heading_point(w, id, t)
-                .or_else(|| crate::structures::bunker::heading_point(w, id, t))
-                .or_else(|| w.obj(t).map(|x| x.pos))
+            object_point(w, id, t)
         }
     }
+}
+
+/// The point object `t` supplies to unit `id`'s locomotion as its
+/// destination: a depot's docking point in depot contact (S-0314 claim
+/// 18), a bunker's in bunker contact (S-0606 claim 4); for a building and a
+/// walking or driving unit, S-0208 claim 27's point ([`crate::lift::lifter_point`]);
+/// otherwise the object's position. None when `t` is not in the game.
+pub fn object_point(w: &World, id: ObjectId, t: ObjectId) -> Option<Pos> {
+    // spec: S-0314 claim 18 (a vehicle in depot contact heads for the docking point, not the building's position)
+    // spec: S-0606 claim 4 (a vehicle approaching a bunker heads for the docking point)
+    if let Some(p) = crate::depot::heading_point(w, id, t)
+        .or_else(|| crate::structures::bunker::heading_point(w, id, t))
+    {
+        return Some(p);
+    }
+    let x = w.obj(t)?;
+    let ground = matches!(
+        crate::lift::current_locomotor(w, id),
+        Some(Locomotor::Walk | Locomotor::Drive)
+    );
+    if x.kind == Kind::Building && ground {
+        // spec: S-0208 claim 27 (r82, Q-3317: a building gives an infantry unit's or a vehicle's locomotion S-0506 claim 14's heading point asked for that unit: its docking point by S-0607 claim 7's precedence with the helipad, unit-repair or vehicle-bunker flag, its centre otherwise, the unit-reload flag alone included; Q-3353 open: a driver's readings compute it again from its position and contacts then)
+        return Some(crate::lift::lifter_point(w, t, id));
+    }
+    Some(x.pos)
 }
 
 /// The cell a unit's searches look for: a walker's object locomotor point's
