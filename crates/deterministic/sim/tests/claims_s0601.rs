@@ -2298,3 +2298,32 @@ fn claim_16_each_damaging_pulse_reports_its_rocking_draw() {
     mind::overload_turn(&mut w, m);
     assert!(rocks(&w).is_empty());
 }
+
+// spec: S-0601 claim 18 (r32, A building's ring: at the building's centre point, S-0204 claim 4, raised above the building's own height by 104 leptons times its art height field; the type's ring-height field takes no part), its Constants row "building ring height per art height level" (104 leptons) and its Import mapping row Height (absent: 2)
+#[test]
+fn claim_18_a_buildings_ring_rises_by_its_art_height() {
+    let mut r = rules();
+    for (name, height) in [("HUTH0", Some(0)), ("HUTH5", Some(5)), ("HUTHX", None)] {
+        building(&mut r, name, |b| {
+            b.foundation = Some([3, 2]);
+            b.combat.immune_to_psionics = Some(false);
+            b.combat.mind_control_ring_offset = Some(500);
+            b.art_height = height;
+        });
+    }
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let c = veh(&mut w, "CTRL3", BETA, 0, 0);
+    for (name, levels, dx) in [("HUTH0", 0, -8), ("HUTH5", 5, 2), ("HUTHX", 2, 6)] {
+        let hut = put(&mut w, Kind::Building, name, ALPHA, dx, 4);
+        assert!(mind::take(&mut w, c, hut), "{name} taken");
+        let p = w.obj(hut).unwrap().pos;
+        let ring = mind::ring(&w, hut).unwrap();
+        assert!(ring.building);
+        assert_eq!(
+            ring.at,
+            Pos::new(p.x + 256, p.y + 128, p.z + 104 * levels),
+            "{name}: the centre point, raised by 104 per art height level"
+        );
+        mind::release(&mut w, c, hut);
+    }
+}
