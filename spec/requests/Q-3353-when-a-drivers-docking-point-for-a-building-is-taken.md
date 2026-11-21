@@ -1,8 +1,9 @@
 ---
 id: Q-3353
 title: When a driving vehicle's docking point for a building destination is taken
-status: open
+status: answered
 related: [S-0207, S-0208, S-0212, S-0606, S-0607]
+answered-by: [S-0207]
 ---
 
 ## Need
