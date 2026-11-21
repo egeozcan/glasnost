@@ -114,11 +114,11 @@ const ARMY_KINDS: [Kind; 3] = [Kind::Vehicle, Kind::Infantry, Kind::Aircraft]; /
 /// while its spend on them, times this, is under its spend on the rest of
 /// its army: at most about a fifth of the army's credits go to units that
 /// never join a wave.
-const SPENT_SHARE: i64 = 4; // design: own AI (#449, B12): a person's army is mostly units that fight together
+const SPENT_SHARE: i64 = 4; // nocite: design: own AI (#449, B12): a person's army is mostly units that fight together
 
 /// [`SPENT_SHARE`] at the hard level ([`Script::spend_less_alone`]): about
 /// a ninth of the army's credits at most.
-const HARD_SPENT_SHARE: i64 = 8; // design: own AI (#449, B12): a stronger player throws fewer units away
+const HARD_SPENT_SHARE: i64 = 8; // nocite: design: own AI (#449, B12): a stronger player throws fewer units away
 
 /// Ticks between two thinks.
 pub const THINK_PERIOD: i32 = 15; // nocite: tuning of our own opponent
