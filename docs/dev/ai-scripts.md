@@ -314,13 +314,23 @@ its plan's harvesters do not stand (`short` in the army round), and hard's plan 
 hard stood with no army unit until after tick 4 500, and easy's first strike, five infantry at
 about tick 3 500, took its base apart.
 
-- **The early guard** (`Tuning::early`, hard only): while the house has fewer than `early` army
-  units on the ground, and the brain orders no infantry this think, the siege orders the
-  cheapest infantry army type it can build. The type must not be one sent alone
-  (`spent_alone`, an engineer among them), and its line must be free. The money in hand, less
-  what the running items still owe, must pay for it, so the harvesters are not starved. Only
-  the infantry line is used, so the vehicle line stays free for the harvesters. Once the brain's
-  own army round runs, it fills the free lines first and the guard adds nothing.
+- **The early guard, tried and dropped.** Hard only: while the house had fewer than six army
+  units on the ground and the brain ordered no infantry, the siege ordered the cheapest infantry
+  army type not sent alone, with the money in hand beyond what the running items owed. In the
+  development round it took the easy rush away (42-0-6 against `siege:easy`) and added eight
+  victories, but its pair with `default:hard` fell from 0.740 to 0.635 (map 2: 3-4-9). A watch
+  of one of those games (map 2, seed 10) showed hard at two refineries all game with the guard
+  and at six or seven on the base: the money the guard spent early was the money of the
+  refineries by the new fields. It was reverted.
+- **More factories when rich** (`Tuning::rich`, hard only). The same watch on the base showed
+  hard from tick 19 500 on with 3 000 to 9 566 credits in hand and an army of 6 to 12. Only one
+  infantry and one vehicle line ran, and with no superweapon to save for, nothing else drew on
+  the money. Each more factory of a kind shortens the build times of that kind (S-0403
+  claim 6), as a person with money to spare builds a second war factory. With at least `rich`
+  credits in hand, the siege orders the cheapest factory it can build and place, of the kind
+  (infantry or vehicles) it owns fewer of, vehicles on a tie, up to three of each kind. It
+  does so only when the house is not short of power or selling, no building is ordered this
+  think and the building line is free.
 
 ## The tournament
 
