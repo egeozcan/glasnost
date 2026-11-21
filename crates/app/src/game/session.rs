@@ -3031,10 +3031,8 @@ impl Session {
         let hovered = self
             .frame_hover()
             .and_then(|h| h.1)
-            // spec: S-0516 claim 26 (a fully cloaked object the viewer neither owns nor senses, or a building at fade level 15 it does not sense, cannot be hovered; #66)
-            .filter(|&id| {
-                glasnost_sim::cloak::view::clickable(&self.play.game.world, id, self.play.eye(id))
-            });
+            // spec: S-0516 r36 claim 26 (a fully cloaked object the viewer neither owns nor senses, or a building at fade level 15 it neither owns nor senses, cannot be hovered; #66)
+            .filter(|&id| pointing::cloak_clickable(&self.play.game.world, id, self.play.eye(id)));
         self.update_name_tip();
         let selection = self.play.selection.clone();
         let digits = self.play.group_digits();
