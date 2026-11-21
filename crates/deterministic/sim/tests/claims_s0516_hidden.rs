@@ -195,7 +195,12 @@ fn claim_26_r36_the_owner_picks_and_selects_its_own_building_at_level_15() {
     run(&mut w, 30);
     assert!(stage(&w, own) >= 15);
     assert!(targeting::selectable_by(&w, own, Some(ALPHA)), "kept");
-    assert!(!view::deselects(&w, own, CloakEvent::Reevaluated, Some(ALPHA)));
+    assert!(!view::deselects(
+        &w,
+        own,
+        CloakEvent::Reevaluated,
+        Some(ALPHA)
+    ));
 }
 
 // spec: S-0516 r36 claim 26 (an order of V's whose target is its own building at fade level 15 takes it as its target as at a lower fade level) and CS9 part e (the action and order over the own building at level 15 are those at a lower level unless another refusal applies: here both levels are hidden levels, S-0516 Terms, so S-0516 claim 24's refusal is alike at both)
