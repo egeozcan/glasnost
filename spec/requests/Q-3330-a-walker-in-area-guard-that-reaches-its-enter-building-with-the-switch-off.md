@@ -1,9 +1,9 @@
 ---
 id: Q-3330
 title: A walker in area guard that reaches the building of its queued enter, switch off
-status: open
+status: answered
 related: [S-0208, S-0215, S-0605]
-answered-by: []
+answered-by: [S-0208]
 ---
 
 ## Need
