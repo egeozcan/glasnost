@@ -304,6 +304,24 @@ easy beat normal (normal 0.406) while hard led normal 0.833 and easy 0.760; with
 superweapons dropped and easy on one harvester and strikes of six, the order holds: normal leads
 easy 0.635, hard leads normal 0.542 and easy 0.625.
 
+### Hard, script AS2
+
+Script AS2 took the siege's hard level further toward 2000 Elo, with the same rules of fair play.
+Its baseline is AS1's certifying round on the base: `siege:hard` at 1801.2 (163-37-40). Its
+losses on map 0 were mostly early: twelve of 23 ended between ticks 6 000 and 9 300, ten of them
+against `siege:easy`. A watch of one (`siege-watch`) showed why. The brain builds no army while
+its plan's harvesters do not stand (`short` in the army round), and hard's plan keeps three. So
+hard stood with no army unit until after tick 4 500, and easy's first strike, five infantry at
+about tick 3 500, took its base apart.
+
+- **The early guard** (`Tuning::early`, hard only): while the house has fewer than `early` army
+  units on the ground, and the brain orders no infantry this think, the siege orders the
+  cheapest infantry army type it can build. The type must not be one sent alone
+  (`spent_alone`, an engineer among them), and its line must be free. The money in hand, less
+  what the running items still owe, must pay for it, so the harvesters are not starved. Only
+  the infantry line is used, so the vehicle line stays free for the harvesters. Once the brain's
+  own army round runs, it fills the free lines first and the guard adds nothing.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
@@ -320,6 +338,13 @@ easy 0.635, hard leads normal 0.542 and easy 0.625.
 - **Elo:** every entrant starts at 1500; after all games are played, the games are taken in their
   fixed order and both entrants move by 32 · (score − expected), score 1, ½ or 0, expected
   1 / (1 + 10^((R_other − R_own) / 400)).
+- **Order-free Elo** (script AS2): the Elo above depends on the order of the games (an entrant's
+  last games weigh most), so the report adds a line with each entrant's mean final Elo over 100
+  seeded shuffles of the games (`ai_tournament::order_free_ratings`). The games are first put in
+  the order of their job (ground, seed, pair, start, side) and result, so the line does not
+  depend on the order they came in; shuffle *n* is a Fisher-Yates shuffle drawn from a small
+  generator of our own (splitmix64) seeded with *n*. The line is a second view only: the goal
+  measure stays the Elo in the table.
 - **Output:** `report.txt` (no timing lines, so the same options give the same text whatever
   `threads=` is; `tests/ai_tournament.rs` checks it on the fixture) and one replay per game,
   `replays/game-NNN.replay`, to `out=` (default `local-lane/ai-issues/b9/tournament/`).

@@ -503,3 +503,29 @@ differs after tick 594) and was regenerated (157e2f2). The other eight are byte-
 | 1 why country index 1 fields half the army | **Setup.** The paradrop-off probe mirror (maps 0, 2 and 8, seeds 7 to 14, cap 27 000, 96 games) scores 0.620 (37-45-14) for country index 0; the normal mirror 0.781 (55-40-1). **What is alike.** Both countries buy about the same army (20995 against 20646 credits a game) and fire a first wave alike, and their fighting ground types survive alike. **What differs.** Country index 1 spends 45.7 % of its army's credits on units sent alone and lost on use (bomb, suicide, charge, designator, engineer), country index 0 21.9 %. So country index 1 stands with 5529 credits of army a game against 8867. **Cause.** The round ranks by fewest living, and a spent-alone type has none standing once used; country index 1's list holds four such types | none (findings) | lane files only: `tour-nn-base`, `tour-nn-p1`, `tour-nn-p1d` and `tour-nn-p2off` (probe reads: spend by type, tagged; hashes equal to `tour-nn-p1`'s) |
 | 2 the fix | fixed. Probe mirror 0.620 to 0.516 (26-47-23), under the 0.60 bar. Country index 1 sends 2.99 waves a game (1.77 before) and stands with 6799 credits of army. Standard mirror 0.781 to 0.771 (56-36-4): the country paradrop, a rules asymmetry, stays | `scripted.rs` army round: the types `spent_alone` names are offered only while their spend times `SPENT_SHARE` (4) is under the rest of the army's spend, where a kind has another type (about a fifth of the army's credits). A person's orders and economy only | `tests/spent_alone.rs`: `the_round_builds_a_fighter_once_the_spent_share_is_full` (failed on the base code first), `the_round_still_builds_a_spent_type_within_the_share` |
 | 3 the levels told apart | not met for one pair; handed back. Same criterion as B11 (each pair at least 0.60, Elo hard, normal, easy). Base: 0.719, 0.781, 0.594 (hard over normal already under), Elo 1390.9 / 1545.6 / 1563.5 (easy / normal / hard). With the fix: 0.812, 0.812, 0.531. H1 (kept): 0.812, 0.812, 0.552, Elo 1305.0 / 1562.0 / 1633.0; on seeds 11 to 14 0.781, 0.812, 0.531, Elo 1391.8 / 1498.5 / 1609.7. Hard over normal by hard's country: 16-7-1 on country index 0, 2-10-12 on country index 1 (seeds 11 to 14: 14-9-1, 1-12-11), so the country gap is what is left. H2 (a plan of 4 harvesters at hard) gave 0.594 but cost hard 9 of 24 games against easy on country index 0, since the army is held back until the plan's harvesters stand; dropped (2972f76 removed its test a690c74). Try 3 (four wanted at hard beside the army) did not bind on a large field; dropped before any commit. B11's E1 and E2 stay | H1: at hard `Brain::think_from` sets the memo flag `Script::spend_less_alone`, and the share is `HARD_SPENT_SHARE` (8, about a ninth). Easy and normal use 4 | `tests/spent_alone.rs`: `hard_keeps_a_smaller_spent_share_than_normal` (failed on the base code first) |
+
+## Script AS2
+
+Issue #449, the siege's second batch: its hard level toward 2000 Elo in the tournament, playing
+fair. Notes in [ai-scripts.md](../dev/ai-scripts.md#hard-script-as2). The default script and the
+shared code it runs are unchanged; the siege's own code and tests change, and the tournament
+report gains one line. Base 6cffcc6.
+
+**Measurement**, fixed before the first round:
+
+- **Baseline cert-0:** AS1's certifying round on the base (seeds 11 to 14, the six entrants,
+  720 games).
+- **Certifying round:** `ai-tournament game=install maps=0,2,8 seeds=15-18 ticks=27000 threads=2`
+  with `default:easy,default:normal,default:hard,siege:easy,siege:normal,siege:hard`. Seeds 15 to
+  18 are not used in development. The goal is `siege:hard`'s final Elo in the report at 2000 or
+  more.
+- **Development rounds:** `siege:hard` against `siege:normal`, `siege:easy`, `default:easy` and
+  `default:hard`, one two-entrant tournament each, on maps 0, 2 and 8, seeds 7 to 10 (192 games).
+- **A clear gain:** the score over the 192 games (win 1, draw ½) up at least 0.03 on the best kept
+  round, or 8 more victories, with no pair down more than 0.06.
+- **Stop rule:** the goal met, or three development rounds in a row with no clear gain.
+
+| part | confirmed | change | test |
+|---|---|---|---|
+| order-free Elo | the table's Elo takes the games in their fixed order, so the last games weigh most (AS1: `default:easy` rated above `default:hard`, which led their pair) | `ai_tournament::order_free_ratings`: the mean final Elo over 100 seeded shuffles of the games, put first in the order of their job and result; one more report line. The table and its Elo are unchanged | `tests/ai_tournament.rs`: `the_order_free_ratings_do_not_depend_on_the_games_order` |
+| the early guard | cert-0: 12 of `siege:hard`'s 23 losses on map 0 end between ticks 6 000 and 9 300; a watch of game 173 shows no army unit before tick 4 500, the brain's army round waiting for the plan's three harvesters, and `siege:easy`'s five infantry taking the base | `Tuning::early` (hard only): below that many army units on the ground, the siege orders the cheapest infantry army type that is not sent alone, on a free line, with the money in hand beyond what the running items owe | `tests/siege.rs`: `hard_guards_its_base_before_its_harvesters_stand` |
