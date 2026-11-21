@@ -327,10 +327,11 @@ about tick 3 500, took its base apart.
   infantry and one vehicle line ran, and with no superweapon to save for, nothing else drew on
   the money. Each more factory of a kind shortens the build times of that kind (S-0403
   claim 6), as a person with money to spare builds a second war factory. With at least `rich`
-  credits in hand, the siege orders the cheapest factory it can build and place, of the kind
-  (infantry or vehicles) it owns fewer of, vehicles on a tie, up to three of each kind. It
-  does so only when the house is not short of power or selling, no building is ordered this
-  think and the building line is free.
+  credits in hand, the siege orders the cheapest factory it can build, place and pay for, of
+  the kind (infantry or vehicles) it owns fewer of, vehicles on a tie, up to three of each
+  kind. The first factory of each kind stays the brain's own plan. It does so only when the
+  new factory would not leave the house short of power, no building is ordered this think and
+  the building line is free.
 
 ## The tournament
 
