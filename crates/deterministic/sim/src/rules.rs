@@ -2015,7 +2015,7 @@ fn building_rules(
         units_self_heal: bt.units_gain_self_heal.unwrap_or(0),
         // spec: S-0306 Import mapping (TargetCoordOffset absent: 0, 0, 0; Height absent: 2)
         aim_shift: bt.target_coord_offset.unwrap_or([0; 3]),
-        art_height: bt.art_height.unwrap_or(2), // spec: S-0306 Import mapping (Height absent: 2)
+        art_height: bt.art_height.unwrap_or(2), // spec: S-0306 Import mapping and S-0601 Import mapping (Height absent: 2; S-0601 claim 18's building ring reads it too)
         voxel_turret: b(bt.turret_anim_is_voxel),
         voxel_barrel: b(bt.barrel_anim_is_voxel),
         // spec: S-0313 claim 7 (a pixel shift of (65535, 65535) counts as not given)
