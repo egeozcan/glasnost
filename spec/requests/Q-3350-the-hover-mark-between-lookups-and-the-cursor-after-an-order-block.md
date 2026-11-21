@@ -1,9 +1,9 @@
 ---
 id: Q-3350
 title: The hover mark between lookups, and the cursor's image after an order block hides it
-status: open
+status: answered
 related: [S-0214, S-0111, S-0201]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need
