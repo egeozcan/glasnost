@@ -102,10 +102,6 @@ pub struct Tuning {
     /// 0: never. A person who has waited long for an edge takes a near-even
     /// fight rather than none.
     pub patience: i32,
-    /// Army units on the ground below which the siege orders infantry for
-    /// the base itself while the brain orders none ([`Siege::early_guard`]);
-    /// 0: never.
-    pub early: usize,
 }
 
 /// The tuning of level `level`.
@@ -124,7 +120,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             recall: 0,
             economy: false,
             patience: 0,
-            early: 0,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -139,7 +134,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             recall: 0,
             economy: false,
             patience: 0,
-            early: 0,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -154,8 +148,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             recall: 50,
             economy: true,
             patience: 3000,
-            // nocite: design: own AI (#449): six army units on the ground, as many as easy's first strike, trained at the barracks while the harvesters come
-            early: 6,
         },
     }
 }
@@ -286,50 +278,6 @@ impl Siege {
             && !self.eyes.busy(w, c)
         {
             out.push(Order::Build { what: c });
-        }
-    }
-
-    /// The early guard (design: own AI, #449): while the house has fewer
-    /// than `early` army units on the ground and the brain orders no
-    /// infantry this think, the cheapest infantry army type the house can
-    /// build that it does not send alone (`scripted::spent_alone`, an
-    /// engineer among them), on a free line, when the money in hand beyond
-    /// what its running items still owe pays its price. The brain's army
-    /// round waits for the plan's harvesters; a person who expects an early
-    /// raid trains a few soldiers at the barracks meanwhile, and leaves the
-    /// vehicle line and the money to the harvesters.
-    fn early_guard(&self, w: &World, early: usize, out: &mut Vec<Order>) {
-        let eyes = &self.eyes;
-        let standing = eyes
-            .of_role(w, Role::Army)
-            .into_iter()
-            .filter(|&id| w.obj(id).is_some_and(|o| o.kind != Kind::Aircraft))
-            .count();
-        let ordered = out
-            .iter()
-            .any(|o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry));
-        if standing >= early || ordered {
-            return;
-        }
-        let house = eyes.house;
-        let owed: i32 = w
-            .econ
-            .lines
-            .lines
-            .iter()
-            .filter(|l| l.house == house)
-            .filter_map(|l| l.item.as_ref())
-            .filter(|i| !i.done() && i.hold == production::Hold::None)
-            .map(|i| i.owed)
-            .fold(0i32, i32::saturating_add);
-        let spare = w.houses[usize::from(house.0)].credits.saturating_sub(owed);
-        if let Some(t) = eyes
-            .candidates(w, Role::Army)
-            .into_iter()
-            .filter(|&t| t.kind == Kind::Infantry && !scripted::spent_alone(w, t))
-            .find(|&t| !eyes.busy(w, t) && production::price(w, house, t) <= spare)
-        {
-            out.push(Order::Build { what: t });
         }
     }
 
@@ -675,9 +623,6 @@ impl AiScript for Siege {
         }
         if !t.superweapons {
             self.no_superweapons(w, &mut out);
-        }
-        if t.early > 0 {
-            self.early_guard(w, t.early, &mut out);
         }
         if acts {
             self.command(w, level, &busy, &mut out);
