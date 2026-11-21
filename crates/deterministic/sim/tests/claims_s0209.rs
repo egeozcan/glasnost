@@ -1211,18 +1211,18 @@ fn r89_w20_c1_a_failed_re_path_within_one_cell_keeps_movement_in_progress() {
     for _ in 0..(4 * r + 10) {
         tick::step(&mut w);
         let c = computations(&trace::take(&w), m);
-        if let Some(&(t, mode, res)) = c.first() {
-            if res != path::Search::Found {
-                assert_eq!(c.len(), 1, "one computation in F");
-                assert_eq!(
-                    mode,
-                    path::Mode::Blocked,
-                    "a re-path for the moving blocker"
-                );
-                assert_eq!(res, path::Search::SearchFailed, "past the gate");
-                f = Some(t);
-                break;
-            }
+        if let Some(&(t, mode, res)) = c.first()
+            && res != path::Search::Found
+        {
+            assert_eq!(c.len(), 1, "one computation in F");
+            assert_eq!(
+                mode,
+                path::Mode::Blocked,
+                "a re-path for the moving blocker"
+            );
+            assert_eq!(res, path::Search::SearchFailed, "past the gate");
+            f = Some(t);
+            break;
         }
     }
     let f = f.expect("a failed re-path");

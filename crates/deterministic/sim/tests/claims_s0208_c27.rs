@@ -142,13 +142,14 @@ fn cell_of((x, y): (i32, i32)) -> CellXY {
     CellXY::new(x.div_euclid(256), y.div_euclid(256))
 }
 
+/// A unit's three points: its stored point, its searches' goal cell and its
+/// heading point.
+type Points = (Option<(i32, i32)>, Option<CellXY>, Option<(i32, i32)>);
+
 /// The walker's points after the assignment: its stored object point (the
 /// locomotor destination, S-0208 Terms), its searches' goal cell (claim
 /// 25) and its heading point (S-0212 Terms).
-fn walker_points(
-    w: &World,
-    u: ObjectId,
-) -> (Option<(i32, i32)>, Option<CellXY>, Option<(i32, i32)>) {
+fn walker_points(w: &World, u: ObjectId) -> Points {
     (
         walk::object_locomotor_point(w, u).map(xy),
         path::search_goal(w, u),
@@ -158,10 +159,7 @@ fn walker_points(
 
 /// The driver's points after the assignment: its installed goal (S-0207
 /// claim 25), its searches' goal cell and its heading point.
-fn driver_points(
-    w: &World,
-    v: ObjectId,
-) -> (Option<(i32, i32)>, Option<CellXY>, Option<(i32, i32)>) {
+fn driver_points(w: &World, v: ObjectId) -> Points {
     (
         drive::goal(w, v).map(xy),
         path::goal_cell(w, v),
