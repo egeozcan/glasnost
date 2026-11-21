@@ -355,7 +355,7 @@ fn raised(p: Pos, h: i32) -> Pos {
     Pos::new(p.x, p.y, p.z + h)
 }
 
-/// spec: S-0601 claim 18 (a controlled object carries the rules' controlled-animation type,
+/// spec: S-0601 r32 claim 18 (a controlled object carries the rules' controlled-animation type,
 /// raised above a mobile object by its type's ring height in leptons) and Constants (the default
 /// ring height, 140 leptons, for a type without the key); S-0109 claims 22 and 26
 #[test]
@@ -377,7 +377,7 @@ fn claim_18_a_controlled_vehicle_shows_the_ring_type_raised_by_its_ring_height()
     assert_eq!(c.live.counts.anims, 2, "one animation per ring");
 }
 
-/// spec: S-0601 claim 18 (a permanently controlled object carries the permanent-controlled-animation
+/// spec: S-0601 r32 claim 18 (a permanently controlled object carries the permanent-controlled-animation
 /// type, also when it is controlled as well) and design: render (#122) (the rings come from the
 /// control records alone: none for a record whose object is gone or is off the map)
 #[test]
@@ -412,7 +412,7 @@ fn claim_18_a_permanently_controlled_object_shows_the_permanent_type() {
     assert_eq!(c.live.counts.anims, 2);
 }
 
-/// spec: S-0601 claim 18 (attached to the object and following it) and S-0109 claim 22 (its
+/// spec: S-0601 r32 claim 18 (attached to the object and following it) and S-0109 claim 22 (its
 /// position is the owner's plus the displacement it had when attached)
 #[test]
 fn claim_18_the_ring_follows_its_object() {
@@ -430,7 +430,7 @@ fn claim_18_the_ring_follows_its_object() {
     assert_eq!(c.live.counts.anims, 1, "the same animation moved");
 }
 
-/// spec: S-0601 claim 18 (the ring is removed at release, claim 9; when the object leaves the game
+/// spec: S-0601 r32 claim 18 (the ring is removed at release, claim 9; when the object leaves the game
 /// the ring goes with it) and S-0109 *Changes for other specs* (the S-0601 claim 18 entry: it ends
 /// at each event of claim 22's *End with the owner* list: destroyed, gone off the map, removed)
 #[test]
@@ -463,7 +463,8 @@ fn claim_18_the_ring_goes_at_release_and_with_its_object() {
 /// again whenever the controlled object is on the map, not destroyed and neither cloaking nor
 /// cloaked; the ring shown again is a new animation, created as at the start of the control, its
 /// creation and playback draws from the unsynchronised stream, changing no game state) and S-0109
-/// claims 1, 3 and 5 (a new playback starts at its first image frame, with claim 3's draw)
+/// claims 1, 3 and 5 (a new playback starts at its first image frame, with claim 3's draw); S-0601
+/// r32 claim 18 (*A ring shown again*)
 #[test]
 fn claim_18_each_return_of_the_ring_starts_a_new_playback() {
     use glasnost_sim::cloak::CloakState;
@@ -520,7 +521,8 @@ fn claim_18_each_return_of_the_ring_starts_a_new_playback() {
 
 /// spec: S-0109 *Changes for other specs* (the S-0601 claim 18 entry: the ring is drawn, advances
 /// and ends as S-0109 gives for the ring's type) and S-0109 claims 7 and 16 (a type with one pass
-/// ends after it): an ended ring does not start again while its object stays controlled
+/// ends after it) and S-0601 r32 claim 18: an ended ring does not start again while its object stays
+/// controlled
 #[test]
 fn claim_18_a_ring_whose_type_ends_stays_gone_while_the_control_lasts() {
     let mut c = case(BOTH);
@@ -534,7 +536,7 @@ fn claim_18_a_ring_whose_type_ends_stays_gone_while_the_control_lasts() {
     assert_eq!(c.live.counts.anims, 1);
 }
 
-/// spec: S-0601 claim 18 (the ring is the rules' type): with no type named nothing is drawn, and a
+/// spec: S-0601 r32 claim 18 (the ring is the rules' type): with no type named nothing is drawn, and a
 /// type the art does not list is an animation without a sprite, which draws nothing (S-0109 Edge
 /// cases)
 #[test]
