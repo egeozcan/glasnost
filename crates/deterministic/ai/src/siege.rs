@@ -102,6 +102,9 @@ pub struct Tuning {
     /// 0: never. A person who has waited long for an edge takes a near-even
     /// fight rather than none.
     pub patience: i32,
+    /// Credits in hand from which the siege adds a factory of the army's
+    /// kinds (`Siege::more_factories`); 0: never.
+    pub rich: i32,
 }
 
 /// The tuning of level `level`.
@@ -120,6 +123,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             recall: 0,
             economy: false,
             patience: 0,
+            rich: 0,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -134,6 +138,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             recall: 0,
             economy: false,
             patience: 0,
+            rich: 0,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -148,6 +153,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             recall: 50,
             economy: true,
             patience: 3000,
+            rich: 0,
         },
     }
 }

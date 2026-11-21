@@ -13,7 +13,7 @@ use glasnost_ai::{fixture, game::Game};
 use glasnost_map::CellXY;
 use glasnost_sim::econ::shroud;
 use glasnost_sim::orders::{self, Order};
-use glasnost_sim::rules::{Behaviour, Kind};
+use glasnost_sim::rules::{Behaviour, FactoryKind, Kind};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{AiDifficulty, AiSeat, HouseId, ObjectId, Pos, Target, World};
 
@@ -309,4 +309,52 @@ fn an_outmatched_strike_is_called_home() {
         })
         .collect();
     assert!(!called.is_empty(), "the strike is called home: {got:?}");
+}
+
+/// House 0's factory buildings on the map that make `kind` (not naval).
+fn factories(w: &World, kind: FactoryKind) -> usize {
+    w.objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(0)) && o.on_map && o.kind == Kind::Building)
+        .filter(|o| {
+            w.rules()
+                .buildings
+                .get(o.type_index as usize)
+                .is_some_and(|b| b.factory == Some(kind) && !b.naval)
+        })
+        .count()
+}
+
+/// House 0's infantry and vehicle factories after `ticks` of play at
+/// `level` from the base, with `credits` in hand at the start.
+fn factories_when_rich(level: AiDifficulty, credits: i32, ticks: i32) -> (usize, usize) {
+    let mut w = base_up();
+    w.houses[0].credits = credits;
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    play(&mut w, &mut s, level, ticks);
+    (
+        factories(&w, FactoryKind::Infantry),
+        factories(&w, FactoryKind::Vehicle),
+    )
+}
+
+// design: own AI (#449): at hard, with money to spare in hand, the siege adds factories of the army's kinds (S-0403 claim 6: more factories of a kind, shorter build times), up to three of each; normal and easy do not
+#[test]
+fn hard_adds_factories_when_rich() {
+    // nocite: test data of our own (money enough for the base, the army and more factories; a few minutes of play)
+    let (credits, ticks) = (40_000, 6000);
+    let (inf, veh) = factories_when_rich(AiDifficulty::Hard, credits, ticks);
+    assert!(
+        inf.max(veh) >= 2,
+        "hard adds a factory when rich: {inf} infantry, {veh} vehicle"
+    );
+    // nocite: design: own AI (#449): three of each kind at most
+    assert!(inf <= 3 && veh <= 3, "{inf} infantry, {veh} vehicle");
+    let (n_inf, n_veh) = factories_when_rich(AiDifficulty::Normal, credits, ticks);
+    assert!(
+        n_inf.max(n_veh) <= 1,
+        "normal adds none: {n_inf} infantry, {n_veh} vehicle"
+    );
+    assert_eq!(tuning(AiDifficulty::Normal).rich, 0);
+    assert_eq!(tuning(AiDifficulty::Easy).rich, 0);
 }
