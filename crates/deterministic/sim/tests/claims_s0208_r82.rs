@@ -11,11 +11,10 @@ use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::structures::bunker;
-use glasnost_sim::world::{HouseId, ObjectId, Pos, Target, World};
+use glasnost_sim::world::{ObjectId, Pos, Target, World};
 use glasnost_sim::{save, superweapons, testkit, tick};
 
 const SIZE: i32 = 30;
-const ALPHA: HouseId = HouseId(0);
 
 fn register(r: &mut Ruleset, reg: &str, name: &str) {
     let l = r.registries.entry(reg.into()).or_default();
