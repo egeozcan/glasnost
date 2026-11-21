@@ -106,8 +106,14 @@ pub const DUEL_DIAGONAL_SEED: u32 = 8;
 /// occupancy record change the play from tick 76 of seed 2 on): seed 2
 /// then ends at tick 11757 with no charger order and no support beam.
 /// Seed 3 is the first of 1 to 16 that plays all its ticks and exercises
-/// every ability (`try_seeds`).
-pub const M6C_SEED: u32 = 3;
+/// every ability (`try_seeds`). Moved from 3 at sim issues batch S47
+/// (S-0208 claim 27, a building's centre or docking point for a walker or
+/// driver, and S-0208 r89, Q-3329 and Q-3330, no end-of-update assignment
+/// while a walker's movement is in progress; seed 3's hashes part from main between ticks 10 and
+/// 20): seed 3 then ends at tick 8528, and six seeds of 1 to 16 end early
+/// where one did before. Seed 2 is the first of 1 to 16 that plays all its
+/// ticks (smallest counter 4) and exercises every ability (`try_seeds`).
+pub const M6C_SEED: u32 = 2;
 
 /// Ticks of the full run of the M6c duel (shorter than the other duels'
 /// games: every ability is exercised well before it).

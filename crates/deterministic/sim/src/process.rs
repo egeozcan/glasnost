@@ -698,6 +698,10 @@ pub fn late_start(w: &mut World, id: ObjectId) {
     if !matches!(kind, Kind::Infantry | Kind::Vehicle) || o.health <= 0 {
         return;
     }
+    // spec: S-0208 Edge cases (r89, Q-3330: a walker that goes in at its arrival with enter queued goes in with the behaviours it has and keeps the queued enter until S-0605 claim 13's queued move replaces it) and S-0605 claim 9 (inside it takes no turns): no late start once it has gone into an absorber in this update
+    if o.structure.absorbed_in.is_some() {
+        return;
+    }
     let empty = o.beh.current.is_none() && o.beh.queued.is_none();
     if o.beh.queued.is_none() && !(kind == Kind::Infantry && empty) {
         return;
@@ -1292,7 +1296,8 @@ pub fn end_of_update_check(w: &mut World, id: ObjectId) {
         let walk = crate::lift::current_locomotor(w, id) == Some(crate::rules::Locomotor::Walk);
         // design: C7-P6 hold (a walker held for this destination waits for its retry delay)
         let held = o.path.held_for == Some(d);
-        if walk && !held && !moving(w, id) {
+        // spec: S-0215 claim 22 (not moving, S-0208 Terms: the locomotor's movement in progress) and S-0208 claim 25 (r89, The blockage delay at a failed search, Q-3329: a re-path that fails within one cell keeps the movement in progress, so no end-of-update assignment follows it, in move too)
+        if walk && !held && !crate::occupancy::in_progress(w, id) {
             // spec: S-0208 claim 25 (r75: the assignment clears the stored path, ends the retry delay, gives the locomotor destination again, for an object its movement point at that moment, and makes a prone walker ask for get-up, S-0107 claim 15)
             crate::econ::assign_destination(w, id, Some(d));
             if let Some(ob) = w.obj_mut(id) {

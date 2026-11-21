@@ -1118,29 +1118,172 @@ fn kept_after_failure(assign: bool) -> (World, ObjectId, i32, i32) {
     (w, m, first, failed)
 }
 
-// spec: S-0209 claim 10 (r76: the blockage delay starts afresh only after a walking step or at an assignment of a destination; a failed search after which the walker keeps its destination, S-0212 claim 23 row 3, is not an assignment, so the delay counts on from the first moving-blocker answer: the search that avoids the blocker comes no earlier than the blockage delay after that answer and earlier than the blockage delay after the failure); S-0209 claim 7 (a blocked answer at the first ask searches at once)
-// The walker here is in move, which S-0208 claim 25 (r75) gives an end-of-update assignment after that failure; Q-3329 asks whether that assignment restarts the delay.
+// spec: S-0208 claim 25 (r89, The blockage delay at a failed search, Q-3329: for a walker in move that keeps its destination after a failed fresh search, the end-of-update assignment starts the blockage delay of S-0209 claim 10 afresh, as every assignment does, so its next wait counts from the first moving-blocker answer after that assignment: the search that avoids the blocker comes no earlier than the blockage delay after the failure) and scenario W20 part c2; S-0209 claim 7 (a blocked answer at the first ask searches at once)
 #[test]
-#[ignore = "Q-3329"]
-fn seams7b_a_failed_search_that_keeps_the_destination_leaves_the_blockage_delay_running() {
+fn r89_the_end_of_update_assignment_after_a_failed_search_restarts_the_blockage_delay() {
     let (mut w, m, first, failed) = kept_after_failure(false);
     let d = w.rules().general.blockage_delay;
     let r = w.rules().general.retry_delay;
     assert!(r <= d / 2 - 3, "C5's set-up: R = {r}, D = {d}");
-    assert_eq!(
-        w.obj(m).unwrap().path.blocked_since,
-        Some(first),
-        "not restarted by the failure"
+    let since = w.obj(m).unwrap().path.blocked_since;
+    assert!(
+        since.is_none_or(|s| s > failed),
+        "restarted after {first}: {since:?}"
     );
     let pos = w.obj(m).unwrap().pos;
     let g = avoids_at(&mut w, m, 4 * d).expect("it avoids");
-    assert!(g >= first + d, "the whole delay from the first answer: {g}");
-    assert!(g < failed + d, "not counted from the failure: {g}");
+    assert!(g >= failed + d, "the whole delay after the failure: {g}");
     assert_eq!(
         w.obj(m).unwrap().pos.cell(),
         pos.cell(),
         "it has not walked"
     );
+}
+
+/// The corridor walker of [`blocked_walker`], on its way from (0, 0) to
+/// D = (0, -1), a flat cell two height levels up that is next to it, so the
+/// step between them is refused (S-0212 claim 10) and claim 15's approach
+/// to a blocked destination does not end a search beside it in the
+/// corridor, while D lies in the walker's reach region (S-0212 claim 3). D
+/// is joined to the corridor only through (1, -1), a flat cell at D's
+/// level, and the slope cell (2, -1) one level up, which the corridor's
+/// slope cells (1, 0) and (2, 0) lead onto (the coarse search joins the
+/// diagonal from (1, 0) too, claim 13b, so (1, 0) is a slope for the cell
+/// search to take it): every route goes through (1, 0), where a moving
+/// blocker stands (scenario W20 part c's set-up in small). Once the wait has
+/// started and the re-path that kept the route has started the retry delay,
+/// (1, -1) becomes road with a zero foot multiplier, which leaves the reach
+/// regions as they are (its category stays passable) and closes the only
+/// way in. Returns the game with the trace on, the walker and the tick the
+/// wait started.
+fn walled_in_destination() -> (World, ObjectId, i32) {
+    let (mut w, m) = corridor_scene("Mope", |s| {
+        s.ruleset.sim.land_types.insert(
+            LandType::Road,
+            LandRow {
+                foot: Some(glasnost_rules::sim::Decimal("0".into())),
+                ..Default::default()
+            },
+        );
+        // spec: S-0208 claim 25 (r75: a cell destination is cleared at a failed fresh search only when D is less than the close-enough distance; half a cell keeps the neighbouring cell)
+        s.ruleset.sim.general.close_enough = Some(glasnost_rules::sim::Decimal("0.5".into()));
+        s.set_cell(cell(0, -1), 0, 2);
+        s.set_cell(cell(1, -1), 0, 2);
+        s.set_cell(cell(2, -1), common::slope_tile(1), 1);
+        s.set_cell(cell(1, 0), common::slope_tile(1), 0);
+        s.set_cell(cell(2, 0), common::slope_tile(1), 0);
+    });
+    order_move(&mut w, m, cell(0, -1));
+    stand_in(&mut w, m, cell(0, 0));
+    assert!(!steps(&w, m).is_empty(), "the route through (1, 0)");
+    w.cells.claim_vehicle(cell(1, 0), Layer::Ground, true);
+    tick::step(&mut w);
+    let first = w.tick - 1;
+    assert_eq!(w.obj(m).unwrap().path.blocked_since, Some(first));
+    w.cells.grid.get_mut(cell(1, -1)).unwrap().land = glasnost_map::terrain::land::ROAD;
+    glasnost_sim::regions::cell_changed(&mut w, cell(1, -1));
+    trace::switch_on(&mut w);
+    (w, m, first)
+}
+
+/// The path computations of `m` in the events, with their tick, mode and
+/// result.
+fn computations(events: &[trace::Event], m: ObjectId) -> Vec<(i32, path::Mode, path::Search)> {
+    events
+        .iter()
+        .filter(|e| e.unit == m)
+        .filter_map(|e| match e.what {
+            trace::What::Search { asked, result, .. } => Some((e.tick, asked, result)),
+            _ => None,
+        })
+        .collect()
+}
+
+// spec: S-0208 claim 25 (r89, The blockage delay at a failed search, Q-3329: a re-path of S-0209 claim 10 that fails within one cell of the destination, S-0212 claim 23 third row, drops the stored path and the retry delay runs, but the walker keeps its movement in progress, its locomotor destination and its running blockage delay; no end-of-update assignment follows, in move too; its next search, once the retry delay has run out, is a fresh search, and when that fails the rules for a failed fresh search apply) and scenario W20 part c1; S-0209 claim 10 and S-0212 claim 23 (r89 Changes)
+#[test]
+fn r89_w20_c1_a_failed_re_path_within_one_cell_keeps_movement_in_progress() {
+    let (mut w, m, first) = walled_in_destination();
+    let r = w.rules().general.retry_delay;
+    let d = cell(0, -1);
+    let home = w.obj(m).unwrap().pos;
+    // F: the first tick whose path computation finds none.
+    let mut f = None;
+    for _ in 0..(4 * r + 10) {
+        tick::step(&mut w);
+        let c = computations(&trace::take(&w), m);
+        if let Some(&(t, mode, res)) = c.first()
+            && res != path::Search::Found
+        {
+            assert_eq!(c.len(), 1, "one computation in F");
+            assert_eq!(
+                mode,
+                path::Mode::Blocked,
+                "a re-path for the moving blocker"
+            );
+            assert_eq!(res, path::Search::SearchFailed, "past the gate");
+            f = Some(t);
+            break;
+        }
+    }
+    let f = f.expect("a failed re-path");
+    let o = w.obj(m).unwrap();
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(d)),
+        "kept within one cell (row 3)"
+    );
+    assert_eq!(o.beh.current, Some(Behaviour::Move), "move is current");
+    assert!(o.path.steps.is_empty(), "the stored path is dropped");
+    assert!(
+        path::delay_runs(&w, m),
+        "the retry delay runs at the end of F"
+    );
+    assert!(
+        occupancy::in_progress(&w, m),
+        "movement in progress is kept"
+    );
+    assert_eq!(
+        o.path.blocked_since,
+        Some(first),
+        "the running blockage delay is kept"
+    );
+    // No computation while the retry delay runs; then a fresh one, which finds none.
+    let mut next = None;
+    for _ in 0..(r + 3) {
+        let running = path::delay_runs(&w, m);
+        tick::step(&mut w);
+        let c = computations(&trace::take(&w), m);
+        if let Some(&x) = c.first() {
+            assert_eq!(c.len(), 1, "one computation");
+            next = Some(x);
+            break;
+        }
+        assert!(running || path::delay_runs(&w, m), "searched once run out");
+    }
+    let (s, mode, res) = next.expect("a search once the delay has run out");
+    assert!(s > f, "after F");
+    assert!(
+        s >= f + r - 1,
+        "not while the delay runs: {s} against F {f}, R {r}"
+    );
+    assert_eq!(mode, path::Mode::Fresh, "a fresh search");
+    assert_eq!(res, path::Search::SearchFailed);
+    // Then the failed fresh search's rules: in move, a search on every tick with no retry delay left.
+    for k in 1..=5 {
+        assert!(
+            !path::delay_runs(&w, m),
+            "no retry delay at the end, tick {k}"
+        );
+        assert_eq!(w.obj(m).unwrap().dest, Some(Target::Cell(d)));
+        assert_eq!(w.obj(m).unwrap().pos, home, "it stays");
+        tick::step(&mut w);
+        let c = computations(&trace::take(&w), m);
+        assert_eq!(
+            c,
+            vec![(s + k, path::Mode::Fresh, path::Search::SearchFailed)],
+            "one failed fresh search per tick"
+        );
+    }
 }
 
 // spec: S-0209 claim 10 (r76: control: an assignment of the destination the walker already has, made in the tick of that failed search, does start the delay afresh, from the first moving-blocker answer after it)

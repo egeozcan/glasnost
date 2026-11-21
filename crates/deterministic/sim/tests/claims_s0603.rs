@@ -562,7 +562,7 @@ fn click_walk_in_end_to_end() {
 fn claim_4_5_vehicle_consumed_on_the_foundation() {
     let mut w = game();
     let b = grnd(&mut w, "GRND", 0, 0, 0);
-    let car = put(&mut w, Kind::Vehicle, "BUGGY", 0, 7, 0);
+    let car = put(&mut w, Kind::Vehicle, "BUGGY", 0, 7, 1);
     let c0 = credits(&w, ALPHA);
     send(&mut w, car, b);
     let mut last = None;
@@ -574,10 +574,11 @@ fn claim_4_5_vehicle_consumed_on_the_foundation() {
         tick::step(&mut w);
     }
     assert!(gone(&w, car), "consumed");
-    // Driving west along the row of the building's top-left cell, the first foundation cell is its east one; the building's own cell is never reached.
+    // spec: S-0208 claim 27 (r82: the building gives the vehicle's locomotion its centre, in foundation cell (1, 1) of a 2 × 2 foundation)
+    // Driving west along the row of that cell, the first foundation cell is it, the south-east one; the building's own cell is never reached.
     assert_eq!(
         last,
-        Some(at(1, 0)),
+        Some(at(1, 1)),
         "consumed in the first foundation cell"
     );
     // F1 by hand: trunc(trunc(700 × 1 × 1) × 0.5) = 350.
@@ -1367,7 +1368,8 @@ fn quirk_no_arrival_recheck_both_positions() {
 fn claim_15_sale_while_bound() {
     let mut w = game();
     let b = grnd(&mut w, "GRNDS", 0, 0, 0);
-    let u = put(&mut w, Kind::Infantry, "WALKER", 0, 2, 0);
+    // One straight step west into the cell of the building's centre, the cell its search looks for (S-0208 claim 27).
+    let u = put(&mut w, Kind::Infantry, "WALKER", 0, 2, 1);
     send(&mut w, u, b);
     sell::sell(&mut w, ALPHA, b);
     assert!(bound(&w, u, b), "not sent away");

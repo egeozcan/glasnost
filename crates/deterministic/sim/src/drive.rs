@@ -144,8 +144,9 @@ const GOAL_HEIGHT_TOLERANCE: i32 = 208;
 
 /// The movement point an order-level destination supplies to locomotion
 /// (S-0207 claim 25): a cell's centre at its surface height, plus 416 on a
-/// high-bridge cell; for an object, the depot's docking point when it
-/// supplies one (S-0314 claim 18), else its position.
+/// high-bridge cell; for an object, [`path::object_point`]: the depot's or
+/// bunker's docking point in contact (S-0314 claim 18, S-0606 claim 4), a
+/// building's point of S-0208 claim 27, else its position.
 fn supplied_point(w: &World, id: ObjectId, dest: Target) -> Option<Pos> {
     match dest {
         Target::Cell(c) => {
@@ -157,9 +158,8 @@ fn supplied_point(w: &World, id: ObjectId, dest: Target) -> Option<Pos> {
         }
         // spec: S-0314 claims 17 and 18 (an accepted enter order supplies the depot's docking point, even in the vehicle's own cell)
         // spec: S-0606 claim 4 (a vehicle approaching a bunker it is in contact with drives toward the docking point)
-        Target::Object(t) => crate::depot::heading_point(w, id, t)
-            .or_else(|| crate::structures::bunker::heading_point(w, id, t))
-            .or_else(|| w.obj(t).map(|x| x.pos)),
+        // spec: S-0208 claim 27 (r82, Q-3317: a building supplies a vehicle's locomotion its docking point or its centre, S-0207 claim 25)
+        Target::Object(t) => path::object_point(w, id, t),
     }
 }
 

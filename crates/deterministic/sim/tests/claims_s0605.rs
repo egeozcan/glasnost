@@ -1547,6 +1547,16 @@ fn claim_16_back_in_after_release_both_positions() {
 /// that decides its rest (S-0215 claim 14 rows 7 and 9). Returns whether it
 /// went back in.
 fn released_comes_back(survives: bool, ignores: bool, threshold: i32) -> bool {
+    released_scene(survives, ignores, threshold).3
+}
+
+/// [`released_comes_back`]'s scene, returning the game, the walker, the
+/// building and whether it went back in.
+fn released_scene(
+    survives: bool,
+    ignores: bool,
+    threshold: i32,
+) -> (World, ObjectId, ObjectId, bool) {
     let mut r = fate_rules(|q| {
         q.enter_nearest_survives_absorption = survives;
         q.walker_search_ignores_queued_enter = ignores;
@@ -1561,14 +1571,38 @@ fn released_comes_back(survives: bool, ignores: bool, threshold: i32) -> bool {
     assert_eq!(absorb::holds_instruction(&w, n), survives);
     try_release(&mut w, b);
     assert!(w.obj(n).unwrap().on_map, "let out");
-    until(&mut w, 800, |w| inside(w, n, b))
+    let back = until(&mut w, 800, |w| inside(w, n, b));
+    (w, n, b, back)
 }
 
-// spec: S-0208 Edge cases (r75, quirks.walker_search_ignores_queued_enter off: the walker goes in under S-0605 claim 6 once enter is current); an armed neutral walker with an area-guard threshold of 0 rests in area guard (S-0215 claim 14 row 9), which is not ready while it walks (S-0215 claim 11), so its arrival in the building's cell comes in area guard; Q-3330 asks what follows
+// spec: S-0208 Edge cases (r89, Q-3330, quirks.walker_search_ignores_queued_enter off: for S-0605 claim 6's test a queued enter counts as current while the off form gives the walker enter's mission target, so a walker whose current behaviour does not let it be ready while it moves, such as area guard, goes in at its arrival with the behaviours it has; at its release S-0605 claim 13's queued move replaces the queued enter); an armed neutral walker with an area-guard threshold of 0 rests in area guard (S-0215 claim 14 row 9), which is not ready while it walks (S-0215 claim 11)
 #[test]
-#[ignore = "Q-3330"]
 fn claim_16_switch_off_back_in_from_area_guard() {
-    assert!(released_comes_back(true, false, 0));
+    let (mut w, n, b, back) = released_scene(true, false, 0);
+    assert!(back, "it walks back in from area guard");
+    assert_eq!(
+        cur(&w, n),
+        Some(Behaviour::AreaGuard),
+        "area guard current inside"
+    );
+    assert_eq!(
+        queued(&w, n),
+        Some(Behaviour::Enter),
+        "enter still queued inside"
+    );
+    try_release(&mut w, b);
+    assert!(w.obj(n).unwrap().on_map, "let out again");
+    assert_eq!(
+        queued(&w, n),
+        Some(Behaviour::Move),
+        "claim 13's move replaces the queued enter"
+    );
+}
+
+// spec: S-0208 claim 26 and Edge cases (r89: with quirks.walker_search_ignores_queued_enter on, the default, the queued enter gives no mission target, the walker in area guard gets a substitute cell near the building and does not walk back in)
+#[test]
+fn claim_16_switch_on_no_back_in_from_area_guard() {
+    assert!(!released_comes_back(true, true, 0));
 }
 
 // spec: S-0605 claim 8 (the vehicle's full acceptance test on arrival: refused when full, its destination cleared, guard queued, a forced scatter request)

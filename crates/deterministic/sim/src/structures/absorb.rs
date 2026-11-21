@@ -459,12 +459,19 @@ pub(crate) fn approach(w: &mut World, u: ObjectId, b: ObjectId) -> bool {
 // Going inside (claims 6 to 8)
 
 /// The absorbing building an arriving infantry unit tries to enter (claim
-/// 6): it is in *enter*, stands in a cell that holds the building, and the
-/// building is its destination, its target, or the building in its
-/// destination cell.
+/// 6): it is in *enter* (or has *enter* queued where the off form of
+/// `quirks.walker_search_ignores_queued_enter` reads it), stands in a cell
+/// that holds the building, and the building is its destination, its
+/// target, or the building in its destination cell.
 fn arrival_building(w: &World, u: ObjectId) -> Option<ObjectId> {
     let o = w.obj(u)?;
-    if o.kind != Kind::Infantry || !o.on_map || o.beh.current != Some(Behaviour::Enter) {
+    if o.kind != Kind::Infantry || !o.on_map {
+        return None;
+    }
+    // spec: S-0208 Edge cases (r89, Q-3330: for S-0605 claim 6's test a queued enter counts as current while the off form gives the walker enter's mission target)
+    let entering =
+        o.beh.current == Some(Behaviour::Enter) || crate::occupancy::reads_queued_enter(w, u);
+    if !entering {
         return None;
     }
     let cell = o.pos.cell();
