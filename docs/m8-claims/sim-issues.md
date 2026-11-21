@@ -2450,3 +2450,38 @@ Seams left:
 - Item 4 (S45's s7g9 parting in (10745, 21491]) was not started.
 
 The P3 census rule: the batch adds no saved field, so it makes or moves no back-reference of `World::census`.
+
+## Batch S48: the owner's own building at fade level 15 (S-0516 r36 claim 26), and S47's untraced moves
+
+Base main 44a6bab, not rebased. Item 1 builds S-0516 r36 claim 26, which closes R20's seam: none of the click and hover refusals applies to an object the viewing house owns, so the owner hovers, clicks, picks and selects its own building at fade level 15 that it does not sense. Item 2 traces four of S47's moves that S47 left untraced, between S47's base c985680 and its head eaf93ec.
+
+The work went in this order:
+1. Item 1: design (ea20d7d), tests (79ecb92), fix (37b8cd1).
+2. Item 2: traced only; no code change.
+
+The fix commit changes no test of its own item. With main's leave, it inverts one assertion in `crates/app/src/game/client_pointing_tests.rs`, which the fix turns red: the owner can now click its own building at fade level 15. The red was shown in a separate base worktree checked out at the test commit (`r1.txt`: the three claim 26 tests fail, 5 pass). Logs are in `local-lane/sim-issues/s48/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| S-0516 r36 claim 26, the owner's own building at fade level 15 (R20's seam) | `view::clickable` refused a building at fade level 15 that the viewing house does not sense, for its owner too, so the owner could not hover, click, pick or select it | fixed (37b8cd1; tests 79ecb92, red there: 3 of 8) | `cloak::view::clickable`: the fade-level-15 refusal, like the full-cloak one, applies only to a house that neither owns nor senses the building. `pickable`, `targeting::clickable_by` and `selectable_by` follow it. The claim 24 hidden-target refusal (`cloak::hidden_from`, levels 11 to 15, the owner too) is not changed | `claims_s0516_hidden.rs`: `claim_26_clicks_and_selection` (level 15: the owner picks it, an ally that does not sense it does not); `claim_26_r36_the_owner_picks_and_selects_its_own_building_at_level_15` (new: hover, pick and select for the owner; the select cursor and click; a not-allied and an allied other house refused; no re-evaluation deselect 30 ticks on); `claim_26_r36_an_order_onto_the_own_building_at_level_15_is_as_at_a_lower_level` (new: cursor and click at level 15 equal those at level 14, default and force-select). `client_pointing_tests.rs`: one assertion inverted |
+| Callers of `clickable`, `pickable` and `selectable_by` | Every caller passes the clicking or viewing house: the select offer (S-0214 claim 1), the click, G-table rows G2 and G10, tap (claim 32), and the client's per-tick selection filter. The change acts only for an owner's own building at level 15, which claim 26 settles in each case. Watch mode sees each object as its own house does: that is our design, not a spec question | checked | none | none; no request filed |
+| `pointing::cloak_clickable` (crates/app) | It is `owner || view::clickable(w, id, v)`, with `owner = v.is_some() && o.owner == v`. `clickable` now passes every owned object under the same guard and refuses a missing object, as the wrapper does, so the two agree for every input | can go (not touched) | none | none |
+| S47's duel-m7a move from tick 350 (seed 17) | Per-tick hashes first differ at tick 350. One object differs: infantry 28 (house 1, in *move*, holding a cell destination, arrived at 349, no walking target, no stored path, no failed search). Its speed fraction is 1 on base and 0 on head. S47 item 1 reads S-0215 claim 22's "not moving" as no movement in progress (S-0208 Terms, *Locomotor moving*; S-0107 Terms). A walker with a destination has movement in progress, so head makes no end-of-update assignment, where base assigned and set the fraction to 1 (S-0208 claim 25) | S47's rule as built; not a fault | none | none |
+| S47's duel-m7b move from tick 620 (seed 11) | Hashes differ at ticks 464, 465 and 616 to 620, and are equal from 466 to 615. At 464 one object differs: infantry 16 (house 1, arrived at 463), speed fraction 1 to 0, the same item 1 reading as duel-m7a. At 616 one object differs: infantry 9 (house 0, *guard* with *enter* queued, destination its own building 59). Only its object point differs, from the building's position (4992, 9088) to (5120, 9216): S-0208 claim 27 (r82, Q-3317), S47 item 3 | S47's rules as built; not a fault | none | none |
+| Two of S47's new M6c sweep early ends (seeds 3 and 1; head ends at 8528 and 8116, as S47 reported) | Both part at tick 16, at the same four objects. These are house 0's infantry 15 to 18, in *guard* with *capture* queued, each with a destination on a neutral 2×2 building. Only their object points differ, from the buildings' positions to their centres (+128, +128): S-0208 claim 27. The opening is seed-independent, so the first parting names claim 27 but does not explain the end ticks, which come thousands of ticks downstream | S47's rule as built; not a fault | none | none |
+
+**Formats:** none move. Save stays 170, AI game stays 151 and wire stays 13. The fix adds no state.
+
+**Goldens:** none move. The sim gate passes 17 on base and after.
+
+Lanes compare base 44a6bab, run in this worktree before any change, with 37b8cd1.
+
+**Oracle arena** (`--record all`, two threads): equal on base and after but for timings and out-dir names. Failing counts are M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0021 10 of 50, and M-0020 0 of 25 checked (28 rows).
+
+**Sweeps** (seeds 1 to 16): every per-seed line is equal on base and after. m6c's smallest minimum is 0 (early ends at seeds 1, 3, 6, 7, 9 and 13), m7a's is 1, and m7b's smallest drain minimum is 3.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games): all 36 "over after" lines are equal.
+
+Seams left: none from this batch. S47's seam "the m6c sweep's six new early ends are not traced" is now traced to a first tick for two of them (claim 27 at tick 16). The other four are not traced; the first parting is likely the same seed-independent tick 16.
+
+The P3 census rule: the batch adds no saved field, so it makes or moves no back-reference of `World::census`.
