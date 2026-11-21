@@ -3574,7 +3574,8 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                     // spec: S-0208 claim 25 (r68: the walker loses its destination in the same locomotion)
                     ob.dest = None;
                 }
-                if walker {
+                // spec: S-0208 claim 25 (r89, The blockage delay at a failed search, Q-3329: a re-path of S-0209 claim 10 that fails within one cell keeps the walker's movement in progress, its locomotor destination and its running blockage delay; one that clears the destination has none left to keep)
+                if walker && !repath {
                     // spec: S-0417 claim 17 (No path: a failed search that passes the gate ends the walking unit's movement in progress in that update, whether or not it keeps its destination; S-0212 claim 23, the sentence after its table)
                     ob.path.failed_for = ob.dest;
                 }

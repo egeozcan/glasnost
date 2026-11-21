@@ -1292,7 +1292,8 @@ pub fn end_of_update_check(w: &mut World, id: ObjectId) {
         let walk = crate::lift::current_locomotor(w, id) == Some(crate::rules::Locomotor::Walk);
         // design: C7-P6 hold (a walker held for this destination waits for its retry delay)
         let held = o.path.held_for == Some(d);
-        if walk && !held && !moving(w, id) {
+        // spec: S-0215 claim 22 (not moving, S-0208 Terms: the locomotor's movement in progress) and S-0208 claim 25 (r89, The blockage delay at a failed search, Q-3329: a re-path that fails within one cell keeps the movement in progress, so no end-of-update assignment follows it, in move too)
+        if walk && !held && !crate::occupancy::in_progress(w, id) {
             // spec: S-0208 claim 25 (r75: the assignment clears the stored path, ends the retry delay, gives the locomotor destination again, for an object its movement point at that moment, and makes a prone walker ask for get-up, S-0107 claim 15)
             crate::econ::assign_destination(w, id, Some(d));
             if let Some(ob) = w.obj_mut(id) {
