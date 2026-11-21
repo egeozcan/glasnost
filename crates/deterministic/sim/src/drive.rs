@@ -167,6 +167,12 @@ fn supplied_point(w: &World, id: ObjectId, dest: Target) -> Option<Pos> {
 /// give-up test (claim 15) measure to: the point the current move order
 /// leads to, at the deck's height when its cell is a high-bridge cell.
 fn move_destination(w: &World, id: ObjectId) -> Option<Pos> {
+    measured_point(w, id)
+}
+
+/// The point a driving vehicle's movement readings measure to: its move
+/// destination (S-0207 Terms), the point its destination supplies.
+pub fn measured_point(w: &World, id: ObjectId) -> Option<Pos> {
     // spec: S-0207 Terms (Move destination: on a high-bridge destination cell its height is the deck's height, the surface plus 416 leptons as for the supplied point of claim 25)
     supplied_point(w, id, w.obj(id)?.dest?)
 }
