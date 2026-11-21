@@ -301,9 +301,9 @@ fn claim_35_e_a_still_pointer_follows_a_unit_that_moves_away() {
     );
 }
 
-/// spec: S-0214 claim 35 (e) (while a left press is held the hover is not looked up again; a
-/// release is resolved at its own pixel, claim 26) and S-0111 Terms (*pointer object*, found as
-/// for *hovered*)
+/// spec: S-0214 r96 claim 35 (e) (while a left battlefield press is held the hover is not looked
+/// up again; a release is resolved at its own pixel, claim 26) and S-0111 Terms (*pointer object*,
+/// found as for *hovered*)
 #[test]
 fn claim_35_e_a_held_left_press_keeps_the_hover() {
     let (mut c, unit, p) = hovering();
@@ -322,8 +322,8 @@ fn claim_35_e_a_held_left_press_keeps_the_hover() {
     );
 }
 
-/// spec: S-0214 claim 35 (e) (while a left press is held the hover is not looked up again: also
-/// while the pointer moves with it, as a band-box drag does, claim 18)
+/// spec: S-0214 r96 claim 35 (e) (while a left battlefield press is held the hover is not looked
+/// up again: also while the pointer moves with it, as a band-box drag does, claim 18)
 #[test]
 fn claim_35_e_a_left_drag_keeps_the_hover() {
     let (mut c, unit, p) = hovering();
@@ -343,25 +343,9 @@ fn claim_35_e_a_left_drag_keeps_the_hover() {
     );
 }
 
-/// spec: S-0214 claim 35 (e) (only a held left press keeps the hover: with the right button held
-/// the hover is found again in every drawn frame)
-#[test]
-fn claim_35_e_a_held_right_press_does_not_keep_the_hover() {
-    let (mut c, unit, p) = hovering();
-    c.pointer_down(Button::Right, p);
-    lift_away(&mut c, unit, p);
-    let _ = c.frame();
-    assert_ne!(
-        hovered(&mut c),
-        Some(unit),
-        "looked up again under a right press"
-    );
-    c.pointer_up(Button::Right, p, Modifiers::default());
-}
-
-/// spec: S-0214 claim 35 (e) (while the game takes no player input the hover is not looked up
-/// again) and S-0201 Terms (*cycle*: a cycle takes the player's input; *stand-still*: in a
-/// single-player game no cycle runs while the options menu is open, claim 8)
+/// spec: S-0201 Terms (*stand-still*: no drawn frame of the game, so no frame's hover lookup; in a
+/// single-player game while the options menu is open, claim 8) and S-0214 r96 claim 35 (e) (the
+/// lookup is made for every drawn frame)
 #[test]
 fn claim_35_e_the_options_menu_keeps_the_hover() {
     let (mut c, unit, p) = hovering();
@@ -378,9 +362,9 @@ fn claim_35_e_the_options_menu_keeps_the_hover() {
     );
 }
 
-/// spec: S-0214 claim 35 (e) (while the game takes no player input the hover is not looked up
-/// again) and S-0201 claim 9 (in a single-player game no cycle runs while the window lacks the
-/// input focus) and Terms (*stand-still*)
+/// spec: S-0201 claim 9 (in a single-player game the game stands still while the window lacks
+/// the input focus) and Terms (*stand-still*: no drawn frame of the game, so no frame's hover
+/// lookup) and S-0214 r96 claim 35 (e) (the lookup is made for every drawn frame)
 #[test]
 fn claim_35_e_a_window_without_focus_keeps_the_hover() {
     let (mut c, unit, p) = hovering();
@@ -439,6 +423,9 @@ fn claim_35_e_a_held_press_leaves_no_mark_after_a_tick() {
         let _ = c.frame();
         assert_eq!(hovered(&mut c), None, "{b:?}: no mark after a tick");
         c.pointer_up(b, p, Modifiers::default());
+        // The left release selects the vehicle, and a selected object is not
+        // hovered (S-0111 Terms).
+        session_mut(&mut c).play.selection.clear();
         let _ = c.frame();
         assert_eq!(
             hovered(&mut c),
@@ -633,6 +620,12 @@ fn claim_35_e_an_order_block_hides_the_cursor() {
 #[test]
 fn claim_26_the_owner_hovers_and_targets_its_own_building_at_fade_15() {
     let (mut c, mcv) = game();
+    // Past the starting order block (S-0201 claim 14), in which no hover
+    // lookup is made (S-0214 r96 claim 35 (e)).
+    steps(&mut c, 400, |c| {
+        let w = &session(c).play.game.world;
+        w.tick > w.orders_blocked_through
+    });
     let s = session_mut(&mut c);
     let me = s.play.me();
     let own_b = place(s, mcv, Kind::Building, "POWR", (3, -3));
