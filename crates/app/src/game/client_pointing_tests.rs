@@ -520,11 +520,11 @@ fn empty_at(c: &mut Client, p: Point, d: (i32, i32)) -> Point {
     q
 }
 
-/// Q-3321. spec: S-0214 r96 claim 35 (e) (while a left battlefield press is held, the cursor shows
-/// the image that the press's own resolution at its pixel gave it, wherever the pointer goes and
-/// whatever happens to the object under it, its removal from play included; when claim 18's band
-/// box starts, outside route-editing mode, it becomes the ordinary arrow until the release) and
-/// scenario T27 parts (g) and (h)
+/// Q-3321. spec: S-0214 r101 claim 35 (e) (while a left battlefield press is held, the cursor
+/// shows the image that the press's own resolution at its pixel gave it, wherever the pointer goes
+/// and whatever happens to the object under it, its removal from play included; when claim 18's
+/// band box starts it becomes the ordinary arrow until the release) and scenario T27 parts (g) and
+/// (h)
 #[test]
 fn claim_35_e_a_held_left_press_keeps_its_image() {
     let (mut c, unit, p) = hovering_with_cursor();
@@ -569,8 +569,9 @@ fn claim_35_e_a_held_left_press_keeps_its_image() {
     );
 }
 
-/// Q-3321. spec: S-0214 r96 claim 35 (e) (the press's own resolution at its pixel, not the last
-/// lookup before the press, chooses the image a held left press keeps) and scenario T27 part (i)
+/// Q-3321. spec: S-0214 r101 claim 35 (e) (the press's own resolution at its pixel, not the last
+/// lookup before the press, chooses the image a held left press keeps; a right press keeps the
+/// last lookup's, as the test after the next shows) and scenario T27 part (i)
 #[test]
 fn claim_35_e_a_press_keeps_the_image_of_its_own_pixel() {
     let (mut c, _, p) = hovering_with_cursor();
@@ -590,7 +591,7 @@ fn claim_35_e_a_press_keeps_the_image_of_its_own_pixel() {
     );
 }
 
-/// Q-3321. spec: S-0214 r96 claim 35 (e) (during an order block the game hides the cursor, S-0111
+/// Q-3321. spec: S-0214 r101 claim 35 (e) (during an order block the game hides the cursor, S-0111
 /// claim 20) and S-0201 Terms (*order block*: the game hides the mouse pointer)
 #[test]
 fn claim_35_e_an_order_block_hides_the_cursor() {
