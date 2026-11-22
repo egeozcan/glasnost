@@ -3,7 +3,7 @@ id: Q-3374
 title: What a driving vehicle's readings measure to after a factory exit track that kept an order-level destination
 status: open
 related: [S-0207, S-0417, S-0212]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need
