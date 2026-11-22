@@ -334,6 +334,15 @@ about tick 3 500, took its base apart.
   leave the house short of power, it orders the power plant the plan builds next instead, as a
   person builds the plant first (on the synthetic skirmish every factory was held so, the
   brain building plants only once the house is short).
+- **A strike at a harmless building, checked.** An AI house counts as human-controlled, so its
+  units' own target searches pass an enemy building with no weapon (S-0309 table C, row
+  "harmless building"). The strike might then stand beside an enemy base without firing. A test
+  shows it does not: once the strike's units arrive they stand idle, and the brain's army part
+  orders each to attack the seen enemy it can hit. No change was needed.
+- **Where it stands.** The certifying round (seeds 15 to 18, the six entrants) put `siege:hard`
+  at 1734.0 (1715.2 order-free), top of the pool at a score of 0.790 (168-29-43, 115 victories),
+  but short of 2000. Its weakest pair is `siege:normal` (0.688) and its weakest country is
+  country 0 (0.679, against 0.900 on country 1).
 
 ## The tournament
 
