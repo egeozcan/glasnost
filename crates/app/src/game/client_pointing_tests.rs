@@ -1026,7 +1026,7 @@ fn claim_26_the_owner_hovers_and_targets_its_own_building_at_fade_15() {
         "the owner's click takes it as its target"
     );
     // The select offer over it (S-0516 r36 claim 26: a left click selects it under the ordinary
-    // rules) is the sim's `targeting::selectable_by`, a seam of crates/deterministic (Q-3322).
+    // rules) is the sim's `targeting::selectable_by`, which sim S48 made follow claim 26.
     s.play.selection.clear();
     c.pointer_moved(at);
     let _ = c.frame();

@@ -621,7 +621,8 @@ impl Play {
         // spec: S-0516 r36 claim 26 (the owner clicks its own building at fade level 15: an order whose target is it takes it as its target)
         let w = &self.game.world;
         match object.filter(|&id| {
-            targeting::selectable(w, id) && super::pointing::cloak_clickable(w, id, self.eye(id))
+            targeting::selectable(w, id)
+                && glasnost_sim::cloak::view::clickable(w, id, self.eye(id))
         }) {
             Some(id) => ClickOn::Object(id),
             None => ClickOn::Cell(cell),

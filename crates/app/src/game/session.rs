@@ -3149,7 +3149,9 @@ impl Session {
             .frame_hover()
             .and_then(|h| h.1)
             // spec: S-0516 r36 claim 26 (a fully cloaked object the viewer neither owns nor senses, or a building at fade level 15 it neither owns nor senses, cannot be hovered; #66)
-            .filter(|&id| pointing::cloak_clickable(&self.play.game.world, id, self.play.eye(id)));
+            .filter(|&id| {
+                glasnost_sim::cloak::view::clickable(&self.play.game.world, id, self.play.eye(id))
+            });
         if looked_up {
             // spec: S-0214 r101 claim 35 (e) and Terms (*hover mark*: a lookup gives the mark to the object it finds and takes it from every other object, and a lookup that finds no object leaves no object with it; a drawn frame that makes no lookup changes no mark, so the object found last keeps it until the next tick clears it)
             self.hover_mark = found;

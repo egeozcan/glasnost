@@ -796,6 +796,12 @@ struct LiveAnim {
     /// The depth adjustment its creator gave in place of its type's (a
     /// building's shot animation, S-0301 F8).
     z_adjust: Option<i32>,
+    /// The depth adjustment of the type it was created with, which a
+    /// follow-up switch keeps (S-0109 r49 claim 15); `None` for a name the
+    /// import does not list. Seam: an animation the drawing first meets
+    /// after its switch (one the simulation plays, adopted at a resume) has
+    /// its current type's, as the simulation keeps no created type.
+    created_z: Option<i32>,
     /// The ordinary animation in play it shows (S-0109 claim 28: the
     /// simulation plays it with the scenario stream, so its type, stage and
     /// position are the simulation's); one the simulation has removed
@@ -2714,6 +2720,8 @@ impl Live {
         let aq = AnimQuirks::from(&env.rules.quirks); // spec: S-0109 Edge cases
         let player = Player::new(name, play, first_update, drawn, &mut env, &aq);
         let sprite = entry.as_ref().is_some_and(|e| e.sprite);
+        // spec: S-0109 r49 claim 15 (the depth adjustment of the type it is created with, kept through a follow-up switch)
+        let created_z = entry.as_ref().map(|e| e.t.z_adjust);
         // spec: S-0102 claim 3 (an unattached animation is in its type's layer, default air)
         let layer = entry
             .as_ref()
@@ -2741,6 +2749,7 @@ impl Live {
             frame: None,
             shooter: None,
             z_adjust: None,
+            created_z,
             sim: None,
             created: self.world.tick,
             cause: "",
@@ -2996,7 +3005,7 @@ impl Live {
             };
             self.counts.anims += 1;
             let serial = self.anim_serial;
-            // spec: S-0601 claim 18 (the takeover creates the controlled ring with a repeat factor of 1, so a ring type of loop count −1 plays until the ring ends; a ring shown again is a new animation, created and attached as at the start of that control, with no loop delay; its creation draws of S-0109 claims 3 and 13 and every later playback draw come from the unsynchronised stream, our cosmetic stream). design: render (Q-3361) the permanent ring is created as the controlled one: no loop delay, repeat factor 1, no reverse request. Seam: the first ring of a control is the original's own animation, whose draws S-0109 claim 28 puts on the scenario stream; the simulation does not play it yet, so the drawing plays it too, from the cosmetic stream.
+            // spec: S-0601 r37 claim 18 (the takeover creates the controlled ring, and a permanent takeover the permanent ring, with no initial loop delay, a repeat factor of 1 and no reverse request, so a ring type of loop count −1 plays until the ring ends; the permanent ring stands, is attached and is layered as a mobile object's controlled ring, with its type's own depth adjustment: the two differ only in their type, Q-3361; a ring shown again is a new animation, created and attached as at the start of that control, with no loop delay; its creation draws of S-0109 claims 3 and 13 and every later playback draw come from the unsynchronised stream, our cosmetic stream). Seam: the first ring of a control is the original's own animation, whose draws S-0109 claim 28 puts on the scenario stream; the simulation does not play it yet, so the drawing plays it too, from the cosmetic stream.
             // design: render (S-0601 claim 18) the drawing finds the ring after the tick, so the ring's first update (S-0109 claims 5 and 29) is in the tick it is found in, the excluded update that follows at once
             self.create_anim(r.anim.as_bytes(), r.at, now, None, false);
             let again = self.ringed.get(&id) == Some(&control);
@@ -3007,7 +3016,7 @@ impl Live {
                 a.layer = super::slots::Layer::Ground;
                 a.cause = "a control ring";
                 if r.building {
-                    // spec: S-0601 claim 18 and Constants (on a building the takeover replaces the ring's animation depth adjustment, S-0102 claim 13, by −1024 depth units, whatever the ring type's own is; the ring stays a depth reader, S-0102 claim 10). design: render (Q-3362) the replacement holds through a follow-up switch
+                    // spec: S-0601 claim 18 and Constants (on a building the takeover replaces the ring's animation depth adjustment, S-0102 claim 13, by −1024 depth units, whatever the ring type's own is; the ring stays a depth reader, S-0102 claim 10); S-0109 r49 claim 15 (the replacement holds through a follow-up switch, Q-3362)
                     a.z_adjust = Some(-1024);
                 }
                 if again {
@@ -4394,7 +4403,8 @@ impl Live {
                             let idx = self.types.get(&k).copied().flatten()?;
                             Some((import_kind(k.0)?, idx))
                         }),
-                        z_adjust: a.z_adjust,
+                        // spec: S-0109 r49 claim 15 (after a follow-up switch the depth adjustment is the value set at creation: the creator's replacement, else the created type's own; the follow-up type's own is not read, Q-3362) and S-0102 claim 13
+                        z_adjust: a.z_adjust.or(a.created_z),
                     },
                 ))
             })

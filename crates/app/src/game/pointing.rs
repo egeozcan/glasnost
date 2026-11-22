@@ -40,15 +40,6 @@ pub fn nearest(
     best.map(|(_, id)| id)
 }
 
-/// Whether viewer `v` can hover and click the object as far as its cloak
-/// goes (S-0516 claim 26): an object `v` owns always, another only where
-/// [`glasnost_sim::cloak::view::clickable`] allows it.
-pub fn cloak_clickable(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
-    // spec: S-0516 r36 claim 26 (none of the refusals applies to an object that V owns: V hovers and clicks its own building at fade level 15, and an order whose target is it takes it as its target)
-    let owner = v.is_some() && w.obj(id).is_some_and(|o| o.owner == v);
-    owner || glasnost_sim::cloak::view::clickable(w, id, v)
-}
-
 /// Whether a viewer that does not own the chosen object can find it
 /// (S-0214 claim 35 (d)): not fully cloaked and unsensed, nor a building at
 /// fade level 15 unsensed (S-0516 claim 26), nor of an invisible type, nor

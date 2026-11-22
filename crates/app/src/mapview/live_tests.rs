@@ -10384,6 +10384,127 @@ fn a_view_animation_draws_its_follow_up_types_art() {
     assert!(seen.contains(&5), "TAILX's art after the switch: {seen:?}");
 }
 
+/// The depths of a view animation BOOMX (frames 2 × 2, art `boom`) and its
+/// follow-up TAILX (frames 5 × 5, art `tail`) as drawn, created by an
+/// animation event with the creator's depth adjustment `z_adjust`: BOOMX's
+/// first, then TAILX's once it shows.
+fn follow_up_depths(
+    boom: &str,
+    tail: &str,
+    z_adjust: Option<i32>,
+) -> (
+    glasnost_render::scene::ItemDepth,
+    glasnost_render::scene::ItemDepth,
+) {
+    use glasnost_render::scene::Group;
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let rules = format!("{RULES}[Animations]\n0=BOOMX\n1=TAILX\n");
+    let art = format!(
+        "{}[BOOMX]\nRate=900\nNext=TAILX\n{boom}[TAILX]\nRate=900\n{tail}",
+        super::tests::ART
+    );
+    let (mut import, catalogue, mut assets) = super::tests::context_full(&rules, &art);
+    import.arts.insert(
+        (Kind::Animations, 0),
+        super::tests::art_of("BOOMX", "boomx.shp"),
+    );
+    import.arts.insert(
+        (Kind::Animations, 1),
+        super::tests::art_of("TAILX", "tailx.shp"),
+    );
+    assets.insert(b"boomx.shp", shp((10, 10), 3, (2, 2), (4, 4)));
+    assets.insert(b"tailx.shp", shp((10, 10), 3, (5, 5), (2, 2)));
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let world = testkit::new_game(5);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, testkit::rules(), testkit::setup(5), Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    live.step();
+    live.world.effects.push(Effect::Anim {
+        name: "boomx".into(),
+        pos: Pos {
+            x: 5 * 256 + 128,
+            y: 5 * 256 + 128,
+            z: 0,
+        },
+        delay: None,
+        reverse: false,
+        z_adjust,
+        id: None,
+    });
+    live.after_tick();
+    let of_width = |scene: &Scene, w: u32| {
+        scene
+            .items
+            .iter()
+            .find(|i| i.group == Group::Effects && scene.images[i.image as usize].width() == w)
+            .map(|i| i.depth)
+    };
+    live.redraw(&inputs, &mut scene);
+    let first = of_width(&scene, 2).expect("BOOMX is drawn first");
+    for _ in 0..8 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        if let Some(d) = of_width(&scene, 5) {
+            return (first, d);
+        }
+    }
+    panic!("TAILX is never drawn");
+}
+
+/// The depth of an ordinary animation row at height 0 with no vertical draw
+/// shift and depth adjustment `z` (S-0102 claim 13).
+fn anim_depth(z: i32) -> glasnost_render::scene::ItemDepth {
+    glasnost_render::scene::ItemDepth::Profile {
+        profile: glasnost_render::compose::Profile::Upright,
+        bias: z - glasnost_render::projection::height_lift(0) - 2,
+        companion: None,
+    }
+}
+
+/// Q-3362. spec: S-0109 r49 claim 15 (at a follow-up switch the depth adjustment is unchanged: the
+/// depth adjustment of the type the animation was created with; the follow-up type's own is not
+/// read) and scenario AN31 part a; S-0102 claim 13. BOOMX's own +2000 holds after the switch to
+/// TAILX, whose own is 0, and BOOMX's own 0 holds after a switch to a TAILX of +2000.
+#[test]
+fn claim_15_a_view_animation_keeps_its_created_types_depth_adjustment() {
+    let (boom, tail) = follow_up_depths("ZAdjust=2000\n", "", None);
+    assert_eq!(boom, anim_depth(2000));
+    assert_eq!(tail, anim_depth(2000), "TAILX keeps BOOMX's +2000");
+    let (boom, tail) = follow_up_depths("", "ZAdjust=2000\n", None);
+    assert_eq!(boom, anim_depth(0));
+    assert_eq!(tail, anim_depth(0), "TAILX keeps BOOMX's 0");
+}
+
+/// Q-3362. spec: S-0109 r49 claim 15 (the depth adjustment after a switch is the creator's
+/// replacement where the creator replaced it) and S-0102 claim 13; S-0506 claim 19 (a rocket
+/// detonation's explosion is created with −15)
+#[test]
+fn claim_15_a_creators_depth_adjustment_holds_through_a_switch() {
+    let (boom, tail) = follow_up_depths("ZAdjust=2000\n", "ZAdjust=300\n", Some(-15));
+    assert_eq!(boom, anim_depth(-15));
+    assert_eq!(tail, anim_depth(-15), "TAILX keeps the creator's −15");
+}
+
 /// A lit building the game puts on the map lights the cells around it, and
 /// its light follows the events of S-0405 claim 9 (#152).
 /// spec: S-0104 claim 12 (building light sources; added, removed or changed relights the same
