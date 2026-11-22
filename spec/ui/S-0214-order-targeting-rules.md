@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 101
+revision: 104
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-21
+approved-on: 2026-11-22
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356, Q-2426, Q-3131, Q-3164, Q-3250, Q-3321, Q-3349, Q-3350]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754, Q-1987, Q-1988, Q-2140, Q-2356, Q-2426, Q-3131, Q-3164, Q-3250, Q-3321, Q-3349, Q-3350, Q-3369]
 supersedes: []
 ---
 
@@ -172,10 +172,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   claim's other conditions. Claim 35 (e) says how long the mark lasts. An object under the
   pointer is *hovered* (S-0111 Terms) but can lack the mark while no lookup is made.
 - **Battlefield press.** A press of claims 18, 26 and 27, of the left or the right button, that
-  begins inside the battlefield view, held until its release, until claim 34 (e) or (f) abandons it,
-  or until an order block begins (claim 35 (e)), whichever comes first (claims 18, 26, 27, 34 and 35
-  (e)). A left press that the route mode takes or refuses at the press (S-0213 claims 16b and 16d)
-  is not one. A *left battlefield press* is one of the left button.
+  begins inside the battlefield view while no order block is in force, held until its release, until
+  claim 34 (e) or (f) abandons it, or until an order block begins (claim 35 (e)), whichever comes
+  first (claims 18, 26, 27, 34 and 35 (e)). A left press that the route mode takes or refuses at the
+  press (S-0213 claims 16b and 16d) is not one, and neither is a press that begins during an order
+  block, even once the block has ended (claim 35 (e)). A *left battlefield press* is one of the left
+  button.
 - **Able to fire.** An own object that is armed, not disabled and not deactivated (S-0405 claims 13
   and 20). Falling (for example under a parachute) is part of neither this nor *movable*. A unit
   falling under a parachute takes orders, and carries them out once landed (S-0522 claim 17, whose
@@ -1545,8 +1547,18 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     block's end. Any other image that the first lookup after the block offers is a change of kind
     from the arrow (claim 22), so an animated image starts at its first frame, and an offer that
     keeps the previous image, as damaging entry does with `quirks.damaging_entry_cursor_retained` on
-    (claim 21), keeps the ordinary arrow (Q-3350). Input that gives no order, such as the view-arrow
-    scrolling of S-0201 claim 14, is S-0201's and is not changed here.
+    (claim 21), keeps the ordinary arrow (Q-3350). A left or right press that begins on the
+    battlefield view while an order block is in force is refused with the rest of the block's input:
+    it is not a battlefield press (Terms), even once the block has ended. So while its button stays
+    down after the block, the hover is looked up for every drawn frame, the cursor follows that
+    lookup, and the object found gets the hover mark, as with no press. A drag of that button after
+    the block starts no band box (claim 18) and no scroll drag (claim 27), and its release gives no
+    box, click, right click or order (Q-3369). During the block the name tip is blocked by the block
+    itself (S-0111 claims 20 and 26, with those claims' backing and ratings), so no tip shows then,
+    and such a press does not block the tip as a held battlefield press does: after the block, while
+    its button stays down, the tip shows once the pointer has moved and rested for 1000 ms, unless
+    another of that claim's blocks holds (Changes for other specs). Input that gives no order, such
+    as the view-arrow scrolling of S-0201 claim 14, is S-0201's and is not changed here.
 
     A hover lookup that finds an object gives it the *hover mark* (Terms), which S-0111 claim 3's
     hover health bar needs. The mark is cleared in every tick, and only a later lookup that finds
@@ -1640,13 +1652,16 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
       key held, and part m for the abandonment at an order block's start of a click press (run m1),
       a band box (m3), a scroll drag (m4) and a right press with no drag (m5), with the release of
       each giving nothing, the lookup with the button still down after the block, the first frame of
-      the image after the block and the kept arrow (m2). That a lookup takes the mark from every
-      other object is `unmeasured`, an engine design choice: in a single-player game, where every
-      drawn frame that makes a lookup follows a tick, it draws what any rule that gives the mark to
-      the object found draws, so no run there can tell it from another, and its other cases are
-      those of the Open question.
+      the image after the block and the kept arrow (m2), and part n for a press that begins during
+      an order block (Q-3369): the lookup, the hover mark and the cursor with its button still down
+      after the block (run n1 for the left button, n3 for the right) and no click at its release
+      (n1), no band box after a drag (n2), no right click (n3), no scroll drag (n4) and the name tip
+      not blocked (n5). That a lookup takes the mark from every other object is `unmeasured`, an
+      engine design choice: in a single-player game, where every drawn frame that makes a lookup
+      follows a tick, it draws what any rule that gives the mark to the object found draws, so no
+      run there can tell it from another, and its other cases are those of the Open question.
     - Confidence of *A held press and an order block*: medium for each part, `measurable` ones as
-      none of T27's parts f to m has been run, `unmeasured` ones for the reasons given. Low for a
+      none of T27's parts f to n has been run, `unmeasured` ones for the reasons given. Low for a
       cloaking or a (d) exclusion of the object under a held press, and the release's order then:
       only a removal from play was traced in the original (Open questions). Low for what the
       original does with a press that begins over the sidebar. Medium for the kept image outside the
@@ -1654,9 +1669,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
       Medium for the original's end of the held state at an abandonment under claim 34 (e): it was
       traced in the original, where that abandonment ends the press's held state as a release does,
       but no run has observed it. Medium for part (f)'s case, a design rule chosen with claim 34
-      (f). Medium for the parts of Q-3349 and Q-3350 that parts j to m play, as they have not been
-      run. Medium for taking the mark from every other object, a design rule chosen for bug-free
-      play: it gives the original's drawing wherever the original draws one frame per tick.
+      (f). Medium for the parts of Q-3349, Q-3350 and Q-3369 that parts j to n play, as they have
+      not been run. Medium for taking the mark from every other object, a design rule chosen for
+      bug-free play: it gives the original's drawing wherever the original draws one frame per tick.
 
 ## Formulas
 
@@ -1794,6 +1809,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 | Battlefield press held, game's window active | Another window starts receiving the mouse input | Press abandoned, nothing applied (claim 34 (e)) |
 | Battlefield press held | Window loses the input focus, or pointer reported with the button up and no release reported | Press abandoned, nothing applied (claim 34 (f)) |
 | Battlefield press held, a scroll drag active included | Order block begins | Press abandoned, nothing applied; a band box disappears and a drag does not go on after the block (claim 35 (e)) |
+| No battlefield press, order block in force | Left or right press on the battlefield view | Refused with its release: no battlefield press, so after the block the hover is looked up while the button stays down, and the release gives nothing (claim 35 (e)) |
 
 **Table C: battlefield cursor frames** (claims 21 and 22). These are frame numbers in the
 imported cursor image, not action numbers. The frame range of each action and its length are
@@ -3958,10 +3974,10 @@ readiness*, and Edge cases).**
   tank E. Each part says where they stand, and parts (k) and (m) add the objects they name. Every
   other cell is open and empty, and a tall stock tree stands on one cell for part (c). The script
   places the pointer at the view pixels given below and keeps it there, and presses no button or
-  key, except in parts (g) to (m). Each tick the recorder logs the cursor image shown, the pointer
+  key, except in parts (g) to (n). Each tick the recorder logs the cursor image shown, the pointer
   pixel, the view position, the position and height in leptons of V, J and E, and the cell under the
   pointer; it saves a screenshot of the battlefield view in each tick of parts (a) to (c) and (f) to
-  (m). In parts (f) to (m) it also logs, per tick, whether the cursor is shown, S's current
+  (n). In parts (f) to (n) it also logs, per tick, whether the cursor is shown, S's current
   behaviour and its target or destination, S's position, which objects are selected, the tick in
   which each object leaves play, and, from the screenshot, which objects show a health bar and
   whether a band box is drawn. Each screenshot and cursor record is labelled with the tick of the
@@ -3978,9 +3994,9 @@ readiness*, and Edge cases).**
   the pointer's position relative to that point, in pixels, negative to the left and upward; F10's
   Δ*x* and Δ*y* are −*o*ₓ and −*o*ᵧ. With S selected the cursor is the select cursor over V or J
   (claim 3), the attack cursor over E, and the move cursor over an empty open cell. Parts (a) to (e)
-  press no button; parts (g) to (m) press and release the left or the right button as they say. In
-  parts (j) and (m) the recorder also logs, for each drawn frame, the cursor image, its frame and
-  the wall-clock time at which the frame is presented.
+  press no button; parts (g) to (n) press and release the left or the right button as they say. In
+  parts (j), (m) and (n) the recorder also logs, for each drawn frame, the cursor image, its frame
+  and the wall-clock time at which the frame is presented.
 - *(a) Region edge and image pixels.* V stands still at the centre of its cell. The pointer is
   held for 30 ticks at each of the pointer places (0, −19), (0, −20), (4, −19), (5, −19), (8, −16),
   (9, −16), (−8, −16) and (−9, −16) from V's point. All of them lie outside V's cell, so only V's
@@ -4190,6 +4206,45 @@ readiness*, and Edge cases).**
   unchanged throughout. Falsified by S not selected after the release, which the right click of a
   press still held would give (claim 26). A run in which the view scrolls or the drag-scroll cursor
   shows decides nothing.
+- *(n) A press that begins during an order block (Q-3369).* As (f), with S selected. In each run the
+  script presses a button 20 ticks before *T*₂ and holds it, without moving unless the run says
+  otherwise, until 40 ticks after *T*₂, or in n5 as that run says, then releases it where the
+  pointer then is. The pointer is placed at the run's press pixel 30 ticks before *T*₁, in n5 at the
+  start of its rest, and stays there until the run moves it. In run n1 the press is the left
+  button's, at V's point. Expected: no health bar on V in any tick from *T*₁ + 2 to *T*₂ − 1, a
+  health bar on V and the select cursor in each tick from *T*₂ + 2 until the release, while the
+  button stays down, and at the release S still selected and V not. Falsified by no health bar on V
+  in a tick from *T*₂ + 2 to the release, which a press held across the block's end would give,
+  since no lookup is made while it is held, or by V selected after the release, which its click
+  would give (claims 12 and 26). In run n2, S stands still at least 3 cells from V, and the press is
+  the left button's at (−40, −30) from V's point, over an empty open cell. 10 ticks after *T*₂ the
+  script moves the pointer in one step to (40, 20), so that a band box from the press pixel would
+  hold V's point and not S's, as in m3. Expected: no band box in any tick from that move to the
+  release, the move cursor, which a lookup over that empty open cell gives, in each tick from the
+  second tick after the move until the release, and at the release S still selected and V not.
+  Falsified by a band box or the ordinary arrow in that span, or by V selected after the release. In
+  run n3 the press is the right button's, at V's point, with no move. Expected: a health bar on V
+  and the select cursor in each tick from *T*₂ + 2 until the release, while the button stays down,
+  and S still selected after the release. Falsified by no health bar on V in a tick from *T*₂ + 2 to
+  the release, which a right press held across the block's end would give, since no lookup is made
+  while it is held, or by S not selected, which a right click would give (claim 26). Run n4 is as
+  n3, with the press at (0, −23) from V's point, over an empty open cell, the scrolling method and
+  the view placed as in m4, and the view at the press at least 10 cells from each of its scroll
+  limits (S-0101 claim 8), on a map large enough for that, so that the drag could scroll it. 10
+  ticks after *T*₂ the script moves the pointer in one step 20 pixels to the right, beyond F8's
+  bound. Expected: the view position unchanged and no drag-scroll cursor (S-0101 claim 17) in each
+  tick from that move to the release, and S still selected after the release. Falsified by a change
+  of the view position or by the drag-scroll cursor in that span, or by S not selected after the
+  release. A run whose view at the press lies within 10 cells of a scroll limit decides nothing. In
+  run n5 the player's tooltip option is on (S-0111 claim 20), and the pointer rests at V's point
+  with no button held from at least 2000 ms of wall-clock time before *T*₁. A run in which V's name
+  tip (S-0111 claims 21 to 23) does not show during that rest decides nothing. The press is the left
+  button's, at V's point. 5 ticks after *T*₂ the script moves the pointer 2 pixels up, to (0, −2)
+  from V's point, inside V's region, keeps it there with the button down until 2500 ms of wall-clock
+  time after the move, and then releases it. Expected: V's name tip in a drawn frame presented
+  between 1000 and 1500 ms after the move, while the button is still down. Falsified by no name tip
+  before the release, which a held battlefield press would give, since it blocks the tip (S-0111
+  claim 20).
 - *Runs:* 3 of each part, each held as stated. A tick is left out of a part's comparison only
   when the recorder lacks a position or the pointer pixel for it, never because of the cursor it
   shows.
@@ -4380,4 +4435,7 @@ readiness*, and Edge cases).**
   `measurable` by S-0214 scenario T27 run m4).
 - **S-0111, claim 20, a held button across an order block.** After "That block ends at the button's
   release" add "or when an order block begins, which abandons the press (S-0214 claim 35 (e))", so a
-  button that is still down after the block does not block the tip (medium).
+  button that is still down after the block does not block the tip (medium). A button pressed while
+  an order block is in force blocks the tip neither during the block, where the block itself does,
+  nor after it: after "that was pressed over the battlefield view" add "while no order block is in
+  force (S-0214 claim 35 (e))" (medium, `measurable` by S-0214 scenario T27 run n5).
