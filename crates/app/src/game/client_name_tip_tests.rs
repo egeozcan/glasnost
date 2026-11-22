@@ -715,6 +715,39 @@ fn claim_20_the_order_block() {
     assert!(shown(&mut c).is_some(), "moved and rested after the block");
 }
 
+/// Q-3369. spec: S-0214 r104 claim 35 (e) (during an order block the name tip is blocked by the
+/// block itself, S-0111 claim 20, so no tip shows then; a left or right press that begins on the
+/// battlefield view while the block is in force does not block the tip as a held battlefield press
+/// does: after the block, while its button stays down, the tip shows once the pointer has moved and
+/// rested for 1000 ms) and scenario T27 run n5. S-0111 claim 20's wording is to follow (S-0214 r104
+/// *Changes for other specs*).
+#[test]
+fn claim_35_e_a_press_made_in_an_order_block_does_not_block_the_tip() {
+    for b in [Button::Left, Button::Right] {
+        let (mut c, p) = font_game();
+        let mut t = 10_000;
+        frame_at(&mut c, &mut t, 0);
+        c.pointer_moved(p);
+        c.pointer_down(b, p);
+        frame_at(&mut c, &mut t, 1000);
+        assert!(shown(&mut c).is_none(), "{b:?}: blocked by the block");
+        let s = session_mut(&mut c);
+        while s.play.game.world.tick <= s.play.game.world.orders_blocked_through {
+            s.step();
+        }
+        let q = Point::new(p.x + 1, p.y);
+        c.pointer_moved(q);
+        frame_at(&mut c, &mut t, 999);
+        assert!(shown(&mut c).is_none(), "{b:?}: the wait");
+        frame_at(&mut c, &mut t, 1);
+        assert!(
+            shown(&mut c).is_some(),
+            "{b:?}: moved and rested with the button still down"
+        );
+        c.pointer_up(b, q, Default::default());
+    }
+}
+
 /// #84. spec: S-0111 claim 20 (Blocked: while the battlefield view is moving, as during a scroll)
 /// and S-0101 claims 13 to 15 (scrolling is requested once per unfrozen cycle, not per drawn frame)
 ///
