@@ -1026,7 +1026,7 @@ fn claim_26_the_owner_hovers_and_targets_its_own_building_at_fade_15() {
         "the owner's click takes it as its target"
     );
     // The select offer over it (S-0516 r36 claim 26: a left click selects it under the ordinary
-    // rules) is the sim's `targeting::selectable_by`, a seam of crates/deterministic (Q-3322).
+    // rules) is the sim's `targeting::selectable_by`, which sim S48 made follow claim 26.
     s.play.selection.clear();
     c.pointer_moved(at);
     let _ = c.frame();
@@ -1037,74 +1037,4 @@ fn claim_26_the_owner_hovers_and_targets_its_own_building_at_fade_15() {
     c.pointer_moved(there);
     let _ = c.frame();
     assert_eq!(hovered(&mut c), None, "nor hovered");
-}
-
-/// Q-3322. spec: S-0516 r36 claim 26 (none of the refusals applies to an object that V owns; a fully
-/// cloaked object, or a building at fade level 15, that V neither owns nor senses cannot be hovered
-/// or clicked): the client's stand-in `pointing::cloak_clickable` gives what the simulation's
-/// `cloak::view::clickable` gives, for the owner's and another house's building and the owner's
-/// vehicle, in every cloak state at fade levels 0, 14 and 15, for every house and no viewer, and
-/// for an object that is gone
-#[test]
-fn claim_26_the_stand_in_agrees_with_the_simulations_clickable() {
-    use glasnost_sim::cloak::CloakState;
-    use glasnost_sim::world::HouseId;
-    let (mut c, mcv) = game();
-    let s = session_mut(&mut c);
-    let me = s.play.me();
-    let own_b = place(s, mcv, Kind::Building, "POWR", (3, -3));
-    let other = s
-        .play
-        .world()
-        .objects
-        .values()
-        .find_map(|o| o.owner.filter(|&h| h != me))
-        .expect("another house's object");
-    let b = cell_of(s, mcv);
-    let theirs = testkit::spawn(
-        &mut s.play.game.world,
-        Kind::Building,
-        "POWR",
-        other.0,
-        CellXY::new(b.x - 3, b.y + 3),
-        0,
-    );
-    let houses = s.play.world().houses.len();
-    let viewers: Vec<Option<HouseId>> = std::iter::once(None)
-        .chain((0..houses).map(|h| Some(HouseId(u8::try_from(h).unwrap()))))
-        .collect();
-    let states = [
-        CloakState::Uncloaked,
-        CloakState::Cloaking,
-        CloakState::Cloaked,
-        CloakState::Uncloaking,
-    ];
-    let mut checked = 0;
-    for id in [own_b, theirs, mcv] {
-        for state in states {
-            for stage in [0, 14, 15] {
-                let o = s.play.game.world.obj_mut(id).unwrap();
-                o.cloak.state = state;
-                o.cloak.stage = stage;
-                let w = s.play.world();
-                for &v in &viewers {
-                    assert_eq!(
-                        crate::game::pointing::cloak_clickable(w, id, v),
-                        glasnost_sim::cloak::view::clickable(w, id, v),
-                        "{id:?} {state:?} at {stage}, viewer {v:?}"
-                    );
-                    checked += 1;
-                }
-            }
-        }
-    }
-    let w = s.play.world();
-    for &v in &viewers {
-        let gone = ObjectId(999_999);
-        assert_eq!(
-            crate::game::pointing::cloak_clickable(w, gone, v),
-            glasnost_sim::cloak::view::clickable(w, gone, v)
-        );
-    }
-    assert!(checked > 0);
 }
