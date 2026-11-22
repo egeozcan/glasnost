@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 92
+revision: 103
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-21
+approved-on: 2026-11-22
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131, Q-1160, Q-1759, Q-2781, Q-3353]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131, Q-1160, Q-1759, Q-2781, Q-3353, Q-3373, Q-3374]
 supersedes: []
 ---
 
@@ -1118,15 +1118,17 @@ The *order-level destination* is the destination that behaviours and factory rep
       tick-tank property also deploys on those answers when its target is a vehicle and its cell
       allows it; in our engine no player house is computer-controlled (S-0215 Terms).
     - (b) **No drop of the target at the end of a move.** A vehicle of this claim whose move ends
-      with its target out of range keeps its target (no rule of the movement side drops it). What it does next is its behaviour's (S-0215
-      claim 37: the approach step at the next processing, or the per-tick rule of part a there
-      for a vehicle without a destination). The original also contains a rule that drops the target
-      of such a vehicle, but only for a vehicle that stands still while keeping a destination right
-      after a failed search for a path. That state does not arise for these locomotors: a failed
-      search for a path removes the destination of a vehicle with the driving, ship or hovering
-      locomotor, also within 1 cell of the destination (in the original, the give-up rule for
-      computer-controlled owners gives a new destination instead, which sets the vehicle moving
-      again). For all three locomotors this is S-0212 claim 23. No rule is specified for the drop.
+      with its target out of range keeps its target: no rule of the movement side drops it there.
+      What it does next is its behaviour's (S-0215 claim 37: the approach step at the next
+      processing, or the per-tick rule of part a there for a vehicle without a destination). The
+      original's rule that drops such a target belongs to S-0309 claim 22. For a driving vehicle
+      it acts only right after a failed fresh search that leaves the vehicle with no movement
+      report (claim 27) and a target not within reach. Under claim 31 every failed fresh search
+      leaves the vehicle no locomotor destination point (the original's rule in *move*, *harvest*
+      and at the factory exit, and our engine's in every behaviour), and S-0309 claim 22 says
+      after which failures the drop comes. The end of a move is not a failed search,
+      so nothing is dropped there. For the ship and
+      hovering locomotors S-0309 claim 22 leaves the conditions of the drop open.
     - (c) **Hovering locomotor: the stored path is discarded at each step point while in range.**
       Whenever a hovering vehicle that is moving and has at least one stored step chooses its next
       step (when it starts a move, and each time it reaches the point it was heading for, the
@@ -1166,9 +1168,13 @@ The *order-level destination* is the destination that behaviours and factory rep
       step measures to the target's own reference point. S-0208 claim 17 gives the same
       arrival-time conditions for an ordinary walker, whose walk ends on that arrival tick.
     - Backing: `measurable` (scenario D21: runs 1 and 2 and their controls for part a, runs 3,
-      3c and 4 for parts c and d, and every run for part e). Part b is `unmeasured`: under our
-      rules the state in which the original's drop would act does not arise, so there is nothing
-      to observe. Part c's chase exception is `unmeasured` (D21 says why). The *area guard*
+      3c and 4 for parts c and d, and every run for part e). The drop after a failed driving
+      search in part b is S-0309 claim 22's: `measurable` by S-0309 scenario A11 part c. That no
+      drop comes at the end
+      of a move is `unmeasured`: a move ends with the target out of range only when a moving
+      target leaves range after the vehicle's last approach step (S-0215 claim 37) and before its
+      last track ends, and no set-up here fixes that timing. Part c's chase exception is
+      `unmeasured` (D21 says why). The *area guard*
       and *hunt* eligibility cases of part a are `unmeasured`: D21 establishes the retained
       target/destination fixture only under *attack*, not those behaviours. The out-of-scope
       *rescue* case and original computer-only deployment aside are also `unmeasured`:
@@ -1176,7 +1182,8 @@ The *order-level destination* is the destination that behaviours and factory rep
       rule is a pointer to S-0310 claim 9 and uses that claim's backing and confidence.
     - Confidence: medium for the arrival-time stop, its conditions and the hover distinction
       between choosing a next step and having none; medium for parts b, c and e (read, not
-      observed); low for the exact tick of the search after a retained-destination wait in part d
+      observed), the drop's timing in part b included; low for the exact tick of the search after
+      a retained-destination wait in part d
 
 ### Teleporting locomotor
 
@@ -1676,8 +1683,8 @@ The *order-level destination* is the destination that behaviours and factory rep
 
     The locomotor destination is independent of the heading point. Beginning, finishing
     or chaining an intermediate track does not by itself remove the locomotor destination.
-    In particular a wait, a turn, a retry delay or an unsuccessful search which retains
-    the movement goal keeps it present. Merely crossing into its cell does not clear it.
+    In particular a wait, a turn or a retry delay keeps it present, while a failed fresh search of a
+    driving vehicle clears it (claim 31). Merely crossing into its cell does not clear it.
     These lifetime rules apply equally to ship and driving locomotion:
 
     | Event | Locomotor destination point afterwards |
@@ -1690,37 +1697,45 @@ The *order-level destination* is the destination that behaviours and factory rep
     | Give-up with no approach destinations (claim 15) | absent through the normal removal of the order destination |
     | Give-up with approach destinations | fall back to rest under S-0215 claim 13; any resulting stop clears the point and any newly supplied movement goal replaces it, rather than treating give-up as successful track arrival |
     | Successful driving factory exit-track instruction of S-0417 claim 5 | exit apron centre with height 0 leptons, as for that track's heading point; ships retaining ship locomotion instead use that claim's ordinary destination instruction |
+    | Driving only: a fresh search that finds no path (claim 31) | absent in that update; the order-level destination stays unless S-0212 claim 23's first two rows remove it |
+    | Driving only: locomotion update with no track, no point and an order-level destination held (claim 30) | the point that destination supplies at that update |
+    | Driving only: end of a track after which the vehicle goes on, its destination an infantry unit (claim 30) | the point that unit supplies then, when it differs from the installed one |
 
     Point coordinates and the height comparisons are integer leptons, with no rounding.
     The high-bridge lift is applied when the point is accepted, not added again each tick.
-    A point in the vehicle's own cell therefore remains present unless an actual stop,
-    replacement or qualifying track completion removes it. Claim 26 defines when standing
+    A point in the vehicle's own cell therefore remains present unless an actual stop, replacement,
+    qualifying track completion or, for a driving vehicle, a failed fresh search (claim 31) removes
+    it. Claim 26 defines when standing
     there removes the order-level destination and thereby stops locomotion; it distinguishes
     a cell destination from one naming a building or a unit. Cell equality must not be used as a
     substitute for the point-presence test. An order-level destination can remain present
     after the track-completion row has cleared the locomotor destination, or can be removed
     by a later behaviour effect. S-0212 claims 20 to 22 own whether a search failure waits,
-    retries or gives up; this claim adds no new give-up condition.
+    retries or gives up, and claim 31 says what a failed fresh search leaves a driving vehicle; this
+    claim adds no give-up condition.
     **Factory-exit lifetime.** S-0417 claim 16 owns the subsequent factory-exit
-    lifecycle. Completing the exit track with no order-level destination retains
-    its locomotor destination point. The clear report, loss of contact and tether,
-    and queueing *harvest* do not themselves stop locomotion or restore a suspended
-    predecessor; there is no factory-exit timeout clearing that point. A later
-    accepted rally, scatter or ore destination replaces it in the active driving
-    locomotion. Qualifying completion at that later goal or an effective stop
+    lifecycle. Completing the exit track with no order-level destination does not
+    itself clear its locomotor destination point. The clear report, loss of contact
+    and tether, and queueing *harvest* do not themselves stop locomotion or restore a
+    suspended predecessor; there is no factory-exit timeout clearing that point. The failed search
+    of claim 31 clears it: in the update in which the exit track ends the vehicle searches for the
+    apron's cell, which it is in, finds no path (S-0212 claim 12), and the point is cleared in that
+    tick, whatever its behaviour. An accepted rally, scatter or ore destination installs its own
+    point in the active driving locomotion. Qualifying completion at that later goal or an effective
+    stop
     clears the resulting point under this claim and claim 26. The retained point
     prevents temporary-driving restoration under claim 27 until such clearing.
     Track completion at the apron alone is insufficient (S-0417 claim 5).
     - Backing: `measurable` (D29; D28 for the factory instruction; S-0417 claim 16
       for the factory lifecycle and its U15 scenario). The strict 208-lepton completion
       boundary is `unmeasured`: D29 proposes 207/208-lepton docking controls, but no legal
-      routes establishing both completion heights are known here. Retention with all later
-      replacements and effective stops excluded inherits that claim's `unmeasured`
-      limitation: no finite trace establishes perpetual retention.
+      routes establishing both completion heights are known here. The clearing of the exit point by
+      claim 31's failed search takes claim 31's backing.
     - Confidence: high for assignment, independent presence, stopping and track-completion clearing,
       except the completion row's fresh point (claim 29), which is medium; medium for the
-      resulting lifetime across approach-destination fallback and the
-      composed post-exit restoration consequences
+      resulting lifetime across approach-destination fallback, the clearing by claim 31's failed
+      search and the composed post-exit restoration consequences, and for the
+      driving-only rows, which take claim 30's ratings
 
 26. **Removing the order-level goal at rest (Q-0797, Q-0830).** For driving and ship vehicles,
     a destination that names a cell differs from one that names an object, including a
@@ -1745,9 +1760,14 @@ The *order-level destination* is the destination that behaviours and factory rep
     unit's current world point. Movement of that unit alone is not a new movement
     instruction; an accepted replacement instruction can replace the point (claim 25).
     This is not a promise of indefinite retention: other stop, replacement, search-give-up,
-    approach or boarding effects can still change either destination. S-0215 claims 22
-    and 29 own move and enter processing; S-0507 claims 5 and 6 own transport exchanges
-    and arrival-time boarding, which are separate from cell-equality cleanup.
+    approach or boarding effects can still change either destination. In particular for a driving
+    vehicle that stands in the cell of its present locomotor destination point, the next fresh
+    search looks for its own cell and finds no path (S-0212 claim 12), so claim 31 applies: that
+    search clears the point, and the order-level destination stays. The same holds for a driving
+    guard vehicle whose world point is not exactly its point.
+    For a ship vehicle in that cell S-0212 claims 20 to 23 decide what its searches do. S-0215
+    claims 22 and 29 own move and enter processing; S-0507 claims 5 and 6 own transport
+    exchanges and arrival-time boarding, which are separate from cell-equality cleanup.
 
     **Final track.** The qualifying completion of claim 25 clears the locomotor destination
     in the completion tick, not the order-level destination. Completion alone therefore
@@ -1770,7 +1790,10 @@ The *order-level destination* is the destination that behaviours and factory rep
     tick itself when assignment precedes the vehicle's update. There is no extra one-tick
     timer and no wait for due behaviour processing. Conversely, an accepted same-cell
     *enter* instruction naming a depot can retain both destinations after successive
-    locomotion updates: the building row applies, not the cell row. This is persistence
+    locomotion updates: the building row applies, not the cell row, for a driving vehicle, whose
+    failed searches there clear only its point, which claim 30 installs again at its next update
+    (claim 31), and for a ship vehicle as long as S-0212
+    claims 20 to 23 let it keep its destination. This is persistence
     absent another stop, replacement or applicable behaviour effect, not a guarantee that
     the depot's entry exchange will never change state. The *move* behaviour's subsequent
     fallback when it has no destination is S-0215 claim 22's separate event.
@@ -1778,7 +1801,8 @@ The *order-level destination* is the destination that behaviours and factory rep
       equivalence and the guard exception; S-0314 claim 17's H19 f for accepted same-cell entry,
       and S-0402 claim 3b's H27 for harvest processing before next-tick cleanup)
     - Confidence: high for the cell/object distinction, moving/stationary equivalence and cleanup conditions; medium for
-      the composed tick timing and approach-destination fallback
+      the composed tick timing and approach-destination fallback, and for what claim 31 adds on
+      retention, which takes its ratings
 
 27. **Destination refresh at placement and a teleporting dock approach (Q-1090, Q-1110).**
     This claim covers vehicles whatever their current locomotor. A destination-refresh
@@ -1860,17 +1884,17 @@ The *order-level destination* is the destination that behaviours and factory rep
     application from suppression already pending before the assignment. A retained
     driving destination point prevents restoration even when the offered destination
     differs or would be immediately reachable. Assignment-time restoration here is
-    separate from a later fall-back-to-rest restoration under S-0215 claim 13; factory
-    exit point lifetime belongs to S-0417 claim 16, not an extra clear supplied here.
-    That lifecycle retains the point after no-order exit completion, replaces it
-    on a later accepted destination, and clears it on qualifying goal completion
-    or effective stopping under claims 25 and 26. A factory-built chrono miner
-    still using temporary driving therefore drives its first leg to distant ore.
+    separate from a later fall-back-to-rest restoration under S-0215 claim 13; the factory exit
+    point's lifetime is claim 25's and claim 31's. A destination accepted during the exit track
+    replaces the point, and otherwise claim 31's failed search for the apron's cell clears it in the
+    tick in which the exit track ends, so a no-order exit leaves no retained point that could
+    prevent restoration. A factory-built chrono miner still using temporary driving drives its first
+    leg to distant ore (S-0417 claims 5 and 16).
     Queueing harvest or starting loading alone does not restore teleporting
     movement. S-0417 claims 5 and 16 own those temporary-driving consequences.
     A subsequent eligible fall-back to rest can restore the predecessor, while
     the qualified docking assignment described here remains a separate restoration
-    route; neither requires an invented unconditional clear at the apron.
+    route; neither needs a clear at the apron beyond claim 31's.
 
     **Suppression meets a teleporting destination (Q-1130).** The suppression test belongs to
     every nonempty vehicle destination assignment, whatever the active locomotor. An unchanged
@@ -2158,7 +2182,18 @@ The *order-level destination* is the destination that behaviours and factory rep
       queued again and refresh is pending. At the first later processing of *enter* at which it
       stands still (it first finishes the track it is on, claim 11),
       the refinery offers the docking cell again (S-0402 claim 10 row 2), refresh lets that
-      unchanged offer through, teleporting is restored and it jumps.
+      unchanged offer through, teleporting is restored and it jumps. That processing comes
+      before claim 30's install could give it its destination's point again. The fallback
+      leaves it with no current behaviour and *enter* queued (claim 27). S-0215 claim 11's
+      readiness does not hold *enter* back while the vehicle moves, and the start of a behaviour
+      expires its processing timer, so *enter* is processed in the next update, before that
+      update's locomotion (S-0215 claims 3a and 3b, S-0203). While it finishes its track the
+      heading point ahead keeps it a movement report (claim 11, *One jump* below), so while the
+      cell stays clear each such processing gets the fallback again. So *enter* is processed in
+      every update until the track has ended, and in the first update after that it is
+      processed before the locomotion at which claim 30 would install. If the cell is occupied
+      again, the offer is an ordinary assignment, which installs its point, and the driving
+      above applies.
 
     It reaches the docking cell by driving only if it gets there before those processings.
 
@@ -2254,8 +2289,8 @@ The *order-level destination* is the destination that behaviours and factory rep
     the movement readings that need its destination's point use the locomotor destination point of
     claim 25: the point that the last assignment to install one supplied, until claim 25's table
     clears it. For a building destination it is the point that S-0208 claim 27 gives the vehicle at
-    that assignment. These readings do not ask the destination for its point again, whatever the
-    vehicle's position or contacts are later:
+    that assignment. Apart from the installs of claim 30, these readings do not ask the
+    destination for its point again, whatever the vehicle's position or contacts are later:
     - Every path search of S-0212 claims 20 to 23 looks for the cell of that point, the
       recomputation of S-0212 claim 20 included.
     - The distance of more than 512 leptons that starts that recomputation is measured to it.
@@ -2266,9 +2301,10 @@ The *order-level destination* is the destination that behaviours and factory rep
 
     So for a bunker destination the vehicle keeps looking for the docking cell of S-0606 claim 4's
     quadrant on its side at the assignment while it drives round the bunker, until a new
-    assignment supplies a new point. For the helipad and unit-repair flags the docking place
-    taken at the assignment stays the goal in the same way. A contact gained or lost later changes
-    it only through a new assignment (Open questions).
+    assignment or an install of claim 30 supplies a new point. For the helipad and unit-repair
+    flags the docking place taken at the assignment stays the goal in the same way. A contact
+    gained or lost later changes it only through a new assignment or an install of claim 30 (Open
+    questions).
 
     **Two tests that ask again.** The completion row of claim 25's table and the bunker's arrival
     test (S-0606 claim 5) ask the destination for its point at the moment they are made, from the
@@ -2277,7 +2313,8 @@ The *order-level destination* is the destination that behaviours and factory rep
     asked from the centre of a foundation cell lies in that cell. So a vehicle that ends a track
     in any foundation cell meets the completion row's cell condition there (its height condition
     holds on level ground), and arrives there when it is in contact with the bunker, even when its
-    stored path goes on to the docking cell installed at the assignment.
+    stored path goes on to the docking cell installed at the assignment. The two installs of claim
+    30 ask in the same way, but they install the point they get.
 
     **Readings of the heading point.** The heading point of Terms is the target of the track the
     vehicle is on. The destination does not supply it. The vehicle scatter centre cell (Terms, claim
@@ -2319,6 +2356,135 @@ The *order-level destination* is the destination that behaviours and factory rep
       for the helipad and unit-repair flags, which D35 does not play. Medium for the completion
       row's fresh point. Medium for the readings of the heading point in S-0402 claims 8 and 26, as
       S-0402 rates those cases. The scatter centre cell takes claim 16's ratings.
+
+30. **Installs that ask the destination again (Q-3373).** Two events make a driving vehicle ask its
+    order-level destination for its movement point again, from the vehicle's position and contacts
+    at that moment, and install the answer as its locomotor destination point (claim 25).
+
+    **No point at a locomotion update.** At a locomotion update at which the vehicle is on no
+    track, has no locomotor destination point, no heading point other than its own position and no
+    stored steps, and holds an order-level destination, it installs the point that destination
+    supplies then. It begins no track in that update. From its next locomotion update it treats
+    that point as any installed point: it searches for a path to the point's cell (S-0212 claims
+    20 and 21) and begins a track along a path that a search finds. The rows of claim 26 are
+    tested first in the same update and take precedence. There is no install while the vehicle is
+    sinking, while its body is turning, or while its current behaviour is *guard* or *unload*.
+    Claim 25's completion row leaves this state when it clears the point while the destination
+    stays and no stored steps are left, so for a vehicle outside those exceptions the state then
+    lasts until its next locomotion update.
+
+    **An infantry destination at a track's end.** When a track ends and the vehicle still has a
+    locomotor destination point or stored steps after claim 25's completion row, and its order-level
+    destination is an infantry unit, the vehicle asks that unit for its point, unless its current
+    behaviour is *unload*. When that point differs from the installed one, it installs it. A
+    destination of any other kind is not asked at a track's end.
+
+    Neither install is an assignment. Neither ends a running retry delay (S-0212 claim 21) or
+    restarts the blockage timer of S-0212 claim 22, and claim 27's refresh state plays no part. From
+    the install on, claim 29's
+    readings use the installed point, until another install replaces it or claim 25's table clears
+    it.
+
+    **Consequences.** A scatter request does not lead into the state without a point: an accepted
+    scatter gives the vehicle a new destination (claim 16), whose point is installed unless claim
+    27's suppression skips that one point. A unit named
+    by the destination that has moved since the completion row supplies its new point, so the
+    vehicle drives after it. In the completion row's own case the vehicle stands in the cell of the
+    point it installs again, so its next search looks for its own cell and finds no path (S-0212
+    claim 12), and claim 31 decides what follows. A vehicle in *guard* installs nothing and keeps
+    its destination with no point, as claim 26 leaves it. Claim 27's dock fallback also leaves a
+    vehicle in this state once the track it is on has ended, but there its queued *enter* is
+    processed before the install could come (claim 28, *An occupied docking cell*), and that
+    processing gives it a point or a jump.
+
+    This is the original's rule, and our engine keeps it with no switch.
+    - Backing: `measurable` by D36 for whether the infantry install at a track's end happens: part a
+      for an infantry destination, which is asked again, part b for a vehicle destination, which is
+      not, and part a's log of the point for an ask at a track's end rather than at every reading.
+      The install at an update with no point is `measurable` by D37 parts a and b, which expect the
+      point back in the row after each failed search beside an unreachable cell (claim 31). Claim
+      27's dock fallback also reaches that state, but has the queued *enter* processed first.
+      That order is `measurable` by D34 part e, which expects no movement report between the end of
+      a fallback stop's track and that processing. The completion row clears the point only with the
+      vehicle in the cell of the point its destination supplies then. For a destination naming a
+      unit that is the cell the unit stands in, and for a building other than a vehicle bunker it
+      lies in the foundation. At a bunker the arrival test stops a vehicle in contact in the same
+      tick (claim 29), so the case needs a bunker destination kept after the contact has ended,
+      which is an Open question of claim 29. A failed fresh search within 1 cell is the other stock
+      route to the state (claim 31).
+    - Confidence: medium for both installs and their exceptions, which D36 and D37 have not yet
+      confirmed,
+      and for the order after a dock fallback, which D34 part e has not yet confirmed
+
+31. **A failed fresh search (Q-3373, Q-3374).** When a fresh search (S-0212 claim 20) of a driving
+    vehicle finds no path, its locomotor destination point is cleared in that update, as by a stop
+    (claim 25), and the retry delay *R* starts (S-0212 claim 21). This holds whatever its distance
+    (F5) from the point, within
+    the close-enough distance (S-0209 F2) or not, and no count of earlier failures plays a part. The
+    search that a first check makes at once (claim 15) is a fresh search too. A failure of another
+    search, such as a re-path, is not covered here, and S-0212 claims 21 to 23 decide it as they
+    stand.
+
+    What the failure does to the order-level destination is S-0212 claim 23's. Its second row
+    removes it with the give-up, and that removal ends *R* (S-0212 claim 21). In its third row,
+    within 1 cell, the failure removes nothing more: the vehicle keeps its order-level destination,
+    *R* keeps running, and the vehicle does not give its move up. With no track, no point and no
+    heading point other than its own position, it then takes claim 30's install at its next
+    locomotion update, which supplies that destination's point again and does not end *R*, and it
+    searches for that point's cell once *R* has passed. So while that search keeps failing and
+    nothing else changes the destination, the vehicle stands where it is and searches again about
+    every *R* ticks, for as long as it holds the destination. Its *move* behaviour does not end
+    this, since that behaviour falls back to rest only with no destination (S-0215 claim 22). In
+    *guard* or *unload* claim 30 installs nothing, so the vehicle keeps the destination with no
+    point and makes no search.
+
+    **A point in the vehicle's own cell.** A driving vehicle that holds a locomotor destination
+    point has not arrived in S-0212 claim 20's sense, even when it stands in that point's cell. So
+    with no track and no stored steps it makes a fresh search for that cell, at once when no retry
+    delay runs, the update in which a track ends there included. A search for the vehicle's own cell
+    finds no path (S-0212 claim 12), so the point is cleared in that update, unless claim 26 removes
+    the destination first. Claim 30's completion-row case is one such state: there each install puts
+    the point in the vehicle's cell again, so the vehicle stays in that cell and searches about
+    every *R* ticks, as above. The factory exit track of S-0417 claim 5 is another. It leaves the
+    point at the apron's centre, so in the update in which the exit track ends the vehicle searches
+    for the apron's cell, and the exit point is cleared in that tick. A vehicle with no order-level
+    destination by then is in *move* or *harvest* at that search (S-0417 claims 2 and 8), which are
+    among the behaviours named below. The
+    instruction neither sets nor removes an order-level destination, and a destination held from
+    before it is not asked for its point while the exit point is present (claim 29). After the
+    clearing, such a destination's point is installed at the next locomotion update (claim 30), and
+    the vehicle searches for it once *R* has passed, *R* ticks after the exit track ended. A
+    destination assigned during the exit track installs its own point (claim 25). A same-cell
+    *enter* instruction naming a depot (claim 26) keeps the depot destination through these
+    failures, its point cleared at each and installed again at the next update, unless the depot's
+    entry exchange (S-0314 claims 17 and 18) changes them first. The original applies this rule in
+    *move*, in *harvest* and at the factory exit, and in no behaviour is it known to do otherwise.
+    Whether it does so in the other behaviours, such as *area guard*, *hunt* and *enter*, is a low
+    Open question, and our engine applies the rule in every behaviour. In *move*, *harvest* and at
+    the factory exit this is the original's rule; in the other behaviours it is our engine's design
+    rule. Our engine keeps it with no switch.
+    - Backing: `measurable` by D37: part a for the clearing at each failure, the destination kept,
+      the install at the next update and the search again about *R* apart, part b for the same
+      within the close-enough distance, and part c for the own-cell search and the clearing in the
+      tick in which the factory exit track ends. The factory exit with a destination held from
+      before the instruction is `unmeasured`: no stock route that gives a driving vehicle such a
+      destination is known (Open questions). It takes part a's backing for the install and the
+      search after *R*. The cases in *guard* or *unload* are `unmeasured`: no set-up here gives a
+      vehicle in those behaviours a destination that its search fails to reach. They take part a's
+      backing for the clearing. The depot case, in *enter*, takes part a's backing and the Open
+      question below. The clearing is `measurable`
+      in *move* by parts a and b, at the factory exit by part c, and in *harvest* by S-0215 scenario
+      B38's failed search within 1 cell, once B38 records the locomotor destination point (Changes).
+      The rule in the other behaviours is `unmeasured`: there it is our engine's design, and the
+      original's handling is the Open question.
+    - Confidence: medium for the clearing, the destination kept and the search again about *R*
+      apart, which D37 has not yet confirmed, and medium for the own-cell search and the clearing at
+      the factory exit; low for the factory exit with a destination held from before the
+      instruction, which takes the Open question's rating; medium for the clearing in *harvest*,
+      which B38 has not yet confirmed; low for the other behaviours, which take the Open question's
+      rating; medium for the cases
+      in *guard* or *unload*, as claim 30 rates its exceptions, and low for the depot case, in
+      *enter*, which takes the Open question's rating and also depends on S-0314's entry exchange
 
 ## Formulas
 
@@ -4319,12 +4485,20 @@ from cleanup during the no-track update.
   Expected: cell equality alone retains the object goal and locomotor point, for both
   stationary and moving named units. A goal naming a cell at the same point is removed
   under D30. Cell-style removal of a unit goal solely on cell equality falsifies the claim.
+  For a driving mover the no-track update in that cell makes a fresh search for the vehicle's own
+  cell, which fails and clears the locomotor point (claim 31), so a driving run reads the goal kept
+  at that update and the point installed again from the next one (claim 30). For a ship mover S-0212
+  claims 20 to 23 decide
+  how long they stay.
 - For each destination kind, establish and verify a named test-map initial resting
   *guard* mover with the accepted unit destination and a present locomotor point. Test
   exact three-coordinate equality, a horizontal displacement inside the same cell and
   a height displacement. Expected: only exact equality triggers removal, or S-0215
-  claim 13's fallback with a verified nonempty approach list. Repeat while the named
-  unit moves without a replacement instruction: compare against the retained point,
+  claim 13's fallback with a verified nonempty approach list. A clearing or removal after a failed
+  search, by claim 31 for a driving mover or by S-0212 claim 23 for a ship mover, is not that
+  removal and decides nothing. Repeat
+  while the named unit moves without a replacement instruction: compare against the retained
+  point,
   not that unit's new position. Different cleanup eligibility solely because the named
   unit moves, retention at exact equality, or clearing on mere cell equality falsifies
   the respective rule. A separately accepted replacement point changes the comparison
@@ -4488,7 +4662,9 @@ conditional diagnostic for that combination and assignment-time restoration.
     records which. If *H* still has a movement report at the first processing after the cell
     clears, the recorder first shows it stopping, and the jump follows either in that same
     processing, when a second assignment of the cell there finds it with no movement report,
-    or at the first later processing at which it has no movement report (*One jump*).
+    or at the first later processing at which it has no movement report (*One jump*). After each
+    stop with no jump the recorder shows no movement report from the end of that stop's track
+    until *H*'s next processing of *enter* (claim 28, *An occupied docking cell*, and claim 30).
   - Part f: the free miner's behaviour is *harvest* from the tick it appears, and its active
     movement kind is driving on every recorded tick from its first, including the ticks before
     any harvest-cycle destination assignment on the variant map. On the main map it drives to
@@ -4537,7 +4713,8 @@ conditional diagnostic for that combination and assignment-time restoration.
   *enter* or the next, with its contact accepting and the cell clear at that processing, while the
   recorder shows it with no movement report (claim 25) at the end of the tick before that processing
   and of the processing's own tick. A stop with no jump at a processing where it still has a
-  movement report is claim 27's fallback and does not falsify. In part c it is
+  movement report is claim 27's fallback and does not falsify, but a movement report again
+  between the end of that stop's track and *H*'s next processing of *enter* does. In part c it is
   falsified if the behaviour becomes *guard* at a jump tick. In part f it is falsified if the
   free miner's active movement kind is teleporting on any recorded tick, in particular before
   its first harvest-cycle destination assignment on the variant map, or if it jumps before its first
@@ -4625,6 +4802,86 @@ conditional diagnostic for that combination and assignment-time restoration.
   braking measured to *SE* starts about 1013 leptons from *SW*'s centre and must still lie 768
   leptons or more from it two ticks later.
 - *Runs:* 3 for each part.
+
+**D36. A destination asked again at a track's end (claim 30; Q-3373).**
+- *Setup:* a tiny flat revealed skirmish map of clear ground at one height, stock data apart from a
+  test file, speed index 2, no engine add-on and no mods, one human house and one distant bystander
+  computer player. The test file sets the path-retry delay field to 1 game minute, so that *R* = 900
+  ticks (S-0212 claim 21), longer than the rest test below. Cells
+  are named by their (east, south) distance in cells along the map axes from *O*, a cell at least
+  4 cells from every map edge. *V*, a vehicle of the human player of a stock driving type whose
+  locomotion class is wheel or track, starts at rest in *guard* at the centre of *O*. A read-only
+  recorder logs, after each tick's logic, the cell of every unit of the human player, *V*'s
+  order-level destination, behaviour and locomotor destination point, the ticks in which a track
+  of *V* ends, and the orders the human player issues, with their ticks. *V* comes to rest at the
+  first tick after which it stays in one cell for the next 200 ticks.
+- *Procedure:* scripted input gives one input event per cycle, so its events are issued in
+  consecutive ticks (S-0213 claim 1). It selects *V* alone. Then it gives a force-move click on
+  the destination unit: the force-move key goes down, the button goes down and up on that unit,
+  and the key goes up. *V*'s order is then *move* with that unit as its destination (S-0214 claim
+  4's table G, row G7, and claim 11). *T* is the tick of that order. Once the recorder shows it,
+  the input selects the destination unit alone and orders it to move to (14, 5).
+- (a) Infantry destination. The destination unit is *I*, an infantry unit of the human player of
+  a stock type, at rest in *guard* in (14, 0). *Expected:* *V* comes to rest within 2 cells
+  (Chebyshev) of the cell *I* then stands in. After *T* its locomotor destination point is replaced
+  only in ticks in which a track of *V* ends, each time by a point in the cell *I* stands in then.
+  *Falsified if:* *V* comes to rest within 1 cell of (14, 0), as for a vehicle that keeps the point
+  installed at the order, or its point is replaced in a tick in which no track of *V* ends, as for a
+  vehicle that asks at every reading while *I* walks. An install in the update after a failed search
+  (claims 30 and 31), which puts the point in the cell *I* stands in then, is not such a
+  replacement.
+- (b) Vehicle destination. As a, with *U*, a vehicle of the human player of a stock driving type,
+  in place of *I*. *Expected:* *V*'s point stays in (14, 0) through each of its tracks' ends until a
+  search for that cell fails with *V* in it. That failure clears the point, and from the next update
+  the point is in the cell *U* stands in then (claims 30 and 31). *V* comes to rest within 1 cell of
+  (14, 0), since its next search waits for *R*. *Falsified if:* it comes to rest on row 3 or further
+  south, or its point is in a cell other than (14, 0) before such a failure, as for a vehicle
+  destination asked again at a track's end.
+- *Void:* a run in which any other input is given to a unit of the human player, in which *V*'s
+  recorded order-level destination in the tick after *T* is not *I* or *U* (S-0214 claim 11), in
+  which *I* or *U* leaves (14, 0) before *T*, or in which *I* or *U* is not on row 4 or further
+  south when *V* comes to rest.
+- *Runs:* 3 for each part.
+
+**D37. A failed fresh search of a driving vehicle (claim 31; Q-3373, Q-3374).**
+- *Setup:* a tiny revealed skirmish map, stock data apart from a test file, speed index 2, no engine
+  add-on and no mods, one human house and one distant bystander computer player. The test file gives
+  one land type (say rough) a track multiplier of 0 and a wheel multiplier of 1.0, as S-0212
+  scenario P7 runs 5 and 6 do. It sets the path-retry delay field to 0.1 game minutes, so that *R* =
+  90 ticks (S-0212 claim 21), and the close-enough field to half a cell (128 leptons) unless a part
+  says otherwise. A single cell *K* of that land type lies in flat clear land at height level 0.
+  *V*, a vehicle of the human player of a stock type whose locomotion class is track and whose
+  locomotor is the driving one, starts at rest in *guard* 10 cells west of *K*. A read-only recorder
+  logs, after each tick's logic, *V*'s cell, behaviour, order-level destination and locomotor
+  destination point and heading point, and the tick and result of each of its path searches.
+- (a) Retry. Order *V* onto *K*. *Expected:* *V* stops on a neighbour of *K* (S-0212 claim 15) on a
+  path that a search found. Its later searches are made from there and fail, about *R* apart. In the
+  row of each failure its locomotor destination point is absent, and from the next row it is *K*'s
+  point again. Its order-level destination stays *K* and its behaviour *move* through the first
+  twenty failures. *Falsified if:* the destination is removed at one of them, as for a failure that
+  clears it or a count of failures that ends the move; or the point is present in the row of a
+  failure, as for a failure that keeps it; or the point is absent in the row after a failure, as for
+  a vehicle that does not install the destination's point again; or no search follows a failure
+  within *R* + 5 ticks. A failure after which *V* has a heading point other than its own position
+  decides the Open question on such a heading point instead, and the falsifiers on a missing point
+  and a missing search do not apply to it.
+- (b) Within the close-enough distance. As a, with the close-enough field at 2 cells (512 leptons).
+  *Expected:* as in a. *Falsified if:* as in a, and in particular if the destination is removed at a
+  failure, as for a give-up within the close-enough distance.
+- (c) Factory exit. On flat clear land at height level 0, with the test file's close-enough field at
+  0, a factory with no rally point produces an ore-gathering vehicle of a stock type moved by
+  driving (S-0417 claim 5): a factory of the human house from the sidebar, or one of a computer
+  house from that house's own production. No orders are given. The recorder logs that vehicle from
+  its creation, with its current behaviour at each of its path searches. A run qualifies only if the
+  vehicle has no order-level destination from the start of its exit to the end of the tick in which
+  it reaches the apron's centre, so a run in which it is given one by then, as by S-0417 claim 8 or
+  claim 13, does not qualify, and either house may give the qualifying runs. *Expected:* a failed
+  search in the tick in which the vehicle reaches the apron's centre, and no locomotor destination
+  point in that tick's row, whatever behaviour is recorded at that search. That recorded behaviour
+  is the one the run backs (claim 31). *Falsified if:* no failed
+  search is recorded in that tick, as for a vehicle that counts as arrived in its point's cell, or
+  the exit point is present in that tick's row, as for a failure that keeps it.
+- *Runs:* 3 for each part, of qualifying runs in part c.
 
 ## Cross-spec changes
 
@@ -4790,7 +5047,8 @@ conditional diagnostic for that combination and assignment-time restoration.
 - Q-3353: S-0212 Terms (*heading point*) gives "normally the position of its destination". For a
   vehicle with the driving locomotor, the point that S-0212's searches look for, and that claim 20's
   512-lepton distance is measured to, is the locomotor destination point of claim 25 here. It is
-  installed at the last assignment and not asked for again (claim 29 here). It is not the heading
+  installed at the last assignment and not asked for again (claim 29 here), apart from the installs
+  of claim 30 here. It is not the heading
   point of this spec's Terms, which is the track's target. S-0212 should say so in its Terms.
 - Q-3353: S-0402 claim 8's connection test reads the harvester's heading point as S-0212's Terms
   give it, or its own position when it is not moving. The point it reads is the heading point of
@@ -4801,10 +5059,93 @@ conditional diagnostic for that combination and assignment-time restoration.
 - Q-3353: S-0606 claim 4 says that the direction "is taken from the vehicle's position at the
   time the point is asked for, so the docking cell can change while the vehicle drives around the
   bunker". By claim 29 here the route's goal is asked for at each assignment only (S-0208 claim
-  27). The completion row of claim 25 and S-0606 claim 5's arrival test ask again, from the
-  vehicle's position when they are made. So the cell the searches lead to changes only at a new
-  assignment, while the cell the vehicle can arrive in follows its position. This settles S-0606
+  27), apart from claim 30's installs, which ask once the vehicle has no point. The completion
+  row of claim 25 and S-0606 claim 5's arrival test ask again, from the vehicle's position when
+  they are made. So the cell the searches lead to changes only at a new assignment or such an
+  install, while the cell the vehicle can arrive in follows its position. This settles S-0606
   Open question 3, and claim 4's rating of when the point is asked again can follow claim 29's.
+- Q-3374: S-0212 claims 20, 21 and 23 and scenario P7. Claim 23's third row says that a driving
+  vehicle whose search fails within 1 cell "also has its destination cleared, so it ends up standing
+  where it is without a destination and with no retry delay", and the paragraph after the table says
+  that in rows 2 and 3 such a unit is left without a destination. Under claim 31 here a failed fresh
+  search of a driving vehicle clears its locomotor destination point in every row, whatever its
+  distance from the point, as that paragraph says, but in the third row the vehicle keeps its
+  order-level destination and the retry delay *R* runs. Claim 30 here installs that destination's
+  point again at the next locomotion update without ending *R*, so the vehicle searches again once
+  *R* has passed, about every *R* ticks while the search fails and it holds the destination. Claim
+  20's sentence "A wait, turn, retry delay or failed search that retains the movement goal keeps the
+  point present" should except a driving vehicle's failed fresh search, and its "has not arrived"
+  holds for a driving vehicle while it holds a locomotor destination point,
+  also in that point's cell (claim 31 here). P7's runs 5 and 5b should expect the destination kept,
+  the point cleared at each failure and installed again at the next update, and the searches about
+  *R* apart, in place of a destination cleared in the tick of the failed search, and their falsifier
+  "keeps its destination and goes on searching" should become a removal of the destination at a
+  failure. D37 parts a and b here play these cases. S-0212 should state this in claims 20, 21 and 23
+  and in P7. It rests on claims 30 and 31.
+- Q-3374: S-0212 claim 27a's departure table gives, for a driving harvester whose departure search
+  fails within 1 cell, the row "Search fails otherwise", with the result "Destination cleared, which
+  leaves no retry delay, and pathfinding queues no behaviour". Under claim 31 here such a failure,
+  in *harvest*, clears only the harvester's locomotor destination point: the harvester keeps its
+  field destination and the retry delay *R* runs. Claim 30 here installs that destination's point
+  again at its next locomotion update, so the harvester searches again once *R* has passed, about
+  every *R* ticks while the search fails and it holds the destination. That row should say so, and
+  should no longer say that the destination is cleared. Pathfinding still queues no behaviour
+  there. S-0215 scenario B38 plays this case (the S-0215 entry). It rests on claims 30 and 31.
+- Q-3374: S-0215 claim 11a's first row joins "a failed search does not give up" to seeking "with
+  neither destination nor remembered cell". A driving harvester whose fresh search fails within 1
+  cell keeps its destination (claim 31 here), so *harvest* finds that destination held at its next
+  processing, and the harvester searches for it again once the retry delay has passed (claim 30
+  here). S-0215 should split that row, and its scenario B38 should expect the destination kept in
+  the case of a failed search within 1 cell that does not give up. B38's recorder should also log
+  the harvester's locomotor destination point in each tick, and that case should expect the point
+  absent in the row of the failure and present again from the next update, with the point kept
+  through the failure as a falsifier. It rests on claims 30 and 31.
+- Q-3374: S-0402 claim 10a's table says, for a harvester at an occupied docking cell, "When a search
+  finds no path, S-0212 claim 23 decides instead: the destination is cleared". For a driving
+  harvester whose fresh search fails within 1 cell (S-0212 claim 23's third row) the failure clears
+  only its locomotor destination point and keeps the destination (claim 31 here), and claim 30 here
+  installs that destination's point again at its next locomotion update. That cell should limit the
+  clearing of the destination to S-0212 claim 23's first two rows. It rests on claims 30 and 31.
+- Q-3374: S-0314 claims 17 and 21, scenario H19 and the Open question on claim 21's same-cell enter
+  order. H19 expects that "a wait or failed search retaining the goal retains the point and movement
+  report", and among its falsifiers it lists clearing "on a retained-goal search failure". Under
+  claim 31 here a failed fresh search of a driving vehicle clears its locomotor destination point in
+  that update, and within 1 cell the goal stays; claim 30 here installs the goal's point again at
+  the vehicle's next locomotion update. So from the failure to that install a driving vehicle whose
+  goal is the depot gives no movement report (S-0314 claim 17's table) and has no moving destination
+  (S-0314 Terms), and the depot's checks of claims 6 and 21 read that state in the interval. This is
+  our engine's rule in *enter*. Whether the original clears the point in *enter* is a low Open
+  question here (claim 31 here), so this entry does not settle S-0314's Open question on the
+  same-cell enter order for the original. Under our engine's rule a vehicle that stands in the
+  docking-point cell after an accepted same-cell enter order searches for its own cell at its
+  no-track update, fails and clears the point, the next update installs it again, and each later
+  search, about *R* ticks apart, clears it again. S-0314 claims 17 and 21 should state that interval
+  as our engine's rule. H19 should record, for a driving vehicle, the point in the row of a failure
+  within 1 cell and in the next row, and should no longer count a clearing there as falsifying: that
+  record decides the Open question here for *enter*. A failure more than 1 cell away gives up
+  (S-0212 claim 23), which H19 already
+  asks to record separately. It rests on claims 30 and 31.
+- Q-3373: S-0507 claim 6a. Claim 30 here has a driving vehicle whose order-level destination is an
+  infantry unit ask that unit for its point at each end of a track, unless its current behaviour is
+  *unload*, and install the point when it differs; that install is not an assignment. So a driving
+  transport of S-0507 claim 5 whose destination is an infantry requester follows the requester at
+  each of its track ends until the destination is lost. Claim 6a's sentence that the point does not
+  follow the object as it moves before it goes inside should say so for driving movement: between
+  track ends the point stays, and at the loss it is the point installed at the last track end before
+  it. It rests on claim 30 and D36.
+- Q-3374: S-0417 claims 5 and 16. Claim 5's drive exit-track instruction neither sets nor removes an
+  order-level destination, so a destination held from before it is kept, and it is not asked for its
+  point while the exit point is present (claim 29 here). Claim 16 says that no factory-exit timeout
+  clears the exit point and, under *No follow-up goal*, that a point that no later instruction
+  replaces or stops is retained indefinitely. Under claim 31 here the vehicle searches for the
+  apron's cell, its own cell, in the update in which the exit track ends, finds no path, and that
+  failure clears the exit point in that tick, whatever its behaviour. So the exit point does not
+  outlast that tick unless an assignment replaces it first. A destination held from before the
+  instruction then has its point installed at the next locomotion update (claim 30 here), and the
+  vehicle searches for it once the retry delay has passed. Claim 16's table should gain a row for
+  that failed search, its *No follow-up goal* paragraph should not expect the exit point to be
+  retained past it, and U15's no-field control should expect the clearing in the tick in which the
+  exit track ends. D37 part c here plays the case. It rests on claims 29 to 31.
 
 ## Open questions
 
@@ -4846,11 +5187,6 @@ conditional diagnostic for that combination and assignment-time restoration.
 - Which cells decide crush mode (claim 7) was read but not exercised. Scenario D10 tests it (runs
   C to F for the track, runs A and B together with the start of the crush-slowdown state, which
   S-0210, claim 9 and scenario K5, owns).
-- The original makes a second look for a nearest object, by the same rule as F8: when a fresh
-  search finds no path while the vehicle is near its destination, it looks at the cell in its body
-  facing's step direction. That case was not traced far enough to state it, and this spec does
-  not describe it; the rule of F8 (top corner, not centre) is the one to reuse if a later
-  revision does.
 - How an infantry or aircraft object whose type names the driving locomotor (claim 14) moves.
   This spec covers drive vehicles only (Terms). The following possible differences from
   claims 2 to 13 and 15 are `unmeasured`, with low confidence: no scenario here tests movement
@@ -4900,3 +5236,18 @@ conditional diagnostic for that combination and assignment-time restoration.
 - (Claim 29.) Q-3353 names a "C7-P5 yield heading" among the readings of a unit with a building
   destination. No spec defines that name. If it is the vehicle scatter centre cell (Terms, claim
   16), claim 29 settles it. Which reading it names otherwise is not known here. Low.
+- (Claim 31; Q-3374.) Whether stock play gives a driving vehicle an order-level destination
+  before its factory's exit-track instruction (S-0417 claim 5), for example at its release, was not
+  traced. The instruction itself neither sets nor removes one. Low.
+- (Claims 30 and 31.) Whether the ship and walk locomotors ask a destination again as claim 30 gives
+  was not traced. Both claims are for the driving locomotor only. Low.
+- (Claim 31.) Whether a failed fresh search can leave a driving vehicle with a heading point other
+  than its own position, as the search that a first check makes at once (claim 15) might, was not
+  traced. Claim 30's install would then not come, and what starts the vehicle's next search there is
+  not known here. Low.
+- (Claim 31.) Whether the original clears a driving vehicle's locomotor destination point at a
+  failed fresh search in behaviours other than *move* and *harvest*, away from the factory exit, as
+  in *area guard*, *hunt* and *enter*. No scenario records the point at such a failure. S-0309
+  scenario A11 part c1 would decide it for *hunt* if its recorder logged the point and its failure
+  were a fresh search, and S-0314 scenario H19 would decide it for *enter* once it records the point
+  (Changes). Low.
