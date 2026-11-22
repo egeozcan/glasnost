@@ -853,6 +853,63 @@ fn claim_18_a_ring_shown_again_makes_no_follow_up_switch() {
     assert!(c.rings().is_empty(), "it ends after its pass");
 }
 
+/// The depth of the first drawn item of a ring of type `of` at `at`, ticking
+/// until one shows (at most 40 ticks).
+fn depth_once_shown(c: &mut Case, of: Of, at: Pos) -> ItemDepth {
+    let p = placed(of, at);
+    for _ in 0..40 {
+        c.tick();
+        if let Some(i) = c.scene.items.iter().find(|i| {
+            i.group == Group::Effects && (i.x, i.y) == p && {
+                let img = &c.scene.images[i.image as usize];
+                (img.width(), img.height())
+                    == match of {
+                        Of::Ring => RING_FRAME,
+                        Of::Perma => PERMA_FRAME,
+                    }
+            }
+        }) {
+            return i.depth;
+        }
+    }
+    panic!("no {of:?} ring drawn at {at:?}");
+}
+
+/// Q-3362. spec: S-0109 r49 claim 15 (at a follow-up switch the depth adjustment is unchanged: the
+/// value set at the animation's creation, the depth adjustment of the type it was created with
+/// where no creator replaced it; the follow-up type's own is not read) and scenario AN31 part a;
+/// S-0601 r37 claim 18 (a mobile object's ring has its type's own depth adjustment); S-0102 claim
+/// 13. RINGX (+2000) switches to PERMX (0) after its one pass.
+#[test]
+fn claim_15_a_vehicles_ring_keeps_its_created_types_depth_adjustment_through_a_switch() {
+    let mut c = case_with(BOTH, "", "LoopCount=1\nNext=PERMX\nZAdjust=2000\n");
+    c.control(c.rv1);
+    let at = raised(c.pos(c.rv1), 140);
+    assert_eq!(depth_once_shown(&mut c, Of::Ring, at), ring_depth(at, 2000));
+    assert_eq!(
+        depth_once_shown(&mut c, Of::Perma, at),
+        ring_depth(at, 2000),
+        "after the switch the ring keeps RINGX's +2000, not PERMX's own 0"
+    );
+}
+
+/// Q-3362. spec: S-0109 r49 claim 15 (the depth adjustment after a follow-up switch is the value set
+/// at creation, which is the creator's replacement where the creator replaced it) and scenario AN31
+/// part b; S-0601 r37 claim 18 and Constants (the takeover of a building replaces its ring's
+/// adjustment by −1024)
+#[test]
+fn claim_15_a_buildings_ring_keeps_minus_1024_through_a_switch() {
+    let mut c = case_with(BOTH, "", "LoopCount=1\nNext=PERMX\nZAdjust=2000\n");
+    c.control(c.hut);
+    let at = glasnost_sim::mind::ring(&c.live.world, c.hut).unwrap().at;
+    assert_eq!(depth_once_shown(&mut c, Of::Ring, at), ring_depth(at, -1024));
+    assert_eq!(
+        depth_once_shown(&mut c, Of::Perma, at),
+        ring_depth(at, -1024),
+        "after the switch the ring keeps the takeover's −1024"
+    );
+}
+
 /// The object `id`'s controller becomes `by` in one tick: a release and a
 /// takeover by another controller (S-0601 claims 6 and 9).
 fn new_controller(c: &mut Case, id: ObjectId, by: ObjectId) {
