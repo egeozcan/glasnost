@@ -412,6 +412,14 @@ and 8, seeds 7 to 14 (480 games).
   plan's count; the vehicle line is left to the harvesters. AS2's early guard and AS3's guard
   when threatened both trained soldiers whatever money the harvesters needed; this one spends
   only what is left over.
+- **A floor under the first strike** (`Tuning::floor`, hard only). The edge is a share of the
+  enemy army the house remembers, and early in a game it remembers none, so the edge holds for
+  any strike. With the soldiers beside the harvesters the strike's count of ten stood by tick
+  6 000 (a dev-1 watch, map 2 seed 8: eight dogs and soldiers out, the strike lost and called
+  home by tick 9 000), where the base's first strike went near tick 10 500 with tanks. So at
+  hard a new strike also needs the units that would go to be worth 5 000 credits at least; the
+  soldiers wait at home as a guard until the war factory's units join them. Joining a strike
+  under way is not held.
 
 ## The tournament
 
