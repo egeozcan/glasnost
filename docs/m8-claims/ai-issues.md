@@ -537,3 +537,34 @@ report gains one line. Base 6cffcc6.
 86 victories, no pair down: a clear gain, kept. cert-0 (base, seeds 11 to 14): `siege:hard`
 1801.2. cert-1 (seeds 15 to 18): `siege:hard` 1734.0 (order-free 1715.2), 168-29-43, score
 0.790, 115 victories and 53 wins on worth; top of the pool, but short of 2000.
+
+## Script AS3
+
+Issue #449, the siege's third batch: its hard level further toward 2000 Elo, playing fair. Notes
+in [ai-scripts.md](../dev/ai-scripts.md#hard-script-as3). No code changes in the end: three
+levers were tried and each was reverted, so the default script, the siege and the tournament are
+as on the base. Base df22a12.
+
+**Measurement**, fixed before the first round:
+
+- **Baseline cert-0:** the certifying round on the base.
+- **Certifying round:** as AS2's (seeds 15 to 18, the six entrants, 720 games). The goal is
+  `siege:hard`'s final Elo in the report at 2000 or more.
+- **Development rounds:** `siege:hard` against each of the five other entrants, one two-entrant
+  tournament each, on maps 0, 2 and 8, seeds 7 to 14 (480 games).
+- **A clear gain:** the combined score (win 1, draw ½) up at least 0.02, or 12 more victories,
+  with no pair down more than 0.06.
+- **Stop rule:** the goal met, or three development rounds in a row with no clear gain.
+
+| part | confirmed | change | test |
+|---|---|---|---|
+| no navy while the enemy is reached by land (dropped) | a watch showed a ship built late in a game on a map where every enemy start is reached by land | tried: at hard, while every enemy start lay in the reach region of the house's ground vehicles (S-0212 claim 4), the brain's naval building orders (S-0406 claim 3 d) were dropped and the climb went on without them. `siege:easy` and `siege:normal` came out game for game as dev-0. Reverted | none (its test was reverted with it) |
+| more factories only after the first strike (dropped) | the watch's fourth building at tick 3 500 was a second war factory, since a house starts above `rich` | tried: AS2's more factories held until the first strike had gone. `siege:normal` fell from 0.646 to 0.557. Reverted | none (its test was reverted with it) |
+| the guard when threatened (dropped) | cert-0: 29 of 34 losses with country 0; two watches on map 0 show no army unit before tick 5 000 while the brain waits for the plan's harvesters | tried: at hard, while the remembered enemy army outweighed the house's own on the ground and the harvesters were short, the cheapest infantry army type not sent alone. 0.807 (+0.004), 222 victories (+7), no pair down more than 0.006. Reverted | none (its test was reverted with it) |
+
+**Rounds.** cert-0 (base, seeds 15 to 18): `siege:hard` 1739.5 (order-free 1702.6), 166-34-40,
+score 0.775, 111 victories and 55 wins on worth; top of the pool, short of 2000. dev-0 (base):
+0.803, 346-55-79, 215 victories. dev-1 (no navy): the two pairs played equal to dev-0, no gain.
+dev-2 (with factories after the first strike): `siege:normal` 0.557, worse. dev-3 (the guard when
+threatened): 0.807, 222 victories, no clear gain. The stop rule ended the batch with no code kept,
+so no certifying round after cert-0.

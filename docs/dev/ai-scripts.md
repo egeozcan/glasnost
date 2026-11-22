@@ -344,6 +344,53 @@ about tick 3 500, took its base apart.
   but short of 2000. Its weakest pair is `siege:normal` (0.688) and its weakest country is
   country 0 (0.679, against 0.900 on country 1).
 
+### Hard, script AS3
+
+Script AS3 took the siege's hard level further toward 2000 Elo, with the same rules of fair play.
+Its baseline is the certifying round on its base: `siege:hard` at 1739.5 (1702.6 order-free),
+166-34-40. Of its 34 losses, 29 came with country 0, and on map 0 with country 0 it lost to
+`siege:easy` 7 of 8, to `siege:normal` 8 of 8. Two watches (`siege-watch`, map 0, seed 8) showed
+the house with no army unit until after tick 5 000: the brain's army round waits for the plan's
+three harvesters, and against `siege:easy` the second harvester was lost, so hard stood with
+5 700 credits in hand and nothing to fight `siege:easy`'s first strike of five infantry at
+tick 3 500. Against `siege:normal` it stood at tick 6 000 with an army worth 1 400 to the
+enemy's 2 500, whose strike of 14 then took its base.
+
+Development rounds play `siege:hard` against each of the five other entrants (maps 0, 2 and 8,
+seeds 7 to 14, 96 games a pair). The baseline round, dev-0, scored 0.803 (346-55-79, 215
+victories).
+
+- **No navy while the enemy is reached by land, tried and dropped.** Hard only: while every
+  enemy start lay in the reach region (S-0212 claim 4) of the house's ground vehicles, the
+  brain's orders for a naval building (S-0406 claim 3 d) were dropped and the climb went on
+  without them. The watch showed a ship later in the game, gone with the change, but the two
+  pairs played (`siege:easy`, `siege:normal`) came out game for game as dev-0 (0.797, 0.646).
+  It was reverted.
+- **More factories only after the first strike, tried and dropped.** The fourth factory at tick
+  3 500 in the watch was a second war factory: a house starts with more than `rich` credits, so
+  AS2's more factories when rich ordered one while the brain still held its army. With the
+  factories held until the first strike had gone, the pair with `siege:normal` fell from 0.646
+  to 0.557: the early second war factory pays later. It was reverted.
+- **The guard when threatened, tried and dropped.** Hard only. AS2's early guard trained
+  infantry whenever the house had few army units, and spent the money of the refineries by new
+  fields on map 2. This one trains only while the house is threatened and the brain holds its
+  army: while the enemy army the house remembers (`Army::seen`) is worth more than its own army
+  on the ground, and it has fewer harvesters than the plan, it orders the cheapest infantry army
+  type it can build that it does not send alone, on a free line, with money in hand beyond what
+  its running items owe, when the brain orders no infantry. A person who sees the enemy's
+  soldiers at the gate trains soldiers; one who sees none builds the economy. The round came out
+  at 0.807 (348-53-79, 222 victories): `siege:easy` rose from 0.797 to 0.823 and `default:easy`
+  gave six more victories, but the other three pairs played game for game as dev-0, since by the
+  time those enemies strike the harvesters stand. That is short of a clear gain, so it was
+  reverted.
+
+Three development rounds in a row brought no clear gain, so script AS3 stopped there with the
+hard level as AS2 left it: no code of AS3's is kept. What the rounds showed is where the next
+gain lies. Hard's losses are early losses with country 0, mostly on map 0, before its first
+strike, while it waits for its third harvester. A lever that answers them has to field an army
+sooner without the early second war factory going, and the guard shows that soldiers alone,
+trained only while threatened, come too few and too late.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
