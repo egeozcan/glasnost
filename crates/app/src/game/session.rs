@@ -1738,7 +1738,8 @@ impl Session {
 
     /// The held press of S-0214 claims 18, 26 and 27: a left or right
     /// press on the battlefield view, outside the pause menu, with its
-    /// press pixel and button.
+    /// press pixel and button. A press that begins during an order block is
+    /// never one: [`Session::pointer_down`] refuses it (r104 claim 35 (e)).
     fn battlefield_press(&self) -> Option<(Point, Button)> {
         self.press.filter(|&(start, b)| {
             !self.paused
@@ -1772,7 +1773,7 @@ impl Session {
     /// no press, so the hover is looked up again from the block's end.
     fn abandon_at_block(&mut self) {
         // spec: S-0214 r101 claim 35 (e) (when the block begins, a battlefield press that is held is abandoned as in claim 34 (e): an active band box disappears, a scroll drag stops, no box, click, right click or order results, and the later release gives none) and Terms (*battlefield press*: held until an order block begins)
-        // design: render (Q-3369) a press that begins while a block is in force is not abandoned: it is held until its release, as before r101
+        // spec: S-0214 r104 claim 35 (e) and Terms (a press that begins while a block is in force is no battlefield press, so none is held here: `pointer_down` refuses it)
         if self.held_press().is_some() {
             self.press = None;
             self.drag = None;
@@ -1830,6 +1831,21 @@ impl Session {
         self.view_button_held = on_map && matches!(b, Button::Left | Button::Right);
         if on_map {
             self.aim = None;
+        }
+        // spec: S-0214 r104 claim 35 (e) (a left or right press that begins on the battlefield view while an order block is in force is refused with the rest of the block's input: it is not a battlefield press, Terms, even once the block has ended, so it holds no hover, starts no band box or scroll drag, and its release gives no box, click, right click or order)
+        // spec: S-0214 r104 claim 35 (e) (such a press does not block the name tip as a held battlefield press does; during the block the block itself blocks it, S-0111 claim 20)
+        if on_map
+            && !self.paused
+            && matches!(b, Button::Left | Button::Right)
+            && glasnost_sim::orders::blocked(&self.play.game.world)
+        {
+            self.press = None;
+            self.view_button_held = false;
+            self.drag = None;
+            self.right = None;
+            self.route.pressed = None;
+            self.press_image = None;
+            return;
         }
         // spec: S-0214 claim 18 (a left-button press in the battlefield can start a selection drag when sell, repair, power, building-placement and superweapon targeting modes are off)
         self.drag = (b == Button::Left && !self.paused && self.play.tool == Tool::Select && on_map)
