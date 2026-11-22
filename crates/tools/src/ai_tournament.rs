@@ -454,7 +454,7 @@ pub fn order_free_ratings(entrants: usize, games: &[Played]) -> Vec<f64> {
             )
         })
         .collect();
-    keyed.sort_by(|x, y| (x.0, x.1).cmp(&(y.0, y.1)));
+    keyed.sort_by_key(|x| (x.0, x.1));
     let canonical: Vec<(usize, usize, f64)> = keyed
         .iter()
         .map(|&((_, _, a, b, _, _), _, s)| (a, b, s))
