@@ -109,6 +109,10 @@ pub struct Tuning {
     /// for the plan's harvesters, with the money the next harvester leaves
     /// over ([`Siege::beside`]).
     pub beside: bool,
+    /// Credits the units that would go must be worth at least for a new
+    /// strike, beside the edge (which holds for any strike while the house
+    /// remembers no enemy army); 0: none.
+    pub floor: i64,
 }
 
 /// The tuning of level `level`.
@@ -129,6 +133,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             patience: 0,
             rich: 0,
             beside: false,
+            floor: 0,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -145,6 +150,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             patience: 0,
             rich: 0,
             beside: false,
+            floor: 0,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -163,6 +169,8 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             rich: 3000,
             // nocite: design: own AI (#449): hard trains soldiers with the money the plan's next harvester leaves over, as a person keeps the barracks busy while the war factory builds harvesters
             beside: true,
+            // nocite: design: own AI (#449): a new strike's units worth five thousand credits at least, so the soldiers trained beside the harvesters wait at home for the war factory's units rather than go out alone while the house remembers no enemy army
+            floor: 5000,
         },
     }
 }
@@ -505,6 +513,8 @@ impl Siege {
         let want = if waited { t.edge.min(80) } else { t.edge };
         // nocite: design: own AI (#449): the edge is a percent of the remembered enemy army's worth
         let edge = want == 0 || goers_worth * 100 >= want * enemy_worth;
+        // design: own AI (#449): the level's floor holds a new strike whose units are worth less, whatever the edge
+        let edge = edge && goers_worth >= t.floor;
         let free_n = army.len().saturating_sub(self.army.out.len());
         let goes = if self.army.striking {
             waiting.len() > guard && waiting.len() - guard >= t.join
