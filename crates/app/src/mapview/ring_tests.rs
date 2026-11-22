@@ -902,7 +902,10 @@ fn claim_15_a_buildings_ring_keeps_minus_1024_through_a_switch() {
     let mut c = case_with(BOTH, "", "LoopCount=1\nNext=PERMX\nZAdjust=2000\n");
     c.control(c.hut);
     let at = glasnost_sim::mind::ring(&c.live.world, c.hut).unwrap().at;
-    assert_eq!(depth_once_shown(&mut c, Of::Ring, at), ring_depth(at, -1024));
+    assert_eq!(
+        depth_once_shown(&mut c, Of::Ring, at),
+        ring_depth(at, -1024)
+    );
     assert_eq!(
         depth_once_shown(&mut c, Of::Perma, at),
         ring_depth(at, -1024),
