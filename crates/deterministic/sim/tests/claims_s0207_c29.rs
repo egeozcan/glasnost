@@ -67,7 +67,11 @@ fn bunker_scene() -> (World, ObjectId, ObjectId, Pos) {
     assert_eq!(w.obj(v).unwrap().contact, None, "no contact");
     econ::assign_destination(&mut w, v, Some(Target::Object(b)));
     let q = drive::goal(&w, v).expect("a point installed at the assignment");
-    assert_eq!(q, bunker::docking_point(&w, b, v), "the quadrant point then");
+    assert_eq!(
+        q,
+        bunker::docking_point(&w, b, v),
+        "the quadrant point then"
+    );
     (w, b, v, q)
 }
 
