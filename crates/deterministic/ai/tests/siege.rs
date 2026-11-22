@@ -81,12 +81,16 @@ fn tanks(w: &mut World, n: usize) -> Vec<ObjectId> {
     out
 }
 
-/// Runs `w` for `ticks`, house 0 played by `s` at `level`; returns every
-/// order it gave, by tick.
+/// Runs `w` for at most `ticks` steps, house 0 played by `s` at `level`,
+/// and stops once the game is over (after its final tick the tick number
+/// no longer grows, S-0201 claim 1 and S-0414 claim 8); returns every order
+/// it gave, by tick.
 fn play(w: &mut World, s: &mut Siege, level: AiDifficulty, ticks: i32) -> Vec<(i32, Order)> {
     let mut got = Vec::new();
-    let end = w.tick + ticks;
-    while w.tick < end {
+    for _ in 0..ticks {
+        if w.econ.end.finished {
+            break;
+        }
         let tick = w.tick;
         let schedule = Schedule::of(HouseId(0), tick);
         let view = View::new(w, HouseId(0));
@@ -309,6 +313,40 @@ fn an_outmatched_strike_is_called_home() {
         })
         .collect();
     assert!(!called.is_empty(), "the strike is called home: {got:?}");
+}
+
+// design: own AI (#449): a strike that reaches its goal, a seen enemy building, attacks it: an AI house counts as human-controlled (glossary), so its units' own searches pass a building with no weapon by (S-0309 table C, row "harmless building"), and the strike stood beside the enemy base
+#[test]
+fn the_strike_attacks_the_building_it_reaches() {
+    let level = AiDifficulty::Hard;
+    let t = tuning(level);
+    let mut w = base_up();
+    let target = yard(&w, 1).expect("house 1's yard stands");
+    let at = w.obj(target).unwrap().pos.cell();
+    // nocite: test data of our own (house 0 sees house 1's base)
+    shroud::area_reveal(&mut w, HouseId(0), Pos::centre(at, 0), 10);
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    // The strike's count and room for the brain's own parts.
+    let ids = tanks(&mut w, t.strike + 3);
+    // nocite: test data of our own (time to drive there and fire)
+    let got = play(&mut w, &mut s, level, 3000);
+    assert!(s.strikes() >= 1, "a strike goes");
+    let attackers: BTreeSet<ObjectId> = got
+        .iter()
+        .filter_map(|(_, o)| match o {
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Attack,
+                target: Some(Target::Object(e)),
+                ..
+            } if *e == target && ids.contains(actor) => Some(*actor),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !attackers.is_empty(),
+        "the strike attacks the yard it reaches"
+    );
 }
 
 /// House 0's factory buildings on the map that make `kind` (not naval).
