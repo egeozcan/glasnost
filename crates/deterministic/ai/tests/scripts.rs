@@ -44,7 +44,9 @@ fn game(setup: GameSetup) -> Game {
 }
 
 /// The game stepped until both houses have an army unit (as the AI suite's
-/// `armed`), at most `limit` ticks.
+/// `armed`), or house 0 has a few soldiers (the siege at hard trains them
+/// beside its harvesters, and its first strike would end the game before
+/// house 1 has a tank), at most `limit` ticks.
 fn armed(seat: AiSeat) -> Game {
     let mut g = game(setup_with(5, seat));
     let has = |w: &World, h: u8| {
@@ -59,9 +61,15 @@ fn armed(seat: AiSeat) -> Game {
                     == Some("GUNR")
         })
     };
-    // nocite: test data of our own (the AI suite's limit for an armed start)
+    let soldiers = |w: &World| {
+        w.objects
+            .values()
+            .filter(|o| o.owner == Some(HouseId(0)) && o.on_map && o.kind == Kind::Infantry)
+            .count()
+    };
+    // nocite: test data of our own (the AI suite's limit for an armed start; three soldiers, fewer than any strike)
     for _ in 0..9000 {
-        if has(&g.world, 0) && has(&g.world, 1) {
+        if (has(&g.world, 0) && has(&g.world, 1)) || soldiers(&g.world) >= 3 {
             break;
         }
         g.step();
