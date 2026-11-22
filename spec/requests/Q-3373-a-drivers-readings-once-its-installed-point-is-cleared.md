@@ -1,9 +1,9 @@
 ---
 id: Q-3373
 title: What a driving vehicle's readings measure to once its installed point is cleared
-status: open
+status: answered
 related: [S-0207, S-0212]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need
