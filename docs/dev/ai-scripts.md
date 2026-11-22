@@ -391,6 +391,28 @@ strike, while it waits for its third harvester. A lever that answers them has to
 sooner without the early second war factory going, and the guard shows that soldiers alone,
 trained only while threatened, come too few and too late.
 
+### Hard, script AS4
+
+Script AS4 took the siege's hard level further toward 2000 Elo, with the same rules of fair play.
+Its baseline is AS3's: the simulation and the AI have not changed since, so AS3's certifying
+round (`siege:hard` 1739.5, 1702.6 order-free) and its development round dev-0 (0.803) stand.
+Development rounds are AS3's: `siege:hard` against each of the five other entrants on maps 0, 2
+and 8, seeds 7 to 14 (480 games).
+
+- **Soldiers beside the harvesters** (`Tuning::beside`, hard only). While the house keeps fewer
+  harvesters than its plan, the brain's army round waits for them, whatever the money in hand
+  (AS3's watch: 5 700 credits and no soldier at tick 3 000). A person with that money trains
+  soldiers at the barracks while the war factory builds the harvesters. So while the plan's
+  harvesters do not stand, the siege orders one infantry army type a think on the free infantry
+  line when the money in hand, beyond what the running items owe, pays for the next harvester
+  and the soldier both (with no harvester type to build yet, the cheapest war factory stands in
+  for it). The type is the one the house has fewest of on the map, then has built fewest of,
+  then the cheapest, and never one it sends alone (`scripted::spent_alone`). It is the brain's
+  own wealth test for a harvester beyond the plan (`rich` in the army round), applied to the
+  plan's count; the vehicle line is left to the harvesters. AS2's early guard and AS3's guard
+  when threatened both trained soldiers whatever money the harvesters needed; this one spends
+  only what is left over.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
