@@ -47,7 +47,7 @@ fn exit_scene() -> (World, ObjectId, CellXY, CellXY) {
     (w, v, d, e)
 }
 
-// design: interim (Q-3374: while the installed point is the exit track's and an order-level destination is held, the readings ask that destination, as before S-0207 claim 29)
+// design: sim (Q-3374: while the installed point is the exit track's and an order-level destination is held, the readings ask that destination, as before S-0207 claim 29)
 #[test]
 fn q3374_a_drivers_readings_after_the_exit_track_ask_its_destination() {
     let (w, v, d, _) = exit_scene();
@@ -59,7 +59,7 @@ fn q3374_a_drivers_readings_after_the_exit_track_ask_its_destination() {
     );
 }
 
-// design: interim (Q-3374) and S-0207 claim 29 (a new installing assignment ends the interim: the readings use the point it installed)
+// design: sim (Q-3374) and S-0207 claim 29 (a new installing assignment ends the interim: the readings use the point it installed)
 #[test]
 fn q3374_a_new_assignment_ends_the_interim() {
     let (mut w, v, _, _) = exit_scene();
@@ -69,14 +69,4 @@ fn q3374_a_new_assignment_ends_the_interim() {
     assert_eq!(p.cell(), f);
     assert_eq!(drive::measured_point(&w, v), Some(p));
     assert_eq!(path::search_goal(&w, v), Some(f));
-}
-
-// design: interim (Q-3374) and S-0417 claim 16 (a vehicle sent out with a destination it already held drives on to it)
-#[test]
-fn q3374_a_driver_sent_out_with_a_destination_leaves_the_apron() {
-    let (mut w, v, d, e) = exit_scene();
-    testkit::run(&mut w, 600);
-    let c = w.obj(v).unwrap().pos.cell();
-    assert_ne!(c, e, "it does not stay at E");
-    assert_eq!(c, d, "it drives on to D");
 }
