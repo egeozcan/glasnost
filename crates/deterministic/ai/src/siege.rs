@@ -105,6 +105,10 @@ pub struct Tuning {
     /// Credits in hand from which the siege adds a factory of the army's
     /// kinds ([`Siege::more_factories`]); 0: never.
     pub rich: i32,
+    /// Whether the house trains soldiers while the brain's army round waits
+    /// for the plan's harvesters, with the money the next harvester leaves
+    /// over ([`Siege::beside`]).
+    pub beside: bool,
 }
 
 /// The tuning of level `level`.
@@ -124,6 +128,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             economy: false,
             patience: 0,
             rich: 0,
+            beside: false,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -139,6 +144,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             economy: false,
             patience: 0,
             rich: 0,
+            beside: false,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -155,6 +161,8 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             patience: 3000,
             // nocite: design: own AI (#449): three thousand credits in hand, money the two army lines leave unspent only while the income outruns them
             rich: 3000,
+            // nocite: design: own AI (#449): hard trains soldiers with the money the plan's next harvester leaves over, as a person keeps the barracks busy while the war factory builds harvesters
+            beside: true,
         },
     }
 }
@@ -341,6 +349,91 @@ impl Siege {
                 out.push(Order::Build { what: t });
             }
             return;
+        }
+    }
+
+    /// Soldiers beside the harvesters (design: own AI, #449): while the
+    /// house keeps fewer harvesters than its plan (`Script::harvesters_kept`),
+    /// the brain's army round waits for them, whatever the money in hand.
+    /// A person with money to spare trains soldiers at the barracks while
+    /// the war factory builds the harvesters. So with no infantry ordered
+    /// this think, one infantry army type on its free line: the one the
+    /// house has fewest of on the map, then has built fewest of, then the
+    /// cheapest, never one it sends alone (`scripted::spent_alone`), when
+    /// the money in hand, beyond what the running items owe and what this
+    /// think's build orders cost, pays for the next harvester and the
+    /// soldier both (the brain's own wealth test for a harvester beyond the
+    /// plan, `rich` in its army round). With no harvester type to build yet,
+    /// the cheapest war factory stands in for it. The vehicle line is left
+    /// to the harvesters.
+    fn beside(&self, w: &World, out: &mut Vec<Order>) {
+        let eyes = &self.eyes;
+        let house = eyes.house;
+        if eyes.selling() || eyes.harvesters_kept(w) {
+            return;
+        }
+        if out
+            .iter()
+            .any(|o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry))
+        {
+            return;
+        }
+        let price = |t: TypeRef| i64::from(production::price(w, house, t));
+        let reserve = eyes
+            .candidates(w, Role::Harvester)
+            .first()
+            .copied()
+            .or_else(|| {
+                eyes.candidates(w, Role::Factory(FactoryKind::Vehicle))
+                    .first()
+                    .copied()
+            })
+            .map_or(0, price);
+        let owed: i64 = w
+            .econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == house)
+            .filter_map(|l| l.item.as_ref())
+            .filter(|i| !i.done() && i.hold == production::Hold::None)
+            .map(|i| i64::from(i.owed))
+            .sum();
+        let ordered: i64 = out
+            .iter()
+            .filter_map(|o| match o {
+                Order::Build { what } => Some(price(*what)),
+                _ => None,
+            })
+            .sum();
+        let spare = i64::from(w.houses[usize::from(house.0)].credits) - owed - ordered;
+        let own = eyes.own(w);
+        let living = |t: TypeRef| {
+            own.iter()
+                .filter(|&&id| w.obj(id).is_some_and(|o| tech::type_of(o) == t))
+                .count()
+        };
+        let pick = eyes
+            .candidates(w, Role::Army)
+            .into_iter()
+            .filter(|&t| {
+                t.kind == Kind::Infantry
+                    && !scripted::spent_alone(w, t)
+                    && !crate::lifter::lifter_type(w, t)
+                    && !eyes.busy(w, t)
+            })
+            .min_by_key(|&t| {
+                (
+                    living(t),
+                    tech::ever_built(w, house, t),
+                    production::cost_field(w, t),
+                    t.index,
+                )
+            });
+        if let Some(t) = pick
+            && spare >= reserve + price(t)
+        {
+            out.push(Order::Build { what: t });
         }
     }
 
@@ -689,6 +782,9 @@ impl AiScript for Siege {
         }
         if t.rich > 0 {
             self.more_factories(w, t.rich, &mut out);
+        }
+        if t.beside {
+            self.beside(w, &mut out);
         }
         if acts {
             self.command(w, level, &busy, &mut out);
