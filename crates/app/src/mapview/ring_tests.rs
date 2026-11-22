@@ -377,9 +377,12 @@ fn claim_18_a_controlled_vehicle_shows_the_ring_type_raised_by_its_ring_height()
     assert_eq!(c.live.counts.anims, 2, "one animation per ring");
 }
 
-/// spec: S-0601 r32 claim 18 (a permanently controlled object carries the permanent-controlled-animation
-/// type, also when it is controlled as well) and design: render (#122) (the rings come from the
-/// control records alone: none for a record whose object is gone or is off the map)
+/// Q-3361. spec: S-0601 r37 claim 18 (a permanently controlled object carries the
+/// permanent-controlled-animation type, also when it is controlled as well: one ring in our engine,
+/// S-0612 claim 14; the permanent ring is created as a mobile object's controlled ring, at the
+/// object's position raised by its type's ring height: the two differ only in their type) and
+/// design: render (#122) (the rings come from the control records alone: none for a record whose
+/// object is gone or is off the map)
 #[test]
 fn claim_18_a_permanently_controlled_object_shows_the_permanent_type() {
     let mut c = case(BOTH);
@@ -521,8 +524,8 @@ fn claim_18_each_return_of_the_ring_starts_a_new_playback() {
 
 /// spec: S-0109 *Changes for other specs* (the S-0601 claim 18 entry: the ring is drawn, advances
 /// and ends as S-0109 gives for the ring's type) and S-0109 claims 7 and 16 (a type with one pass
-/// ends after it) and S-0601 r32 claim 18: an ended ring does not start again while its object stays
-/// controlled
+/// ends after it) and S-0601 r37 claim 18 (the permanent ring is created with a repeat factor of 1,
+/// Q-3361): an ended ring does not start again while its object stays controlled
 #[test]
 fn claim_18_a_ring_whose_type_ends_stays_gone_while_the_control_lasts() {
     let mut c = case(BOTH);
