@@ -959,17 +959,109 @@ fn claim_35_e_an_order_block_abandons_a_right_press() {
     assert_eq!(selected(&mut c), s0, "no right click");
 }
 
-/// Q-3369. design: render (Q-3369) (a press that begins during an order block is held until its
-/// release as before S-0214 r101: only a press held when a block begins is abandoned, claim 35
-/// (e))
+/// Q-3369. spec: S-0214 r104 claim 35 (e) (a left or right press that begins on the battlefield
+/// view while an order block is in force is refused with the rest of the block's input: it is not
+/// a battlefield press, Terms, even once the block has ended; while its button stays down after the
+/// block the hover is looked up for every drawn frame, the cursor follows that lookup and the
+/// object found gets the hover mark, and its release gives no click) and scenario T27 run n1
 #[test]
-fn a_press_that_begins_during_an_order_block_is_held_until_its_release() {
+fn claim_35_e_a_left_press_made_in_an_order_block_holds_nothing_after_it() {
     let (mut c, unit, p) = hovering_with_cursor();
+    let s0 = selected(&mut c);
     block_begins(&mut c, unit);
     c.pointer_down(Button::Left, p);
+    let _ = c.frame();
+    assert_eq!(hovered(&mut c), None, "no mark in the block");
     block_ends(&mut c);
+    let _ = c.frame();
+    assert_eq!(
+        hovered(&mut c),
+        Some(unit),
+        "looked up with the button still down"
+    );
+    assert!(
+        cursor_now(&mut c, 1_000).is_some_and(|f| SELECT.contains(&f)),
+        "the cursor follows the lookup"
+    );
     c.pointer_up(Button::Left, p, Modifiers::default());
-    assert_eq!(selected(&mut c), vec![unit], "the release is a click");
+    assert_eq!(selected(&mut c), s0, "the release gives no click");
+}
+
+/// Q-3369. spec: S-0214 r104 claim 35 (e) (a drag after the block of a left press that began during
+/// it starts no band box, claim 18, so the cursor follows the lookup, and its release gives no
+/// box) and scenario T27 run n2
+#[test]
+fn claim_35_e_a_press_made_in_an_order_block_starts_no_band_box() {
+    let (mut c, unit, p) = hovering_with_cursor();
+    let s0 = selected(&mut c);
+    let press = empty_at(&mut c, p, (-40, -30));
+    let end = empty_at(&mut c, p, (40, 20));
+    c.pointer_moved(press);
+    block_begins(&mut c, unit);
+    c.pointer_down(Button::Left, press);
+    block_ends(&mut c);
+    c.pointer_moved(end);
+    let _ = c.frame();
+    assert!(
+        cursor_now(&mut c, 1_000).is_some_and(|f| MOVE.contains(&f)),
+        "no band box: the lookup's move cursor"
+    );
+    c.pointer_up(Button::Left, end, Modifiers::default());
+    assert_eq!(selected(&mut c), s0, "the release gives no box");
+}
+
+/// Q-3369. spec: S-0214 r104 claim 35 (e) (a right press that begins during an order block is no
+/// battlefield press: with its button still down after the block the hover is looked up and the
+/// cursor follows the lookup, and its release gives no right click, claim 26) and scenario T27 run
+/// n3
+#[test]
+fn claim_35_e_a_right_press_made_in_an_order_block_gives_no_right_click() {
+    let (mut c, unit, p) = hovering_with_cursor();
+    let s0 = selected(&mut c);
+    assert!(!s0.is_empty(), "set-up: S is selected");
+    block_begins(&mut c, unit);
+    c.pointer_down(Button::Right, p);
+    block_ends(&mut c);
+    let _ = c.frame();
+    assert_eq!(
+        hovered(&mut c),
+        Some(unit),
+        "looked up with the button still down"
+    );
+    assert!(
+        cursor_now(&mut c, 1_000).is_some_and(|f| SELECT.contains(&f)),
+        "the cursor follows the lookup"
+    );
+    c.pointer_up(Button::Right, p, Modifiers::default());
+    assert_eq!(selected(&mut c), s0, "no right click");
+}
+
+/// Q-3369. spec: S-0214 r104 claim 35 (e) (a drag after the block of a right press that began
+/// during it starts no scroll drag, claim 27, and its release gives nothing) and scenario T27 run
+/// n4
+#[test]
+fn claim_35_e_a_right_press_made_in_an_order_block_starts_no_scroll_drag() {
+    let (mut c, unit, p) = hovering_with_cursor();
+    let s0 = selected(&mut c);
+    let press = empty_at(&mut c, p, (0, -23));
+    c.pointer_moved(press);
+    block_begins(&mut c, unit);
+    c.pointer_down(Button::Right, press);
+    block_ends(&mut c);
+    let before = session_mut(&mut c).view().origin;
+    // 20 pixels to the right, beyond F8's bound.
+    let held = Point::new(press.x + 20, press.y);
+    c.pointer_moved(held);
+    for k in 0..3 {
+        session_mut(&mut c).scroll_cycle(2_000 + 100 * k, [false; 4], true);
+    }
+    assert_eq!(
+        session_mut(&mut c).view().origin,
+        before,
+        "no scroll drag after the block"
+    );
+    c.pointer_up(Button::Right, held, Modifiers::default());
+    assert_eq!(selected(&mut c), s0, "the release gives nothing");
 }
 
 /// Q-3322. spec: S-0516 r36 claim 26 (none of the refusals applies to an object that V owns: V
