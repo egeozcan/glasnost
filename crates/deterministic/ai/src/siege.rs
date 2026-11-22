@@ -38,7 +38,7 @@ use glasnost_sim::econ::{TypeRef, production, shroud, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::probe::Probe;
 use glasnost_sim::regions::{self, Reach};
-use glasnost_sim::rules::{Behaviour, Kind};
+use glasnost_sim::rules::{Behaviour, FactoryKind, Kind};
 use glasnost_sim::world::{AiDifficulty, HouseId, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
@@ -102,6 +102,9 @@ pub struct Tuning {
     /// 0: never. A person who has waited long for an edge takes a near-even
     /// fight rather than none.
     pub patience: i32,
+    /// Credits in hand from which the siege adds a factory of the army's
+    /// kinds ([`Siege::more_factories`]); 0: never.
+    pub rich: i32,
 }
 
 /// The tuning of level `level`.
@@ -120,6 +123,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             recall: 0,
             economy: false,
             patience: 0,
+            rich: 0,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -134,6 +138,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             recall: 0,
             economy: false,
             patience: 0,
+            rich: 0,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -148,6 +153,8 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             recall: 50,
             economy: true,
             patience: 3000,
+            // nocite: design: own AI (#449): three thousand credits in hand, money the two army lines leave unspent only while the income outruns them
+            rich: 3000,
         },
     }
 }
@@ -194,6 +201,10 @@ pub struct Army {
     /// the first; the army's patience ([`Tuning::patience`]) runs from it.
     ended: i32,
 }
+
+/// The factories of each army kind (infantry, vehicles) the siege adds up
+/// to ([`Siege::more_factories`]).
+const MOST_FACTORIES: usize = 3; // nocite: design: own AI (#449)
 
 /// Ticks after which an enemy army unit not seen again is forgotten.
 const MEMORY: i32 = 4500; // nocite: design: own AI (#449)
@@ -278,6 +289,58 @@ impl Siege {
             && !self.eyes.busy(w, c)
         {
             out.push(Order::Build { what: c });
+        }
+    }
+
+    /// More factories when rich (design: own AI, #449): with at least
+    /// `rich` credits in hand and no building ordered this think, the
+    /// cheapest factory the house can build, place and pay for, of the army
+    /// kind (infantry or vehicles) it owns fewer of, vehicles on a tie, once
+    /// it owns one of that kind and while it owns fewer than
+    /// [`MOST_FACTORIES`], when the building line is free; the plan's next
+    /// power plant (`Script::plant_type`) in its place when the factory
+    /// would leave the house short of power. Each more factory of a
+    /// kind shortens the build times of that kind (S-0403 claim 6), as a
+    /// person with money to spare builds a second war factory; the first of
+    /// each kind stays the brain's plan.
+    fn more_factories(&self, w: &World, rich: i32, out: &mut Vec<Order>) {
+        let eyes = &self.eyes;
+        let house = eyes.house;
+        let credits = w.houses[usize::from(house.0)].credits;
+        let building = out
+            .iter()
+            .any(|o| matches!(o, Order::Build { what } if what.kind == Kind::Building));
+        if credits < rich || building {
+            return;
+        }
+        let owned = |k: FactoryKind| eyes.of_role(w, Role::Factory(k)).len();
+        let (inf, veh) = (owned(FactoryKind::Infantry), owned(FactoryKind::Vehicle));
+        let kinds = if veh <= inf {
+            [(FactoryKind::Vehicle, veh), (FactoryKind::Infantry, inf)]
+        } else {
+            [(FactoryKind::Infantry, inf), (FactoryKind::Vehicle, veh)]
+        };
+        for (k, n) in kinds {
+            if n == 0 || n >= MOST_FACTORIES {
+                continue;
+            }
+            let pick = eyes.candidates(w, Role::Factory(k)).into_iter().find(|&t| {
+                production::price(w, house, t) <= credits && eyes.place_cell(w, t).is_some()
+            });
+            let Some(t) = pick else { continue };
+            // A plant first when the factory would leave the house short.
+            let t = if crate::power::short_after(w, house, t) {
+                match eyes.plant_type(w) {
+                    Some(p) => p,
+                    None => return,
+                }
+            } else {
+                t
+            };
+            if !eyes.busy(w, t) {
+                out.push(Order::Build { what: t });
+            }
+            return;
         }
     }
 
@@ -623,6 +686,9 @@ impl AiScript for Siege {
         }
         if !t.superweapons {
             self.no_superweapons(w, &mut out);
+        }
+        if t.rich > 0 {
+            self.more_factories(w, t.rich, &mut out);
         }
         if acts {
             self.command(w, level, &busy, &mut out);

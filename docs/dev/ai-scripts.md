@@ -304,6 +304,46 @@ easy beat normal (normal 0.406) while hard led normal 0.833 and easy 0.760; with
 superweapons dropped and easy on one harvester and strikes of six, the order holds: normal leads
 easy 0.635, hard leads normal 0.542 and easy 0.625.
 
+### Hard, script AS2
+
+Script AS2 took the siege's hard level further toward 2000 Elo, with the same rules of fair play.
+Its baseline is AS1's certifying round on the base: `siege:hard` at 1801.2 (163-37-40). Its
+losses on map 0 were mostly early: twelve of 23 ended between ticks 6 000 and 9 300, ten of them
+against `siege:easy`. A watch of one (`siege-watch`) showed why. The brain builds no army while
+its plan's harvesters do not stand (`short` in the army round), and hard's plan keeps three. So
+hard stood with no army unit until after tick 4 500, and easy's first strike, five infantry at
+about tick 3 500, took its base apart.
+
+- **The early guard, tried and dropped.** Hard only: while the house had fewer than six army
+  units on the ground and the brain ordered no infantry, the siege ordered the cheapest infantry
+  army type not sent alone, with the money in hand beyond what the running items owed. In the
+  development round it took the easy rush away (42-0-6 against `siege:easy`) and added eight
+  victories, but its pair with `default:hard` fell from 0.740 to 0.635 (map 2: 3-4-9). A watch
+  of one of those games (map 2, seed 10) showed hard at two refineries all game with the guard
+  and at six or seven on the base: the money the guard spent early was the money of the
+  refineries by the new fields. It was reverted.
+- **More factories when rich** (`Tuning::rich`, hard only). The same watch on the base showed
+  hard from tick 19 500 on with 3 000 to 9 566 credits in hand and an army of 6 to 12. Only one
+  infantry and one vehicle line ran, and with no superweapon to save for, nothing else drew on
+  the money. Each more factory of a kind shortens the build times of that kind (S-0403
+  claim 6), as a person with money to spare builds a second war factory. With at least `rich`
+  credits in hand, the siege orders the cheapest factory it can build, place and pay for, of
+  the kind (infantry or vehicles) it owns fewer of, vehicles on a tie, up to three of each
+  kind. The first factory of each kind stays the brain's own plan. It does so only when no
+  building is ordered this think and the building line is free. When the new factory would
+  leave the house short of power, it orders the power plant the plan builds next instead, as a
+  person builds the plant first (on the synthetic skirmish every factory was held so, the
+  brain building plants only once the house is short).
+- **A strike at a harmless building, checked.** An AI house counts as human-controlled, so its
+  units' own target searches pass an enemy building with no weapon (S-0309 table C, row
+  "harmless building"). The strike might then stand beside an enemy base without firing. A test
+  shows it does not: once the strike's units arrive they stand idle, and the brain's army part
+  orders each to attack the seen enemy it can hit. No change was needed.
+- **Where it stands.** The certifying round (seeds 15 to 18, the six entrants) put `siege:hard`
+  at 1734.0 (1715.2 order-free), top of the pool at a score of 0.790 (168-29-43, 115 victories),
+  but short of 2000. Its weakest pair is `siege:normal` (0.688) and its weakest country is
+  country 0 (0.679, against 0.900 on country 1).
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
@@ -320,6 +360,13 @@ easy 0.635, hard leads normal 0.542 and easy 0.625.
 - **Elo:** every entrant starts at 1500; after all games are played, the games are taken in their
   fixed order and both entrants move by 32 · (score − expected), score 1, ½ or 0, expected
   1 / (1 + 10^((R_other − R_own) / 400)).
+- **Order-free Elo** (script AS2): the Elo above depends on the order of the games (an entrant's
+  last games weigh most), so the report adds a line with each entrant's mean final Elo over 100
+  seeded shuffles of the games (`ai_tournament::order_free_ratings`). The games are first put in
+  the order of their job (ground, seed, pair, start, side) and result, so the line does not
+  depend on the order they came in; shuffle *n* is a Fisher-Yates shuffle drawn from a small
+  generator of our own (splitmix64) seeded with *n*. The line is a second view only: the goal
+  measure stays the Elo in the table.
 - **Output:** `report.txt` (no timing lines, so the same options give the same text whatever
   `threads=` is; `tests/ai_tournament.rs` checks it on the fixture) and one replay per game,
   `replays/game-NNN.replay`, to `out=` (default `local-lane/ai-issues/b9/tournament/`).

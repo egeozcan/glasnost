@@ -422,6 +422,88 @@ pub fn ratings(entrants: usize, games: &[Played]) -> Vec<f64> {
     r
 }
 
+/// The shuffles of the games that the order-free Elo is the mean over.
+// nocite: design: own AI (#449): a fixed count, so the same games give the same line, and enough that more shuffles move the mean little
+pub const SHUFFLES: u64 = 100;
+
+/// Each entrant's order-free Elo (design: own AI, #449): the mean of its
+/// final Elo ([`ratings`]' rule) over [`SHUFFLES`] seeded shuffles of the
+/// games. The games are first put in the order of their job (ground, seed,
+/// pair, start, side) and result, so the ratings do not depend on the
+/// order the games come in; shuffle `n` is a Fisher-Yates shuffle drawn
+/// from [`splitmix64`] seeded with `n`.
+pub fn order_free_ratings(entrants: usize, games: &[Played]) -> Vec<f64> {
+    let score = |r: GameResult| match r {
+        GameResult::A => 1.0,
+        GameResult::B => 0.0,
+        GameResult::Draw => 0.5,
+    };
+    let rank = |r: GameResult| match r {
+        GameResult::A => 0u8,
+        GameResult::Draw => 1,
+        GameResult::B => 2,
+    };
+    let mut keyed: Vec<_> = games
+        .iter()
+        .map(|g| {
+            let j = g.job;
+            (
+                (j.ground, j.seed, j.a, j.b, j.swap_start, j.swap_side),
+                rank(g.result),
+                score(g.result),
+            )
+        })
+        .collect();
+    keyed.sort_by_key(|x| (x.0, x.1));
+    let canonical: Vec<(usize, usize, f64)> = keyed
+        .iter()
+        .map(|&((_, _, a, b, _, _), _, s)| (a, b, s))
+        .collect();
+    if canonical.len() < 2 {
+        return elo_of(entrants, &canonical);
+    }
+    let mut sum = vec![0.0; entrants];
+    for n in 0..SHUFFLES {
+        let mut order = canonical.clone();
+        let mut state = n;
+        for i in (1..order.len()).rev() {
+            let j = (splitmix64(&mut state) % (i as u64 + 1)) as usize;
+            order.swap(i, j);
+        }
+        for (s, r) in sum.iter_mut().zip(elo_of(entrants, &order)) {
+            *s += r;
+        }
+    }
+    sum.into_iter().map(|s| s / SHUFFLES as f64).collect()
+}
+
+/// The final Elo after `games` (house 0's entrant, house 1's, house 0's
+/// score), in their order: [`ratings`]' rule.
+fn elo_of(entrants: usize, games: &[(usize, usize, f64)]) -> Vec<f64> {
+    let mut r = vec![START_RATING; entrants];
+    for &(a, b, score) in games {
+        // nocite: our own tooling (the usual Elo scale, as in `ratings`)
+        let expected = 1.0 / (1.0 + 10f64.powf((r[b] - r[a]) / 400.0));
+        r[a] += K * (score - expected);
+        r[b] -= K * (score - expected);
+    }
+    r
+}
+
+/// The next number of the splitmix64 generator (our own tooling, #449: a
+/// small, fixed generator for the order-free Elo's shuffles).
+fn splitmix64(state: &mut u64) -> u64 {
+    // nocite: design: own AI (#449): splitmix64's published increment and mixing constants
+    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut z = *state;
+    // nocite: design: own AI (#449): splitmix64's published mixing constants and shifts
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    // nocite: design: own AI (#449): splitmix64's published mixing constants and shifts
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    // nocite: design: own AI (#449): splitmix64's published final shift
+    z ^ (z >> 31)
+}
+
 /// The report of a finished tournament (no timing: the same options give
 /// the same text).
 pub fn report(o: &Options, grounds: &[Ground], results: &[Result<Played, String>]) -> String {
@@ -473,7 +555,7 @@ pub fn report(o: &Options, grounds: &[Ground], results: &[Result<Played, String>
     );
     let mut order: Vec<usize> = (0..o.entrants.len()).collect();
     order.sort_by(|&x, &y| rating[y].total_cmp(&rating[x]).then(x.cmp(&y)));
-    for i in order {
+    for &i in &order {
         let t = tally.get(&i).copied().unwrap_or_default();
         let _ = writeln!(
             s,
@@ -488,6 +570,17 @@ pub fn report(o: &Options, grounds: &[Ground], results: &[Result<Played, String>
             t[4]
         );
     }
+    // design: own AI (#449): the order-free Elo, a second view beside the table's
+    let free = order_free_ratings(o.entrants.len(), &games);
+    let _ = writeln!(
+        s,
+        "\norder-free Elo (the mean over {SHUFFLES} seeded shuffles of the game order): {}",
+        order
+            .iter()
+            .map(|&i| format!("{} {:.1}", entrant_name(o.entrants[i]), free[i]))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
     let _ = writeln!(
         s,
         "\ngames (house 0 against house 1; start and country index of house 0):"

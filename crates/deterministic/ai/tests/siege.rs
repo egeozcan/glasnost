@@ -13,7 +13,7 @@ use glasnost_ai::{fixture, game::Game};
 use glasnost_map::CellXY;
 use glasnost_sim::econ::shroud;
 use glasnost_sim::orders::{self, Order};
-use glasnost_sim::rules::{Behaviour, Kind};
+use glasnost_sim::rules::{Behaviour, FactoryKind, Kind};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{AiDifficulty, AiSeat, HouseId, ObjectId, Pos, Target, World};
 
@@ -81,12 +81,16 @@ fn tanks(w: &mut World, n: usize) -> Vec<ObjectId> {
     out
 }
 
-/// Runs `w` for `ticks`, house 0 played by `s` at `level`; returns every
-/// order it gave, by tick.
+/// Runs `w` for at most `ticks` steps, house 0 played by `s` at `level`,
+/// and stops once the game is over (after its final tick the tick number
+/// no longer grows, S-0201 claim 1 and S-0414 claim 8); returns every order
+/// it gave, by tick.
 fn play(w: &mut World, s: &mut Siege, level: AiDifficulty, ticks: i32) -> Vec<(i32, Order)> {
     let mut got = Vec::new();
-    let end = w.tick + ticks;
-    while w.tick < end {
+    for _ in 0..ticks {
+        if w.econ.end.finished {
+            break;
+        }
         let tick = w.tick;
         let schedule = Schedule::of(HouseId(0), tick);
         let view = View::new(w, HouseId(0));
@@ -309,4 +313,86 @@ fn an_outmatched_strike_is_called_home() {
         })
         .collect();
     assert!(!called.is_empty(), "the strike is called home: {got:?}");
+}
+
+// design: own AI (#449): a strike that reaches its goal, a seen enemy building, attacks it: an AI house counts as human-controlled (glossary), so its units' own searches pass a building with no weapon by (S-0309 table C, row "harmless building"), and the strike stood beside the enemy base
+#[test]
+fn the_strike_attacks_the_building_it_reaches() {
+    let level = AiDifficulty::Hard;
+    let t = tuning(level);
+    let mut w = base_up();
+    let target = yard(&w, 1).expect("house 1's yard stands");
+    let at = w.obj(target).unwrap().pos.cell();
+    // nocite: test data of our own (house 0 sees house 1's base)
+    shroud::area_reveal(&mut w, HouseId(0), Pos::centre(at, 0), 10);
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    // The strike's count and room for the brain's own parts.
+    let ids = tanks(&mut w, t.strike + 3);
+    // nocite: test data of our own (time to drive there and fire)
+    let got = play(&mut w, &mut s, level, 3000);
+    assert!(s.strikes() >= 1, "a strike goes");
+    let attackers: BTreeSet<ObjectId> = got
+        .iter()
+        .filter_map(|(_, o)| match o {
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Attack,
+                target: Some(Target::Object(e)),
+                ..
+            } if *e == target && ids.contains(actor) => Some(*actor),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !attackers.is_empty(),
+        "the strike attacks the yard it reaches"
+    );
+}
+
+/// House 0's factory buildings on the map that make `kind` (not naval).
+fn factories(w: &World, kind: FactoryKind) -> usize {
+    w.objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(0)) && o.on_map && o.kind == Kind::Building)
+        .filter(|o| {
+            w.rules()
+                .buildings
+                .get(o.type_index as usize)
+                .is_some_and(|b| b.factory == Some(kind) && !b.naval)
+        })
+        .count()
+}
+
+/// House 0's infantry and vehicle factories after `ticks` of play at
+/// `level` from the base, with `credits` in hand at the start.
+fn factories_when_rich(level: AiDifficulty, credits: i32, ticks: i32) -> (usize, usize) {
+    let mut w = base_up();
+    w.houses[0].credits = credits;
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    play(&mut w, &mut s, level, ticks);
+    (
+        factories(&w, FactoryKind::Infantry),
+        factories(&w, FactoryKind::Vehicle),
+    )
+}
+
+// design: own AI (#449): at hard, with money to spare in hand, the siege adds factories of the army's kinds (S-0403 claim 6: more factories of a kind, shorter build times), up to three of each; normal and easy do not
+#[test]
+fn hard_adds_factories_when_rich() {
+    // nocite: test data of our own (money enough for the base, the army and more factories; a few minutes of play)
+    let (credits, ticks) = (40_000, 6000);
+    let (inf, veh) = factories_when_rich(AiDifficulty::Hard, credits, ticks);
+    assert!(
+        inf.max(veh) >= 2,
+        "hard adds a factory when rich: {inf} infantry, {veh} vehicle"
+    );
+    // nocite: design: own AI (#449): three of each kind at most
+    assert!(inf <= 3 && veh <= 3, "{inf} infantry, {veh} vehicle");
+    let (n_inf, n_veh) = factories_when_rich(AiDifficulty::Normal, credits, ticks);
+    assert!(
+        n_inf.max(n_veh) <= 1,
+        "normal adds none: {n_inf} infantry, {n_veh} vehicle"
+    );
+    assert_eq!(tuning(AiDifficulty::Normal).rich, 0);
+    assert_eq!(tuning(AiDifficulty::Easy).rich, 0);
 }
