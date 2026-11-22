@@ -1844,7 +1844,11 @@ fn claim_17_same_cell_enter_supplies_the_point() {
         glasnost_sim::drive::tick(&mut w, v);
     }
     assert_eq!(w.obj(v).unwrap().dest, Some(Target::Object(d)));
-    assert_eq!(glasnost_sim::drive::goal(&w, v), None, "cleared by the own-cell search");
+    assert_eq!(
+        glasnost_sim::drive::goal(&w, v),
+        None,
+        "cleared by the own-cell search"
+    );
     assert_eq!(w.obj(v).unwrap().pos, pos);
 }
 

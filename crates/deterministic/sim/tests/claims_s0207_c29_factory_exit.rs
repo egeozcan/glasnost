@@ -32,9 +32,11 @@ fn claim_31_a_vehicle_given_a_destination_before_its_exit_leaves_the_apron() {
     let r = w.rules().general.retry_delay;
     assert!(r > 0);
     let on_exit = |w: &glasnost_sim::world::World| {
-        w.obj(v).unwrap().drive.as_ref().is_some_and(|dd| {
-            dd.track.as_ref().is_some_and(|t| t.exit)
-        })
+        w.obj(v)
+            .unwrap()
+            .drive
+            .as_ref()
+            .is_some_and(|dd| dd.track.as_ref().is_some_and(|t| t.exit))
     };
     let mut exit_seen = false;
     let mut ended = None;

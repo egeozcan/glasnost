@@ -524,7 +524,10 @@ fn claim_25_completion_height_tolerance() {
         }
         assert_eq!(goal_of(&w, id), None, "Δz = {dz}: cleared either way");
         let searched = w.obj(id).unwrap().path.retry_at >= w.tick;
-        assert_eq!(searched, !cleared, "Δz = {dz}: kept by the completion, cleared by the search");
+        assert_eq!(
+            searched, !cleared,
+            "Δz = {dz}: kept by the completion, cleared by the search"
+        );
     }
 }
 

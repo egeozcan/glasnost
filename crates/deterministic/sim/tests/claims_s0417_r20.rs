@@ -226,7 +226,10 @@ fn claim_16_no_field_no_timer() {
             None => {
                 // spec: S-0207 claim 31 (r103, Q-3374, S-0417 claim 16's Changes entry: in the update the exit track ends the vehicle searches for the apron's cell, its own, finds no path, and the failure clears the exit point in that tick)
                 held += 1;
-                assert!(goal.is_none(), "the exit point is cleared at the track's end");
+                assert!(
+                    goal.is_none(),
+                    "the exit point is cleared at the track's end"
+                );
             }
             Some(Target::Cell(c)) => {
                 // The only destination in this scene: an accepted scatter request.

@@ -2392,7 +2392,9 @@ fn compute_tried(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>)
         return res;
     }
     // design: C7-P4 nearest reachable cell and S50 (a search for the unit's own cell, S-0207 claim 31's own-cell search, fails by S-0212 claim 12 and not for want of reach: it makes no second try, which would replace a destination the search did not look for)
-    if w.obj(id).is_some_and(|o| search_goal(w, id) == Some(o.pos.cell())) {
+    if w.obj(id)
+        .is_some_and(|o| search_goal(w, id) == Some(o.pos.cell()))
+    {
         return res;
     }
     // design: C7-P4 nearest reachable cell (a failed move tries once more towards the nearest cell the unit can stand on in its own reach region; one try, as the new destination is reachable)

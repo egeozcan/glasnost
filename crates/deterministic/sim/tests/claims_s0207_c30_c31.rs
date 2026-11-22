@@ -63,7 +63,11 @@ fn claim_31_a_failure_within_one_cell_keeps_the_destination_and_searches_every_r
     let f = until_failure(&mut w, a, 10);
     let o = w.obj(a).unwrap();
     assert_eq!(o.path.retry_at, f + r, "R starts at the failure");
-    assert_eq!(o.dest, Some(Target::Cell(cell(1, 0))), "the destination stays");
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(cell(1, 0))),
+        "the destination stays"
+    );
     assert_eq!(drive::goal(&w, a), None, "the point is cleared");
     // spec: S-0207 claim 30 (r103: no point at a locomotion update, the destination held: its point is installed and no track begins)
     step(&mut w);
@@ -138,7 +142,11 @@ fn claim_31_a_track_ending_in_the_points_cell_clears_it_and_the_driver_follows()
         let o = w.obj(v).unwrap();
         if before && !en_route(&w, v) && o.pos.cell() == p.cell() {
             cleared_at = Some(w.tick - 1);
-            assert_eq!(drive::goal(&w, v), None, "cleared in the update the track ends");
+            assert_eq!(
+                drive::goal(&w, v),
+                None,
+                "cleared in the update the track ends"
+            );
             assert_eq!(o.dest, Some(Target::Object(u)), "the unit kept");
             assert!(o.path.retry_at >= w.tick, "R runs");
             break;
@@ -147,7 +155,11 @@ fn claim_31_a_track_ending_in_the_points_cell_clears_it_and_the_driver_follows()
     assert!(cleared_at.is_some(), "the driver never ended a track at p");
     step(&mut w);
     let now = w.obj(u).unwrap().pos;
-    assert_eq!(drive::goal(&w, v), Some(now), "the unit's new point installed");
+    assert_eq!(
+        drive::goal(&w, v),
+        Some(now),
+        "the unit's new point installed"
+    );
     testkit::run(&mut w, 600);
     let (vc, uc) = (w.obj(v).unwrap().pos.cell(), w.obj(u).unwrap().pos.cell());
     assert!(
