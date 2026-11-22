@@ -1696,8 +1696,10 @@ pub struct AnimDraw {
     /// or undeploy animation, a parachute's carried object (S-0103 claim
     /// 16).
     pub named: Option<(Kind, usize)>,
-    /// The depth adjustment its creator gave in place of its type's: a
-    /// building's shot animation (S-0301 claim 22, F8).
+    /// The depth adjustment set at its creation, which a follow-up switch
+    /// keeps (S-0109 r49 claim 15): the one its creator gave in place of its
+    /// type's (a building's shot animation, S-0301 claim 22, F8), else the
+    /// created type's own; `None` takes the current type's.
     pub z_adjust: Option<i32>,
 }
 
@@ -3777,7 +3779,7 @@ impl<'a> Builder<'a> {
             n,
             a.frame,
             a.pos,
-            // spec: S-0102 claim 13, Import mapping (ZAdjust: the type's depth adjustment, unless its creator replaced it, S-0301 F8)
+            // spec: S-0102 claim 13, Import mapping (ZAdjust: the type's depth adjustment, unless its creator replaced it, S-0301 F8); S-0109 r49 claim 15 (the value set at creation holds through a follow-up switch)
             a.z_adjust.unwrap_or(t.z_adjust),
             (row, code),
             Group::Effects,
