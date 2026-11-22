@@ -420,6 +420,16 @@ and 8, seeds 7 to 14 (480 games).
   hard a new strike also needs the units that would go to be worth 5 000 credits at least; the
   soldiers wait at home as a guard until the war factory's units join them. Joining a strike
   under way is not held.
+- **No navy while the enemy is reached by land** (`Tuning::navy`, false at hard only). AS3
+  tried dropping the naval buildings and found that it did not bind. With the two levers above,
+  a dev-2 watch (map 0 seed 7, country 0, against `siege:normal`) shows hard ahead at tick 12 000
+  (17 army units to 2). From tick 10 500 on its building and naval lines go to a shipyard,
+  destroyers and a naval transport, while it has one refinery. It lost its land army and then
+  its base by tick 24 600, with three destroyers left. So at hard, while every enemy start lies
+  in the reach region (S-0212 claim 4) of the house's first ground vehicle, the brain's orders
+  for a naval building (S-0406 claim 3 d) and for a unit whose movement zone is water are
+  dropped. A dropped building gives way to the climb building as with the superweapons. With no
+  ground vehicle, or an enemy start across the water, the navy stays.
 
 ## The tournament
 
