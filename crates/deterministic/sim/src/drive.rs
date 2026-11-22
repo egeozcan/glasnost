@@ -105,6 +105,11 @@ pub struct DriveState {
     /// The order-level destination the locomotor last took ([`take_destination`]).
     #[serde(default)]
     pub for_dest: Option<Target>,
+    /// Whether the locomotor destination point is the one the factory exit
+    /// track installed (S-0417 claim 5) and no assignment has installed one
+    /// since ([`measured_point`], Q-3374).
+    #[serde(default)]
+    pub exit_point: bool,
 }
 
 impl DriveState {
@@ -127,6 +132,7 @@ impl DriveState {
             // spec: S-0207 claim 25 (a newly created driving or ship locomotor has no locomotor destination point)
             goal: None,
             for_dest: None,
+            exit_point: false,
         }
     }
 }
@@ -176,6 +182,13 @@ fn move_destination(w: &World, id: ObjectId) -> Option<Pos> {
 /// Terms). Its searches, the start of the recomputation, braking and the
 /// give-up test read it; they do not ask the destination again.
 pub fn measured_point(w: &World, id: ObjectId) -> Option<Pos> {
+    let o = w.obj(id)?;
+    if o.drive.as_ref().is_some_and(|d| d.exit_point)
+        && let Some(dest) = o.dest
+    {
+        // design: sim (Q-3374: the installed point is the factory exit track's, S-0417 claim 5, and an order-level destination is held, assigned before the exit; claim 29 read literally keeps the vehicle at E for good, as claim 25's completion row asks that destination and never clears E's point, so the readings ask the destination as before claim 29 until an assignment installs a point)
+        return supplied_point(w, id, dest);
+    }
     // spec: S-0207 claim 29 (r92, Q-3353: the readings use the locomotor destination point of claim 25, the point the last assignment installed, whatever the vehicle's position or contacts are later) and Terms (Move destination: the locomotor destination point as installed at the last assignment; on a high-bridge cell the 416-lepton lift it carries)
     goal(w, id).or_else(|| {
         // design: interim (Q-3373: with the installed point cleared while the order-level destination stays, the readings ask the destination as before claim 29)
@@ -212,6 +225,8 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
     if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
         d.for_dest = dest;
         d.goal = goal;
+        // design: sim (Q-3374: an assignment that installs or clears the point ends the exit track's mark)
+        d.exit_point = false;
     }
 }
 
@@ -220,6 +235,8 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
 pub fn stop_point(w: &mut World, id: ObjectId) {
     if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
         d.goal = None;
+        // design: sim (Q-3374: with the point gone the exit track's mark ends)
+        d.exit_point = false;
     }
 }
 
@@ -1576,6 +1593,8 @@ pub fn begin_exit_track(w: &mut World, id: ObjectId, e: CellXY) {
             // spec: S-0207 claim 25 and S-0417 claim 5 (a successful driving exit-track instruction supplies the locomotor destination point at E's horizontal centre with height 0)
             dd.goal = Some(Pos::new(target.0, target.1, 0));
             dd.for_dest = ob.dest;
+            // design: sim (Q-3374: the installed point is the exit track's until an assignment installs one)
+            dd.exit_point = true;
         }
     }
     // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once)
