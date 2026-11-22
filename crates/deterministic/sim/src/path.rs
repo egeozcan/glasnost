@@ -1314,15 +1314,20 @@ pub fn object_point(w: &World, id: ObjectId, t: ObjectId) -> Option<Pos> {
         Some(Locomotor::Walk | Locomotor::Drive)
     );
     if x.kind == Kind::Building && ground {
-        // spec: S-0208 claim 27 (r82, Q-3317: a building gives an infantry unit's or a vehicle's locomotion S-0506 claim 14's heading point asked for that unit: its docking point by S-0607 claim 7's precedence with the helipad, unit-repair or vehicle-bunker flag, its centre otherwise, the unit-reload flag alone included; Q-3353 open: a driver's readings compute it again from its position and contacts then)
+        // spec: S-0208 claim 27 (r82, Q-3317: a building gives an infantry unit's or a vehicle's locomotion S-0506 claim 14's heading point asked for that unit: its docking point by S-0607 claim 7's precedence with the helipad, unit-repair or vehicle-bunker flag, its centre otherwise, the unit-reload flag alone included) and S-0207 claim 29 (r92, Q-3353: a driver takes it at the assignment, and its readings use that installed point, drive::measured_point)
         return Some(crate::lift::lifter_point(w, t, id));
     }
     Some(x.pos)
 }
 
 /// The cell a unit's searches look for: a walker's object locomotor point's
-/// cell (S-0208 claim 25), else [`goal_cell`].
+/// cell (S-0208 claim 25); a driver's installed point's cell (S-0207 claim
+/// 29, [`crate::drive::measured_point`]); else [`goal_cell`].
 pub fn search_goal(w: &World, id: ObjectId) -> Option<CellXY> {
+    if crate::lift::current_locomotor(w, id) == Some(Locomotor::Drive) {
+        // spec: S-0207 claim 29 (r92, Q-3353: every path search of S-0212 claims 20 to 23 of a vehicle with the driving locomotor looks for the cell of the locomotor destination point installed at the last assignment, not of the point the destination would give at the search)
+        return crate::drive::measured_point(w, id).map(|p| p.cell());
+    }
     // spec: S-0208 claim 25 (r68: a walker's searches for an object destination look for the cell of its locomotor destination, the point of the last assignment)
     crate::walk::object_locomotor_point(w, id)
         .map(|p| p.cell())

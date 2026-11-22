@@ -583,10 +583,10 @@ fn front_with(hut: &str, ring: &str) -> Front {
     let at = glasnost_sim::mind::ring(&c.live.world, c.hut).unwrap().at;
     let p = c.pos(c.hut);
     // spec: S-0601 r32 claim 18 (the building's centre point, S-0204 claim 4: for a 2 × 2
-    // foundation its position plus (128, 128); the type's ring-height field takes no part). The
-    // simulation gives it at the building's own height: the raise by 104 leptons per art height
-    // level is a seam in `glasnost_sim::mind::ring`.
-    assert_eq!(at, Pos::new(p.x + 128, p.y + 128, p.z));
+    // foundation its position plus (128, 128), raised above the building's own height by 104
+    // leptons per art height level; the type's ring-height field takes no part), its Constants
+    // row (104 leptons) and Import mapping row Height (HUTX gives none: 2 levels).
+    assert_eq!(at, Pos::new(p.x + 128, p.y + 128, p.z + 104 * 2));
     assert_eq!(
         ring.at,
         placed(Of::Ring, at),

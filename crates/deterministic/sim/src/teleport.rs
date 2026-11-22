@@ -947,7 +947,7 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     crate::crates::pickup(w, id, l.cell());
     let had = o.dest.is_some();
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0207 claim 20 (e) (it stops moving and its destination is removed; a behaviour that ends once its destination is gone falls back to rest at a later tick, S-0215 claim 13, as the behaviour was processed before the locomotion)
+        // spec: S-0207 claim 20 (e) (r92: it stops moving and its destination is removed; a behaviour that ends once its destination is gone falls back to rest, S-0215 claim 13, at a later tick for any object but an infantry unit, as the behaviour was processed before the locomotion; an infantry unit in move falls back at the end of its jump tick through S-0215 claim 22's end-of-update check)
         ob.dest = None;
         ob.path.steps.clear();
     }

@@ -2485,3 +2485,55 @@ Lanes compare base 44a6bab, run in this worktree before any change, with 37b8cd1
 Seams left: none from this batch. S47's seam "the m6c sweep's six new early ends are not traced" is now traced to a first tick for two of them (claim 27 at tick 16). The other four are not traced; the first parting is likely the same seed-independent tick 16.
 
 The P3 census rule: the batch adds no saved field, so it makes or moves no back-reference of `World::census`.
+
+## Batch S49: the point a driving vehicle measures to (S-0207 r92 claim 29, Q-3353), a factory exit point under an order destination (Q-3374), and a building's control ring height (S-0601 r32 claim 18)
+
+Base main 6b84072, not rebased. Item 1 builds S-0207 r92 claim 29: a driving vehicle's searches, the start of the recomputation, braking and the give-up test use the locomotor destination point installed at the last assignment, and do not ask the destination again. Read literally, claim 29 keeps a vehicle at its factory exit point for good when its order destination was given before the exit: the exit track (S-0417 claim 5) installs the exit cell's centre at height 0 and keeps the destination, and claim 25's completion row asks that destination and never clears the exit point. The quick lane showed it on seed 7: a fresh slave miner never left its factory. That gap is Q-3374, and the batch builds an interim, `design: sim (Q-3374)`. Item 2 builds S-0601 r32 claim 18: a building's control ring rises above its centre point by 104 leptons per level of its art height.
+
+The work went in this order:
+1. Item 1: design (fb40c1e), request Q-3373 (5bc7455), a refactor with no behaviour change (14d60bc), tests (1417619), fix (410c080).
+2. Item 2: design (56d0385), test (659f857), fix (0a2e328).
+3. Q-3374: request (c2222d5), design (bd72811), tests (ff14fc8, moved to a factory release in 67b5430), fix (94c250c).
+4. Goldens (e7f3c18) and rustfmt (f3cc8b2).
+
+No fix commit changes a test of its own item. Under the brief, 0a2e328 also updates the one ring assertion in `crates/app/src/mapview/ring_tests.rs` that the fix turns red, from the building's own height to 208 leptons above it. Each red was shown in a separate base worktree checked out at the test commit:
+- `r1.txt`: 4 of 5 claim 29 tests fail at their intended asserts; the new-assignment control passes.
+- `r2.txt`: the ring test fails at the height, 0 against 520.
+- `r3.txt` and `r4.txt`: the two Q-3374 tests fail (the search looks for the exit cell; the vehicle stays on it); the control passes.
+
+Logs are in `local-lane/sim-issues/s49/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| S-0207 r92 claim 29, the point a driving vehicle measures to (Q-3353) | A driver's searches (`path::search_goal`), the recomputation's 512-lepton start, braking and the give-up test asked the destination for its point at each reading, so a bunker's quadrant cell and a building's docking place followed the vehicle round | fixed (410c080; tests 1417619, red there: 4 of 5) | `drive::measured_point`: the installed point (`drive::goal`), which `move_destination` and `path::search_goal` read. The completion row of claim 25 and S-0606 claim 5's arrival test still ask again. The harvester and slave connection tests (S-0402 claims 8 and 26) read the track's target or the unit's own position (`econ::harvest`, `econ::slaves`). With the installed point cleared while the order destination stays, the readings ask the destination: `design: interim (Q-3373)` | `claims_s0207_c29.rs`: the bunker point is kept through the searches; braking and the give-up test measure to it; a new assignment takes the point again; a chase keeps the assignment's point. `claims_s0207_c29_harvest.rs`: the connection test reads the track target |
+| S-0207 r92's other hunks | Terms (the order-level destination's point for a driver is claim 29's); claim 20 e (an infantry unit in *move* falls back to rest at the end of its jump tick; a recycling building consumes an entrant in the jump tick); claim 25's completion row (the point supplied at that moment); D35; the notes to S-0212, S-0402 and S-0606; two Open questions | already built on base or carried by item 1 | claim 20 e's infantry fall-back runs through S-0215 claim 22's end-of-update check and the recycling consumption through S-0603 claim 16 (`structures::grinder`), both on base; 410c080 updates teleport.rs's citation to r92. The completion row already asked the destination at the track's end | none new |
+| A factory exit point under an order destination (Q-3374, filed) | The exit track (S-0417 claim 5) installs the exit cell's centre at height 0 and keeps the order destination given while tethered. Under claim 29 the searches look for the exit cell, and claim 25's completion row (destination cell, height within 208) never clears it, so the vehicle stays on its exit cell (seed 7, map 0: slave miner 1255 from tick 4138) | interim built (94c250c; tests ff14fc8 and 67b5430, red there: 2 of 3) | `DriveState::exit_point`, set by `begin_exit_track` and cleared by every installed point (`take`, the stop, the lift stand-in): while it is set and a destination is held, `measured_point` asks the destination, as before claim 29. `design: sim (Q-3374)` | `claims_s0207_c29_exit.rs`: the readings ask the destination after the exit track; a new assignment ends the interim. `claims_s0207_c29_factory_exit.rs`: a tank released from a war factory with a destination given while tethered leaves the apron and reaches it |
+| S-0601 r32 claim 18, a building's control ring height | `mind::ring` put a building's ring at its reference point, at the building's own height | fixed (0a2e328; test 659f857, red there) | the centre point raised by 104 leptons (Constants) per art height level (Import mapping: 2 when absent) | `claims_s0601.rs`: claim 18's ring height on a HUTH5-like test building; `ring_tests.rs`: the one assertion updated |
+
+**Formats:** save 170 to 223 and AI game 151 to 203, for the new saved `DriveState::exit_point`. Wire stays 13.
+
+**Goldens:** all 9 move (e7f3c18), each by the hash only: every driver's state gains the flag, and each file keeps its length. A probe of the whole state with the flag stripped (the rules handle dropped) compared base 6b84072 with the head:
+- scripted and combat: equal at every tick;
+- skirmish: equal at every 100th tick;
+- duel, duel-diagonal, duel-naval, duel-m6c and duel-m7b: equal final state at the same end tick.
+- duel-m7a: differs from tick 11964, at vehicle 8 in *enter* onto object 370. Both hold the installed point in cell (30, 33). Base searches for (31, 33), the point 370 gives at the search, and the head searches for (30, 33): claim 29.
+
+The sim gate passes 17 on base and after.
+
+Lanes compare base 6b84072, run in this worktree before any change, with 94c250c.
+
+**Oracle arena** (`--record all`, two threads): failing counts are unchanged (M-0001 10 of 96, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0021 10 of 50, M-0020 0 of 25 checked). Two rows move within FAIL (side outcome): M-0001 LTNK against E1, ours 4/8/0 to 3/9/0, and TELE against BFRT, ours 1/3/8 to 2/2/8.
+
+**Sweeps** (seeds 1 to 16):
+- m6c: every per-seed line is equal; the smallest minimum is 0.
+- m7a: the smallest minimum stays 1. Counters move on seeds 9, 10, 13, 15 and 16, and seed 9 adds "infantry absorbed = 2" below 3.
+- m7b: equal but for timings; the smallest drain minimum is 3.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games): 2 winner changes, both traced to claim 29.
+- Seed 7, map 2, sides 1 and 2 (house 1 at 47612 to house 0 at 66448): first differs at tick 26628, vehicle 953 attacking with destination cell (82, 88). Base's search looked for its track's cell (83, 88); the head's looks for the installed point's (82, 88).
+- Seed 10, map 2, sides 1 and 2 (house 0 at 68895 to house 1 at 46464): first differs at tick 31851, vehicle 11350 attacking infantry 8985, which had moved a cell since the assignment and dies that tick. Base's search for the infantry's present cell fails and the destination goes; the head searches for the installed point's cell, finds a path and keeps the destination until the body is removed at 31869.
+- Same winner, other length: 15 games. Equal: 19 games. Before the interim, seed 7 had 7 of 9 winner changes, every game of side 2 going to its opponent; the first, map 0 sides 0 and 2, traces to the stall at tick 4138.
+
+Seams left: Q-3373 and Q-3374 are open, with their interims. Q-3374's interim reads the destination while the flag is set, so a vehicle sent on from its factory exit keeps the pre-claim-29 readings until its next assignment.
+
+The P3 census rule: the batch adds one saved field, a bool, so it makes or moves no back-reference of `World::census`.

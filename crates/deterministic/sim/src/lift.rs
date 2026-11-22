@@ -565,6 +565,8 @@ fn instruct_stand_in(w: &mut World, x: ObjectId, k: StandIn, lifter: ObjectId, p
                 // spec: S-0607 claim 23 and S-0207 claim 25 (the locomotor destination point is the lifter's point, taken for the lifter as the order-level destination)
                 d.for_dest = dest;
                 d.goal = Some(p);
+                // design: sim (Q-3374: a point installed for the lifter ends the exit track's mark)
+                d.exit_point = false;
             }
         }
         // spec: S-0607 claim 23 and S-0207 claim 20 (a) and (b) (the teleporting stand-in fixes its landing point from the cell of the lifter's point)

@@ -1047,12 +1047,17 @@ pub struct Ring {
     /// The permanent ring.
     pub permanent: bool,
     /// Where: a mobile object's position raised by its type's ring height;
-    /// a building's top-centre point (the exact building-height conversion
-    /// is not established, S-0601 Open questions).
+    /// a building's centre point raised by 104 leptons per level of its
+    /// art height (claim 18).
     pub at: Pos,
     /// Drawn in front of a building.
     pub building: bool,
 }
+
+/// The height a building's ring rises per level of its art height,
+/// leptons (one height level).
+// spec: S-0601 Constants (building ring height per art height level: 104 leptons) and claim 18
+const BUILDING_RING_LEVEL: i32 = 104;
 
 /// The control ring of an object, if it carries one (claim 18).
 pub fn ring(w: &World, id: ObjectId) -> Option<Ring> {
@@ -1082,9 +1087,14 @@ pub fn ring(w: &World, id: ObjectId) -> Option<Ring> {
     };
     let building = o.kind == Kind::Building;
     let at = if building {
-        // MC13 has not established the building-height conversion: the ring
-        // stands at the building's reference point, drawn in front of it.
-        w.reference_point(id)
+        let c = w.reference_point(id);
+        let levels = w
+            .rules()
+            .buildings
+            .get(o.type_index as usize)
+            .map_or(2, |t| t.building.art_height); // spec: S-0601 Import mapping (Height absent: 2)
+        // spec: S-0601 claim 18 (r32, A building's ring: the centre point, S-0204 claim 4, raised above the building's own height by one height level per art height level; the type's ring-height field takes no part) and Constants (building ring height per art height level: 104 leptons)
+        Pos::new(c.x, c.y, c.z + BUILDING_RING_LEVEL * levels)
     } else {
         let lift = type_combat(w, id).map_or(0, |tc| tc.ring_height);
         // spec: S-0601 claim 18 (raised above a mobile object by its type's ring height in leptons)
