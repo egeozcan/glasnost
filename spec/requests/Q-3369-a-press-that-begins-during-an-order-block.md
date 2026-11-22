@@ -1,9 +1,9 @@
 ---
 id: Q-3369
 title: A battlefield press that begins while an order block is in force
-status: open
+status: answered
 related: [S-0214, S-0201, S-0111]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need
