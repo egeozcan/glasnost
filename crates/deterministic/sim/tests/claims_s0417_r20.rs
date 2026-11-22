@@ -204,8 +204,8 @@ fn claim_16_a_later_move_clears_the_point_and_the_fallback_restores() {
     }));
 }
 
-// spec: S-0417 claim 16 (No follow-up goal: there is no factory-exit timeout clearing the exit point; without a replacement or a stop it keeps preventing restoration after the clear report with no field)
-// spec: S-0207 claim 25 (Factory-exit lifetime: completing the exit track with no order-level destination retains its locomotor destination point; a later accepted destination replaces it in the active driving locomotion)
+// spec: S-0417 claim 16 (No follow-up goal: there is no factory-exit timeout; the temporary driving is not restored after the clear report with no field)
+// spec: S-0207 claim 31 (r103, Q-3374: the exit point is cleared by the failed own-cell search in the tick the exit track ends, which replaces claim 25's retained point; a later accepted destination installs its own point in the active driving locomotion)
 // spec: S-0207 claim 16 b (the refusal reads the current locomotor: the driving miner accepts the factory's apron-clearing request, S-0417 claim 4, which was refused while it read the type's teleporting locomotor)
 #[test]
 fn claim_16_no_field_no_timer() {
@@ -218,10 +218,15 @@ fn claim_16_no_field_no_timer() {
         let o = w.obj(u).unwrap();
         assert!(release::temporary_drive(&w, u), "no timer restores it");
         let goal = o.drive.as_ref().unwrap().goal;
+        let on_track = o.drive.as_ref().unwrap().track.is_some();
         match o.dest {
+            None if on_track => {
+                assert!(goal.is_some(), "the exit point while on the exit track");
+            }
             None => {
+                // spec: S-0207 claim 31 (r103, Q-3374, S-0417 claim 16's Changes entry: in the update the exit track ends the vehicle searches for the apron's cell, its own, finds no path, and the failure clears the exit point in that tick)
                 held += 1;
-                assert!(goal.is_some(), "the exit point is retained");
+                assert!(goal.is_none(), "the exit point is cleared at the track's end");
             }
             Some(Target::Cell(c)) => {
                 // The only destination in this scene: an accepted scatter request.
@@ -240,5 +245,5 @@ fn claim_16_no_field_no_timer() {
             Some(Target::Object(_)) => panic!("no object destination in this scene"),
         }
     }
-    assert!(held >= 30, "the exit point held {held} ticks");
+    assert!(held >= 30, "no destination and no point for {held} ticks");
 }

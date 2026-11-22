@@ -164,7 +164,7 @@ fn naming(kind: Kind, name: &str) -> (World, ObjectId, ObjectId) {
     (w, v, n)
 }
 
-// spec: S-0207 claim 26 (Q-0830, second and third rows: a destination naming a vehicle or an infantry unit, stationary or moving, is not a cell destination: the first locomotion update at rest in the supplied point's cell removes neither the destination nor the point, as for a building)
+// spec: S-0207 claim 26 (Q-0830, second and third rows: a destination naming a vehicle or an infantry unit, stationary or moving, is not a cell destination: the first locomotion update at rest in the supplied point's cell removes neither destination, as for a building) and claims 30 and 31 (r103: the point comes and goes with the own-cell search)
 #[test]
 fn claim_26_a_destination_naming_a_unit_is_kept_by_cell_equality() {
     for (kind, name) in [(Kind::Vehicle, "BUGGY"), (Kind::Infantry, "WALKER")] {
@@ -185,7 +185,12 @@ fn claim_26_a_destination_naming_a_unit_is_kept_by_cell_equality() {
                 Some(Target::Object(n)),
                 "{name}, update {step}"
             );
-            assert!(drive::goal_present(&w, v), "{name}: the point stays");
+            // spec: S-0207 claims 30 and 31 (r103, Q-3374: the point in the mover's own cell is searched for, the search fails and clears it in update 0; update 1 installs the destination's point again, with no search while the retry delay runs)
+            assert_eq!(
+                drive::goal_present(&w, v),
+                step >= 1,
+                "{name}, update {step}: cleared by the search, then installed again"
+            );
         }
     }
 }

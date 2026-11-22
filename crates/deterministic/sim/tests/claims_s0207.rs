@@ -504,7 +504,7 @@ fn claim_25_stop_same_cell_and_replacement() {
     assert_eq!(goal_of(&w, id).map(|p| p.cell()), Some(far));
 }
 
-// spec: S-0207 claim 25 (the qualifying completion needs |vehicle height − point height| strictly below 208 leptons: 207 clears, 208 keeps)
+// spec: S-0207 claim 25 (the qualifying completion needs |vehicle height − point height| strictly below 208 leptons: 207 clears, 208 keeps) and claim 31 (r103, Q-3374: a kept point in the vehicle's own cell is searched for in the update the track ends; the search fails and clears it, and the retry delay starts, which a completion clearing does not)
 #[test]
 fn claim_25_completion_height_tolerance() {
     for (dz, cleared) in [(207, true), (208, false), (-207, true), (-208, false)] {
@@ -522,7 +522,9 @@ fn claim_25_completion_height_tolerance() {
             guard += 1;
             assert!(guard < 300);
         }
-        assert_eq!(goal_of(&w, id).is_none(), cleared, "Δz = {dz}");
+        assert_eq!(goal_of(&w, id), None, "Δz = {dz}: cleared either way");
+        let searched = w.obj(id).unwrap().path.retry_at >= w.tick;
+        assert_eq!(searched, !cleared, "Δz = {dz}: kept by the completion, cleared by the search");
     }
 }
 

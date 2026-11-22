@@ -1144,7 +1144,7 @@ fn search_failure_far_away_gives_up() {
     assert!(!path::delay_runs(&w, id));
 }
 
-// spec: S-0212 claim 23 (search failure within 1 cell: the unit stops without giving up; a driving unit's destination is cleared)
+// spec: S-0212 claim 23 (search failure within 1 cell: the unit stops without giving up) and S-0207 claim 31 (r103, Q-3373: a driving vehicle's failed fresh search clears its locomotor destination point; in row 3 it keeps its order-level destination, a pending cross-spec change to S-0212 claim 23 named by S-0207 r103)
 #[test]
 fn search_failure_within_one_cell_does_not_give_up() {
     let mut s = scene();
@@ -1158,11 +1158,12 @@ fn search_failure_within_one_cell_does_not_give_up() {
     }
     path::failed(&mut w, id, Search::SearchFailed, false);
     let o = w.obj(id).unwrap();
-    assert_eq!(o.dest, None);
+    assert_eq!(o.dest, Some(Target::Cell(cell(1, 1))));
+    assert_eq!(glasnost_sim::drive::goal(&w, id), None);
     assert_eq!(o.beh.queued, None);
-    // spec: S-0212 claim 23 row 3 (r97: a driving unit ends up without a destination and with no retry delay, claim 21)
-    assert!(o.path.retry_at <= w.tick);
-    assert!(!path::delay_runs(&w, id));
+    // spec: S-0207 claim 31 (r103: R keeps running, S-0212 claim 21, as the destination stays)
+    assert!(o.path.retry_at > w.tick);
+    assert!(path::delay_runs(&w, id));
 }
 
 // spec: S-0212 claim 15 (a unit already next to its blocked destination gets no path: the search fails)
