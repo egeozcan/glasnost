@@ -105,11 +105,6 @@ pub struct DriveState {
     /// The order-level destination the locomotor last took ([`take_destination`]).
     #[serde(default)]
     pub for_dest: Option<Target>,
-    /// Whether the locomotor destination point is the one the factory exit
-    /// track installed (S-0417 claim 5) and no assignment has installed one
-    /// since ([`measured_point`], Q-3374).
-    #[serde(default)]
-    pub exit_point: bool,
 }
 
 impl DriveState {
@@ -132,7 +127,6 @@ impl DriveState {
             // spec: S-0207 claim 25 (a newly created driving or ship locomotor has no locomotor destination point)
             goal: None,
             for_dest: None,
-            exit_point: false,
         }
     }
 }
@@ -180,20 +174,23 @@ fn move_destination(w: &World, id: ObjectId) -> Option<Pos> {
 /// claim 29): the locomotor destination point installed at the last
 /// assignment ([`goal`]), which is also its move destination (S-0207
 /// Terms). Its searches, the start of the recomputation, braking and the
-/// give-up test read it; they do not ask the destination again.
+/// give-up test read it; apart from claim 30's installs they do not ask the
+/// destination again, and with no point there is nothing to measure to. A
+/// ship reads its stored point, else the point its destination supplies.
 pub fn measured_point(w: &World, id: ObjectId) -> Option<Pos> {
-    let o = w.obj(id)?;
-    if o.drive.as_ref().is_some_and(|d| d.exit_point)
-        && let Some(dest) = o.dest
-    {
-        // design: sim (Q-3374: the installed point is the factory exit track's, S-0417 claim 5, and an order-level destination is held, assigned before the exit; claim 29 read literally keeps the vehicle at E for good, as claim 25's completion row asks that destination and never clears E's point, so the readings ask the destination as before claim 29 until an assignment installs a point)
-        return supplied_point(w, id, dest);
+    if driving(w, id) {
+        // spec: S-0207 claim 29 (r103, Q-3373 and Q-3374: the readings use the locomotor destination point of claim 25 only, the point the last assignment or an install of claim 30 supplied, until claim 25's table clears it; the factory exit track's point included) and Terms (Move destination: the locomotor destination point as installed; on a high-bridge cell the 416-lepton lift it carries)
+        return goal(w, id);
     }
-    // spec: S-0207 claim 29 (r92, Q-3353: the readings use the locomotor destination point of claim 25, the point the last assignment installed, whatever the vehicle's position or contacts are later) and Terms (Move destination: the locomotor destination point as installed at the last assignment; on a high-bridge cell the 416-lepton lift it carries)
-    goal(w, id).or_else(|| {
-        // design: interim (Q-3373: with the installed point cleared while the order-level destination stays, the readings ask the destination as before claim 29)
-        supplied_point(w, id, w.obj(id)?.dest?)
-    })
+    // spec: S-0207 Terms (Move destination: the point the current move order leads to; claim 29 is the driving locomotor's)
+    goal(w, id).or_else(|| supplied_point(w, id, w.obj(id)?.dest?))
+}
+
+/// Whether `id` has a drive state and the driving locomotor is its current
+/// one (S-0207 claims 29 to 31 hold for the driving locomotor only).
+fn driving(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.drive.is_some())
+        && crate::lift::current_locomotor(w, id) == Some(Locomotor::Drive)
 }
 
 /// The locomotor takes the order-level destination just assigned (S-0207
@@ -225,8 +222,6 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
     if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
         d.for_dest = dest;
         d.goal = goal;
-        // design: sim (Q-3374: an assignment that installs or clears the point ends the exit track's mark)
-        d.exit_point = false;
     }
 }
 
@@ -235,9 +230,105 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
 pub fn stop_point(w: &mut World, id: ObjectId) {
     if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
         d.goal = None;
-        // design: sim (Q-3374: with the point gone the exit track's mark ends)
-        d.exit_point = false;
     }
+}
+
+/// Claim 31's clearing of a driving vehicle's locomotor destination point
+/// at a failed fresh search (S-0207 r103), the point counted as taken for
+/// the order-level destination the vehicle holds after the failure's own
+/// clearing, so that it does not supply the point again through [`goal`].
+pub(crate) fn clear_after_failure(w: &mut World, id: ObjectId) {
+    if !driving(w, id) {
+        return;
+    }
+    if let Some(o) = w.obj_mut(id) {
+        let held = o.dest;
+        if let Some(d) = o.drive.as_mut() {
+            // spec: S-0207 claim 31 (r103, Q-3373: a fresh search of a driving vehicle that finds no path clears its locomotor destination point in that update, as by a stop, claim 25, whatever its distance from the point) and claim 25's table (Driving only: a fresh search that finds no path)
+            d.goal = None;
+            d.for_dest = held;
+        }
+    }
+}
+
+/// Claim 30's install at a locomotion update with no point (S-0207 r103):
+/// the vehicle on no track, with no stored steps and no locomotor
+/// destination point, holding an order-level destination, installs the
+/// point that destination supplies now, except while it sinks, while its
+/// body turns, or in *guard* or *unload*. Whether it installed one.
+fn install_again(w: &mut World, id: ObjectId) -> bool {
+    let t = w.tick;
+    let Some(o) = w.obj(id) else { return false };
+    let Some(d) = o.drive.as_ref() else {
+        return false;
+    };
+    let Some(dest) = o.dest else { return false };
+    if !driving(w, id) || d.track.is_some() || d.goal.is_some() || !o.path.steps.is_empty() {
+        return false;
+    }
+    // spec: S-0207 claim 30 (r103: no install while the vehicle is sinking, while its body is turning, or while its current behaviour is guard or unload)
+    if crate::naval::sinking(w, id)
+        || o.body.turning(t)
+        || matches!(o.beh.current, Some(Behaviour::Guard | Behaviour::Unload))
+    {
+        return false;
+    }
+    // design: S50 hold-back pending Q-3389 (a vehicle that has made its movement arrival at a depot, S-0314 claim 17, installs nothing: under claim 30 its point would be present all but one tick in R, and the depot's moving-destination test, S-0314 claims 6 and 21, could then never find it still; today's rule is kept until the request is answered)
+    if crate::depot::link(w, id).is_some_and(|l| l.arrived) {
+        return false;
+    }
+    // spec: S-0207 claim 30 (r103: the point the order-level destination supplies at that update, from the vehicle's position and contacts then; not an assignment: no retry delay or blockage timer is ended or restarted, and claim 27's refresh state plays no part)
+    let Some(p) = supplied_point(w, id, dest) else {
+        return false;
+    };
+    if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
+        d.goal = Some(p);
+    }
+    true
+}
+
+/// Claim 30's ask at a track's end (S-0207 r103): after claim 25's
+/// completion row, a driving vehicle that still has a locomotor destination
+/// point or stored steps and whose order-level destination is an infantry
+/// unit installs the point that unit supplies now when it differs, unless
+/// its current behaviour is *unload*.
+fn ask_infantry_again(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let Some(Target::Object(t)) = o.dest else {
+        return;
+    };
+    let installed = o.drive.as_ref().and_then(|d| d.goal);
+    // spec: S-0207 claim 30 (r103: the vehicle still has a locomotor destination point or stored steps after claim 25's completion row; a destination of any other kind than an infantry unit is not asked at a track's end; not in unload)
+    if !driving(w, id)
+        || (installed.is_none() && o.path.steps.is_empty())
+        || w.obj(t).is_none_or(|x| x.kind != Kind::Infantry)
+        || o.beh.current == Some(Behaviour::Unload)
+    {
+        return;
+    }
+    let Some(p) = supplied_point(w, id, Target::Object(t)) else {
+        return;
+    };
+    if installed != Some(p)
+        && let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut())
+    {
+        // spec: S-0207 claim 30 (r103: installed when it differs from the installed one; not an assignment)
+        d.goal = Some(p);
+    }
+}
+
+/// Whether a driving vehicle on no track and with no stored steps holds a
+/// locomotor destination point in its own cell (S-0207 claim 31: it has
+/// not arrived, so it searches for that cell).
+fn point_in_own_cell(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let Some(d) = o.drive.as_ref() else {
+        return false;
+    };
+    driving(w, id)
+        && d.track.is_none()
+        && o.path.steps.is_empty()
+        && goal(w, id).is_some_and(|p| p.cell() == o.pos.cell())
 }
 
 /// The driving movement report of a vehicle with a driving locomotor
@@ -1593,8 +1684,6 @@ pub fn begin_exit_track(w: &mut World, id: ObjectId, e: CellXY) {
             // spec: S-0207 claim 25 and S-0417 claim 5 (a successful driving exit-track instruction supplies the locomotor destination point at E's horizontal centre with height 0)
             dd.goal = Some(Pos::new(target.0, target.1, 0));
             dd.for_dest = ob.dest;
-            // design: sim (Q-3374: the installed point is the exit track's until an assignment installs one)
-            dd.exit_point = true;
         }
     }
     // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once)
@@ -1721,6 +1810,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             }
             // spec: S-0207 claim 25 (a qualifying track completion clears the locomotor destination point before the cell-arrival report)
             completion_clears_goal(w, id);
+            // spec: S-0207 claim 30 (r103: an infantry destination is asked again when a track ends, after claim 25's completion row)
+            ask_infantry_again(w, id);
             // spec: S-0516 claims 13 and 22 (arrival at the track target's cell centre is the completed-cell movement event: the sensor disc moves and a cloaked mover takes the adjacency check)
             crate::cloak::machine::cell_movement_completed(w, id);
             // spec: S-0409 claim 8 and Terms (a driving unit removes and adds its sight at the position reached on each arrival in a cell, the movement arrival update; not at a boundary crossing) and S-0207 claim 12 (reaching the track target is the cell-arrival update)
@@ -1857,8 +1948,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         if ended && !move_goes_on(w, id) {
             arrive_or_rest(w, id);
         }
+        own_cell_search(w, id, u, ended);
     } else {
-        if no_dest {
+        // spec: S-0207 claim 31 (r103: a driving vehicle holding a point has not arrived, even in that point's cell; the factory exit point with no order-level destination is searched for too)
+        if no_dest && !point_in_own_cell(w, id) {
             if turning_in_place && let Some(d2) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
                 // spec: S-0207 claim 11 (revision 39, Q-1160 question 2: a destination cancelled during the pre-step turn leaves no heading point and no independent pre-step movement hold; the cancelled step is not taken; the cancellation neither stops the body's turn nor retargets it, so the body completes its existing turn without displacement) and S-0206 Terms (a vehicle standing still with neither a move destination nor a next point is not being moved, even while its body turns)
                 d2.turning_in_place = false;
@@ -1878,9 +1971,14 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             return false;
         }
         if no_steps {
+            // spec: S-0207 claim 30 (r103, Q-3373: no point at a locomotion update, an order-level destination held: its point is installed, after claim 26's rows, and no track begins in that update)
+            if install_again(w, id) {
+                return false;
+            }
             // spec: S-0207 claim 29 (r92, Q-3353: the cell the searches look for, the installed point's)
             let goal = path::search_goal(w, id);
-            if goal == Some(pos.cell()) || goal.is_none() {
+            // spec: S-0207 claim 31 (r103: a driving vehicle in its point's cell searches for that cell, which fails, S-0212 claim 12, and clears the point; a ship rests there as before)
+            if goal.is_none() || (goal == Some(pos.cell()) && !driving(w, id)) {
                 // spec: S-0207 claim 26 (a building goal in its supplied point's cell is kept: cell equality alone removes neither destination)
                 arrive_or_rest(w, id);
                 return false;
@@ -1917,6 +2015,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         if ended && !move_goes_on(w, id) {
             arrive_or_rest(w, id);
         }
+        own_cell_search(w, id, u, ended);
     }
     let after = w.obj(id).map_or(before, |o| (o.pos.x, o.pos.y));
     let moved = after != before;
@@ -1924,6 +2023,21 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         d2.moved_tick = Some(t);
     }
     moved
+}
+
+/// The search of S-0207 claim 31 in the update in which a track ends
+/// (`ended`) with the vehicle in its point's cell, no track and no stored
+/// steps left: made at once when no retry delay runs. It finds no path
+/// (S-0212 claim 12), and the failure clears the point.
+fn own_cell_search(w: &mut World, id: ObjectId, u: &UnitRules, ended: bool) {
+    if !ended || !w.obj(id).is_some_and(|o| o.on_map) || !point_in_own_cell(w, id) {
+        return;
+    }
+    // spec: S-0207 claim 31 (r103: at once when no retry delay runs, the update in which a track ends there included) and S-0212 claim 21 (the fresh search waits for a running retry delay)
+    if path::waits(w, id) {
+        return;
+    }
+    fresh_search(w, id, u);
 }
 
 fn add_budget(w: &mut World, id: ObjectId, s: i32) {
