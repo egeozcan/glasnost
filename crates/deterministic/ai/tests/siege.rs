@@ -258,6 +258,54 @@ fn the_strike_goes_at_its_count_and_leaves_the_guard() {
     }
 }
 
+/// `n` riflemen of house 0 on free cells north of its yard.
+fn soldiers(w: &mut World, n: usize) -> Vec<ObjectId> {
+    let at = w.obj(yard(w, 0).unwrap()).unwrap().pos.cell();
+    let mut out = Vec::new();
+    // nocite: test data of our own (cells a few north of the yard)
+    for dy in [-5, -6, -7] {
+        for dx in -6..=6 {
+            let c = CellXY::new(at.x + dx, at.y + dy);
+            if out.len() < n && w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c) {
+                out.push(testkit::spawn(w, Kind::Infantry, "WALKER", 0, c, 0));
+            }
+        }
+    }
+    assert_eq!(out.len(), n, "room for the soldiers");
+    out
+}
+
+// design: own AI (#449): at hard a new strike also needs its units worth the level's floor: past the count, with no enemy army remembered, cheap soldiers wait at home, and go once tanks join them
+#[test]
+fn a_strike_below_the_floor_waits_at_hard() {
+    let level = AiDifficulty::Hard;
+    let t = tuning(level);
+    assert!(t.floor > 0);
+    assert_eq!(tuning(AiDifficulty::Easy).floor, 0);
+    assert_eq!(tuning(AiDifficulty::Normal).floor, 0);
+    let mut w = base_up();
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    // The count and room for the brain's own parts, worth less than the floor.
+    let few = soldiers(&mut w, t.strike + 3);
+    let worth: i64 = few.iter().map(|&id| siege::worth(&w, id)).sum();
+    assert!(worth < t.floor, "{worth} under the floor");
+    // nocite: test data of our own (several think periods)
+    let got = play(&mut w, &mut s, level, 600);
+    assert!(waiting(&w, &few) >= t.strike, "the count waits");
+    assert!(
+        attack_moved(&got, &few).is_empty(),
+        "no strike below the floor"
+    );
+    assert_eq!(s.strikes(), 0);
+    // Tanks join them: the units that would go pass the floor.
+    let more = tanks(&mut w, 8);
+    let all: Vec<ObjectId> = few.iter().chain(&more).copied().collect();
+    // nocite: test data of our own
+    let got = play(&mut w, &mut s, level, 600);
+    assert_eq!(s.strikes(), 1);
+    assert!(!attack_moved(&got, &all).is_empty(), "the strike goes");
+}
+
 // design: own AI (#449): at hard a strike worth less than the level's share of the enemy army the house has seen is called home with plain move orders, and the army gathers again
 #[test]
 fn an_outmatched_strike_is_called_home() {
