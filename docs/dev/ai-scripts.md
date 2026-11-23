@@ -493,6 +493,15 @@ against it all came at the cap on worth, six of them on map 2.
   short of power, as with the factories when rich. The refinery takes the place of the brain's
   other building order of that think (its tech climb, a defence or a sensor): a rich brain keeps
   its building line busy, and when the line frees it orders the next building at once.
+  Development round 1: 0.912 against dev-0's 0.849, every pair up (`default:hard` 0.786 to
+  0.927); cert-1 1912.1 (order-free 1885.9) against cert-0's 1808.7.
+- **Refineries before factories** (`Tuning::rich_after`, hard 2). Of dev-1's 19 losses to
+  `siege:normal`, 18 came on country 0. A watch of one (map 0, seed 11) shows hard spending its
+  starting money on more factories (`Tuning::rich`, 3000 credits in hand), its credits near 0 from
+  tick 5 000, one refinery until tick 9 000, and its base lost at 11 135. The starting money is
+  not income. A person puts it into refineries first and builds a second war factory once the
+  income stands. So at hard, money in hand counts as rich only once the plan's harvesters stand and
+  the house owns two refineries.
 
 ## The tournament
 
