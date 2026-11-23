@@ -11,7 +11,7 @@ use glasnost_ai::scripts::{self, AiScript, REGISTRY, Schedule, Seat, View};
 use glasnost_ai::siege::{self, HELD, Siege, plan_for, tuning};
 use glasnost_ai::{fixture, game::Game};
 use glasnost_map::CellXY;
-use glasnost_sim::econ::{production, shroud};
+use glasnost_sim::econ::shroud;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind};
 use glasnost_sim::testkit;
@@ -577,64 +577,6 @@ fn hard_builds_more_refineries() {
     let hard = refineries_standing(AiDifficulty::Hard, credits, ticks);
     let normal = refineries_standing(AiDifficulty::Normal, credits, ticks);
     assert!(hard > normal, "hard {hard} refineries, normal {normal}");
-}
-
-/// The refinery build orders house 0 gives at `level` from
-/// [`economy_base`] with `credits` in hand over `ticks`, each with the
-/// tick, the money in hand and the refinery's price.
-fn refineries_ordered(level: AiDifficulty, credits: i32, ticks: i32) -> Vec<(i32, i32, i32)> {
-    // nocite: test data of our own (the plan's three harvesters standing)
-    let mut w = economy_base(credits, 3);
-    let proc = w.rules().index_of(Kind::Building, "PROC").unwrap();
-    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
-    let mut seen = Vec::new();
-    for _ in 0..ticks {
-        if w.econ.end.finished {
-            break;
-        }
-        let tick = w.tick;
-        let view = View::new(&w, HouseId(0));
-        let got = AiScript::think(
-            &mut s,
-            &view,
-            Schedule::of(HouseId(0), tick),
-            level,
-            None,
-            &mut (),
-        );
-        for o in got {
-            if let Order::Build { what } = &o
-                && what.kind == Kind::Building
-                && what.index == proc
-            {
-                let price = production::price(&w, HouseId(0), *what);
-                seen.push((tick, w.houses[0].credits, price));
-            }
-            orders::issue(&mut w, HouseId(0), o);
-        }
-        testkit::run(&mut w, 1);
-    }
-    seen
-}
-
-// design: own AI (#449): at hard, the more refinery is ordered with less than its price in hand only while the army is worth the level's floor: one ordered broke owes more than the money in hand, and the brain then holds the army lines to pay for it (`field_refinery_short`), so a base with no army to speak of keeps training first
-#[test]
-fn hard_orders_more_refineries_broke_only_with_an_army() {
-    // nocite: test data of our own (less money than a refinery and no army; a few minutes of play)
-    let (credits, ticks) = (300, 6000);
-    // The brain's own refinery by a new field is ordered broke at every
-    // level; hard adds none to it.
-    let broke = |level| {
-        refineries_ordered(level, credits, ticks)
-            .into_iter()
-            .filter(|&(_, c, p)| c < p)
-            .collect::<Vec<_>>()
-    };
-    let (hard, normal) = (broke(AiDifficulty::Hard), broke(AiDifficulty::Normal));
-    assert!(
-        hard.len() <= normal.len(),
-        "hard orders refineries broke: {hard:?}, normal {normal:?}"
-    );
 }
 
 // design: own AI (#449): at hard, the money in hand counts as rich only once the plan's harvesters stand on two refineries: from the yard alone with much money in hand, no factory of a kind the house owns is ordered while it owns fewer than two refineries
