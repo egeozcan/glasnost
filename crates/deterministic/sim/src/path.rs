@@ -2391,6 +2391,12 @@ fn compute_tried(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>)
     if res == Search::SearchFailed && holds(w, id) {
         return res;
     }
+    // design: C7-P4 nearest reachable cell and S50 (a search for the unit's own cell, S-0207 claim 31's own-cell search, fails by S-0212 claim 12 and not for want of reach: it makes no second try, which would replace a destination the search did not look for)
+    if w.obj(id)
+        .is_some_and(|o| search_goal(w, id) == Some(o.pos.cell()))
+    {
+        return res;
+    }
     // design: C7-P4 nearest reachable cell (a failed move tries once more towards the nearest cell the unit can stand on in its own reach region; one try, as the new destination is reachable)
     let Some(c) = reachable_near(w, id) else {
         return res;
@@ -3153,6 +3159,8 @@ fn compute_once(w: &mut World, id: ObjectId, mode: Mode, start: Option<CellXY>) 
             // spec: S-0208 claim 26 (r75, Q-3264 and Q-3303: the substitute cell is assigned as the walker's destination, replacing a cell, an object, which it then no longer holds as its destination, or a kept locomotor destination, which the assignment ends; an absorbing building it is to enter included: the contact and a queued or current enter stay) and S-0212 claim 24
             crate::econ::assign_destination(w, id, Some(Target::Cell(goal)));
         } else if !walk
+            // spec: S-0212 claim 24 (only an adopted substitute replaces the destination cell) and S-0207 claim 29 (r92: a driver's searched cell is its installed point's, which can differ from its destination cell, as for the exit point of S-0417 claim 5, without any substitution)
+            && searched != Some(goal)
             && let Some(Target::Cell(d)) = o.dest
             && d != goal
             && let Some(ob) = w.obj_mut(id)
@@ -3521,6 +3529,10 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
     let walker = o.walk.is_some();
     // spec: S-0212 claim 23 (the same clearing ends every failed search of a unit with the driving, ship or hovering locomotor)
     let drive = o.drive.is_some() || o.hover.is_some();
+    // spec: S-0207 claim 31 (r103, Q-3373: a fresh search of a driving vehicle, the one a first check makes at once included; a re-path's failure is not covered)
+    let driving_fresh = !repath
+        && o.drive.is_some()
+        && crate::lift::current_locomotor(w, id) == Some(Locomotor::Drive);
     let mut gave_up = false;
     let mut house_given = false;
     match res {
@@ -3537,6 +3549,10 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 if drive || walker {
                     ob.dest = None;
                 }
+            }
+            if driving_fresh {
+                // spec: S-0207 claim 31 (r103, Q-3373: the point is cleared in that update)
+                crate::drive::clear_after_failure(w, id);
             }
         }
         Search::SearchFailed => {
@@ -3558,7 +3574,12 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 && o.dest.is_some()
                 && crate::lift::current_locomotor(w, id) == Some(Locomotor::Walk);
             // design: C7-P6 hold (quirks.jammed_move_dropped off: a move that would be given up while only units stand in its way is kept; the unit stops, counts as blocked from now if it was not, and searches again after the retry delay); not for a walker that claim 25 has cleared
-            if gives_up && !near_clear && holds(w, id) {
+            let held = gives_up && !near_clear && holds(w, id);
+            if held {
+                if driving_fresh {
+                    // spec: S-0207 claim 31 (r103, Q-3373: the point is cleared in that update, whatever the distance; the give-up test of S-0212 claim 23 row 2 and the hold's test read it first)
+                    crate::drive::clear_after_failure(w, id);
+                }
                 if let Some(ob) = w.obj_mut(id) {
                     ob.path.steps.clear();
                     start_delay(ob, t, r.general.retry_delay);
@@ -3586,7 +3607,8 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 ob.path.steps.clear();
                 // spec: S-0212 claim 23 (the unit stops and the retry delay R starts, which the clearing of its destination below ends again for the driving and walk locomotors, claim 21)
                 start_delay(ob, t, r.general.retry_delay);
-                if drive {
+                // spec: S-0207 claim 31 (r103, Q-3373: in S-0212 claim 23's third row, within 1 cell, a driving vehicle keeps its order-level destination after a fresh search and R keeps running; a pending cross-spec change to S-0212 claim 23 named by S-0207 r103) and S-0212 claim 23 (the ship and hovering locomotors and a driving re-path have it cleared)
+                if drive && !driving_fresh {
                     ob.dest = None;
                 }
                 if gives_up {
@@ -3606,6 +3628,10 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                     // spec: S-0417 claim 17 (No path: a failed search that passes the gate ends the walking unit's movement in progress in that update, whether or not it keeps its destination; S-0212 claim 23, the sentence after its table)
                     ob.path.failed_for = ob.dest;
                 }
+            }
+            if driving_fresh {
+                // spec: S-0207 claim 31 (r103, Q-3373: the point is cleared in that update, whatever the distance; the give-up test of S-0212 claim 23 row 2 read it first; claim 23a's destination, given below, is an assignment and supplies its own point)
+                crate::drive::clear_after_failure(w, id);
             }
             if point_lost {
                 crate::walk::locomotor_destination_lost(w, id);

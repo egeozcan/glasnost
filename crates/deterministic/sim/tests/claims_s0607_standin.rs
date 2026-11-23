@@ -125,7 +125,7 @@ fn claim_22_mechanical_walking_cannot_stand_in() {
     assert_eq!(w.obj(v).unwrap().dest, None, "it stops");
 }
 
-// spec: S-0607 claim 23: with the driving stand-in the unit drives towards the lifter under S-0207's rules (here a teleporting type, which would otherwise jump), is never lifted, gets no arrival drop, and is set down, not dropped, when its grip ends
+// spec: S-0607 claim 23: with the driving stand-in the unit drives towards the lifter under S-0207's rules (here a teleporting type, which would otherwise jump), is never lifted and gets no arrival drop; S-0207 claim 31 (r103, Q-3373: its failed fresh search beside the occupied lifter cell, within 1 cell, keeps the destination, so the grip, which only a change of that destination to none or a lifter-side event of S-0607 claim 12 ends, holds)
 #[test]
 fn claim_23_drive_stand_in_drives_to_the_lifter() {
     let (mut w, l, v) = scene(Some("drive"), true, "CHRONO");
@@ -145,9 +145,13 @@ fn claim_23_drive_stand_in_drives_to_the_lifter() {
     assert!(cells_apart(&w, l, v) < start, "it came nearer");
     assert!(max_step < 256, "it drove, never jumped a cell at once");
     assert_eq!(max_h, 0, "never lifted");
-    assert!(ended, "the drive gives up beside the occupied lifter cell");
-    assert!(lift::seized(&w, v), "the end of the grip does not restore");
-    assert_eq!(w.obj(v).unwrap().dest, None, "set down: no destination");
+    assert!(!ended, "the drive beside the occupied lifter cell keeps it");
+    assert_eq!(
+        w.obj(v).unwrap().dest,
+        Some(Target::Object(l)),
+        "the lifter stays its destination"
+    );
+    assert!(lift::seized(&w, v));
     assert_eq!(health(&w, v), 100, "no impact damage");
 }
 

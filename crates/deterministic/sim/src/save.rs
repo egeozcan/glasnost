@@ -21,7 +21,7 @@ use crate::world::{GameSetup, HouseId, World};
 
 /// Format version of saves and replays.
 // nocite: version number of our own save format
-pub const FORMAT_VERSION: u32 = 223;
+pub const FORMAT_VERSION: u32 = 225;
 
 /// A saved game.
 #[derive(Serialize, Deserialize)]

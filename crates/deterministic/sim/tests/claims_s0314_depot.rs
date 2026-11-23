@@ -1838,12 +1838,17 @@ fn claim_17_same_cell_enter_supplies_the_point() {
     depot::process_enter(&mut w, v);
     assert!(!docked(&w, v), "no tether at the repeated request");
     assert_eq!(w.obj(v).unwrap().pos, pos);
-    // spec: S-0207 claim 26 (a building destination is kept by locomotion updates at rest in the supplied point's cell: cell equality removes neither the order-level destination nor the point)
+    // spec: S-0207 claim 26 (a building destination is kept by locomotion updates at rest in the supplied point's cell: cell equality removes neither destination) and claim 31 (r103, Q-3374: a point in the vehicle's own cell is searched for, the search fails and clears the point; the depot destination is kept) and claim 30 (r103: in guard nothing is installed again)
+    assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Guard));
     for _ in 0..3 {
         glasnost_sim::drive::tick(&mut w, v);
     }
     assert_eq!(w.obj(v).unwrap().dest, Some(Target::Object(d)));
-    assert_eq!(glasnost_sim::drive::goal(&w, v), Some(dp));
+    assert_eq!(
+        glasnost_sim::drive::goal(&w, v),
+        None,
+        "cleared by the own-cell search"
+    );
     assert_eq!(w.obj(v).unwrap().pos, pos);
 }
 
@@ -1876,7 +1881,7 @@ fn claim_26_guard_row_removes_the_building_goal_at_the_exact_point() {
     assert!(!glasnost_sim::drive::goal_present(&w, v));
 }
 
-// spec: S-0207 claim 26 (the guard row needs exact integer-lepton equality of all coordinates; the same cell, a horizontal displacement inside it, or a height difference is insufficient, and a building destination is not removed by cell equality)
+// spec: S-0207 claim 26 (the guard row needs exact integer-lepton equality of all coordinates; the same cell, a horizontal displacement inside it, or a height difference is insufficient, and a building destination is not removed by cell equality) and claims 30 and 31 (r103, Q-3374: the point in the own cell is searched for and cleared; in guard nothing is installed again, and the destination is kept with no point)
 #[test]
 fn claim_26_guard_row_needs_exact_equality() {
     for (offset, dz) in [(400, 0), (512, 1)] {
@@ -1892,7 +1897,10 @@ fn claim_26_guard_row_needs_exact_equality() {
             Some(Target::Object(d)),
             "offset {offset}, dz {dz}"
         );
-        assert!(glasnost_sim::drive::goal_present(&w, v));
+        assert!(
+            !glasnost_sim::drive::goal_present(&w, v),
+            "offset {offset}, dz {dz}: cleared, not installed again in guard"
+        );
     }
 }
 

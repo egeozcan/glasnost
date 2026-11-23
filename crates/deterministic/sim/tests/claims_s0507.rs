@@ -1267,7 +1267,12 @@ fn claim_5_a_transport_goal_is_kept_by_cell_equality() {
                 Some(Target::Object(t)),
                 "moving {moving}, update {step}"
             );
-            assert!(glasnost_sim::drive::goal_present(&w, v));
+            // spec: S-0207 claims 30 and 31 (r103, Q-3374: the point in the passenger's own cell is searched for, the search fails and clears it in update 0; update 1 installs the transport's point again, with no search while the retry delay runs)
+            assert_eq!(
+                glasnost_sim::drive::goal_present(&w, v),
+                step >= 1,
+                "moving {moving}, update {step}: cleared by the search, then installed again"
+            );
         }
     }
     // A later assignment naming the cell instead: the cell-goal cleanup removes it at the first update.

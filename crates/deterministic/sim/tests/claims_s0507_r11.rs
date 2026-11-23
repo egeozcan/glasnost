@@ -350,7 +350,7 @@ fn the_transport_it_boards_loses_it() {
     }
 }
 
-// spec: S-0507 claim 6a (any vehicle or infantry holder, transport or not, loses the object as its destination at once; the driving locomotor's destination point stays as it was, S-0207 claims 25 and 26 as r11's Changes for other specs amend claim 26's closing paragraph)
+// spec: S-0507 claim 6a (any vehicle or infantry holder, transport or not, loses the object as its destination at once; the driving locomotor's destination point stays as it was, S-0207 claims 25 and 26 as r11's Changes for other specs amend claim 26's closing paragraph; S-0207 r103 claim 30: as it was at the last track end before the loss)
 #[test]
 fn other_holders_lose_it_and_a_driver_keeps_its_point() {
     let mut w = world();
@@ -361,7 +361,10 @@ fn other_holders_lose_it_and_a_driver_keeps_its_point() {
     testkit::run(&mut w, 5);
     econ::assign_destination(&mut w, v, Some(Target::Object(i)));
     econ::assign_destination(&mut w, f, Some(Target::Object(i)));
-    let goal = drive::goal(&w, v).expect("a driving point at the assignment");
+    assert!(
+        drive::goal(&w, v).is_some(),
+        "a driving point at the assignment"
+    );
     click(&mut w, &[i], ClickOn::Object(c));
     let mut gone_in = false;
     for _ in 0..300 {
@@ -374,7 +377,8 @@ fn other_holders_lose_it_and_a_driver_keeps_its_point() {
     assert!(gone_in, "I boarded C");
     assert_eq!(dest(&w, v), None, "the vehicle lost it");
     assert_eq!(dest(&w, f), None, "the infantry unit lost it");
-    assert_eq!(drive::goal(&w, v), Some(goal), "the driving point stays");
+    // spec: S-0207 claim 30 (r103, Q-3373, S-0507 claim 6a's Changes entry: a driver whose destination is an infantry unit asks it again at each track end, so at the loss its point is the one installed at the last track end before it, and that point stays)
+    let goal = drive::goal(&w, v).expect("the driving point stays");
     for _ in 0..3 {
         tick::step(&mut w);
         assert_eq!(dest(&w, v), None);

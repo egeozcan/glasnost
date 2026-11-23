@@ -153,14 +153,29 @@ fn chase_scene() -> (World, ObjectId, ObjectId, Pos) {
     (w, v, u, p)
 }
 
-// spec: S-0207 claim 29 (r92, Q-3353: the searches look for the installed point's cell, which does not follow the destination) and claim 25 (the completion row asks the destination for its point when the track ends: the vehicle is not in the cell of the point the unit supplies then, so the installed point stays)
+// spec: S-0207 claim 29 (r92, Q-3353: the searches look for the installed point's cell, which does not follow the destination) and claim 25 (the completion row asks the destination for its point when the track ends: the vehicle is not in the cell of the point the unit supplies then, so the completion row leaves the installed point) and claims 30 and 31 (r103, Q-3373: the search for the point's own cell fails and clears it, and the next update installs the unit's new point, so the driver goes after it)
 #[test]
-fn claim_29_a_driver_goes_to_the_point_of_the_assignment_and_keeps_it() {
+fn claim_29_a_driver_goes_to_the_point_of_the_assignment_then_after_the_unit() {
     let (mut w, v, u, p) = chase_scene();
-    testkit::run(&mut w, 400);
+    let mut reached = false;
+    for _ in 0..400 {
+        testkit::run(&mut w, 1);
+        if w.obj(v).unwrap().pos.cell() == p.cell() {
+            reached = true;
+            break;
+        }
+    }
+    assert!(reached, "the driver goes to the point of the assignment");
+    testkit::run(&mut w, 600);
     let o = w.obj(v).unwrap();
-    assert_ne!(w.obj(u).unwrap().pos.cell(), at(0, 0), "the unit has left");
-    assert_eq!(o.pos.cell(), p.cell(), "the driver ends where the unit was");
-    assert_eq!(o.dest, Some(Target::Object(u)), "it keeps the unit");
-    assert_eq!(drive::goal(&w, v), Some(p), "and the installed point");
+    let uc = w.obj(u).unwrap().pos.cell();
+    assert_ne!(uc, at(0, 0), "the unit has left");
+    // Whether it still holds the unit at the end is S-0212 claim 23's: a
+    // search for the unit's occupied cell from more than 1 cell away gives
+    // the move up.
+    let c = o.pos.cell();
+    assert!(
+        (c.x - uc.x).abs().max((c.y - uc.y).abs()) <= 2,
+        "then it goes after the unit: {c:?} and {uc:?}"
+    );
 }
