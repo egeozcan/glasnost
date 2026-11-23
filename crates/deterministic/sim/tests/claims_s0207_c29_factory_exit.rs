@@ -66,10 +66,12 @@ fn claim_31_a_vehicle_given_a_destination_before_its_exit_leaves_the_apron() {
             let p = glasnost_sim::drive::goal(&w, v).expect("D's point installed");
             assert_eq!(p.cell(), d);
         }
-        if ended.is_some() && next_track.is_none() && !had_track {
-            if o.drive.as_ref().unwrap().track.is_some() {
-                next_track = Some(t);
-            }
+        if ended.is_some()
+            && next_track.is_none()
+            && !had_track
+            && o.drive.as_ref().unwrap().track.is_some()
+        {
+            next_track = Some(t);
         }
         if exit_seen && o.pos.cell() == d {
             let (end, next) = (ended.unwrap(), next_track.expect("a track after the exit"));
