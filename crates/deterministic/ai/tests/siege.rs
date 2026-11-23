@@ -621,19 +621,11 @@ fn refineries_ordered(level: AiDifficulty, credits: i32, ticks: i32) -> Vec<(i32
 #[test]
 fn hard_orders_more_refineries_only_with_the_money() {
     // nocite: test data of our own (less money than a refinery; a few minutes of play)
-    let (credits, ticks) = (300, 6000);
-    // The brain's own refinery by a new field is ordered broke at every
-    // level; hard adds none to it.
-    let broke = |level| {
-        refineries_ordered(level, credits, ticks)
-            .into_iter()
-            .filter(|&(_, c, p)| c < p)
-            .collect::<Vec<_>>()
-    };
-    let (hard, normal) = (broke(AiDifficulty::Hard), broke(AiDifficulty::Normal));
+    let (credits, ticks) = (300, 3000);
+    let got = refineries_ordered(AiDifficulty::Hard, credits, ticks);
     assert!(
-        hard.len() <= normal.len(),
-        "hard orders refineries broke: {hard:?}, normal {normal:?}"
+        got.iter().all(|&(_, c, p)| c >= p),
+        "hard orders a refinery broke: {got:?}"
     );
     // nocite: test data of our own (money for the refineries and more)
     let rich = refineries_ordered(AiDifficulty::Hard, 20_000, ticks);
