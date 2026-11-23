@@ -506,6 +506,19 @@ against it all came at the cap on worth, six of them on map 2.
   `base_ordered`). A rich brain orders a building every think its line frees, so without that
   rule more factories had fired only before the economy stood, which is just what this lever
   stops. A test trial showed it: on four refineries and 30 000 credits the house added no factory.
+  Development round 2: 0.919 against dev-1's 0.912, with 293 victories against 265 (`siege:normal`
+  0.724 to 0.771); cert-2 1914.9 (order-free 1894.8).
+- **Tanks first** (`Tuning::tanks_first`, hard only). dev-2's draws are stalemates at the cap at
+  high worth, hard ahead but under 3/2 (about 40 000 against 30 000). A watch of one (map 2,
+  seed 11, against `default:normal`) shows hard on seven refineries with its credits near 0 and
+  an army of 31 units worth 11 300, mostly cheap infantry (dogs, rifles, gunners) with one or
+  two tanks. It made three strikes all game, and each was called home. The brain picks the army
+  type the house has fewest of on the map, so its fast infantry line builds as often as the
+  war factory and takes the money. A person facing tanks and base defences puts most of his
+  money into tanks. So at hard, while the house owns a vehicle factory and has spent more on
+  infantry army units than on vehicle army units (S-0407 claim 10's ever-built counts at the
+  types' costs), the siege drops the brain's orders for infantry army units, and the money
+  goes to the war factory. The soldiers trained beside the harvesters (`beside`) stay.
 
 ## The tournament
 
