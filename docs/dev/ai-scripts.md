@@ -534,6 +534,11 @@ against it all came at the cap on worth, six of them on map 2.
   Development round 4, stopped after two pairs: `siege:normal` level at 0.771, `default:hard`
   0.943 to 0.839 (map 2 14-3-15). A drop past 0.06 on a pair is no clear gain, so the lever and
   its test are reverted: the refineries ordered broke pay back on the long games.
+- **Broke refineries only with an army** (hard, `Tuning::floor`). The narrower form of the last
+  lever: the more refinery may still be ordered with less than its price in hand, but only
+  while the house's army is worth the level's floor for a strike (5 000 at hard). The army lines
+  the brain then holds stand on an army that can guard the base. In the watch above hard's army
+  was worth 2 800 when it ordered the refinery.
 
 ## The tournament
 
