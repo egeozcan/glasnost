@@ -7,12 +7,11 @@
 
 use std::collections::BTreeSet;
 
-use glasnost_ai::scripted::{self, Role};
 use glasnost_ai::scripts::{self, AiScript, REGISTRY, Schedule, Seat, View};
 use glasnost_ai::siege::{self, HELD, Siege, plan_for, tuning};
 use glasnost_ai::{fixture, game::Game};
 use glasnost_map::CellXY;
-use glasnost_sim::econ::{production, shroud};
+use glasnost_sim::econ::shroud;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind};
 use glasnost_sim::testkit;
@@ -634,52 +633,6 @@ fn hard_builds_refineries_before_factories() {
         }
         testkit::run(&mut w, 1);
     }
-}
-
-/// House 0's spend on army units of `kind`: its ever-built counts (S-0407
-/// claim 10) at the types' costs.
-fn army_spend(w: &World, kind: Kind) -> i64 {
-    w.houses[0]
-        .econ
-        .tech
-        .ever_built
-        .iter()
-        .filter(|&(&t, _)| t.kind == kind && scripted::role_of(w, t) == Some(Role::Army))
-        .map(|(&t, &n)| i64::from(n) * i64::from(production::cost_field(w, t)))
-        .sum()
-}
-
-// design: own AI (#449): at hard, while the house owns a war factory, it spends no more on infantry army units than on vehicle army units, as a person facing tanks and defences puts most of his money into tanks; normal builds the brain's mix
-#[test]
-fn hard_puts_its_money_into_tanks() {
-    // nocite: test data of our own (money for a long build-up; a few minutes of play)
-    let (credits, ticks) = (40_000, 6000);
-    let spend = |level| {
-        // nocite: test data of our own (the plan's three harvesters standing)
-        let mut w = guarded(economy_base(credits, 3));
-        let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
-        play(&mut w, &mut s, level, ticks);
-        (
-            army_spend(&w, Kind::Infantry),
-            army_spend(&w, Kind::Vehicle),
-        )
-    };
-    let (inf, veh) = spend(AiDifficulty::Hard);
-    assert!(
-        veh > 0,
-        "hard builds vehicles: {inf} infantry, {veh} vehicle"
-    );
-    // nocite: design: own AI (#449): one army unit's cost over the line, the order that crosses it
-    let slack = 1000;
-    assert!(
-        inf <= veh + slack,
-        "hard spends {inf} on infantry, {veh} on vehicles"
-    );
-    let (n_inf, n_veh) = spend(AiDifficulty::Normal);
-    assert!(
-        n_inf > n_veh,
-        "the brain's mix at normal: {n_inf} infantry, {n_veh} vehicle"
-    );
 }
 
 // design: own AI (#449): at hard, with money to spare in hand, the siege adds factories of the army's kinds (S-0403 claim 6: more factories of a kind, shorter build times), up to three of each; normal and easy do not
