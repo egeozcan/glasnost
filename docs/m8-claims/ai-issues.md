@@ -568,3 +568,34 @@ score 0.775, 111 victories and 55 wins on worth; top of the pool, short of 2000.
 dev-2 (with factories after the first strike): `siege:normal` 0.557, worse. dev-3 (the guard when
 threatened): 0.807, 222 victories, no clear gain. The stop rule ended the batch with no code kept,
 so no certifying round after cert-0.
+
+## Script AS4
+
+Issue #449, the siege's fourth batch: its hard level further toward 2000 Elo, playing fair. Notes
+in [ai-scripts.md](../dev/ai-scripts.md#hard-script-as4). Three hard-only levers in `siege.rs`
+are kept. The default script, the shared brain and the tournament are as on the base. Base
+5bb77d6 (its code is df22a12's). AI game 204, save 223 and wire 13 are unchanged, since
+`Tuning` is not saved.
+
+**Measurement:** AS3's, fixed before the first round. The baseline is AS3's cert-0 and dev-0.
+Development rounds play `siege:hard` against each of the five others on maps 0, 2 and 8, seeds 7
+to 14 (480 games). A clear gain is the combined score up at least 0.02, or 12 more victories,
+with no pair down more than 0.06. The stop rule is three rounds in a row with no clear gain.
+
+| part | confirmed | change | test |
+|---|---|---|---|
+| soldiers beside the harvesters | AS3's watch: 5 700 credits and no soldier at tick 3 000 while the brain's army round waits for the plan's harvesters | `Tuning::beside` (hard): while fewer harvesters stand than the plan, one infantry army type a think on a free line, when the money in hand beyond what running items owe pays for the next harvester and the soldier | `hard_trains_soldiers_beside_the_harvesters` |
+| a floor under the first strike | a dev-1 watch, map 2 seed 8: the strike's count stood by tick 6 000 with no enemy army remembered (the edge holds for any strike then); eight cheap units went out and were lost | `Tuning::floor` (hard 5 000): a new strike also needs the units that would go worth that many credits; joining is not held | `a_strike_below_the_floor_waits_at_hard` |
+| no navy while the enemy is reached by land | a dev-2 watch, map 0 seed 7 against `siege:normal`: hard ahead at tick 12 000, its lines then on a shipyard and ships, the game lost by land | `Tuning::navy` (false at hard): while every enemy start lies in the reach region (S-0212 claim 4) of the house's first ground vehicle, orders for a naval building (S-0406 claim 3 d) or a water-zone unit are dropped, the climb building in a dropped building's place | `hard_builds_no_navy_while_the_enemy_is_reached_by_land` (lib) |
+
+**Rounds.**
+
+- dev-1 (soldiers): 0.808 and 241 victories, but `default:hard` fell 0.083, so no clear gain.
+- dev-2 (and the floor): 0.827 and 246 victories, a clear gain on dev-0.
+- dev-3 (and no navy): 0.846 and 257 victories, with every pair up on dev-2. That is +0.019 and
+  +11, just short of both bars, so no clear gain by the rule; the lever was kept.
+- cert-1 (dev-2's code): `siege:hard` 1761.9, order-free 1729.5, 172-30-38.
+- cert-2 (dev-3's code, the head): 1762.2, order-free 1748.4, 177-25-38, score 0.817, 135
+  victories and 42 wins on worth. It is top of the pool but short of 2000.
+
+The batch handed back one round into the stop count.

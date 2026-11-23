@@ -394,6 +394,8 @@ trained only while threatened, come too few and too late.
 ### Hard, script AS4
 
 Script AS4 took the siege's hard level further toward 2000 Elo, with the same rules of fair play.
+It kept three hard-only levers and reached 1762.2 (1748.4 order-free) in its last certifying
+round, short of the goal.
 Its baseline is AS3's: the simulation and the AI have not changed since, so AS3's certifying
 round (`siege:hard` 1739.5, 1702.6 order-free) and its development round dev-0 (0.803) stand.
 Development rounds are AS3's: `siege:hard` against each of the five other entrants on maps 0, 2
@@ -430,6 +432,41 @@ and 8, seeds 7 to 14 (480 games).
   for a naval building (S-0406 claim 3 d) and for a unit whose movement zone is water are
   dropped. A dropped building gives way to the climb building as with the superweapons. With no
   ground vehicle, or an enemy start across the water, the navy stays.
+
+The rounds, with `siege:hard`'s score against each pair (win 1, draw ½):
+
+| round | `siege:normal` | `siege:easy` | `default:easy` | `default:normal` | `default:hard` | all | victories |
+|---|---|---|---|---|---|---|---|
+| dev-0 (base) | 0.646 | 0.797 | 0.917 | 0.828 | 0.828 | 0.803 | 215 |
+| dev-1 (soldiers) | 0.630 | 0.901 | 0.922 | 0.844 | 0.745 | 0.808 | 241 |
+| dev-2 (and the floor) | 0.667 | 0.927 | 0.901 | 0.849 | 0.792 | 0.827 | 246 |
+| dev-3 (and no navy) | 0.729 | 0.932 | 0.911 | 0.854 | 0.802 | 0.846 | 257 |
+
+- dev-1 was no clear gain: 26 more victories, but `default:hard` fell 0.083. Its watch is the
+  floor's reason above. The soldiers were kept, since the floor builds on them.
+- dev-2 was a clear gain on dev-0: +0.024 and 31 more victories, with no pair down more than
+  0.036.
+- dev-3 rose on every pair against dev-2, +0.019 and 11 more victories. That is just short of
+  both bars, so it was no clear gain by the rule. The lever was kept anyway: it only drops
+  spending, and no pair fell.
+
+Certifying rounds (seeds 15 to 18, the six entrants, 720 games):
+
+| round | code | Elo | order-free | W-L-D | score |
+|---|---|---|---|---|---|
+| cert-0 (AS3, base) | df22a12 | 1739.5 | 1702.6 | 166-34-40 | 0.775 |
+| cert-1 | soldiers and the floor | 1761.9 | 1729.5 | 172-30-38 | 0.796 |
+| cert-2 | and no navy | 1762.2 | 1748.4 | 177-25-38 | 0.817 |
+
+The goal of 2000 was not met. At the cap, with the pool's ratings, 2000 needs about 0.93
+against every entrant. cert-2 has `siege:easy` at 0.948 but `siege:normal` at 0.667 and
+`default:hard` at 0.792. What remains:
+
+- Country 0 against `siege:normal` (79-18-23 with country 0 in cert-2, 98-7-15 with country 1).
+- Map 2, where most games end in a draw at the cap (44-10-26). A base watch there shows hard on
+  two refineries all game against four.
+
+The batch handed back one round into the stop count, to leave room for the final checks.
 
 ## The tournament
 
