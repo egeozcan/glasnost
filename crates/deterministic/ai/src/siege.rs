@@ -121,6 +121,10 @@ pub struct Tuning {
     /// Refineries the house builds up to, beyond the brain's own rule, once
     /// the plan's harvesters stand ([`Siege::more_refineries`]); 0: none.
     pub refineries: usize,
+    /// Refineries the house owns, with the plan's harvesters standing, before
+    /// the money in hand counts as rich ([`Siege::economy_stands`]); 0: from
+    /// the start.
+    pub rich_after: usize,
 }
 
 /// The tuning of level `level`.
@@ -144,6 +148,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             floor: 0,
             navy: true,
             refineries: 0,
+            rich_after: 0,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -163,6 +168,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             floor: 0,
             navy: true,
             refineries: 0,
+            rich_after: 0,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -187,6 +193,8 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: false,
             // nocite: design: own AI (#449): hard builds up to four refineries once its harvesters stand, as a person whose credits run out with fields unworked builds the next refinery early
             refineries: 4,
+            // nocite: design: own AI (#449): the starting money is not income; hard counts as rich only on two refineries with its harvesters standing, as a person builds the second refinery before the second war factory
+            rich_after: 2,
         },
     }
 }
@@ -381,9 +389,26 @@ impl Siege {
         }
     }
 
+    /// Whether the house's income stands (design: own AI, #449): with
+    /// `refineries` 0 always; else once the plan's harvesters stand
+    /// (`Script::harvesters_kept`) and the house owns at least `refineries`
+    /// refineries, or is a slave miner's house (its miners are their own
+    /// refinery, S-0402 claim 14). Money in hand before then is the starting
+    /// money, which a person puts into refineries first.
+    fn economy_stands(&self, w: &World, refineries: usize) -> bool {
+        let eyes = &self.eyes;
+        refineries == 0
+            || (eyes.harvesters_kept(w)
+                && (eyes.slave_miners(w) || eyes.of_role(w, Role::Refinery).len() >= refineries))
+    }
+
     /// More factories when rich (design: own AI, #449): with at least
-    /// `rich` credits in hand and no building ordered this think, the
-    /// cheapest factory the house can build, place and pay for, of the army
+    /// `rich` credits in hand and no base building ordered this think
+    /// ([`base_ordered`]: the brain's, or a refinery of
+    /// [`Siege::more_refineries`], which goes first), in place of the brain's
+    /// other building order (a rich brain orders the next building the think
+    /// its line frees), the cheapest factory the house can build, place and
+    /// pay for, of the army
     /// kind (infantry or vehicles) it owns fewer of, vehicles on a tie, once
     /// it owns one of that kind and while it owns fewer than
     /// [`MOST_FACTORIES`], when the building line is free; the plan's next
@@ -396,10 +421,7 @@ impl Siege {
         let eyes = &self.eyes;
         let house = eyes.house;
         let credits = w.houses[usize::from(house.0)].credits;
-        let building = out
-            .iter()
-            .any(|o| matches!(o, Order::Build { what } if what.kind == Kind::Building));
-        if credits < rich || building {
+        if credits < rich || base_ordered(w, out) {
             return;
         }
         let owned = |k: FactoryKind| eyes.of_role(w, Role::Factory(k)).len();
@@ -427,6 +449,7 @@ impl Siege {
                 t
             };
             if !eyes.busy(w, t) {
+                out.retain(|o| !matches!(o, Order::Build { what } if what.kind == Kind::Building));
                 out.push(Order::Build { what: t });
             }
             return;
@@ -461,15 +484,7 @@ impl Siege {
         // The base's own buildings come first; the refinery takes the place
         // of the brain's other building orders (its tech climb, its
         // defences, its sensors).
-        let base = |t: TypeRef| {
-            matches!(
-                scripted::role_of(w, t),
-                Some(Role::Yard | Role::Power | Role::Refinery | Role::Factory(_))
-            )
-        };
-        if out.iter().any(
-            |o| matches!(o, Order::Build { what } if what.kind == Kind::Building && base(*what)),
-        ) {
+        if base_ordered(w, out) {
             return;
         }
         let types: Vec<TypeRef> = eyes
@@ -742,6 +757,20 @@ pub fn naval(w: &World, t: TypeRef) -> bool {
     }
 }
 
+/// Whether `out` orders a base building (design: own AI, #449): a
+/// construction yard, power plant, refinery or factory. The siege's more
+/// refineries and more factories wait behind these and take the place of
+/// the brain's other building orders.
+fn base_ordered(w: &World, out: &[Order]) -> bool {
+    out.iter().any(|o| {
+        matches!(o, Order::Build { what } if what.kind == Kind::Building
+        && matches!(
+            scripted::role_of(w, *what),
+            Some(Role::Yard | Role::Power | Role::Refinery | Role::Factory(_))
+        ))
+    })
+}
+
 /// Whether army unit `id` is free for the strike: not bound into a building
 /// or bunker, not berserk, not a lifter (it keeps to its own part), not
 /// deployed, and not an aircraft (the brain's own part flies them).
@@ -950,11 +979,11 @@ impl AiScript for Siege {
         if !t.navy {
             self.no_navy(w, &mut out);
         }
-        if t.rich > 0 {
-            self.more_factories(w, t.rich, &mut out);
-        }
         if t.refineries > 0 {
             self.more_refineries(w, t.refineries, &mut out);
+        }
+        if t.rich > 0 && self.economy_stands(w, t.rich_after) {
+            self.more_factories(w, t.rich, &mut out);
         }
         if t.beside {
             self.beside(w, &mut out);
