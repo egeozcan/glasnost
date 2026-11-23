@@ -522,6 +522,15 @@ against it all came at the cap on worth, six of them on map 2.
   Development round 3: 0.914 against dev-2's 0.919, with 294 victories against 293
   (`default:normal` 0.906 to 0.953, `siege:easy` 0.990 to 0.964). No clear gain, so the lever
   and its test are reverted.
+- **More refineries only with the money** (hard). dev-2's losses to `siege:normal` come on
+  country 0. A watch of one (map 0, seed 8) shows both houses even to tick 4 500, hard with 11
+  army units and normal none. At 5 250, with about 800 credits in hand, hard orders its second
+  refinery (more refineries). It owes more than the money in hand, so the brain holds both army
+  lines to pay for it (its rule for a refinery by a new field that waits for money). Hard's army
+  stays at 11 units until 6 750 while normal's grows to 12 units worth nearly twice as much and
+  strikes. Hard's army is gone by 8 250 and its base by 9 955, with 4 748 credits unspent. A
+  person builds the next refinery when he can pay for it and keeps training meanwhile. So the
+  more refinery is ordered only while the money in hand pays its price.
 
 ## The tournament
 
