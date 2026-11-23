@@ -2583,3 +2583,38 @@ Lanes compare base b453c29 (worktree `sim50-base`) with 7d08b93 plus goldens.
 Seams left: Q-3389 is open, with its hold-back. Factory exits now pay one failed own-cell search and an R wait (7 ticks in the traces) before the vehicle paths. That is claim 31 as written; play-fixes may want to look at it. The r103 hunks in other specs are text-only seams, listed in the table.
 
 The P3 census rule: the batch removes one saved bool and adds no saved field, so it makes or moves no back-reference of `World::census`.
+
+## Batch S51: a driving vehicle's depot destination at its arrival (S-0314 r116, the answer to Q-3389)
+
+Base 8b43df9, not rebased. S-0314 r116 answers Q-3389, so S50's hold-back in `drive::install_again` goes. A driving vehicle whose order-level destination is the depot loses it at its movement arrival in its docking-point cell, in the arrival's update (claim 17). A failed own-cell search of a contacted driving vehicle in that cell counts as the arrival, with only the exchange and the removal (claim 21). Hovering vehicles and ships keep their destination.
+
+The work went in this order:
+1. Design (00934b7), request Q-3401 (8f34bfa), tests (b9605f6).
+2. Fix (167d542).
+3. Formats (03c9a8f).
+
+The fix commit changes no test. The red was shown in a separate base worktree checked out at b9605f6 (`red.txt`): all 5 tests of `claims_s0314_r116.rs` fail, and the guard tests pass there (`claims_s0314_depot.rs` 78, `claims_s0504.rs` 47, the ship guard among them). Logs are in `local-lane/sim-issues/s51/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| S-0314 r116 claim 17, the depot destination at a driving vehicle's arrival (Q-3389) | A driving vehicle kept the depot as destination from its arrival to the settling step; S50 held claim 30's install back after the arrival so that the depot could find it still | fixed (167d542; tests b9605f6) | `depot::movement_arrival` sets the destination to none after the exchange when `drive::driving` (now `pub(crate)`); the S50 hold-back in `drive::install_again` is removed | `claims_s0314_r116.rs`: the destination is held in every row before the arrival, in the dock cell included, and none from the arrival on, with no point installed again; the exchange and the removal share the update; the vehicle in place 1 of a two-place depot loses it too and is repaired. `claims_s0314_depot.rs`'s `claim_23_free_place_taken_by_the_processing` (the hold-back's guard) re-cited to r116 Edge cases |
+| S-0314 r116 claim 21, a same-cell enter order's failed own-cell search | The search failed and cleared the point, claim 30 installed it again *R* later, and the depot never accepted the vehicle | fixed (167d542; tests b9605f6) | `depot::own_cell_failure`, called after a failed own-cell `fresh_search` in `drive::tick`'s no-track update and in `drive::own_cell_search`: makes `movement_arrival`'s exchange and removal under its tests (*enter*, the depot as destination, the docking-point cell below 208 leptons); no other cell-arrival effect | `claims_s0314_r116.rs`: the failure makes the exchange, the vehicle is settled, no point comes back and the depot repairs it. `claim_17_same_cell_enter_supplies_the_point` re-cited: in *guard* the failure is not the arrival |
+| S-0314 r116 claim 17, hovering vehicles and ships | Not affected | guard kept | the removal checks the driving locomotor | `claims_s0314_r116.rs` (a hovering vehicle keeps it, a driving one loses it); `claims_s0504.rs` `s0314_claim_17_a_ship_keeps_the_yard_at_its_arrival` |
+| S-0314 claim 20, a full-health enter order on the own untethered depot (Q-3401, filed) | Since r116 the untethered vehicle holds no destination before the order, so `claim_20_same_depot_enter_while_docked` shows that the order gives the depot as destination; claim 20's second bullet with claim 23's empty-depot path give one, and the third bullet's "whatever the depot's pad flag" reads as none | request filed, today's rule kept | none | `claims_s0314_depot.rs`: the destination is asserted only for the tethered case, citing Q-3401 |
+| S-0314 r110 to r116, the other hunks | The movement-report paragraph's failed-search clearing and its ratings (built in S50 as S-0207 claim 31); claim 23's restart in a later place (Edge cases; follows from claim 17); H18 h and H19 f observation text; the Open questions; the changes for S-0215 B43 and claim 29 and for S-0207 claims 31, 26 and D30 (text that carries claims 17 and 21 into those specs) | seams, not built | no rule of our code changes beyond the items above | none new; `s0215_claim_29_entry_keeps_the_building_destination` still passes (its vehicle is not in *enter*, so no exchange is made) |
+
+**Formats:** save 225 to 227 and AI game 206 to 208. Wire stays 13. No saved state is added or removed; `depot::Link::arrived` stays, claim 22 still reads it.
+
+**Goldens:** none move. The sim gate passes 17 on base and after, and `xtask gate` matches all 9 under wasm32.
+
+Lanes compare base 8b43df9 with 03c9a8f.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt` against `arena-after.txt`): identical. M-0001 10 of 96 failing (win test 2, side outcome 10, stock-replay pairings 1 of 12), M-0002 4 of 24, M-0003 3 of 35 (stock replay 1 of 11), M-0019 0 of 6, M-0021 9 of 50, M-0020 0 of 25.
+
+**Sweeps** (seeds 1 to 16; `m6c-base.txt` against `m6c-after.txt`, and so on): m6c, m7a and m7b identical, all pass.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games; `quick-base-<seed>.txt` against `quick-after-<seed>.txt`): identical, no winner or length change, so nothing to trace. **AI suite** with ignored tests: 419 passed on base and on 03c9a8f.
+
+Seams left: Q-3401 is open. A vehicle factory that is also a repair depot reads `o.dest` in `econ::release::arrival` after the arrival; no synthetic or stock case of ours reaches it.
+
+The P3 census rule: the batch adds and removes no saved field, so it makes or moves no back-reference of `World::census`.

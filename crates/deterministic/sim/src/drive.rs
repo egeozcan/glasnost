@@ -188,7 +188,7 @@ pub fn measured_point(w: &World, id: ObjectId) -> Option<Pos> {
 
 /// Whether `id` has a drive state and the driving locomotor is its current
 /// one (S-0207 claims 29 to 31 hold for the driving locomotor only).
-fn driving(w: &World, id: ObjectId) -> bool {
+pub(crate) fn driving(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| o.drive.is_some())
         && crate::lift::current_locomotor(w, id) == Some(Locomotor::Drive)
 }
@@ -271,10 +271,6 @@ fn install_again(w: &mut World, id: ObjectId) -> bool {
         || o.body.turning(t)
         || matches!(o.beh.current, Some(Behaviour::Guard | Behaviour::Unload))
     {
-        return false;
-    }
-    // design: S50 hold-back pending Q-3389 (a vehicle that has made its movement arrival at a depot, S-0314 claim 17, installs nothing: under claim 30 its point would be present all but one tick in R, and the depot's moving-destination test, S-0314 claims 6 and 21, could then never find it still; today's rule is kept until the request is answered)
-    if crate::depot::link(w, id).is_some_and(|l| l.arrived) {
         return false;
     }
     // spec: S-0207 claim 30 (r103: the point the order-level destination supplies at that update, from the vehicle's position and contacts then; not an assignment: no retry delay or blockage timer is ended or restarted, and claim 27's refresh state plays no part)
@@ -1990,6 +1986,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             }
             // spec: S-0207 claim 15 (a fresh search that finds a path looks at the new path's first cell)
             if fresh_search(w, id, u) != Search::Found {
+                if goal == Some(pos.cell()) {
+                    // spec: S-0314 claim 21 (r116, Q-3389: the failed own-cell search of a contacted driving vehicle in its docking-point cell counts as its movement arrival)
+                    crate::depot::own_cell_failure(w, id);
+                }
                 return false;
             }
         }
@@ -2037,7 +2037,10 @@ fn own_cell_search(w: &mut World, id: ObjectId, u: &UnitRules, ended: bool) {
     if path::waits(w, id) {
         return;
     }
-    fresh_search(w, id, u);
+    if fresh_search(w, id, u) != Search::Found {
+        // spec: S-0314 claim 21 (r116, Q-3389: the failed own-cell search of a contacted driving vehicle in its docking-point cell counts as its movement arrival)
+        crate::depot::own_cell_failure(w, id);
+    }
 }
 
 fn add_budget(w: &mut World, id: ObjectId, s: i32) {

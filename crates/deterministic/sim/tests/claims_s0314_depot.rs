@@ -740,7 +740,10 @@ fn claim_20_same_depot_enter_while_docked() {
         tick::step(&mut w);
         assert_eq!(contact(&w, v), None, "full health: contact lost at once");
         let o = w.obj(v).unwrap();
-        assert_eq!(o.dest, dest, "full health: the order gives no destination");
+        // spec: S-0314 claim 20 (third bullet: a docked, so tethered, vehicle gets no destination from the order); the untethered vehicle's destination waits for Q-3401 (since r116 it holds none before the order, claim 17, so the order's own destination shows)
+        if tethered {
+            assert_eq!(o.dest, dest, "full health: the order gives no destination");
+        }
         assert_eq!(o.depot.queued, None, "full health: no queued entry");
         assert!(depot::link(&w, v).is_none(), "tethered {tethered}");
     }
@@ -1349,7 +1352,7 @@ fn claim_23_switched_off_queued_vehicle() {
     assert_eq!(health(&w, b), 300, "never enters");
 }
 
-// spec: S-0314 claim 23 (a depot holding any contact, whatever its place count: with a place free when the processing runs, that request takes the contact without a destination; the retry later in the same turn finds the contact held, asks permission and, granted, assigns the depot and clears the queued entry)
+// spec: S-0314 claim 23 (a depot holding any contact, whatever its place count: with a place free when the processing runs, that request takes the contact without a destination; the retry later in the same turn finds the contact held, asks permission and, granted, assigns the depot and clears the queued entry) and Edge cases (several contact places, r116: the second truck, docked in place 1, holds no order-level destination after its arrival, claim 17, so the restarted waiting accepts and repairs it)
 #[test]
 fn claim_23_free_place_taken_by_the_processing() {
     let r = rules();
@@ -1838,7 +1841,7 @@ fn claim_17_same_cell_enter_supplies_the_point() {
     depot::process_enter(&mut w, v);
     assert!(!docked(&w, v), "no tether at the repeated request");
     assert_eq!(w.obj(v).unwrap().pos, pos);
-    // spec: S-0207 claim 26 (a building destination is kept by locomotion updates at rest in the supplied point's cell: cell equality removes neither destination) and claim 31 (r103, Q-3374: a point in the vehicle's own cell is searched for, the search fails and clears the point; the depot destination is kept) and claim 30 (r103: in guard nothing is installed again)
+    // spec: S-0207 claim 26 (a building destination is kept by locomotion updates at rest in the supplied point's cell: cell equality removes neither destination) and claim 31 (r103, Q-3374: a point in the vehicle's own cell is searched for, the search fails and clears the point; the depot destination is kept) and claim 30 (r103: in guard nothing is installed again); S-0314 claim 21 (r116: the failure counts as the arrival only for a vehicle in enter, as claim 17's arrival; this one is still in guard)
     assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Guard));
     for _ in 0..3 {
         glasnost_sim::drive::tick(&mut w, v);

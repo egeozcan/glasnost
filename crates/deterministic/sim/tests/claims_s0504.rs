@@ -1338,6 +1338,19 @@ fn ship_docked_at_yard() -> (World, ObjectId, ObjectId) {
     (w, yard, skiff)
 }
 
+// spec: S-0314 claim 17 (r116, Q-3389: ships are not affected by the loss of a driving vehicle's depot destination at its arrival; a ship's destination follows claim 21, so it still holds the yard when it is asleep there before the settling step)
+#[test]
+fn s0314_claim_17_a_ship_keeps_the_yard_at_its_arrival() {
+    let (w, yard, skiff) = ship_docked_at_yard();
+    assert!(glasnost_sim::depot::link(&w, skiff).is_some_and(|l| l.arrived));
+    assert_eq!(
+        w.obj(skiff).unwrap().health,
+        200,
+        "before the settling step"
+    );
+    assert_eq!(w.obj(skiff).unwrap().dest, Some(Target::Object(yard)));
+}
+
 // spec: S-0504 claims 8, 12 and 14 and S-0314 claims 6 and 16 to 18 (a damaged ship clicked onto its repairing yard docks at the yard's docking point, passes the 200-lepton waiting gate, is repaired step by step at its owner's cost and is sent away)
 #[test]
 fn claim_14_ship_repaired_at_yard() {
