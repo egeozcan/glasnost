@@ -486,10 +486,13 @@ against it all came at the cap on worth, six of them on map 2.
   credit. The brain builds a refinery by a new field only once the field by its refineries runs
   low (`Script::field_refinery`). A person who sees his credits run out with fields unworked
   builds the next refinery early. So at hard, once the plan's harvesters stand and the house owns
-  a refinery, while it owns fewer than four and no building is ordered this think, the siege orders
-  the cheapest refinery type it can place (`Script::place_refinery`: beside the field of
-  `Script::ore_goal`) on the free building line, the plan's next power plant first when the
-  refinery would leave the house short of power, as with the factories when rich.
+  a refinery, while it owns fewer than four and the brain orders no base building this think
+  (construction yard, power plant, refinery or factory), the siege orders the cheapest refinery
+  type it can place (`Script::place_refinery`: beside the field of `Script::ore_goal`) on the
+  free building line, the plan's next power plant first when the refinery would leave the house
+  short of power, as with the factories when rich. The refinery takes the place of the brain's
+  other building order of that think (its tech climb, a defence or a sensor): a rich brain keeps
+  its building line busy, and when the line frees it orders the next building at once.
 
 ## The tournament
 
