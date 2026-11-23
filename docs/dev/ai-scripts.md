@@ -519,6 +519,9 @@ against it all came at the cap on worth, six of them on map 2.
   infantry army units than on vehicle army units (S-0407 claim 10's ever-built counts at the
   types' costs), the siege drops the brain's orders for infantry army units, and the money
   goes to the war factory. The soldiers trained beside the harvesters (`beside`) stay.
+  Development round 3: 0.914 against dev-2's 0.919, with 294 victories against 293
+  (`default:normal` 0.906 to 0.953, `siege:easy` 0.990 to 0.964). No clear gain, so the lever
+  and its test are reverted.
 
 ## The tournament
 
