@@ -258,6 +258,54 @@ fn the_strike_goes_at_its_count_and_leaves_the_guard() {
     }
 }
 
+/// `n` riflemen of house 0 on free cells north of its yard.
+fn soldiers(w: &mut World, n: usize) -> Vec<ObjectId> {
+    let at = w.obj(yard(w, 0).unwrap()).unwrap().pos.cell();
+    let mut out = Vec::new();
+    // nocite: test data of our own (cells a few north of the yard)
+    for dy in [-5, -6, -7] {
+        for dx in -6..=6 {
+            let c = CellXY::new(at.x + dx, at.y + dy);
+            if out.len() < n && w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c) {
+                out.push(testkit::spawn(w, Kind::Infantry, "WALKER", 0, c, 0));
+            }
+        }
+    }
+    assert_eq!(out.len(), n, "room for the soldiers");
+    out
+}
+
+// design: own AI (#449): at hard a new strike also needs its units worth the level's floor: past the count, with no enemy army remembered, cheap soldiers wait at home, and go once tanks join them
+#[test]
+fn a_strike_below_the_floor_waits_at_hard() {
+    let level = AiDifficulty::Hard;
+    let t = tuning(level);
+    assert!(t.floor > 0);
+    assert_eq!(tuning(AiDifficulty::Easy).floor, 0);
+    assert_eq!(tuning(AiDifficulty::Normal).floor, 0);
+    let mut w = base_up();
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    // The count and room for the brain's own parts, worth less than the floor.
+    let few = soldiers(&mut w, t.strike + 3);
+    let worth: i64 = few.iter().map(|&id| siege::worth(&w, id)).sum();
+    assert!(worth < t.floor, "{worth} under the floor");
+    // nocite: test data of our own (several think periods)
+    let got = play(&mut w, &mut s, level, 600);
+    assert!(waiting(&w, &few) >= t.strike, "the count waits");
+    assert!(
+        attack_moved(&got, &few).is_empty(),
+        "no strike below the floor"
+    );
+    assert_eq!(s.strikes(), 0);
+    // Tanks join them: the units that would go pass the floor.
+    let more = tanks(&mut w, 8);
+    let all: Vec<ObjectId> = few.iter().chain(&more).copied().collect();
+    // nocite: test data of our own
+    let got = play(&mut w, &mut s, level, 600);
+    assert_eq!(s.strikes(), 1);
+    assert!(!attack_moved(&got, &all).is_empty(), "the strike goes");
+}
+
 // design: own AI (#449): at hard a strike worth less than the level's share of the enemy army the house has seen is called home with plain move orders, and the army gathers again
 #[test]
 fn an_outmatched_strike_is_called_home() {
@@ -364,16 +412,91 @@ fn factories(w: &World, kind: FactoryKind) -> usize {
 }
 
 /// House 0's infantry and vehicle factories after `ticks` of play at
-/// `level` from the base, with `credits` in hand at the start.
+/// `level` from the base, with `credits` in hand at the start. House 1's
+/// yard has a guard of tanks, so that hard's first soldiers (trained beside
+/// its harvesters) do not end the game before the factories come.
 fn factories_when_rich(level: AiDifficulty, credits: i32, ticks: i32) -> (usize, usize) {
     let mut w = base_up();
     w.houses[0].credits = credits;
+    let at = w.obj(yard(&w, 1).unwrap()).unwrap().pos.cell();
+    // nocite: test data of our own (six tanks beside house 1's yard)
+    for dy in [-4, -2, 0, 2, 4, 6] {
+        testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "GUNR",
+            1,
+            CellXY::new(at.x - 4, at.y + dy),
+            0,
+        );
+    }
     let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
     play(&mut w, &mut s, level, ticks);
     (
         factories(&w, FactoryKind::Infantry),
         factories(&w, FactoryKind::Vehicle),
     )
+}
+
+/// House 0's base with a barracks, a refinery and a war factory standing
+/// and no harvester (fewer than any level's plan keeps), `credits` in hand;
+/// returns the infantry types (by index) house 0 is ordered to build over
+/// one think period at `level`.
+fn soldiers_while_short(level: AiDifficulty, credits: i32) -> Vec<u32> {
+    let mut w = base_up();
+    let at = w.obj(yard(&w, 0).unwrap()).unwrap().pos.cell();
+    // nocite: test data of our own (free cells around the yard)
+    for (name, dx, dy) in [("PILL", -6, -6), ("PROC", 4, -7), ("FACT", -7, 4)] {
+        testkit::spawn(
+            &mut w,
+            Kind::Building,
+            name,
+            0,
+            CellXY::new(at.x + dx, at.y + dy),
+            0,
+        );
+    }
+    let minr = w.rules().index_of(Kind::Vehicle, "MINR").unwrap();
+    assert!(
+        !w.objects.values().any(|o| o.owner == Some(HouseId(0))
+            && o.kind == Kind::Vehicle
+            && o.type_index == minr),
+        "no harvester yet"
+    );
+    w.houses[0].credits = credits;
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    // nocite: test data of our own (one think period and a tick)
+    let got = play(
+        &mut w,
+        &mut s,
+        level,
+        glasnost_ai::scripted::THINK_PERIOD + 1,
+    );
+    got.iter()
+        .filter_map(|(_, o)| match o {
+            Order::Build { what } if what.kind == Kind::Infantry => Some(what.index),
+            _ => None,
+        })
+        .collect()
+}
+
+// design: own AI (#449): at hard, while the plan's harvesters do not stand, the brain's army round waits for them; the siege trains a soldier on the free infantry line when the money in hand pays for the next harvester and the soldier both, and not when it pays for less; normal and easy wait
+#[test]
+fn hard_trains_soldiers_beside_the_harvesters() {
+    assert!(tuning(AiDifficulty::Hard).beside);
+    assert!(!tuning(AiDifficulty::Normal).beside && !tuning(AiDifficulty::Easy).beside);
+    // nocite: test data of our own (the fixture's harvester costs 1000 and its soldier 200)
+    let (rich, poor) = (20_000, 1_199);
+    let hard = soldiers_while_short(AiDifficulty::Hard, rich);
+    assert!(!hard.is_empty(), "hard trains a soldier while short");
+    assert!(
+        soldiers_while_short(AiDifficulty::Hard, poor).is_empty(),
+        "not with money for the harvester alone"
+    );
+    assert!(
+        soldiers_while_short(AiDifficulty::Normal, rich).is_empty(),
+        "normal waits for its harvesters"
+    );
 }
 
 // design: own AI (#449): at hard, with money to spare in hand, the siege adds factories of the army's kinds (S-0403 claim 6: more factories of a kind, shorter build times), up to three of each; normal and easy do not

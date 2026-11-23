@@ -34,6 +34,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use glasnost_map::{CellXY, Map};
+use glasnost_rules::sim::MovementZone;
 use glasnost_sim::econ::{TypeRef, production, shroud, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::probe::Probe;
@@ -105,6 +106,18 @@ pub struct Tuning {
     /// Credits in hand from which the siege adds a factory of the army's
     /// kinds ([`Siege::more_factories`]); 0: never.
     pub rich: i32,
+    /// Whether the house trains soldiers while the brain's army round waits
+    /// for the plan's harvesters, with the money the next harvester leaves
+    /// over ([`Siege::beside`]).
+    pub beside: bool,
+    /// Credits the units that would go must be worth at least for a new
+    /// strike, beside the edge (which holds for any strike while the house
+    /// remembers no enemy army); 0: none.
+    pub floor: i64,
+    /// Whether the house builds a navy while every enemy start is reached by
+    /// land ([`Siege::no_navy`]); without, the brain's orders for naval
+    /// buildings and ships are dropped then.
+    pub navy: bool,
 }
 
 /// The tuning of level `level`.
@@ -124,6 +137,9 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             economy: false,
             patience: 0,
             rich: 0,
+            beside: false,
+            floor: 0,
+            navy: true,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -139,6 +155,9 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             economy: false,
             patience: 0,
             rich: 0,
+            beside: false,
+            floor: 0,
+            navy: true,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -155,6 +174,12 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             patience: 3000,
             // nocite: design: own AI (#449): three thousand credits in hand, money the two army lines leave unspent only while the income outruns them
             rich: 3000,
+            // nocite: design: own AI (#449): hard trains soldiers with the money the plan's next harvester leaves over, as a person keeps the barracks busy while the war factory builds harvesters
+            beside: true,
+            // nocite: design: own AI (#449): a new strike's units worth five thousand credits at least, so the soldiers trained beside the harvesters wait at home for the war factory's units rather than go out alone while the house remembers no enemy army
+            floor: 5000,
+            // nocite: design: own AI (#449): hard spends nothing on ships while its tanks reach every enemy start, as a person on a land map leaves the shipyard unbuilt
+            navy: false,
         },
     }
 }
@@ -292,6 +317,63 @@ impl Siege {
         }
     }
 
+    /// Whether every enemy start lies in the reach region (S-0212 claim 4)
+    /// of the house's first ground vehicle by object number: its army
+    /// reaches every enemy by land. False with no such vehicle, or no
+    /// enemy start.
+    fn by_land(&self, w: &World) -> bool {
+        let eyes = &self.eyes;
+        let ground = eyes.own(w).iter().find_map(|&id| {
+            let o = w.obj(id)?;
+            if o.kind != Kind::Vehicle {
+                return None;
+            }
+            let zone = w.rules().unit(o.kind, o.type_index)?.zone;
+            if zone == MovementZone::Water {
+                return None;
+            }
+            eyes.reach_region(w, id).map(|r| (zone, r))
+        });
+        let Some((zone, r)) = ground else {
+            return false;
+        };
+        let starts = eyes.enemy_starts(w);
+        !starts.is_empty()
+            && starts
+                .iter()
+                .all(|&c| regions::reach_in(w, c, zone) == Reach::Region(r))
+    }
+
+    /// No navy while the enemy is reached by land (design: own AI, #449):
+    /// while [`Self::by_land`], the brain's orders for a naval building
+    /// (S-0406 claim 3 d) and for a unit that moves on water are dropped,
+    /// and a dropped building gives way to the climb building as in
+    /// [`Self::no_superweapons`].
+    fn no_navy(&self, w: &World, out: &mut Vec<Order>) {
+        let ship_order = |o: &Order| matches!(o, Order::Build { what } if naval(w, *what));
+        if !out.iter().any(ship_order) || !self.by_land(w) {
+            return;
+        }
+        let building = out.iter().any(|o| {
+            matches!(o, Order::Build { what } if what.kind == Kind::Building && naval(w, *what))
+        });
+        out.retain(|o| !ship_order(o));
+        if !building
+            || out
+                .iter()
+                .any(|o| matches!(o, Order::Build { what } if what.kind == Kind::Building))
+        {
+            return;
+        }
+        if let Some(c) = self.eyes.climb(w)
+            && !naval(w, c)
+            && !gives_superweapon(w, c)
+            && !self.eyes.busy(w, c)
+        {
+            out.push(Order::Build { what: c });
+        }
+    }
+
     /// More factories when rich (design: own AI, #449): with at least
     /// `rich` credits in hand and no building ordered this think, the
     /// cheapest factory the house can build, place and pay for, of the army
@@ -341,6 +423,91 @@ impl Siege {
                 out.push(Order::Build { what: t });
             }
             return;
+        }
+    }
+
+    /// Soldiers beside the harvesters (design: own AI, #449): while the
+    /// house keeps fewer harvesters than its plan (`Script::harvesters_kept`),
+    /// the brain's army round waits for them, whatever the money in hand.
+    /// A person with money to spare trains soldiers at the barracks while
+    /// the war factory builds the harvesters. So with no infantry ordered
+    /// this think, one infantry army type on its free line: the one the
+    /// house has fewest of on the map, then has built fewest of, then the
+    /// cheapest, never one it sends alone (`scripted::spent_alone`), when
+    /// the money in hand, beyond what the running items owe and what this
+    /// think's build orders cost, pays for the next harvester and the
+    /// soldier both (the brain's own wealth test for a harvester beyond the
+    /// plan, `rich` in its army round). With no harvester type to build yet,
+    /// the cheapest war factory stands in for it. The vehicle line is left
+    /// to the harvesters.
+    fn beside(&self, w: &World, out: &mut Vec<Order>) {
+        let eyes = &self.eyes;
+        let house = eyes.house;
+        if eyes.selling() || eyes.harvesters_kept(w) {
+            return;
+        }
+        if out
+            .iter()
+            .any(|o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry))
+        {
+            return;
+        }
+        let price = |t: TypeRef| i64::from(production::price(w, house, t));
+        let reserve = eyes
+            .candidates(w, Role::Harvester)
+            .first()
+            .copied()
+            .or_else(|| {
+                eyes.candidates(w, Role::Factory(FactoryKind::Vehicle))
+                    .first()
+                    .copied()
+            })
+            .map_or(0, price);
+        let owed: i64 = w
+            .econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == house)
+            .filter_map(|l| l.item.as_ref())
+            .filter(|i| !i.done() && i.hold == production::Hold::None)
+            .map(|i| i64::from(i.owed))
+            .sum();
+        let ordered: i64 = out
+            .iter()
+            .filter_map(|o| match o {
+                Order::Build { what } => Some(price(*what)),
+                _ => None,
+            })
+            .sum();
+        let spare = i64::from(w.houses[usize::from(house.0)].credits) - owed - ordered;
+        let own = eyes.own(w);
+        let living = |t: TypeRef| {
+            own.iter()
+                .filter(|&&id| w.obj(id).is_some_and(|o| tech::type_of(o) == t))
+                .count()
+        };
+        let pick = eyes
+            .candidates(w, Role::Army)
+            .into_iter()
+            .filter(|&t| {
+                t.kind == Kind::Infantry
+                    && !scripted::spent_alone(w, t)
+                    && !crate::lifter::lifter_type(w, t)
+                    && !eyes.busy(w, t)
+            })
+            .min_by_key(|&t| {
+                (
+                    living(t),
+                    tech::ever_built(w, house, t),
+                    production::cost_field(w, t),
+                    t.index,
+                )
+            });
+        if let Some(t) = pick
+            && spare >= reserve + price(t)
+        {
+            out.push(Order::Build { what: t });
         }
     }
 
@@ -412,6 +579,8 @@ impl Siege {
         let want = if waited { t.edge.min(80) } else { t.edge };
         // nocite: design: own AI (#449): the edge is a percent of the remembered enemy army's worth
         let edge = want == 0 || goers_worth * 100 >= want * enemy_worth;
+        // design: own AI (#449): the level's floor holds a new strike whose units are worth less, whatever the edge
+        let edge = edge && goers_worth >= t.floor;
         let free_n = army.len().saturating_sub(self.army.out.len());
         let goes = if self.army.striking {
             waiting.len() > guard && waiting.len() - guard >= t.join
@@ -480,6 +649,22 @@ pub fn gives_superweapon(w: &World, t: TypeRef) -> bool {
             .building_sw
             .get(t.index as usize)
             .is_some_and(|f| f.iter().any(Option::is_some))
+}
+
+/// Whether `t` belongs to a navy: a naval building (S-0406 claim 3 d: it
+/// stands on water) or a unit whose movement zone is water.
+pub fn naval(w: &World, t: TypeRef) -> bool {
+    match t.kind {
+        Kind::Building => w
+            .rules()
+            .buildings
+            .get(t.index as usize)
+            .is_some_and(|b| b.naval),
+        k => w
+            .rules()
+            .unit(k, t.index)
+            .is_some_and(|u| u.zone == MovementZone::Water),
+    }
 }
 
 /// Whether army unit `id` is free for the strike: not bound into a building
@@ -687,8 +872,14 @@ impl AiScript for Siege {
         if !t.superweapons {
             self.no_superweapons(w, &mut out);
         }
+        if !t.navy {
+            self.no_navy(w, &mut out);
+        }
         if t.rich > 0 {
             self.more_factories(w, t.rich, &mut out);
+        }
+        if t.beside {
+            self.beside(w, &mut out);
         }
         if acts {
             self.command(w, level, &busy, &mut out);
@@ -747,6 +938,50 @@ mod tests {
         // After MEMORY ticks unseen, b is forgotten too.
         w.tick += MEMORY;
         assert_eq!(army.remember(&w, house, &[]), 0);
+    }
+
+    // design: own AI (#449): at hard, while the house's first ground vehicle reaches every enemy start by land, the brain's orders for a naval building and a ship are dropped and its other orders kept; the other levels keep their navy
+    #[test]
+    fn hard_builds_no_navy_while_the_enemy_is_reached_by_land() {
+        assert!(!tuning(AiDifficulty::Hard).navy);
+        assert!(tuning(AiDifficulty::Easy).navy && tuning(AiDifficulty::Normal).navy);
+        let mut w = world();
+        let navy = building(&w, "NAVY");
+        let vehicle = |w: &World, name: &str| TypeRef {
+            kind: Kind::Vehicle,
+            index: w.rules().index_of(Kind::Vehicle, name).expect(name),
+        };
+        let (boat, gunr) = (vehicle(&w, "BOAT"), vehicle(&w, "GUNR"));
+        // spec: S-0406 claim 3 d (a naval building); S-0212 claim 4 (a ship's zone is water)
+        assert!(naval(&w, navy) && naval(&w, boat));
+        assert!(!naval(&w, gunr) && !naval(&w, building(&w, "POWR")));
+        // A tank of house 0 by its start: the skirmish's enemy start is reached by land.
+        // nocite: test data of our own (a usable free cell a few cells from the start)
+        let c = (2..8)
+            .flat_map(|d| [fixture::at(d, 3), fixture::at(-d, 3), fixture::at(d, -3)])
+            .find(|&c| w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c))
+            .expect("a free cell by the start");
+        testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, c, 0);
+        let s = Siege::start(&w, &fixture::map(), HouseId(0), AiDifficulty::Hard);
+        s.eyes.begin_think();
+        assert!(s.by_land(&w));
+        let mut out = vec![
+            Order::Build { what: navy },
+            Order::Build { what: boat },
+            Order::Build { what: gunr },
+        ];
+        s.no_navy(&w, &mut out);
+        s.eyes.end_think();
+        assert!(
+            !out.iter()
+                .any(|o| matches!(o, Order::Build { what } if naval(&w, *what))),
+            "{out:?}"
+        );
+        assert!(
+            out.iter()
+                .any(|o| matches!(o, Order::Build { what } if *what == gunr)),
+            "{out:?}"
+        );
     }
 
     // design: own AI (#449): at a level without superweapons the brain's order for a superweapon building is dropped, and its other orders are kept

@@ -391,6 +391,83 @@ strike, while it waits for its third harvester. A lever that answers them has to
 sooner without the early second war factory going, and the guard shows that soldiers alone,
 trained only while threatened, come too few and too late.
 
+### Hard, script AS4
+
+Script AS4 took the siege's hard level further toward 2000 Elo, with the same rules of fair play.
+It kept three hard-only levers and reached 1762.2 (1748.4 order-free) in its last certifying
+round, short of the goal.
+Its baseline is AS3's: the simulation and the AI have not changed since, so AS3's certifying
+round (`siege:hard` 1739.5, 1702.6 order-free) and its development round dev-0 (0.803) stand.
+Development rounds are AS3's: `siege:hard` against each of the five other entrants on maps 0, 2
+and 8, seeds 7 to 14 (480 games).
+
+- **Soldiers beside the harvesters** (`Tuning::beside`, hard only). While the house keeps fewer
+  harvesters than its plan, the brain's army round waits for them, whatever the money in hand
+  (AS3's watch: 5 700 credits and no soldier at tick 3 000). A person with that money trains
+  soldiers at the barracks while the war factory builds the harvesters. So while the plan's
+  harvesters do not stand, the siege orders one infantry army type a think on the free infantry
+  line when the money in hand, beyond what the running items owe, pays for the next harvester
+  and the soldier both (with no harvester type to build yet, the cheapest war factory stands in
+  for it). The type is the one the house has fewest of on the map, then has built fewest of,
+  then the cheapest, and never one it sends alone (`scripted::spent_alone`). It is the brain's
+  own wealth test for a harvester beyond the plan (`rich` in the army round), applied to the
+  plan's count; the vehicle line is left to the harvesters. AS2's early guard and AS3's guard
+  when threatened both trained soldiers whatever money the harvesters needed; this one spends
+  only what is left over.
+- **A floor under the first strike** (`Tuning::floor`, hard only). The edge is a share of the
+  enemy army the house remembers, and early in a game it remembers none, so the edge holds for
+  any strike. With the soldiers beside the harvesters the strike's count of ten stood by tick
+  6 000 (a dev-1 watch, map 2 seed 8: eight dogs and soldiers out, the strike lost and called
+  home by tick 9 000), where the base's first strike went near tick 10 500 with tanks. So at
+  hard a new strike also needs the units that would go to be worth 5 000 credits at least; the
+  soldiers wait at home as a guard until the war factory's units join them. Joining a strike
+  under way is not held.
+- **No navy while the enemy is reached by land** (`Tuning::navy`, false at hard only). AS3
+  tried dropping the naval buildings and found that it did not bind. With the two levers above,
+  a dev-2 watch (map 0 seed 7, country 0, against `siege:normal`) shows hard ahead at tick 12 000
+  (17 army units to 2). From tick 10 500 on its building and naval lines go to a shipyard,
+  destroyers and a naval transport, while it has one refinery. It lost its land army and then
+  its base by tick 24 600, with three destroyers left. So at hard, while every enemy start lies
+  in the reach region (S-0212 claim 4) of the house's first ground vehicle, the brain's orders
+  for a naval building (S-0406 claim 3 d) and for a unit whose movement zone is water are
+  dropped. A dropped building gives way to the climb building as with the superweapons. With no
+  ground vehicle, or an enemy start across the water, the navy stays.
+
+The rounds, with `siege:hard`'s score against each pair (win 1, draw ½):
+
+| round | `siege:normal` | `siege:easy` | `default:easy` | `default:normal` | `default:hard` | all | victories |
+|---|---|---|---|---|---|---|---|
+| dev-0 (base) | 0.646 | 0.797 | 0.917 | 0.828 | 0.828 | 0.803 | 215 |
+| dev-1 (soldiers) | 0.630 | 0.901 | 0.922 | 0.844 | 0.745 | 0.808 | 241 |
+| dev-2 (and the floor) | 0.667 | 0.927 | 0.901 | 0.849 | 0.792 | 0.827 | 246 |
+| dev-3 (and no navy) | 0.729 | 0.932 | 0.911 | 0.854 | 0.802 | 0.846 | 257 |
+
+- dev-1 was no clear gain: 26 more victories, but `default:hard` fell 0.083. Its watch is the
+  floor's reason above. The soldiers were kept, since the floor builds on them.
+- dev-2 was a clear gain on dev-0: +0.024 and 31 more victories, with no pair down more than
+  0.036.
+- dev-3 rose on every pair against dev-2, +0.019 and 11 more victories. That is just short of
+  both bars, so it was no clear gain by the rule. The lever was kept anyway: it only drops
+  spending, and no pair fell.
+
+Certifying rounds (seeds 15 to 18, the six entrants, 720 games):
+
+| round | code | Elo | order-free | W-L-D | score |
+|---|---|---|---|---|---|
+| cert-0 (AS3, base) | df22a12 | 1739.5 | 1702.6 | 166-34-40 | 0.775 |
+| cert-1 | soldiers and the floor | 1761.9 | 1729.5 | 172-30-38 | 0.796 |
+| cert-2 | and no navy | 1762.2 | 1748.4 | 177-25-38 | 0.817 |
+
+The goal of 2000 was not met. At the cap, with the pool's ratings, 2000 needs about 0.93
+against every entrant. cert-2 has `siege:easy` at 0.948 but `siege:normal` at 0.667 and
+`default:hard` at 0.792. What remains:
+
+- Country 0 against `siege:normal` (79-18-23 with country 0 in cert-2, 98-7-15 with country 1).
+- Map 2, where most games end in a draw at the cap (44-10-26). A base watch there shows hard on
+  two refineries all game against four.
+
+The batch handed back one round into the stop count, to leave room for the final checks.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
