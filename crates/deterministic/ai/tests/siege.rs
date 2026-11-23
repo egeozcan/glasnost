@@ -499,6 +499,73 @@ fn hard_trains_soldiers_beside_the_harvesters() {
     );
 }
 
+/// House 0's base with a power plant, a refinery, a barracks and a war
+/// factory standing and three harvesters by them (the plan's count at
+/// normal and hard), `credits` in hand; returns the refinery orders house 0
+/// is given over one think period at `level`.
+fn refineries_ordered(level: AiDifficulty, credits: i32) -> usize {
+    let mut w = base_up();
+    let at = w.obj(yard(&w, 0).unwrap()).unwrap().pos.cell();
+    // nocite: test data of our own (free cells around the yard)
+    for (name, dx, dy) in [
+        ("POWR", -6, 4),
+        ("PILL", -6, -6),
+        ("PROC", 4, -7),
+        ("FACT", -7, 4),
+    ] {
+        testkit::spawn(
+            &mut w,
+            Kind::Building,
+            name,
+            0,
+            CellXY::new(at.x + dx, at.y + dy),
+            0,
+        );
+    }
+    // nocite: test data of our own (three harvesters south of the yard)
+    for dx in [-2, 0, 2] {
+        testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "MINR",
+            0,
+            CellXY::new(at.x + dx, at.y + 6),
+            0,
+        );
+    }
+    w.houses[0].credits = credits;
+    let proc = w.rules().index_of(Kind::Building, "PROC").unwrap();
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    // nocite: test data of our own (one think period and a tick)
+    let got = play(
+        &mut w,
+        &mut s,
+        level,
+        glasnost_ai::scripted::THINK_PERIOD + 1,
+    );
+    got.iter()
+        .filter(|(_, o)| {
+            matches!(o, Order::Build { what } if what.kind == Kind::Building && what.index == proc)
+        })
+        .count()
+}
+
+// design: own AI (#449): at hard, once the plan's harvesters stand, the siege orders another refinery on the free building line while the house owns fewer than the level's count, so its credits do not run out with fields unworked; normal and easy leave it to the brain's own rule (a new field once the near one runs low)
+#[test]
+fn hard_builds_more_refineries() {
+    // nocite: test data of our own (money for the refinery and more)
+    let credits = 20_000;
+    assert!(
+        refineries_ordered(AiDifficulty::Hard, credits) >= 1,
+        "hard orders a second refinery"
+    );
+    assert_eq!(
+        refineries_ordered(AiDifficulty::Normal, credits),
+        0,
+        "normal leaves it to the brain"
+    );
+}
+
 // design: own AI (#449): at hard, with money to spare in hand, the siege adds factories of the army's kinds (S-0403 claim 6: more factories of a kind, shorter build times), up to three of each; normal and easy do not
 #[test]
 fn hard_adds_factories_when_rich() {
