@@ -693,6 +693,25 @@ pub fn movement_arrival(w: &mut World, id: ObjectId) {
     // spec: S-0314 Terms and claim 21 (the movement arrival in the docking-point cell makes the vehicle settled, whatever its state before; a hovering vehicle is switched off, with no draws since its behaviour is then enter)
     settle(w, id);
     // spec: S-0314 claim 17 (revision 29, Q-1162 answered: arrival itself requests no map-east body turn, even for a tethered vehicle, and schedules none for a later enter processing; an existing driving turn holds sleep only under S-0215 claim 11's ordinary readiness test)
+    if crate::drive::driving(w, id)
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0314 claim 17 (r116, Q-3389: a driving vehicle whose order-level destination is the depot loses it at its movement arrival in its docking-point cell, in the arrival's update, after the exchange; the removal ends nothing else and queues nothing; hovering vehicles and ships keep theirs, claim 21; no switch)
+        ob.dest = None;
+    }
+}
+
+/// A driving vehicle's failed search for its own cell (S-0207 claim 31),
+/// made while it holds depot contact and stands in the docking-point cell
+/// of its contact place, counts as its movement arrival there (S-0314
+/// claim 21, r116): the arrival's exchange and the loss of the depot
+/// destination of [`movement_arrival`], and nothing else of a cell-arrival
+/// update. Called by the driving locomotor after such a failure.
+pub(crate) fn own_cell_failure(w: &mut World, id: ObjectId) {
+    // spec: S-0314 claim 21 (r116, same-cell enter order: the failure counts as the movement arrival, with only its exchange and the loss of the destination; not a cell-arrival update of S-0207 claim 12, so no entered-by raise, S-0207 claim 22) and claim 17 (r116: the arrival's tests, a vehicle in enter with the depot as its destination, in the docking-point cell of its contact place below 208 leptons, claim 18)
+    if crate::drive::driving(w, id) {
+        movement_arrival(w, id);
+    }
 }
 
 /// The processing delay *D* of a depot (S-0314 F1): the rate delay of
