@@ -118,6 +118,9 @@ pub struct Tuning {
     /// land ([`Siege::no_navy`]); without, the brain's orders for naval
     /// buildings and ships are dropped then.
     pub navy: bool,
+    /// Refineries the house builds up to, beyond the brain's own rule, once
+    /// the plan's harvesters stand ([`Siege::more_refineries`]); 0: none.
+    pub refineries: usize,
 }
 
 /// The tuning of level `level`.
@@ -140,6 +143,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             beside: false,
             floor: 0,
             navy: true,
+            refineries: 0,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -158,6 +162,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             beside: false,
             floor: 0,
             navy: true,
+            refineries: 0,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -180,6 +185,8 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             floor: 5000,
             // nocite: design: own AI (#449): hard spends nothing on ships while its tanks reach every enemy start, as a person on a land map leaves the shipyard unbuilt
             navy: false,
+            // nocite: design: own AI (#449): hard builds up to four refineries once its harvesters stand, as a person whose credits run out with fields unworked builds the next refinery early
+            refineries: 4,
         },
     }
 }
@@ -423,6 +430,74 @@ impl Siege {
                 out.push(Order::Build { what: t });
             }
             return;
+        }
+    }
+
+    /// More refineries (design: own AI, #449): once the plan's harvesters
+    /// stand (`Script::harvesters_kept`), while the house owns at least one
+    /// refinery and fewer than `most`, the brain orders no base building this
+    /// think (yard, power, refinery or factory) and no refinery is on its
+    /// line, the cheapest refinery type it can place (`Script::place_refinery`:
+    /// beside the field of `Script::ore_goal`), on the free building line, in
+    /// place of the brain's other building order (its tech climb, a defence or
+    /// a sensor: a rich brain orders the next building the think its line
+    /// frees); the plan's next power plant in its place when the refinery
+    /// would leave the house short of power. Each refinery
+    /// comes with a harvester (S-0404 claim 2, S-0402 claim 18). The brain
+    /// builds one by a new field only once the field by its refineries runs
+    /// low (`Script::field_refinery`); a person whose credits run out with
+    /// fields unworked builds the next refinery early. Not for slave miners,
+    /// which are their slaves' own refinery (S-0402 claim 14).
+    fn more_refineries(&self, w: &World, most: usize, out: &mut Vec<Order>) {
+        let eyes = &self.eyes;
+        let house = eyes.house;
+        if eyes.selling() || eyes.slave_miners(w) || !eyes.harvesters_kept(w) {
+            return;
+        }
+        let owned = eyes.of_role(w, Role::Refinery).len();
+        if owned == 0 || owned >= most {
+            return;
+        }
+        // The base's own buildings come first; the refinery takes the place
+        // of the brain's other building orders (its tech climb, its
+        // defences, its sensors).
+        let base = |t: TypeRef| {
+            matches!(
+                scripted::role_of(w, t),
+                Some(Role::Yard | Role::Power | Role::Refinery | Role::Factory(_))
+            )
+        };
+        if out.iter().any(
+            |o| matches!(o, Order::Build { what } if what.kind == Kind::Building && base(*what)),
+        ) {
+            return;
+        }
+        let types: Vec<TypeRef> = eyes
+            .candidates(w, Role::Refinery)
+            .into_iter()
+            .filter(|&t| !scripted::keeps_slaves(w, t))
+            .collect();
+        if types.iter().any(|&t| eyes.busy(w, t)) {
+            return;
+        }
+        let Some(t) = types
+            .into_iter()
+            .find(|&t| eyes.place_refinery(w, t).is_some())
+        else {
+            return;
+        };
+        // A plant first when the refinery would leave the house short.
+        let t = if crate::power::short_after(w, house, t) {
+            match eyes.plant_type(w) {
+                Some(p) => p,
+                None => return,
+            }
+        } else {
+            t
+        };
+        if !eyes.busy(w, t) {
+            out.retain(|o| !matches!(o, Order::Build { what } if what.kind == Kind::Building));
+            out.push(Order::Build { what: t });
         }
     }
 
@@ -877,6 +952,9 @@ impl AiScript for Siege {
         }
         if t.rich > 0 {
             self.more_factories(w, t.rich, &mut out);
+        }
+        if t.refineries > 0 {
+            self.more_refineries(w, t.refineries, &mut out);
         }
         if t.beside {
             self.beside(w, &mut out);
