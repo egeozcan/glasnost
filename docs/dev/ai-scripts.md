@@ -531,6 +531,9 @@ against it all came at the cap on worth, six of them on map 2.
   strikes. Hard's army is gone by 8 250 and its base by 9 955, with 4 748 credits unspent. A
   person builds the next refinery when he can pay for it and keeps training meanwhile. So the
   more refinery is ordered only while the money in hand pays its price.
+  Development round 4, stopped after two pairs: `siege:normal` level at 0.771, `default:hard`
+  0.943 to 0.839 (map 2 14-3-15). A drop past 0.06 on a pair is no clear gain, so the lever and
+  its test are reverted: the refineries ordered broke pay back on the long games.
 
 ## The tournament
 
