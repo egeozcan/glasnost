@@ -538,7 +538,11 @@ against it all came at the cap on worth, six of them on map 2.
   lever: the more refinery may still be ordered with less than its price in hand, but only
   while the house's army is worth the level's floor for a strike (5 000 at hard). The army lines
   the brain then holds stand on an army that can guard the base. In the watch above hard's army
-  was worth 2 800 when it ordered the refinery.
+  was worth 2 800 when it ordered the refinery. Development round 5, stopped after two pairs:
+  `default:hard` 0.911 (dev-2 0.943), `siege:normal` level at 0.771 with country 0's losses
+  unchanged (14). Even a perfect last three pairs would not make it a clear gain, so the lever
+  and its test are reverted. That made three rounds in a row with no clear gain, so AS5 stopped
+  on the code of round 2, which cert-2 certified.
 
 ## The tournament
 
