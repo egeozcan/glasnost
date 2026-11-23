@@ -2,13 +2,13 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 110
+revision: 116
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-15
+approved-on: 2026-11-23
 measurements: [M-0007]
-requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162, Q-1610, Q-1876, Q-3113]
+requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162, Q-1610, Q-1876, Q-3113, Q-3389]
 supersedes: []
 ---
 
@@ -957,8 +957,20 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     The movement report used here has these meanings (Q-0790, Q-0794). For driving and
     ship locomotion, S-0207 claim 25 owns the separate destination point's lifetime:
     an accepted movement instruction sets it before path-search success, and retained-goal
-    waits, blockages and zero speed do not clear it. Stop or cancellation that stops
-    locomotion clears it immediately. Qualifying final-track completion clears it before
+    waits, blockages and zero speed do not clear it. A failed fresh path search of a driving vehicle
+    clears it in that update, also when the order-level destination stays. S-0207 claims 30 and 31
+    say when that destination's point is installed again; claim 30 there makes no install in some
+    states, for example in *guard* or while the body is turning. Until a point is present again the
+    table below decides the movement report: the vehicle reports movement only while its heading
+    point is present and differs from its current horizontal position, and the depot's checks of
+    claims 6 and 21 read the report so decided. The moving-destination test itself and the moments
+    at which the depot reads it are unchanged. The clearing takes S-0207 claim 31's backing and
+    ratings case by case, not this claim's high rating for movement reports. For the depot case in
+    *enter*, the behaviour of a vehicle sent to the depot, that claim rates it low, and there it is
+    our engine's design rule. The depot's readings that follow from such a clearing are low with it,
+    except at a failed own-cell search of a vehicle in contact in the docking-point cell of its
+    contact place: claim 21's same-cell rule and its rating apply to that case. Stop or cancellation
+    that stops locomotion clears it immediately. Qualifying final-track completion clears it before
     the cell-arrival report, whereas intermediate completion and merely standing in the
     goal cell do not by themselves. S-0207 claim 26 separately removes a cell destination
     at a no-track update in its cell, or applies its approach-destination fallback; this
@@ -1036,6 +1048,35 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     vehicle's staying settled through that clearing of its order-level destination (Terms,
     claim 21).
 
+    **A driving vehicle's destination after arrival (Q-3389).** In our engine, a driving vehicle
+    whose order-level destination is the depot loses that destination at its movement arrival in its
+    docking-point cell, in the arrival's update. That is the update in which its final track ends in
+    its docking-point cell, on level tracks at that cell's centre also when the point is off-centre,
+    with a vertical difference strictly below 208 leptons (claim 18), not an earlier update in which
+    it is already inside that cell. It is the cell-arrival report of the movement-report paragraph,
+    and the exchange of "reaching the supplied
+    docking-point cell during movement" above (ready mark, *repair* and *sleep* queued) is made in
+    that same update. Claim 21's failed own-cell search after a same-cell enter order also counts as
+    this spec's arrival, but it is not a cell-arrival update and makes only the two effects claim 21
+    names. This gives the measured driving vehicle's record: it held no order-level
+    destination from its inferred arrival to its settling step. Since that
+    arrival is inferred from the empty destination, M-0007 does not show which event of the original
+    empties it, nor that a vehicle in another contact place behaves the same (Open questions). With
+    the destination gone, S-0207 claim 30 installs no point after the final track's completion has
+    cleared it, so the vehicle has no moving destination (Terms) from its arrival, whatever its
+    behaviour, until it is given a new destination. The rule removes nothing else and queues
+    nothing. Hovering vehicles and ships are not affected: their destinations follow claim 21. No
+    switch.
+    - Backing for this paragraph: `measured` (M-0007) for the measured driving vehicle's empty
+      order-level destination from its inferred arrival to its settling step, high. That in the
+      original the destination goes in the tick in which the vehicle's final track ends in its
+      docking-point cell, the first row with its final position, and not in an earlier tick in which
+      it is already inside that cell, and that the same holds for a driving vehicle in a second
+      contact place, is `measurable` by H18 h's record of the second vehicle, medium until it runs.
+      H18 h records once per tick, so it does not order the loss and the exchange within that tick:
+      that they share the update is our engine's rule, medium, `unmeasured`. Our engine's rule
+      states for every driving vehicle what M-0007 shows for one: medium, `measurable` by H18 h.
+
     **Arrival does not start a turn (Q-1162).** Docking-point-cell movement arrival itself
     requests no map-east body turn, even for a tethered vehicle facing another way. There is
     no turn scheduled for a later enter processing merely because arrival queued sleep.
@@ -1089,14 +1130,18 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
       processing. H18 d's repeats record other driving and hovering vehicles and a ship without
       judging them. The
       refusal of a vehicle at full health is claim 16's.
-    - Confidence: high (capacity, repeated request, cell test, movement reports, empty-place result,
+    - Confidence: high (capacity, repeated request, cell test, movement reports apart from a
+      failed search's clearing, which takes S-0207 claim 31's ratings (the movement-report
+      paragraph), empty-place result,
       ready mark, same-cell destination assignment and absence of initial tether), medium (stock
       approach observations, early guard start and the uninterrupted one-place approach; that the
       repeated request refuses a vehicle at full health, claim 16); high (arrival itself requests no
       turn, and no extra depot-specific readiness gate); the driving-only existing-turn hold
       inherits S-0215 claim 11's confidence; high (the driving vehicle's *guard* from the first tick
       with an empty destination, the reading from which its arrival is inferred); medium (that the
-      hovering vehicle's *sleep* follows its arrival, which is inferred from that reading)
+      hovering vehicle's *sleep* follows its arrival, which is inferred from that reading); medium
+      (the loss of a driving vehicle's depot destination at its arrival, as the arrival paragraph
+      rates it)
 
 18. **Depot docking point and stopping (Q-0641, Q-0680).** For an ordinary repair depot,
     including a naval yard, without obsolete-unloading, resource-unloading or tank-bunker flags,
@@ -1398,16 +1443,26 @@ only the vehicle in that place.
         arises.
     - *Same-cell enter order.* A vehicle whose accepted enter order found it already in the
       docking-point cell (claim 17) holds the depot as its order-level destination and a present
-      locomotor destination point, so it has a moving destination (Terms) for as long as that
-      point lasts. If the depot is in waiting, each waiting processing finds it moving and does not accept it, so it
-      stays in waiting, checked every *D* ticks, and receives no step. In settling within 200
-      leptons, not settled, each processing would find it moving and check again after 1 tick,
-      never making it settled. It is accepted only once that point is cleared (S-0207 claim 25).
-      Whether and when anything clears it while the vehicle stands there is open (Open
-      questions).
+      locomotor destination point, so it has a moving destination (Terms) for as long as that point
+      lasts. While it does, each waiting processing finds it moving and does not accept it, so it
+      stays in waiting, checked every *D* ticks, and receives no step; in settling within 200
+      leptons, not settled, each processing would find it moving and check again after 1 tick, never
+      making it settled. A driving vehicle in this state searches for its own cell once no retry
+      delay runs, which fails and clears the point (S-0207 claim 31). In our engine that
+      failure, made while the vehicle holds contact with the depot and stands in the docking-point
+      cell of its contact place, counts as its movement arrival there: the arrival's exchange is
+      made and the order-level destination goes, as at any driving vehicle's arrival (claim 17), so
+      S-0207 claim 30 installs no point again. From then on the vehicle is read as one that arrived
+      by movement in this spec's rules. The failure makes these two effects only: it is not a
+      cell-arrival update of S-0207 claim 12, so none of that claim's other arrival effects follow
+      from it, such as S-0207 claim 22's raise of the cell's entered-by tag. Other locomotion keeps
+      the state above. Whether and when the original clears the
+      point or the destination in this case is open (Open questions).
       - Backing: `measurable` (H19 part f's same-cell control, with the depot's phase and the
-        vehicle's health recorded).
-      - Confidence: medium until that control runs.
+        vehicle's health recorded) for the moving destination before the failure, medium until that
+        control runs. The arrival at the failure is our engine's rule: `unmeasured`, since it is a
+        design choice where the original's handling is not known, medium. H19 part f records that
+        handling.
     - *Working:* only movement defers a step (claim 6). A docked vehicle standing still at any
       distance from the depot, for example after a move order or while it attacks without moving,
       receives its steps and pays for them (`quirks.depot_remote_repair`).
@@ -1898,7 +1953,7 @@ Backing and confidence are claim 15's.
 | State | Event | Result |
 |---|---|---|
 | no depot contact | successful entry request with a place free | contact assigned before arrival (claim 17) |
-| entering with contact, tether present or absent | arrival in the supplied docking-point cell | depot sets its ready mark and queues repair; vehicle queues sleep, neither with immediate start and without creating tether or requesting a body turn; the vehicle becomes settled (claims 17 and 21; S-0215 claim 11 owns subsequent starts) |
+| entering with contact, tether present or absent | arrival in the supplied docking-point cell | depot sets its ready mark and queues repair; vehicle queues sleep, neither with immediate start and without creating tether or requesting a body turn; the vehicle becomes settled; a driving vehicle whose order-level destination is the depot loses it (claims 17 and 21; S-0215 claim 11 owns subsequent starts) |
 | waiting for a contacted vehicle, tethered or not | processing finds it still within its starting distance | settling scheduled 3 ticks later (claim 6) |
 | waiting for a contacted vehicle, tethered or not | moving or outside its starting distance | waiting, next processing after *D* ticks; the vehicle stops being settled, if it was (claim 21) |
 | settling, with contact | *production* slot animation running | no step; recheck after 1 tick (claim 6) |
@@ -2055,7 +2110,9 @@ alternatives are design rules, not claims of oracle measurements.
   original's next depot processing reads a vehicle that does not exist. The outcome is undefined:
   the expected result is a program error. Stock data is not believed to reach
   this case. Our engine services the vehicle in the lowest-numbered occupied place, one at a time,
-  with claim 6's phases. When the serviced place changes, the phases restart at *waiting*.
+  with claim 6's phases. When the serviced place changes, the phases restart at *waiting*. A driving
+  vehicle that docked in a later place holds no order-level destination by then (claim 17), so the
+  restarted waiting accepts it once it stands still inside the starting distance.
   The importer warns for a count above 1 on a repair depot.
   - Backing: `measurable` for the unserviced second place (H18 h). The original's outcome when
     place 0 empties is `unmeasured`: it is a fault, not a defined behaviour to reproduce.
@@ -3080,11 +3137,22 @@ damaged to half strength unless a part says otherwise.
 - *g, no automatic return:* leave a damaged vehicle of the human house idle near the depot for
   9000 ticks with no orders. Expected: it never enters. Any automatic entry falsifies claim 24.
 - *h, two places:* a named test depot type with a docking-place count of 2 and two invented
-  displacements. Order the second vehicle in the same tick as the first. Expected: it takes place
-  1, docks at its own point, and receives no step while the first is serviced. Stop recording
-  before the first leaves, because the original's outcome there is undefined.
+  displacements. Order the second vehicle in the same tick as the first. Expected: it takes place 1,
+  docks in its own docking-point cell, and receives no step while the first is serviced. Stop
+  recording before the first leaves, because the original's outcome there is undefined. The two
+  displacements lie in different cells. Place 0's displacement is within the starting distance
+  (claim 6) of its cell's centre, for example that
+  centre itself, so that the first vehicle is serviced; place 1's may be off-centre. Record the
+  second vehicle's cell, world position, order-level destination, locomotor destination point and
+  current and queued behaviours every tick from its order on, and the depot's phase. Expected (claim
+  17): a driving second vehicle still holds the depot as its order-level destination in the rows in
+  which it is inside its docking-point cell before its final track ends there. It holds none from
+  the row of the tick in which that track ends, the first row with its final position, and its point
+  stays absent from then on.
   *Falsified if:* the second takes place 2 instead of 1, or receives a step while the first is
-  serviced.
+  serviced, or, driving, still holds the depot as its order-level destination in the first row with
+  its final position in its docking-point cell or in any later row, or holds none in a row in
+  which it is inside that cell before that row.
 
 ### H19 — Tether, repeated entry and off-centre stopping (Q-0680)
 
@@ -3148,13 +3216,21 @@ damaged to half strength unless a part says otherwise.
   point is present at the supplied point despite cell equality, before any successful search,
   and its movement report is true while that building destination remains. Across later
   no-track updates, mere cell equality clears neither destination: the depot is a building
-  destination, not a cell destination. Record behaviour as well: S-0207 claim 26's
+  destination, not a cell destination. A driving vehicle's failed own-cell search while it holds
+  contact (claim 21) is not mere cell equality. For a driving vehicle record, every tick from the
+  order to the first repair step, both destinations, the point in the row of each failed search
+  for its own cell and in the next row, the depot's ready mark and the vehicle's current and queued
+  behaviours.
+  This record shows the original's handling of the case (claim 21 and Open questions) and is not
+  judged against our engine's rule there. Record behaviour as well: S-0207 claim 26's
   exact-point guard exception remains applicable if it becomes at rest in guard with
   all three coordinates equal. Use that claim's D30 cell-goal and guard controls to
   distinguish those cleanups from entry exchanges or servicing changes. In a separate
   run order entry from outside that cell and block the route
-  short of it with stock obstacles; a wait or failed search retaining the goal retains the
-  point and movement report. Record give-up separately rather than treating every failure
+  short of it with stock obstacles; a wait retaining the goal retains the point and movement report.
+  For a driving vehicle record the point in the row of each failed search within 1 cell and in the
+  next row; that record decides S-0207's Open question on the clearing in *enter* and is not judged
+  here. Record give-up separately rather than treating every failure
   as give-up. Compare ordinary final-track arrival, expecting S-0207 claim 25's clearing
   before the arrival report, and a stop order, expecting immediate point clearing even if
   an existing track continues. S-0207 D29 supplies the complementary general movement
@@ -3162,7 +3238,7 @@ damaged to half strength unless a part says otherwise.
   Refused same-cell input is a refusal control, not evidence that accepted assignment omits
   the point. If the named map cannot reach accepted same-cell entry, report that case
   untested, not an inferred absence. Omission on accepted assignment, clearing solely at
-  cell equality or on a retained-goal search failure, or different stop/arrival clearing
+  cell equality or during a retained-goal wait, or different stop/arrival clearing
   falsifies the respective rule, excluding S-0207 claim 26's applicable guard cleanup
   and separately recorded entry or servicing effects.
   These tests need a read-only state trace proposed for the harness; do not set marks,
@@ -3322,16 +3398,18 @@ The measurement scenario requires a read-only record of the ordered events; end-
 
 - (Claim 21, the settling question within 200 leptons.) A settled vehicle (down on the ground, if
   it hovers) within 200 leptons of its docking point whose locomotor still reports movement: no
-  input is known that reaches this state, and the state table has no row for it. Claim 17's
-  same-cell enter case keeps the locomotor's destination, but such a vehicle is not accepted in
-  waiting and is never made settled (claim 21), so it does not reach the state. Expected,
+  input is known that reaches this state, and the state table has no row for it. Claim 21's
+  same-cell enter case does not reach it: while its point is present it is not accepted in waiting
+  and is never made settled. Expected,
   `unmeasured`: the processing removes its order-level destination (claim 21), so by the
   moving-destination test of Terms it counts as not moving and takes its settling step, and it
   stays settled. A scenario that reaches the state would test this.
-- (Claim 21, the same-cell enter order.) Whether anything clears the locomotor destination point
-  of a vehicle whose accepted enter order found it already in the docking-point cell while it
-  stands there, so that the depot accepts it, and when. Until then it stays in waiting with no
-  step. H19 part f's same-cell control, run long enough, would show it.
+- (Claim 21, the same-cell enter order.) For a driving vehicle whose accepted enter order found it
+  already in the docking-point cell: whether the original clears its locomotor destination point
+  while it stands there (S-0207 claim 31 leaves the clearing in *enter* open), whether the point is
+  then installed again or the depot destination ends, and whether and when the depot accepts the
+  vehicle. For a ship, whether anything clears the point while it stands there. Our engine's rule is
+  claim 21's. H19 part f's same-cell control, run long enough, would show it.
 - (Claim 22, a stranded hovering vehicle.) Whether a superweapon teleport (S-0513) places a
   vehicle stranded by `quirks.depot_loss_strands_hover` on the map anew, which would switch it
   on and let it move again, or moves it without doing so.
@@ -3361,9 +3439,11 @@ The measurement scenario requires a read-only record of the ordered events; end-
   destination on that tick (M-0007), while the measured hovering vehicle is in *sleep*. No
   exchange of the arrival found so far queues *guard*. So it is open whether locomotion or
   another difference between the two vehicles decides it, and what other vehicles and a ship
-  show. H18 d's record-only repeats would tell these apart. Whether
+  show. H18 d's record-only repeats would tell these apart, and H18 h's record of a second driving
+  vehicle, in another contact place, shows when its destination goes there. Whether
   a vehicle in *guard* there differs from one in *sleep* in any later rule of this spec (for
-  example S-0215's start rules) is open with it.
+  example S-0215's start rules) is open with it. Our engine empties the destination at the arrival
+  whatever decides it (claim 17).
 - (Claim 22.) Whether a contacted driving vehicle, in *guard* when its depot is destroyed, then
   takes a target in range and fires at it. H18 d records it without judging it.
 - (Claim 20.) After an enter order on its own depot releases a docked vehicle at full health,
@@ -3484,6 +3564,23 @@ The measurement scenario requires a read-only record of the ordered events; end-
   *sleep*. B48 keeps its driving vehicle, since its
   readiness test is driving-specific (S-0215 claim 11). It reaches *sleep* for it by another
   way that S-0215 states, or, if none exists, its driving *sleep* comparison is `unmeasured`.
+- S-0215 scenario B43, which uses S-0314 H19 f's accepted same-cell depot-entry fixture with contact
+  accepted and expects "The accepted depot-entry processing retains its building goal at cell
+  equality, including a due processing after a same-cell entry. An arrival exchange can queue
+  *sleep* without deleting that goal": for a driving vehicle these sentences hold only until its
+  first failed search in the docking-point cell of its contact place, which in our engine counts as
+  its movement arrival and ends the depot destination (S-0314 claim 21). At an arrival by movement
+  the destination of a driving vehicle goes too (S-0314 claim 17), so "without deleting that goal"
+  holds for the ship fixture only. For the driving fixture B43 records the destinations and
+  behaviours at that failure and after it without judging them, since the rule there is our engine's
+  and the original's handling is an Open question of S-0314. Level and backing: as S-0314 claim 21
+  rates the rule (medium, `unmeasured`, our engine's design rule).
+- S-0215 claim 29, *Goal-cell equality*, the sentence "A movement-arrival exchange may queue *sleep*
+  in the arrival tick, as above, but queueing it is not removal of the order-level destination": it
+  stands, and gains "In our engine, at a repair depot a driving vehicle loses its order-level
+  destination at its movement arrival, in the arrival's update (S-0314 claim 17); which event of the
+  original empties it is open there". Level and backing: as S-0314 claim 17 rates our engine's rule
+  (medium); the original's event is not stated.
 - S-0214 scenario (a vehicle clicked on an own repair depot), "Repeat at full health, at zero
   credits, and with a mutually allied depot: none of these alone prevents entry": the targeting
   results are unchanged (the *enter* action and an enter order in each repeat), but at full
@@ -3543,3 +3640,25 @@ The measurement scenario requires a read-only record of the ordered events; end-
     locomotor test as the choice of starting distance by locomotor kind. If that rating also
     covers the completed-settling condition, it should be narrowed to medium for when that
     condition is first met, as in S-0314 claim 6.
+- S-0207 claim 31, the sentence "A same-cell *enter* instruction naming a depot (claim 26) keeps the
+  depot destination through these failures": for a driving vehicle that holds contact with the depot
+  and stands in the docking-point cell of its contact place, the first such failure counts in our
+  engine as the vehicle's movement arrival (S-0314 claims 17 and 21) and ends the depot destination,
+  so the point is not installed again after it. It is not a cell-arrival update of claim 12, and
+  none of that claim's other arrival effects follow from it. The sentence's "unless the depot's
+  entry exchange (S-0314 claims 17 and 18) changes them first" can name that arrival. Claim 30 needs
+  no new exception: a driving vehicle that has arrived at a depot by movement holds no order-level
+  destination (S-0314 claim 17). Level and backing: as S-0314 claim 21 rates the rule (medium,
+  `unmeasured`, our engine's design rule). S-0207 claim 26, *Same-cell order from rest*, the
+  sentence "an accepted same-cell *enter* instruction naming a depot can retain both destinations
+  after successive locomotion updates": the same rule as for claim 31 above applies. For a driving
+  vehicle that holds contact with the depot and stands in the docking-point cell of its contact
+  place, the first failed search counts in our engine as its movement arrival, though not as a
+  cell-arrival update of claim 12 (S-0314 claim 21), so the depot destination ends there and the
+  point is not installed again. The words "whose failed searches there clear only its point, which
+  claim 30 installs again at its next update" then hold for a driving vehicle without that contact
+  only. The ship part is unchanged. Scenario D30's same-cell expectation "both destinations can
+  survive no-track updates despite cell equality" does not judge a driving vehicle with that
+  contact: for it D30 records the contact, that failure's tick and both destinations in that row and
+  the next, since the rule there is our engine's and the original's handling is an Open question of
+  S-0314. Level and backing: as for claim 31 above.
