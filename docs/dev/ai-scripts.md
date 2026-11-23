@@ -501,7 +501,11 @@ against it all came at the cap on worth, six of them on map 2.
   tick 5 000, one refinery until tick 9 000, and its base lost at 11 135. The starting money is
   not income. A person puts it into refineries first and builds a second war factory once the
   income stands. So at hard, money in hand counts as rich only once the plan's harvesters stand and
-  the house owns two refineries.
+  the house owns two refineries. More refineries are ordered before more factories. A factory added
+  when rich takes the place of the brain's other building order, as the refinery does (shared
+  `base_ordered`). A rich brain orders a building every think its line frees, so without that
+  rule more factories had fired only before the economy stood, which is just what this lever
+  stops. A test trial showed it: on four refineries and 30 000 credits the house added no factory.
 
 ## The tournament
 
