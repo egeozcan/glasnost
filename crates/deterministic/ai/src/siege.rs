@@ -125,6 +125,10 @@ pub struct Tuning {
     /// the money in hand counts as rich ([`Siege::economy_stands`]); 0: from
     /// the start.
     pub rich_after: usize,
+    /// Whether the brain's infantry army orders are dropped while the house
+    /// owns a vehicle factory and has spent more on infantry army units than
+    /// on vehicle army units ([`Siege::tanks_first`]).
+    pub tanks_first: bool,
 }
 
 /// The tuning of level `level`.
@@ -149,6 +153,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
+            tanks_first: false,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -169,6 +174,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
+            tanks_first: false,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -195,6 +201,8 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             refineries: 4,
             // nocite: design: own AI (#449): the starting money is not income; hard counts as rich only on two refineries with its harvesters standing, as a person builds the second refinery before the second war factory
             rich_after: 2,
+            // nocite: design: own AI (#449): hard puts no more into infantry than into tanks once it has a war factory, as a person facing tanks and defences does
+            tanks_first: true,
         },
     }
 }
@@ -386,6 +394,44 @@ impl Siege {
             && !self.eyes.busy(w, c)
         {
             out.push(Order::Build { what: c });
+        }
+    }
+
+    /// Tanks first (design: own AI, #449): while the house owns a vehicle
+    /// factory and has spent more on infantry army units than on vehicle
+    /// army units (S-0407 claim 10's ever-built counts at the types' costs),
+    /// the brain's orders for infantry army units are dropped, so the money
+    /// goes to the war factory. The brain picks the type the house has
+    /// fewest of on the map, so its fast infantry line builds as often as
+    /// the war factory; a person facing tanks and defences puts most of his
+    /// money into tanks.
+    fn tanks_first(&self, w: &World, out: &mut Vec<Order>) {
+        let eyes = &self.eyes;
+        if eyes
+            .of_role(w, Role::Factory(FactoryKind::Vehicle))
+            .is_empty()
+        {
+            return;
+        }
+        let (inf, veh) = w.houses[usize::from(eyes.house.0)]
+            .econ
+            .tech
+            .ever_built
+            .iter()
+            .filter(|&(&t, _)| scripted::role_of(w, t) == Some(Role::Army))
+            .fold((0i64, 0i64), |(i, v), (&t, &n)| {
+                let c = i64::from(n) * i64::from(production::cost_field(w, t));
+                match t.kind {
+                    Kind::Infantry => (i + c, v),
+                    Kind::Vehicle => (i, v + c),
+                    _ => (i, v),
+                }
+            });
+        if inf > veh {
+            out.retain(|o| {
+                !matches!(o, Order::Build { what } if what.kind == Kind::Infantry
+                    && scripted::role_of(w, *what) == Some(Role::Army))
+            });
         }
     }
 
@@ -984,6 +1030,9 @@ impl AiScript for Siege {
         }
         if t.rich > 0 && self.economy_stands(w, t.rich_after) {
             self.more_factories(w, t.rich, &mut out);
+        }
+        if t.tanks_first {
+            self.tanks_first(w, &mut out);
         }
         if t.beside {
             self.beside(w, &mut out);
