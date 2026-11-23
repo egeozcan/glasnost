@@ -468,6 +468,29 @@ against every entrant. cert-2 has `siege:easy` at 0.948 but `siege:normal` at 0.
 
 The batch handed back one round into the stop count, to leave room for the final checks.
 
+### Hard, script AS5
+
+Script AS5 took the siege's hard level further toward 2000 Elo, with the same rules of fair play.
+Sim batch S50 changed how vehicles path after AS4 measured, so AS5 took its own baseline on its
+base: the certifying round cert-0 put `siege:hard` at 1808.7 (1794.9 order-free), 190-32-18,
+score 0.858; the development round dev-0 (AS4's: the five other entrants, maps 0, 2 and 8, seeds
+7 to 14, 480 games) scored 0.849 (369-34-77, 270 victories). Map 2 is the weak ground (98-11-51,
+0.772): there hard draws at the cap even against `default:easy`, and `default:hard`'s ten wins
+against it all came at the cap on worth, six of them on map 2.
+
+- **More refineries** (`Tuning::refineries`, hard only). A watch of a game `default:hard` won on
+  worth (map 2, seed 7) shows hard on one refinery until tick 10 500 and two after, with four
+  harvesters and its credits near 0 all game, while `default:hard` stood on three refineries by
+  tick 7 500 and seven by 21 000. Each refinery comes with a harvester (S-0404 claim 2, S-0402
+  claim 18), and hard's building line stood idle most of the game while its army lines took every
+  credit. The brain builds a refinery by a new field only once the field by its refineries runs
+  low (`Script::field_refinery`). A person who sees his credits run out with fields unworked
+  builds the next refinery early. So at hard, once the plan's harvesters stand and the house owns
+  a refinery, while it owns fewer than four and no building is ordered this think, the siege orders
+  the cheapest refinery type it can place (`Script::place_refinery`: beside the field of
+  `Script::ore_goal`) on the free building line, the plan's next power plant first when the
+  refinery would leave the house short of power, as with the factories when rich.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):

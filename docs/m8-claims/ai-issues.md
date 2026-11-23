@@ -599,3 +599,19 @@ with no pair down more than 0.06. The stop rule is three rounds in a row with no
   victories and 42 wins on worth. It is top of the pool but short of 2000.
 
 The batch handed back one round into the stop count.
+
+## Script AS5
+
+Issue #449, the siege's fifth batch: its hard level further toward 2000 Elo, playing fair. Notes
+in [ai-scripts.md](../dev/ai-scripts.md#hard-script-as5). Base ae0de29 (sim S50 and AS4 merged;
+save 225, AI game 206, wire 13).
+
+**Measurement:** AS4's, fixed before the first round, with a baseline of AS5's own taken on the
+base after S50: cert-0 (seeds 15 to 18, 720 games) and dev-0 (`siege:hard` against each of the
+five others on maps 0, 2 and 8, seeds 7 to 14, 480 games). A clear gain is the combined score up
+at least 0.02, or 12 more victories, with no pair down more than 0.06; a lever without one is
+reverted. The stop rule is three rounds in a row with no clear gain.
+
+| part | confirmed | change | test |
+|---|---|---|---|
+| more refineries | a dev-0 watch, map 2 seed 7 against `default:hard`: hard on one refinery to tick 10 500 and two after, credits near 0, its building line idle; `default:hard` on seven refineries | `Tuning::refineries` (hard 4): once the plan's harvesters stand, while the house owns at least one and fewer than four refineries and no building is ordered this think, the cheapest refinery type it can place on the free building line (a power plant first when short) | `hard_builds_more_refineries` |
