@@ -468,6 +468,82 @@ against every entrant. cert-2 has `siege:easy` at 0.948 but `siege:normal` at 0.
 
 The batch handed back one round into the stop count, to leave room for the final checks.
 
+### Hard, script AS5
+
+Script AS5 took the siege's hard level further toward 2000 Elo, with the same rules of fair play.
+Sim batch S50 changed how vehicles path after AS4 measured, so AS5 took its own baseline on its
+base: the certifying round cert-0 put `siege:hard` at 1808.7 (1794.9 order-free), 190-32-18,
+score 0.858; the development round dev-0 (AS4's: the five other entrants, maps 0, 2 and 8, seeds
+7 to 14, 480 games) scored 0.849 (369-34-77, 270 victories). Map 2 is the weak ground (98-11-51,
+0.772): there hard draws at the cap even against `default:easy`, and `default:hard`'s ten wins
+against it all came at the cap on worth, six of them on map 2.
+
+- **More refineries** (`Tuning::refineries`, hard only). A watch of a game `default:hard` won on
+  worth (map 2, seed 7) shows hard on one refinery until tick 10 500 and two after, with four
+  harvesters and its credits near 0 all game, while `default:hard` stood on three refineries by
+  tick 7 500 and seven by 21 000. Each refinery comes with a harvester (S-0404 claim 2, S-0402
+  claim 18), and hard's building line stood idle most of the game while its army lines took every
+  credit. The brain builds a refinery by a new field only once the field by its refineries runs
+  low (`Script::field_refinery`). A person who sees his credits run out with fields unworked
+  builds the next refinery early. So at hard, once the plan's harvesters stand and the house owns
+  a refinery, while it owns fewer than four and the brain orders no base building this think
+  (construction yard, power plant, refinery or factory), the siege orders the cheapest refinery
+  type it can place (`Script::place_refinery`: beside the field of `Script::ore_goal`) on the
+  free building line, the plan's next power plant first when the refinery would leave the house
+  short of power, as with the factories when rich. The refinery takes the place of the brain's
+  other building order of that think (its tech climb, a defence or a sensor): a rich brain keeps
+  its building line busy, and when the line frees it orders the next building at once.
+  Development round 1: 0.912 against dev-0's 0.849, every pair up (`default:hard` 0.786 to
+  0.927); cert-1 1912.1 (order-free 1885.9) against cert-0's 1808.7.
+- **Refineries before factories** (`Tuning::rich_after`, hard 2). Of dev-1's 19 losses to
+  `siege:normal`, 18 came on country 0. A watch of one (map 0, seed 11) shows hard spending its
+  starting money on more factories (`Tuning::rich`, 3000 credits in hand), its credits near 0 from
+  tick 5 000, one refinery until tick 9 000, and its base lost at 11 135. The starting money is
+  not income. A person puts it into refineries first and builds a second war factory once the
+  income stands. So at hard, money in hand counts as rich only once the plan's harvesters stand and
+  the house owns two refineries. More refineries are ordered before more factories. A factory added
+  when rich takes the place of the brain's other building order, as the refinery does (shared
+  `base_ordered`). A rich brain orders a building every think its line frees, so without that
+  rule more factories had fired only before the economy stood, which is just what this lever
+  stops. A test trial showed it: on four refineries and 30 000 credits the house added no factory.
+  Development round 2: 0.919 against dev-1's 0.912, with 293 victories against 265 (`siege:normal`
+  0.724 to 0.771); cert-2 1914.9 (order-free 1894.8).
+- **Tanks first** (`Tuning::tanks_first`, hard only). dev-2's draws are stalemates at the cap at
+  high worth, hard ahead but under 3/2 (about 40 000 against 30 000). A watch of one (map 2,
+  seed 11, against `default:normal`) shows hard on seven refineries with its credits near 0 and
+  an army of 31 units worth 11 300, mostly cheap infantry (dogs, rifles, gunners) with one or
+  two tanks. It made three strikes all game, and each was called home. The brain picks the army
+  type the house has fewest of on the map, so its fast infantry line builds as often as the
+  war factory and takes the money. A person facing tanks and base defences puts most of his
+  money into tanks. So at hard, while the house owns a vehicle factory and has spent more on
+  infantry army units than on vehicle army units (S-0407 claim 10's ever-built counts at the
+  types' costs), the siege drops the brain's orders for infantry army units, and the money
+  goes to the war factory. The soldiers trained beside the harvesters (`beside`) stay.
+  Development round 3: 0.914 against dev-2's 0.919, with 294 victories against 293
+  (`default:normal` 0.906 to 0.953, `siege:easy` 0.990 to 0.964). No clear gain, so the lever
+  and its test are reverted.
+- **More refineries only with the money** (hard). dev-2's losses to `siege:normal` come on
+  country 0. A watch of one (map 0, seed 8) shows both houses even to tick 4 500, hard with 11
+  army units and normal none. At 5 250, with about 800 credits in hand, hard orders its second
+  refinery (more refineries). It owes more than the money in hand, so the brain holds both army
+  lines to pay for it (its rule for a refinery by a new field that waits for money). Hard's army
+  stays at 11 units until 6 750 while normal's grows to 12 units worth nearly twice as much and
+  strikes. Hard's army is gone by 8 250 and its base by 9 955, with 4 748 credits unspent. A
+  person builds the next refinery when he can pay for it and keeps training meanwhile. So the
+  more refinery is ordered only while the money in hand pays its price.
+  Development round 4, stopped after two pairs: `siege:normal` level at 0.771, `default:hard`
+  0.943 to 0.839 (map 2 14-3-15). A drop past 0.06 on a pair is no clear gain, so the lever and
+  its test are reverted: the refineries ordered broke pay back on the long games.
+- **Broke refineries only with an army** (hard, `Tuning::floor`). The narrower form of the last
+  lever: the more refinery may still be ordered with less than its price in hand, but only
+  while the house's army is worth the level's floor for a strike (5 000 at hard). The army lines
+  the brain then holds stand on an army that can guard the base. In the watch above hard's army
+  was worth 2 800 when it ordered the refinery. Development round 5, stopped after two pairs:
+  `default:hard` 0.911 (dev-2 0.943), `siege:normal` level at 0.771 with country 0's losses
+  unchanged (14). Even a perfect last three pairs would not make it a clear gain, so the lever
+  and its test are reverted. That made three rounds in a row with no clear gain, so AS5 stopped
+  on the code of round 2, which cert-2 certified.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):

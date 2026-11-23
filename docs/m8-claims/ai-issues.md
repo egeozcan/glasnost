@@ -599,3 +599,23 @@ with no pair down more than 0.06. The stop rule is three rounds in a row with no
   victories and 42 wins on worth. It is top of the pool but short of 2000.
 
 The batch handed back one round into the stop count.
+
+## Script AS5
+
+Issue #449, the siege's fifth batch: its hard level further toward 2000 Elo, playing fair. Notes
+in [ai-scripts.md](../dev/ai-scripts.md#hard-script-as5). Base ae0de29 (sim S50 and AS4 merged;
+save 225, AI game 206, wire 13).
+
+**Measurement:** AS4's, fixed before the first round, with a baseline of AS5's own taken on the
+base after S50: cert-0 (seeds 15 to 18, 720 games) and dev-0 (`siege:hard` against each of the
+five others on maps 0, 2 and 8, seeds 7 to 14, 480 games). A clear gain is the combined score up
+at least 0.02, or 12 more victories, with no pair down more than 0.06; a lever without one is
+reverted. The stop rule is three rounds in a row with no clear gain.
+
+| part | confirmed | change | test |
+|---|---|---|---|
+| more refineries | a dev-0 watch, map 2 seed 7 against `default:hard`: hard on one refinery to tick 10 500 and two after, credits near 0, its building line idle; `default:hard` on seven refineries | `Tuning::refineries` (hard 4): once the plan's harvesters stand, while the house owns at least one and fewer than four refineries and the brain orders no base building this think, the cheapest refinery type it can place on the free building line (a power plant first when short), in place of the brain's other building order | `hard_builds_more_refineries` (after 4 500 ticks hard stands on more refineries than normal; red on the base code) |
+| refineries before factories | dev-1: 0.912 (+0.063), every pair up; cert-1 1912.1. Of dev-1's 19 losses to `siege:normal`, 18 on country 0. A watch (map 0 seed 11): hard spends its starting money on a third and fourth factory (`rich`), its credits near 0 from tick 5 000, on one refinery to tick 9 000, and loses its base at 11 135 | `Tuning::rich_after` (hard 2): money in hand counts as rich only once the plan's harvesters stand and the house owns two refineries. More refineries go first. A factory added when rich takes the place of the brain's other building order, as the refinery does (a rich brain orders a building every think its line frees, so without this rule the factory came only before the economy stood) | `hard_builds_refineries_before_factories` (red on the code before); `hard_adds_factories_when_rich` from a base on one refinery with the plan's harvesters, 9 000 ticks (from the yard alone the economy does not stand in time) |
+| tanks first | dev-2: 0.919, 293 victories (+28); cert-2 1914.9. dev-2's draws are stalemates at high worth under 3/2. A watch (map 2 seed 11 against `default:normal`): an army of 31 worth 11 300, mostly cheap infantry, one or two tanks, three strikes each called home | `Tuning::tanks_first` (hard): while the house owns a vehicle factory and its spend on infantry army units (ever-built counts at cost, S-0407 claim 10) is above its spend on vehicle army units, the brain's infantry army orders are dropped. Reverted: dev-3 0.914 against dev-2's 0.919, 294 victories against 293, no clear gain | none (`hard_puts_its_money_into_tanks` reverted with the lever) |
+| more refineries only with the money | A watch of a dev-2 loss to `siege:normal` (map 0 seed 8, country 0): hard orders its second refinery with about 800 in hand, the brain holds both army lines to pay for it, the army stays at 11 units from 4 500 to 6 750, normal strikes and the base falls at 9 955 | `Siege::more_refineries` (hard): only a refinery type whose price the money in hand pays. Reverted: dev-4 `default:hard` 0.943 to 0.839, no clear gain | none (`hard_orders_more_refineries_only_with_the_money` reverted with the lever) |
+| broke refineries only with an army | The watch above: hard's army was worth 2 800 when the broke refinery held its army lines; dev-4's price-only form lost on `default:hard` | `Siege::more_refineries` (hard): with less than the price in hand, only while the army is worth `Tuning::floor`. Reverted: dev-5 `default:hard` 0.911, `siege:normal` 0.771, no clear gain; the third round in a row without one, so AS5 stopped on round 2's code (cert-2) | none (`hard_orders_more_refineries_broke_only_with_an_army` reverted with the lever) |

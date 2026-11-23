@@ -412,12 +412,31 @@ fn factories(w: &World, kind: FactoryKind) -> usize {
 }
 
 /// House 0's infantry and vehicle factories after `ticks` of play at
-/// `level` from the base, with `credits` in hand at the start. House 1's
+/// `level` from [`economy_base`] (one refinery, the plan's harvesters), with
+/// `credits` in hand at the start. House 1's
 /// yard has a guard of tanks, so that hard's first soldiers (trained beside
 /// its harvesters) do not end the game before the factories come.
 fn factories_when_rich(level: AiDifficulty, credits: i32, ticks: i32) -> (usize, usize) {
+    // nocite: test data of our own (the plan's three harvesters standing)
+    let mut w = guarded(economy_base(credits, 3));
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    play(&mut w, &mut s, level, ticks);
+    (
+        factories(&w, FactoryKind::Infantry),
+        factories(&w, FactoryKind::Vehicle),
+    )
+}
+
+/// The base of [`base_up`] (the yard alone) with `credits` in hand and six
+/// tanks guarding house 1's yard.
+fn rich_world(credits: i32) -> World {
     let mut w = base_up();
     w.houses[0].credits = credits;
+    guarded(w)
+}
+
+/// `w` with six tanks guarding house 1's yard.
+fn guarded(mut w: World) -> World {
     let at = w.obj(yard(&w, 1).unwrap()).unwrap().pos.cell();
     // nocite: test data of our own (six tanks beside house 1's yard)
     for dy in [-4, -2, 0, 2, 4, 6] {
@@ -430,12 +449,7 @@ fn factories_when_rich(level: AiDifficulty, credits: i32, ticks: i32) -> (usize,
             0,
         );
     }
-    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
-    play(&mut w, &mut s, level, ticks);
-    (
-        factories(&w, FactoryKind::Infantry),
-        factories(&w, FactoryKind::Vehicle),
-    )
+    w
 }
 
 /// House 0's base with a barracks, a refinery and a war factory standing
@@ -499,11 +513,133 @@ fn hard_trains_soldiers_beside_the_harvesters() {
     );
 }
 
+/// House 0's base with a power plant, a refinery, a barracks and a war
+/// factory standing and `harvesters` harvesters by them (three is the
+/// plan's count at normal and hard), `credits` in hand.
+fn economy_base(credits: i32, harvesters: usize) -> World {
+    let mut w = base_up();
+    let at = w.obj(yard(&w, 0).unwrap()).unwrap().pos.cell();
+    // nocite: test data of our own (free cells around the yard)
+    for (name, dx, dy) in [
+        ("POWR", -6, 4),
+        ("PILL", -6, -6),
+        ("PROC", 4, -7),
+        ("FACT", -7, 4),
+    ] {
+        testkit::spawn(
+            &mut w,
+            Kind::Building,
+            name,
+            0,
+            CellXY::new(at.x + dx, at.y + dy),
+            0,
+        );
+    }
+    // nocite: test data of our own (three harvesters south of the yard)
+    for dx in [-2, 0, 2].into_iter().take(harvesters) {
+        testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "MINR",
+            0,
+            CellXY::new(at.x + dx, at.y + 6),
+            0,
+        );
+    }
+    w.houses[0].credits = credits;
+    w
+}
+
+/// House 0's refineries on the map after `ticks` of play at `level` from
+/// [`economy_base`] with `credits` in hand.
+fn refineries_standing(level: AiDifficulty, credits: i32, ticks: i32) -> usize {
+    // nocite: test data of our own (the plan's three harvesters standing)
+    let mut w = economy_base(credits, 3);
+    let proc = w.rules().index_of(Kind::Building, "PROC").unwrap();
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    play(&mut w, &mut s, level, ticks);
+    w.objects
+        .values()
+        .filter(|o| {
+            o.owner == Some(HouseId(0))
+                && o.on_map
+                && o.kind == Kind::Building
+                && o.type_index == proc
+        })
+        .count()
+}
+
+// design: own AI (#449): at hard, once the plan's harvesters stand, the siege orders more refineries on the free building line while the house owns fewer than the level's count, so its credits do not run out with fields unworked; normal leaves it to the brain's own rule (a new field once the near one runs low)
+#[test]
+fn hard_builds_more_refineries() {
+    // nocite: test data of our own (money for the refineries and more; a few minutes of play)
+    let (credits, ticks) = (20_000, 4500);
+    let hard = refineries_standing(AiDifficulty::Hard, credits, ticks);
+    let normal = refineries_standing(AiDifficulty::Normal, credits, ticks);
+    assert!(hard > normal, "hard {hard} refineries, normal {normal}");
+}
+
+// design: own AI (#449): at hard, the money in hand counts as rich only once the plan's harvesters stand on two refineries: from the yard alone with much money in hand, no factory of a kind the house owns is ordered while it owns fewer than two refineries
+#[test]
+fn hard_builds_refineries_before_factories() {
+    // nocite: test data of our own (money enough for the base, the army and more factories; a few minutes of play)
+    let (credits, ticks) = (40_000, 6000);
+    let mut w = rich_world(credits);
+    let proc = w.rules().index_of(Kind::Building, "PROC").unwrap();
+    let kind = |w: &World, i: u32| {
+        w.rules()
+            .buildings
+            .get(i as usize)
+            .filter(|b| !b.naval)
+            .and_then(|b| b.factory)
+    };
+    let level = AiDifficulty::Hard;
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    for _ in 0..ticks {
+        if w.econ.end.finished {
+            break;
+        }
+        let tick = w.tick;
+        let view = View::new(&w, HouseId(0));
+        let got = AiScript::think(
+            &mut s,
+            &view,
+            Schedule::of(HouseId(0), tick),
+            level,
+            None,
+            &mut (),
+        );
+        let refineries = w
+            .objects
+            .values()
+            .filter(|o| {
+                o.owner == Some(HouseId(0))
+                    && o.on_map
+                    && o.kind == Kind::Building
+                    && o.type_index == proc
+            })
+            .count();
+        for o in got {
+            if let Order::Build { what } = &o
+                && what.kind == Kind::Building
+                && let Some(k) = kind(&w, what.index)
+            {
+                assert!(
+                    refineries >= 2 || factories(&w, k) == 0,
+                    "tick {tick}: a {k:?} factory ordered on {refineries} refineries"
+                );
+            }
+            orders::issue(&mut w, HouseId(0), o);
+        }
+        testkit::run(&mut w, 1);
+    }
+}
+
 // design: own AI (#449): at hard, with money to spare in hand, the siege adds factories of the army's kinds (S-0403 claim 6: more factories of a kind, shorter build times), up to three of each; normal and easy do not
 #[test]
 fn hard_adds_factories_when_rich() {
-    // nocite: test data of our own (money enough for the base, the army and more factories; a few minutes of play)
-    let (credits, ticks) = (40_000, 6000);
+    // nocite: test data of our own (money enough for the base, the army and more factories; a few minutes of play, the refineries first)
+    let (credits, ticks) = (40_000, 9000);
     let (inf, veh) = factories_when_rich(AiDifficulty::Hard, credits, ticks);
     assert!(
         inf.max(veh) >= 2,
