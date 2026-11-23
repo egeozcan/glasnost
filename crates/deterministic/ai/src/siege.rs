@@ -461,7 +461,10 @@ impl Siege {
     /// refinery and fewer than `most`, the brain orders no base building this
     /// think (yard, power, refinery or factory) and no refinery is on its
     /// line, the cheapest refinery type it can place (`Script::place_refinery`:
-    /// beside the field of `Script::ore_goal`), on the free building line, in
+    /// beside the field of `Script::ore_goal`), with its price in hand or an
+    /// army worth `floor` (one ordered broke owes more than the money in
+    /// hand, and the brain then holds the army lines to pay for it), on the
+    /// free building line, in
     /// place of the brain's other building order (its tech climb, a defence or
     /// a sensor: a rich brain orders the next building the think its line
     /// frees); the plan's next power plant in its place when the refinery
@@ -471,7 +474,7 @@ impl Siege {
     /// low (`Script::field_refinery`); a person whose credits run out with
     /// fields unworked builds the next refinery early. Not for slave miners,
     /// which are their slaves' own refinery (S-0402 claim 14).
-    fn more_refineries(&self, w: &World, most: usize, out: &mut Vec<Order>) {
+    fn more_refineries(&self, w: &World, most: usize, floor: i64, out: &mut Vec<Order>) {
         let eyes = &self.eyes;
         let house = eyes.house;
         if eyes.selling() || eyes.slave_miners(w) || !eyes.harvesters_kept(w) {
@@ -495,10 +498,20 @@ impl Siege {
         if types.iter().any(|&t| eyes.busy(w, t)) {
             return;
         }
-        let Some(t) = types
+        // With less than its price in hand, only while the army is worth the
+        // level's floor: one ordered broke owes more than the money in hand,
+        // and the brain then holds the army lines to pay for it
+        // (`field_refinery_short`).
+        let credits = w.houses[usize::from(house.0)].credits;
+        let army: i64 = eyes
+            .of_role(w, Role::Army)
             .into_iter()
-            .find(|&t| eyes.place_refinery(w, t).is_some())
-        else {
+            .map(|id| worth(w, id))
+            .sum();
+        let Some(t) = types.into_iter().find(|&t| {
+            (army >= floor || production::price(w, house, t) <= credits)
+                && eyes.place_refinery(w, t).is_some()
+        }) else {
             return;
         };
         // A plant first when the refinery would leave the house short.
@@ -980,7 +993,7 @@ impl AiScript for Siege {
             self.no_navy(w, &mut out);
         }
         if t.refineries > 0 {
-            self.more_refineries(w, t.refineries, &mut out);
+            self.more_refineries(w, t.refineries, t.floor, &mut out);
         }
         if t.rich > 0 && self.economy_stands(w, t.rich_after) {
             self.more_factories(w, t.rich, &mut out);
