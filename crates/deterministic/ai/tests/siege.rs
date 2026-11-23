@@ -412,11 +412,13 @@ fn factories(w: &World, kind: FactoryKind) -> usize {
 }
 
 /// House 0's infantry and vehicle factories after `ticks` of play at
-/// `level` from the base, with `credits` in hand at the start. House 1's
+/// `level` from [`economy_base`] (one refinery, the plan's harvesters), with
+/// `credits` in hand at the start. House 1's
 /// yard has a guard of tanks, so that hard's first soldiers (trained beside
 /// its harvesters) do not end the game before the factories come.
 fn factories_when_rich(level: AiDifficulty, credits: i32, ticks: i32) -> (usize, usize) {
-    let mut w = rich_world(credits);
+    // nocite: test data of our own (the plan's three harvesters standing)
+    let mut w = guarded(economy_base(credits, 3));
     let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
     play(&mut w, &mut s, level, ticks);
     (
@@ -636,8 +638,8 @@ fn hard_builds_refineries_before_factories() {
 // design: own AI (#449): at hard, with money to spare in hand, the siege adds factories of the army's kinds (S-0403 claim 6: more factories of a kind, shorter build times), up to three of each; normal and easy do not
 #[test]
 fn hard_adds_factories_when_rich() {
-    // nocite: test data of our own (money enough for the base, the army and more factories; a few minutes of play)
-    let (credits, ticks) = (40_000, 6000);
+    // nocite: test data of our own (money enough for the base, the army and more factories; a few minutes of play, the refineries first)
+    let (credits, ticks) = (40_000, 9000);
     let (inf, veh) = factories_when_rich(AiDifficulty::Hard, credits, ticks);
     assert!(
         inf.max(veh) >= 2,
