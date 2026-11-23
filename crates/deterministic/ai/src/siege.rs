@@ -461,7 +461,9 @@ impl Siege {
     /// refinery and fewer than `most`, the brain orders no base building this
     /// think (yard, power, refinery or factory) and no refinery is on its
     /// line, the cheapest refinery type it can place (`Script::place_refinery`:
-    /// beside the field of `Script::ore_goal`), on the free building line, in
+    /// beside the field of `Script::ore_goal`) and pay for with the money in
+    /// hand (one ordered broke owes more than the money in hand, and the
+    /// brain then holds the army lines to pay for it), on the free building line, in
     /// place of the brain's other building order (its tech climb, a defence or
     /// a sensor: a rich brain orders the next building the think its line
     /// frees); the plan's next power plant in its place when the refinery
@@ -495,10 +497,13 @@ impl Siege {
         if types.iter().any(|&t| eyes.busy(w, t)) {
             return;
         }
-        let Some(t) = types
-            .into_iter()
-            .find(|&t| eyes.place_refinery(w, t).is_some())
-        else {
+        // Only with its price in hand: one ordered broke owes more than the
+        // money in hand, and the brain then holds the army lines to pay
+        // for it (`field_refinery_short`).
+        let credits = w.houses[usize::from(house.0)].credits;
+        let Some(t) = types.into_iter().find(|&t| {
+            production::price(w, house, t) <= credits && eyes.place_refinery(w, t).is_some()
+        }) else {
             return;
         };
         // A plant first when the refinery would leave the house short.
