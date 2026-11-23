@@ -1,9 +1,9 @@
 ---
 id: Q-3389
 title: A vehicle asleep at a depot and claim 30's install of its point
-status: open
+status: answered
 related: [S-0207, S-0314]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need
