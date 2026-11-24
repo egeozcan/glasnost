@@ -363,6 +363,60 @@ fn an_outmatched_strike_is_called_home() {
     assert!(!called.is_empty(), "the strike is called home: {got:?}");
 }
 
+// design: own AI (#449): at hard the recall is judged on the whole army: a strike outmatched by the enemy army the house has seen stays out while the strike and the army at home together are worth the level's share of it, and the army at home joins it
+#[test]
+fn a_strike_backed_by_the_army_at_home_stays_out_at_hard() {
+    let level = AiDifficulty::Hard;
+    let t = tuning(level);
+    let mut w = base_up();
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    // The strike's count and room for the brain's own parts.
+    tanks(&mut w, t.strike + 3);
+    // nocite: test data of our own
+    play(&mut w, &mut s, level, 600);
+    assert_eq!(s.strikes(), 1);
+    let out: Vec<ObjectId> = s.out().iter().copied().collect();
+    assert!(!out.is_empty());
+    // A second army at home, more than went out (the guard stands on one
+    // of the cells).
+    let home = tanks(&mut w, t.strike + 2);
+    // A large enemy army, seen, ahead of the strike.
+    let lead = w.obj(out[0]).unwrap().pos.cell();
+    let mut n = 0;
+    // nocite: test data of our own (three times the strike, a few cells ahead)
+    for dy in -4..=4 {
+        for dx in 6..=9 {
+            let c = CellXY::new(lead.x + dx, lead.y + dy);
+            if n < 3 * t.strike
+                && w.cells.usable(c)
+                && w.objects.values().all(|o| o.pos.cell() != c)
+            {
+                testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, c, 0);
+                n += 1;
+            }
+        }
+    }
+    // nocite: test data of our own
+    shroud::area_reveal(&mut w, HouseId(0), Pos::centre(lead, 0), 14);
+    // The strike alone is outmatched; with the army at home it is not.
+    let worth = |ids: &[ObjectId]| -> i64 { ids.iter().map(|&id| siege::worth(&w, id)).sum() };
+    let enemy: i64 = 3 * t.strike as i64 * siege::worth(&w, out[0]);
+    assert!(worth(&out) * 100 < t.recall * enemy);
+    assert!((worth(&out) + worth(&home)) * 100 >= t.recall * enemy);
+    // nocite: test data of our own (one think period)
+    let got = play(
+        &mut w,
+        &mut s,
+        level,
+        glasnost_ai::scripted::THINK_PERIOD + 1,
+    );
+    assert_eq!(s.recalls(), 0, "the strike stays out");
+    assert!(
+        !attack_moved(&got, &home).is_empty(),
+        "the army at home joins it"
+    );
+}
+
 // design: own AI (#449): a strike that reaches its goal, a seen enemy building, attacks it: an AI house counts as human-controlled (glossary), so its units' own searches pass a building with no weapon by (S-0309 table C, row "harmless building"), and the strike stood beside the enemy base
 #[test]
 fn the_strike_attacks_the_building_it_reaches() {
