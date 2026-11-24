@@ -544,6 +544,71 @@ against it all came at the cap on worth, six of them on map 2.
   and its test are reverted. That made three rounds in a row with no clear gain, so AS5 stopped
   on the code of round 2, which cert-2 certified.
 
+### Hard, script AS6
+
+Script AS6 took the siege's hard level further toward 2000 Elo, with the same rules of fair play.
+Sim batch S51 changed depot arrivals after AS5 measured, so AS6 took its own baseline on its base:
+cert-0 put `siege:hard` at 1914.9 (1894.8 order-free), 211-8-21, and dev-0 (AS5's: the five other
+entrants, maps 0, 2 and 8, seeds 7 to 14, 480 games) scored 0.919 (418-16-46, 293 victories), both
+exactly as AS5's last round: S51 did not move them. All 15 of dev-0's losses to `siege:normal` came
+with country 0; dev-0's 46 draws are mostly stalemates at the cap on map 2.
+
+- **The army trains while a new refinery waits for money** (`Tuning::train_while_paying`, hard
+  only). A watch of a dev-0 loss to `siege:normal` (map 0, seed 12, country 0) shows AS5's watch 4
+  again: hard stands with 11 army units from tick 3 750 to 6 750 and both army lines held, its
+  credits at 22 to 792, while its second refinery is paid. The brain pays for a refinery by a new
+  field first (`field_refinery_short`: such a refinery owes more than the money in hand and the
+  house is safe) and holds every other item for it. Normal's army grows to 13 units worth 5 200,
+  strikes, and hard's base falls at 10 592 with 6 220 credits unspent. A person who builds a
+  refinery on credit keeps training soldiers beside it, and lets the refinery wait. So at hard,
+  while the only reason the brain pays for its economy first is a refinery by a new field (the
+  house owns a refinery, has lost none and keeps its economy target), the siege drops the brain's
+  hold orders for army items and resumes the army items it held (S-0404 claims 3 and 5); the
+  refinery is paid beside them. The rule is the siege's own; the brain's, which the default script
+  plays, is unchanged.
+  Development round 1, stopped after two pairs: `siege:normal` 0.771 to 0.750 (country 0 still
+  lost 14), `default:hard` 0.943 to 0.885. Down 7.6 points and 13 victories on dev-0, more than
+  the other three pairs have room to make up, so the lever and its test are reverted: the
+  refinery that waits for the army comes late, and its income with it.
+- **The recall judged on the whole army** (`Tuning::whole`, hard only). Most of dev-0's draws
+  are stalemates at the cap. A watch of one (map 2, seed 10, country 1, against
+  `default:normal`, a draw at 45 500 against 34 600) shows hard spending 60 200 on its army
+  against 33 900. It made five strikes, and each was called home once it was worth less than half
+  the enemy army it remembered (four aircraft among it), while more of its units stood at home.
+  The enemy's harvesters fell to none or one, but its 26 buildings stood, and hard's 30 units
+  waited at home from tick 22 500 to 25 500. A person whose army at home is on its way does not
+  call the strike back. So at hard a strike is called home only while the strike and the free
+  army units at home together are worth less than the recall share of the remembered enemy
+  army; the units at home join it as before (`Tuning::join`).
+  Development round 2, stopped after two pairs: `siege:normal` 0.745 (dev-0 0.771),
+  `default:hard` 0.943 to 0.880 (map 2 from 26-0-6 to 16-0-16), past the limit of 0.06. The
+  lever and its test are reverted: a strike kept out loses the army whose worth wins at the cap.
+- **No more economy while outmatched** (`Tuning::wary`, hard only). All seven of dev-0's losses
+  to `siege:normal` on map 8 come late (ticks 21 210 to 26 731, the enemy worth 39 400 to
+  51 900). A watch of one (seed 7, country 0) shows both houses taking in about 70 000 by tick
+  21 000. Hard put 36 000 of it into its army, 10 000 into factories, 9 800 into harvesters and
+  8 000 into refineries; normal put 50 100 into its army, on two refineries and four harvesters.
+  So hard's more refineries bought no more income there. From tick 13 500, when it remembered an
+  enemy army worth 10 500 against its own 4 700, it still added two factories, and at 18 000 a
+  refinery. A person who sees a larger army than his own puts the money into his army first. So
+  at hard, while the enemy army the house remembers is worth at least the level's floor and more
+  than its own army units, the siege's more refineries and more factories wait. The brain's own
+  plan is unchanged.
+  Development round 3: 0.922 (421-16-43, 292 victories) against dev-0's 0.919 (293). `siege:normal`
+  rose to 0.781 and `default:normal` to 0.917, and `default:hard` played as dev-0. That is no
+  clear gain, so the lever and its test are reverted.
+
+Three development rounds in a row brought no clear gain, so AS6 stopped with the hard level as AS5
+left it: no code of AS6's is kept, and cert-0 (1914.9) stands. What the rounds showed:
+
+- `default:hard` on map 2 is where a change shows first. Both levers that sent more of the army
+  into fights (training through the refinery's wait, keeping a strike out) turned worth wins at
+  the cap there into draws (26-0-6 to 19-2-11 and 16-0-16). Hard wins that pair by keeping its
+  army alive to the cap.
+- The losses to `siege:normal` with country 0 did not move under any lever (14 to 16 of them in
+  every round). On map 8 they come late, against an enemy army that outgrows hard's on the same
+  income; on map 0 they come early, while the base is paid for.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
