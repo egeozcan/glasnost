@@ -125,9 +125,6 @@ pub struct Tuning {
     /// the money in hand counts as rich ([`Siege::economy_stands`]); 0: from
     /// the start.
     pub rich_after: usize,
-    /// Whether the siege's more refineries and more factories wait while
-    /// the house is outmatched ([`Siege::outmatched`]).
-    pub wary: bool,
 }
 
 /// The tuning of level `level`.
@@ -152,7 +149,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
-            wary: false,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -173,7 +169,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
-            wary: false,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -200,8 +195,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             refineries: 4,
             // nocite: design: own AI (#449): the starting money is not income; hard counts as rich only on two refineries with its harvesters standing, as a person builds the second refinery before the second war factory
             rich_after: 2,
-            // nocite: design: own AI (#449): hard adds no refinery and no factory of its own while the enemy army it remembers outweighs its own, as a person under threat puts the money into the army
-            wary: true,
         },
     }
 }
@@ -407,22 +400,6 @@ impl Siege {
         refineries == 0
             || (eyes.harvesters_kept(w)
                 && (eyes.slave_miners(w) || eyes.of_role(w, Role::Refinery).len() >= refineries))
-    }
-
-    /// Whether the house is outmatched (design: own AI, #449): the enemy
-    /// army it remembers ([`Self::remembered`], the shroud-filtered view)
-    /// is worth at least `floor` and more than its own army units on the
-    /// map. A person who sees a larger army than his own puts the money
-    /// into the army before more refineries and factories.
-    fn outmatched(&self, w: &World, floor: i64) -> bool {
-        let enemy = self.remembered();
-        let own: i64 = self
-            .eyes
-            .of_role(w, Role::Army)
-            .into_iter()
-            .map(|id| worth(w, id))
-            .sum();
-        enemy >= floor && enemy > own
     }
 
     /// More factories when rich (design: own AI, #449): with at least
@@ -1002,12 +979,10 @@ impl AiScript for Siege {
         if !t.navy {
             self.no_navy(w, &mut out);
         }
-        // design: own AI (#449): with the level's wary, more refineries and more factories wait while the house is outmatched
-        let wary = t.wary && self.outmatched(w, t.floor);
-        if t.refineries > 0 && !wary {
+        if t.refineries > 0 {
             self.more_refineries(w, t.refineries, &mut out);
         }
-        if t.rich > 0 && !wary && self.economy_stands(w, t.rich_after) {
+        if t.rich > 0 && self.economy_stands(w, t.rich_after) {
             self.more_factories(w, t.rich, &mut out);
         }
         if t.beside {
