@@ -7,11 +7,12 @@
 
 use std::collections::BTreeSet;
 
+use glasnost_ai::scripted::{Role, role_of};
 use glasnost_ai::scripts::{self, AiScript, REGISTRY, Schedule, Seat, View};
 use glasnost_ai::siege::{self, HELD, Siege, plan_for, tuning};
 use glasnost_ai::{fixture, game::Game};
 use glasnost_map::CellXY;
-use glasnost_sim::econ::shroud;
+use glasnost_sim::econ::{shroud, tech};
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind};
 use glasnost_sim::testkit;
@@ -577,6 +578,69 @@ fn hard_builds_more_refineries() {
     let hard = refineries_standing(AiDifficulty::Hard, credits, ticks);
     let normal = refineries_standing(AiDifficulty::Normal, credits, ticks);
     assert!(hard > normal, "hard {hard} refineries, normal {normal}");
+}
+
+/// House 0's refineries and factories on the map after `ticks` of play at
+/// `level` from [`economy_base`] with `credits` in hand and the plan's
+/// harvesters, while a large enemy army stands in its sight; and whether
+/// the siege remembered that army worth more than the level's floor.
+fn economy_while_outmatched(level: AiDifficulty, credits: i32, ticks: i32) -> (usize, usize, bool) {
+    // nocite: test data of our own (the plan's three harvesters standing)
+    let mut w = economy_base(credits, 3);
+    // A large enemy army by the enemy start, in house 0's sight.
+    let enemy = fixture::at(fixture::START_DX, 0);
+    let mut n = 0;
+    // nocite: test data of our own (forty tanks in a block west of the enemy start)
+    for dy in -5..=5 {
+        for dx in -14..=-6 {
+            let c = CellXY::new(enemy.x + dx, enemy.y + dy);
+            if n < 40 && w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c) {
+                testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, c, 0);
+                n += 1;
+            }
+        }
+    }
+    assert_eq!(n, 40, "room for the enemy army");
+    // nocite: test data of our own
+    let near = CellXY::new(enemy.x - 10, enemy.y);
+    // nocite: test data of our own
+    shroud::area_reveal(&mut w, HouseId(0), Pos::centre(near, 0), 12);
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    let mut seen = false;
+    for _ in 0..ticks {
+        play(&mut w, &mut s, level, 1);
+        seen |= s.remembered() >= tuning(AiDifficulty::Hard).floor;
+    }
+    let count = |role: fn(Role) -> bool| {
+        w.objects
+            .values()
+            .filter(|o| {
+                o.owner == Some(HouseId(0))
+                    && o.on_map
+                    && o.kind == Kind::Building
+                    && role_of(&w, tech::type_of(o)).is_some_and(role)
+            })
+            .count()
+    };
+    (
+        count(|r| r == Role::Refinery),
+        count(|r| matches!(r, Role::Factory(_))),
+        seen,
+    )
+}
+
+// design: own AI (#449): at hard, while the enemy army the house remembers is worth the level's floor and more than its own army, the siege orders no more refineries and no more factories, and the money goes to the army lines: with a large enemy army in sight hard stands on no more refineries and factories than normal, which has neither
+#[test]
+fn hard_adds_no_economy_while_outmatched() {
+    // nocite: test data of our own (money for refineries, factories and the army; a few minutes of play)
+    let (credits, ticks) = (20_000, 4500);
+    let (h_ref, h_fac, seen) = economy_while_outmatched(AiDifficulty::Hard, credits, ticks);
+    assert!(seen, "hard remembers the enemy army");
+    let (n_ref, n_fac, _) = economy_while_outmatched(AiDifficulty::Normal, credits, ticks);
+    assert!(
+        h_ref <= n_ref && h_fac <= n_fac,
+        "hard {h_ref} refineries {h_fac} factories, normal {n_ref} and {n_fac}"
+    );
 }
 
 // design: own AI (#449): at hard, the money in hand counts as rich only once the plan's harvesters stand on two refineries: from the yard alone with much money in hand, no factory of a kind the house owns is ordered while it owns fewer than two refineries
