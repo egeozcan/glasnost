@@ -566,6 +566,20 @@ with country 0; dev-0's 46 draws are mostly stalemates at the cap on map 2.
   hold orders for army items and resumes the army items it held (S-0404 claims 3 and 5); the
   refinery is paid beside them. The rule is the siege's own; the brain's, which the default script
   plays, is unchanged.
+  Development round 1, stopped after two pairs: `siege:normal` 0.771 to 0.750 (country 0 still
+  lost 14), `default:hard` 0.943 to 0.885. Down 7.6 points and 13 victories on dev-0, more than
+  the other three pairs have room to make up, so the lever and its test are reverted: the
+  refinery that waits for the army comes late, and its income with it.
+- **The recall judged on the whole army** (`Tuning::whole`, hard only). Most of dev-0's draws
+  are stalemates at the cap. A watch of one (map 2, seed 10, country 1, against
+  `default:normal`, a draw at 45 500 against 34 600) shows hard spending 60 200 on its army
+  against 33 900. It made five strikes, and each was called home once it was worth less than half
+  the enemy army it remembered (four aircraft among it), while more of its units stood at home.
+  The enemy's harvesters fell to none or one, but its 26 buildings stood, and hard's 30 units
+  waited at home from tick 22 500 to 25 500. A person whose army at home is on its way does not
+  call the strike back. So at hard a strike is called home only while the strike and the free
+  army units at home together are worth less than the recall share of the remembered enemy
+  army; the units at home join it as before (`Tuning::join`).
 
 ## The tournament
 
