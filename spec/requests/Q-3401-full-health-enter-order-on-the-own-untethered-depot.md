@@ -1,9 +1,9 @@
 ---
 id: Q-3401
 title: A full-health untethered vehicle given an enter order on the depot it holds contact with
-status: open
+status: answered
 related: [S-0314]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need
