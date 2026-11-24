@@ -544,6 +544,29 @@ against it all came at the cap on worth, six of them on map 2.
   and its test are reverted. That made three rounds in a row with no clear gain, so AS5 stopped
   on the code of round 2, which cert-2 certified.
 
+### Hard, script AS6
+
+Script AS6 took the siege's hard level further toward 2000 Elo, with the same rules of fair play.
+Sim batch S51 changed depot arrivals after AS5 measured, so AS6 took its own baseline on its base:
+cert-0 put `siege:hard` at 1914.9 (1894.8 order-free), 211-8-21, and dev-0 (AS5's: the five other
+entrants, maps 0, 2 and 8, seeds 7 to 14, 480 games) scored 0.919 (418-16-46, 293 victories), both
+exactly as AS5's last round: S51 did not move them. All 15 of dev-0's losses to `siege:normal` came
+with country 0; dev-0's 46 draws are mostly stalemates at the cap on map 2.
+
+- **The army trains while a new refinery waits for money** (`Tuning::train_while_paying`, hard
+  only). A watch of a dev-0 loss to `siege:normal` (map 0, seed 12, country 0) shows AS5's watch 4
+  again: hard stands with 11 army units from tick 3 750 to 6 750 and both army lines held, its
+  credits at 22 to 792, while its second refinery is paid. The brain pays for a refinery by a new
+  field first (`field_refinery_short`: such a refinery owes more than the money in hand and the
+  house is safe) and holds every other item for it. Normal's army grows to 13 units worth 5 200,
+  strikes, and hard's base falls at 10 592 with 6 220 credits unspent. A person who builds a
+  refinery on credit keeps training soldiers beside it, and lets the refinery wait. So at hard,
+  while the only reason the brain pays for its economy first is a refinery by a new field (the
+  house owns a refinery, has lost none and keeps its economy target), the siege drops the brain's
+  hold orders for army items and resumes the army items it held (S-0404 claims 3 and 5); the
+  refinery is paid beside them. The rule is the siege's own; the brain's, which the default script
+  plays, is unchanged.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
