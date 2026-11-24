@@ -727,7 +727,7 @@ fn claim_20_same_depot_enter_while_docked() {
     assert!(run_until(&mut w, 60, |w| w.obj(v).unwrap().beh.current
         != Some(Behaviour::Enter)));
     assert_ne!(w.obj(v).unwrap().beh.current, Some(Behaviour::Sleep));
-    // spec: S-0314 claim 20 (revision 107: released by the order itself, which takes claim 23's full-health case: the order gives no destination and no queued entry, so the order's tick end does not show the contact, whatever the pad flag)
+    // spec: S-0314 claim 20 (r121, Q-3401 answered: a vehicle at full health in contact with the depot, approaching or docked, is released by an enter order on that depot itself, which takes claim 23's full-health case: no destination, no queued entry, enter not current, its current behaviour kept, no move; the order's tick end does not show the contact) and claim 23 (r121: it does not take the path of an enter order on a depot that holds no contact)
     for tethered in [true, false] {
         let (mut w, d, v) = if tethered {
             pad_scene(300)
@@ -735,17 +735,99 @@ fn claim_20_same_depot_enter_while_docked() {
             docked_scene(300)
         };
         w.obj_mut(v).unwrap().health = 600;
-        let dest = w.obj(v).unwrap().dest;
+        let (cur, pos) = (w.obj(v).unwrap().beh.current, w.obj(v).unwrap().pos);
         assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
         tick::step(&mut w);
         assert_eq!(contact(&w, v), None, "full health: contact lost at once");
         let o = w.obj(v).unwrap();
-        // spec: S-0314 claim 20 (third bullet: a docked, so tethered, vehicle gets no destination from the order); the untethered vehicle's destination waits for Q-3401 (since r116 it holds none before the order, claim 17, so the order's own destination shows)
-        if tethered {
-            assert_eq!(o.dest, dest, "full health: the order gives no destination");
-        }
+        assert_eq!(o.dest, None, "tethered {tethered}: no destination");
         assert_eq!(o.depot.queued, None, "full health: no queued entry");
+        assert_ne!(o.beh.queued, Some(Behaviour::Enter), "tethered {tethered}");
+        assert_eq!(o.beh.current, cur, "tethered {tethered}: behaviour kept");
+        assert_eq!(o.pos, pos, "tethered {tethered}: no move");
         assert!(depot::link(&w, v).is_none(), "tethered {tethered}");
+    }
+}
+
+// spec: S-0314 claim 20 (r121, Q-3401 answered: the untethered vehicle at full health given an enter order on its own depot, in sleep while the depot waits, settles or works, gets no destination and no queued entry, the depot holds no contact and the vehicle has not moved in the order's tick; until any later contact it stays where it stood in its current behaviour, with no leaving move, unlike claim 6's own release, and enter never becomes current) and claim 23 (r121)
+#[test]
+fn claim_20_full_health_enter_on_own_untethered_depot_in_every_phase() {
+    for phase in 0..3 {
+        let (mut w, d, v) = docked_scene(300);
+        let dd = d_rep(&w);
+        if phase >= 1 {
+            next_step(&mut w, v, 600).expect("settling step");
+        }
+        if phase == 2 {
+            assert!(run_until(&mut w, dd, |w| w.obj(d).unwrap().beh.progress == 2));
+        }
+        assert!(!docked(&w, v));
+        assert_eq!(contact(&w, v), Some(d), "phase {phase}: in contact");
+        w.obj_mut(v).unwrap().health = 600;
+        let (cur, pos) = (w.obj(v).unwrap().beh.current, w.obj(v).unwrap().pos);
+        assert_ne!(cur, Some(Behaviour::Enter), "phase {phase}: not ignored");
+        assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
+        tick::step(&mut w);
+        let o = w.obj(v).unwrap();
+        assert_eq!(o.dest, None, "phase {phase}: no destination");
+        assert_eq!(o.depot.queued, None, "phase {phase}: no queued entry");
+        assert_ne!(o.beh.queued, Some(Behaviour::Enter), "phase {phase}");
+        assert_eq!(o.beh.current, cur, "phase {phase}: behaviour kept");
+        assert_eq!(o.pos, pos, "phase {phase}: not moved");
+        assert_eq!(contact(&w, v), None, "phase {phase}: contact ended");
+        assert!(depot::link(&w, v).is_none(), "phase {phase}: the depot holds none");
+        for _ in 0..120 {
+            if contact(&w, v).is_some() {
+                break;
+            }
+            let o = w.obj(v).unwrap();
+            assert_ne!(o.beh.current, Some(Behaviour::Enter), "phase {phase}: enter never current");
+            assert_eq!(o.pos, pos, "phase {phase}: no leaving move");
+            assert_eq!(o.dest, None, "phase {phase}: no destination later");
+            tick::step(&mut w);
+        }
+    }
+}
+
+// spec: S-0314 claim 20 (r121: a vehicle that still holds an order-level destination when the order is executed, a hovering vehicle before its settling step, claim 17, loses that destination to the order as at a stop order, and its movement then follows its locomotion's rules for that loss, S-0503 claim 16, not a forced halt; the contact ends, no queued entry, its current behaviour kept)
+#[test]
+fn claim_20_full_health_enter_removes_a_hover_destination_as_a_stop_does() {
+    let scene = || {
+        let (mut w, v) = skimmer_sinking();
+        let d = w.obj(v).unwrap().contact.expect("in contact");
+        assert!(
+            run_until(&mut w, 60, |w| w.obj(v).unwrap().beh.current == Some(Behaviour::Sleep)),
+            "sleep current after the arrival"
+        );
+        assert_eq!(
+            w.obj(v).unwrap().dest,
+            Some(Target::Object(d)),
+            "a hovering vehicle keeps the depot as its destination before its settling step"
+        );
+        w.obj_mut(v).unwrap().health = 600;
+        (w, d, v)
+    };
+    let (mut a, d, v) = scene();
+    let (mut b, _, _) = scene();
+    assert!(orders::issue(&mut a, ALPHA, enter(v, d)));
+    assert!(orders::issue(&mut b, ALPHA, Order::Stop { actor: v }));
+    tick::step(&mut a);
+    tick::step(&mut b);
+    let o = a.obj(v).unwrap();
+    assert_eq!(o.dest, None, "the held destination is removed");
+    assert_eq!(contact(&a, v), None, "contact ended");
+    assert_eq!(o.depot.queued, None);
+    assert_ne!(o.beh.queued, Some(Behaviour::Enter));
+    assert_eq!(o.beh.current, Some(Behaviour::Sleep), "behaviour kept");
+    for t in 0..120 {
+        let (x, y) = (a.obj(v).unwrap(), b.obj(v).unwrap());
+        assert_eq!(
+            (x.pos, x.dest, glasnost_sim::hover::hover_height(&a, v)),
+            (y.pos, y.dest, glasnost_sim::hover::hover_height(&b, v)),
+            "tick {t}: it moves as after a stop order's destination loss"
+        );
+        tick::step(&mut a);
+        tick::step(&mut b);
     }
 }
 
