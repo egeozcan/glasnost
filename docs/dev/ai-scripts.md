@@ -594,6 +594,20 @@ with country 0; dev-0's 46 draws are mostly stalemates at the cap on map 2.
   at hard, while the enemy army the house remembers is worth at least the level's floor and more
   than its own army units, the siege's more refineries and more factories wait. The brain's own
   plan is unchanged.
+  Development round 3: 0.922 (421-16-43, 292 victories) against dev-0's 0.919 (293). `siege:normal`
+  rose to 0.781 and `default:normal` to 0.917, and `default:hard` played as dev-0. That is no
+  clear gain, so the lever and its test are reverted.
+
+Three development rounds in a row brought no clear gain, so AS6 stopped with the hard level as AS5
+left it: no code of AS6's is kept, and cert-0 (1914.9) stands. What the rounds showed:
+
+- `default:hard` on map 2 is where a change shows first. Both levers that sent more of the army
+  into fights (training through the refinery's wait, keeping a strike out) turned worth wins at
+  the cap there into draws (26-0-6 to 19-2-11 and 16-0-16). Hard wins that pair by keeping its
+  army alive to the cap.
+- The losses to `siege:normal` with country 0 did not move under any lever (14 to 16 of them in
+  every round). On map 8 they come late, against an enemy army that outgrows hard's on the same
+  income; on map 0 they come early, while the base is paid for.
 
 ## The tournament
 
