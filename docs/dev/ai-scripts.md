@@ -580,6 +580,20 @@ with country 0; dev-0's 46 draws are mostly stalemates at the cap on map 2.
   call the strike back. So at hard a strike is called home only while the strike and the free
   army units at home together are worth less than the recall share of the remembered enemy
   army; the units at home join it as before (`Tuning::join`).
+  Development round 2, stopped after two pairs: `siege:normal` 0.745 (dev-0 0.771),
+  `default:hard` 0.943 to 0.880 (map 2 from 26-0-6 to 16-0-16), past the limit of 0.06. The
+  lever and its test are reverted: a strike kept out loses the army whose worth wins at the cap.
+- **No more economy while outmatched** (`Tuning::wary`, hard only). All seven of dev-0's losses
+  to `siege:normal` on map 8 come late (ticks 21 210 to 26 731, the enemy worth 39 400 to
+  51 900). A watch of one (seed 7, country 0) shows both houses taking in about 70 000 by tick
+  21 000. Hard put 36 000 of it into its army, 10 000 into factories, 9 800 into harvesters and
+  8 000 into refineries; normal put 50 100 into its army, on two refineries and four harvesters.
+  So hard's more refineries bought no more income there. From tick 13 500, when it remembered an
+  enemy army worth 10 500 against its own 4 700, it still added two factories, and at 18 000 a
+  refinery. A person who sees a larger army than his own puts the money into his army first. So
+  at hard, while the enemy army the house remembers is worth at least the level's floor and more
+  than its own army units, the siege's more refineries and more factories wait. The brain's own
+  plan is unchanged.
 
 ## The tournament
 
