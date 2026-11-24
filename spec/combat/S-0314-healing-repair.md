@@ -2,13 +2,13 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 116
+revision: 121
 sources-class: [decomp, measurement, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-23
+approved-on: 2026-11-24
 measurements: [M-0007]
-requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162, Q-1610, Q-1876, Q-3113, Q-3389]
+requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162, Q-1610, Q-1876, Q-3113, Q-3389, Q-3401]
 supersedes: []
 ---
 
@@ -1226,24 +1226,39 @@ only the vehicle in that place.
       *enter* falls back to rest at its next processing. So, for a vehicle standing on the depot,
       the contact is lost in the first turn in which the order's *enter* is current, not in a later
       one (Q-1158). A docked vehicle not standing on the depot is not refused by claim 16, so its
-      retry is decided by claim 23's permission instead.
-      Unless the order is ignored under the first bullet, a docked vehicle at full health given
-      this *enter* order is released by the order itself,
-      not in a later turn: the order takes claim 23's full-health case, which gives it no
-      destination and no queued
-      entry. This claim adds that the order ends its contact when it is executed. So the tick
-      end of the order's tick does not show that contact, whatever the depot's pad flag. This
-      release is not claim 16's full-health refusal at a repeated entry request, which a
-      tethered vehicle survives (claim 16). Whether the vehicle takes contact with the depot
-      again afterwards is open (Open questions).
+      retry is decided by claim 23's permission instead. A docked vehicle at full health takes
+      the next bullet.
       Otherwise the order runs normally, and claim 21 decides what the depot then does.
-    - Backing: `measurable` (H18 a, including its full-health repeat for the release at the
-      order; H19 c for untethered repair-phase interruption).
-    - Confidence: high (approaching release, ignored repeat), medium (docked retention under
-      each order kind; that the processing of the own-depot *enter* queues nothing and the
-      contact is lost in the same turn; that a docked vehicle at full health loses its contact
-      when the order is executed), low (the full tick-by-tick sequence of a same-depot
-      enter order while docked, composed from separately established steps)
+    - Unless the order is ignored under the first bullet, a vehicle at full health that holds
+      contact with the depot, approaching or docked, and is given an enter order on that same depot
+      is released by the order itself, not in a later turn. The order takes claim 23's full-health
+      case: it gives the vehicle no destination and no queued entry, *enter* does not become
+      current, and the vehicle keeps its current behaviour and does not move because of the order.
+      The order ends the contact when it is executed, so the tick end of the order's tick does not
+      show that contact. In our engine a vehicle that still holds an order-level destination when
+      the order is executed (a hovering vehicle or ship before its settling step, claim 17) loses
+      that destination to the order as at a stop order, and its movement then follows its
+      locomotion's rules for that loss (for a hovering vehicle S-0503 claim 16, which is not a
+      forced halt); the original's handling of that case is open (Open questions). Unlike the
+      depot's own release of a vehicle at full health (claim 6), this release gives no leaving
+      move. For an approaching vehicle this replaces the second bullet's path, in which the order
+      would then run on a depot that holds no contact (claim 23's last paragraph) and give the
+      depot as destination. This release is not claim 16's full-health refusal at a repeated entry
+      request, which a tethered vehicle survives (claim 16). Whether a docked vehicle takes contact
+      with the depot again afterwards is open (Open questions).
+    - Backing: `measurable` (H18 a, including its two full-health repeats for the release at
+      the order; H19 c for untethered repair-phase interruption). The removal of a destination
+      still held at a full-health order on the own depot is `unmeasured`: it is our engine's
+      design rule, and H18 a's hovering run only records the original's case without judging it.
+    - Confidence: high (approaching release, ignored repeat), medium (docked retention under each
+      order kind; that the processing of the own-depot *enter* queues nothing and the contact is
+      lost in the same turn; that a vehicle at full health given an enter order on its own depot
+      loses its contact when the order is executed, with no destination, no queued entry and no
+      leaving move, for a vehicle that holds no order-level destination at the order; the
+      no-leaving-move part is judged by H18 a's untethered repeat only, and for a tethered vehicle
+      rests on claim 23's full-health case), low (that the order removes an order-level
+      destination the vehicle still holds, our engine's rule; the full tick-by-tick sequence of a same-depot enter order while
+      docked, composed from separately established steps)
 
 21. **Moving away while docked.** The depot's checks of claim 6 continue for a docked vehicle
     wherever it goes:
@@ -1774,7 +1789,8 @@ only the vehicle in that place.
     vehicle enters by itself at the first eligible retry after the first leaves. The sequential case of claim 17 differs:
     a click made while the place is held gives no enter order at all. With an enter order on a
     depot that holds no contact, the vehicle asks for entry at once. If it is refused, it takes
-    no contact and does not queue.
+    no contact and does not queue. A vehicle at full health given an enter order on the depot it
+    holds contact with does not take this path: claim 20 releases it with no destination.
     - Backing: `measurable` (H18 f; H22 for local turn ordering, same-tick acquisition and
       next-turn processing and the state/parasite/passenger distinctions). The inactive-reference
       case is `unmeasured`: a stock-only setup distinguishing that check has not been established.
@@ -1971,10 +1987,10 @@ Backing and confidence are claim 15's.
 | working | step reports *more needed* | stays |
 | working | step reports *done* or *not needed* | settling; sent away if a destination is available; otherwise contact held in settling with a 1-tick retry (claims 6 and 25); announcement as claim 6 says |
 | working | step reports *cannot pay* | contact retained; settling retry next tick, then unsuccessful retries every *D* ticks; low-funds announcement as claim 6 says |
-| approaching vehicle | any order other than a repeated enter on this depot | contact released at once; queued entry cleared (claim 20) |
+| approaching vehicle | any order other than a repeated enter on this depot (at full health, an enter order on this depot takes the full-health row below) | contact released at once; queued entry cleared (claim 20) |
 | docked vehicle | any order other than an enter order on this depot, unless it gains contact elsewhere | contact and tether kept; the phase continues (claims 20 and 21) |
 | docked vehicle standing on the depot, damaged | enter order on this depot, unless ignored under claim 20's first bullet | queued entry, no destination; *enter* current and processed in the vehicle's next turn, and contact lost in that turn (claim 20) |
-| docked vehicle at full health | enter order on this depot, unless ignored under claim 20's first bullet | no destination, no queued entry; contact ended when the order is executed, so the order's tick end does not show it (claim 20; a later new contact is open) |
+| vehicle in contact at full health, approaching or docked | enter order on this depot, unless ignored under claim 20's first bullet | no destination (one held at the order is removed), no queued entry, no leaving move; current behaviour kept; contact ended when the order is executed, so the order's tick end does not show it (claim 20; for a docked vehicle a later new contact is open) |
 | settling, vehicle within 200 leptons, not settled or, hovering, not down | processing | no step; standing still, it becomes settled; recheck next tick (claims 6 and 21) |
 | settling, vehicle at least 200 leptons away and moving | processing | no step, settling and contact retained; it stops being settled, if it was; recheck after *D* ticks (claim 21) |
 | settling, no departure destination available | departure attempted | no departure, settling and contact retained; recheck after *D* ticks (claims 6 and 25) |
@@ -2176,10 +2192,11 @@ define the test types named. Use game speed index 2 and 800 × 600 resolution; r
 three times unless it gives another count. One bystander computer player starts in an isolated
 area farthest from the test objects. The observed area contains all named test objects; apply
 its glossary void rule. There is no combat in that area except a hit a part explicitly requests.
-Disable both kinds of self-healing except where a part tests them, and use a positive automatic
-repair-and-sell threshold except in H9. Record exact health, credit balance and tick numbers
-with a read-only recorder; use scripted input for exact-tick orders where needed. Record sounds
-and announcements separately. No timing here is speed-normalised.
+Disable both kinds of self-healing except where a part tests them or uses them to raise
+health, and use a positive automatic repair-and-sell threshold except in H9. Record exact
+health, credit balance and tick numbers with a read-only recorder; use scripted input for
+exact-tick orders where needed. Record sounds and announcements separately. No timing here is
+speed-normalised.
 
 **H1: healer kinds and amount (claim 1).** *Part a (kinds):* a healer infantry type whose warhead has 100 % against an
 infantry armour class and 0 % against a vehicle armour class, and a damaged infantry unit and a
@@ -3039,13 +3056,35 @@ damaged to half strength unless a part says otherwise.
   current in the tick the contact ends; no destination; the depot queues no new *repair* and
   the vehicle no new *sleep* between the order and the end of contact. *Falsified if:* either is
   queued again, a destination appears, or the contact outlives the first tick with *enter*
-  current. Repeat at full health: dock a damaged vehicle at a depot with the pad flag, raise
-  its health to full by scripted input before the depot's next step, and give the order in
-  that tick. Judge this repeat only when the order is not ignored under claim 20's first bullet.
+  current. Repeat at full health: dock a damaged vehicle at a depot with the pad flag, let a
+  rule other than the depot's raise its health to full before the depot's next step (an own
+  healer of claim 1, or self-healing of claim 9 on a test type), and give the order through
+  scripted input at the first order opportunity after the row that first shows full health.
+  Record the depot's processing ticks. The order is applied after every object's turn of the
+  tick it is issued in, so void a run in which that row no longer shows the contact, or in which
+  the depot has a processing in the tick the order is applied in: that processing may already
+  have sent the vehicle away (claim 6). Judge this repeat only when the order is not ignored
+  under claim 20's first bullet.
   Expected: no contact at the end of the order's tick, no destination and no queued entry
   (claim 20). *Falsified if:* the contact is shown at that tick end. Go on recording contact,
   tether, place, current behaviour and position every tick for 120 ticks after the order,
-  without judging them: whether the vehicle takes contact again is open (claim 20).
+  without judging them: whether the vehicle takes contact again is open (claim 20). Repeat at
+  full health untethered: at a stock depot without the pad flag let a damaged tracked vehicle
+  arrive, raise its health to full in the same way, and give the order at the first order
+  opportunity after the row that first shows full health, with the same void rule and the same
+  judge-only condition. Read the depot's phase in that row from the recorded processing and step
+  ticks, and repeat until judged runs fall in waiting, in settling and in the gap before the first
+  working processing, which comes *D* ticks after the step that starts working (claim 6). From that
+  processing on the depot processes every tick, so a later working run is voided and only recorded.
+  Expected: in the row of the order's tick the vehicle has no order-level destination and no queued
+  entry, the depot holds no contact and the vehicle has not moved; until any later contact it then
+  stays where it stood in its current behaviour, with no leaving move, and *enter* does not become
+  current (claim 20). *Falsified if:* that row shows a destination, a queued entry or the contact,
+  or, before any later contact, *enter* becomes current or the vehicle moves while it has no
+  target. Record contact, target and position every tick for 120 ticks after the order, without
+  judging a later contact, and void a run in which another object pushes the vehicle. A run with a
+  stock hovering vehicle that still holds the depot as its destination at the order records its
+  destination and position in the same way, without judging them (Open questions).
 - *b, moving away:* order a docked vehicle 6 cells away during working and let it stand still.
   Expected: health keeps rising by steps, credits fall, and at full health the vehicle is sent to
   the rally point or exit cell, not left at the ordered cell. Repeat during waiting: no step while
@@ -3449,6 +3488,10 @@ The measurement scenario requires a read-only record of the ordered events; end-
 - (Claim 20.) After an enter order on its own depot releases a docked vehicle at full health,
   whether that vehicle's later processings take contact with the depot again, and if so how
   that contact ends. H18 a's full-health repeat records it without judging it.
+- (Claim 20.) Whether the original's enter order on its own depot removes the order-level
+  destination of a vehicle at full health that still holds one at the order, such as a hovering
+  vehicle or ship before its settling step, and how it then moves. Our engine removes it as at a
+  stop order. H18 a's hovering run records it without judging it.
 - Which additional vehicle-state condition makes the original's non-human-owner branch return
   a depot from a paid settling step to waiting without starting work (claim 6), and what
   subsequent vehicle orders result? Only neutral and special houses retain this branch in our
