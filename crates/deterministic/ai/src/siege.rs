@@ -125,6 +125,10 @@ pub struct Tuning {
     /// the money in hand counts as rich ([`Siege::economy_stands`]); 0: from
     /// the start.
     pub rich_after: usize,
+    /// Whether the recall ([`Tuning::recall`]) is judged on the whole free
+    /// army, the strike and the units at home together; without, on the
+    /// strike alone.
+    pub whole: bool,
 }
 
 /// The tuning of level `level`.
@@ -149,6 +153,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
+            whole: false,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -169,6 +174,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
+            whole: false,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -195,6 +201,8 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             refineries: 4,
             // nocite: design: own AI (#449): the starting money is not income; hard counts as rich only on two refineries with its harvesters standing, as a person builds the second refinery before the second war factory
             rich_after: 2,
+            // nocite: design: own AI (#449): hard calls a strike home only while it and the army at home together are outmatched, as a person whose army at home is on its way does not call the strike back
+            whole: true,
         },
     }
 }
@@ -627,8 +635,14 @@ impl Siege {
         let enemies = eyes.seen_enemies(w);
         let enemy_worth = self.army.remember(w, eyes.house, &enemies);
         let out_worth: i64 = self.army.out.iter().map(|&id| worth(w, id)).sum();
+        // design: own AI (#449): with the level's whole, the recall weighs the strike and the free army units at home together
+        let judged = if t.whole {
+            army.iter().map(|&id| worth(w, id)).sum()
+        } else {
+            out_worth
+        };
         // nocite: design: own AI (#449): the level's recall is a percent of the remembered enemy army's worth
-        if self.army.striking && t.recall > 0 && out_worth * 100 < t.recall * enemy_worth {
+        if self.army.striking && t.recall > 0 && judged * 100 < t.recall * enemy_worth {
             // The strike is outmatched: it comes home to fight beside the
             // base and the new units, and the army gathers again.
             for &id in &self.army.out {
