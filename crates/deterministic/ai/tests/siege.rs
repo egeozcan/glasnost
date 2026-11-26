@@ -275,22 +275,7 @@ fn soldiers(w: &mut World, n: usize) -> Vec<ObjectId> {
     out
 }
 
-/// `w` with a defence tower of house 1 beside its yard.
-fn defended(mut w: World) -> World {
-    let at = w.obj(yard(&w, 1).unwrap()).unwrap().pos.cell();
-    // nocite: test data of our own (a free cell west of house 1's yard)
-    testkit::spawn(
-        &mut w,
-        Kind::Building,
-        "TOWER",
-        1,
-        CellXY::new(at.x - 3, at.y),
-        0,
-    );
-    w
-}
-
-// design: own AI (#449): at hard a new strike also needs its units worth the level's floor: past the count, with no enemy army remembered and the enemy base defended, cheap soldiers wait at home, and go once tanks join them
+// design: own AI (#449): at hard a new strike also needs its units worth the level's floor: past the count, with no enemy army remembered, cheap soldiers wait at home, and go once tanks join them
 #[test]
 fn a_strike_below_the_floor_waits_at_hard() {
     let level = AiDifficulty::Hard;
@@ -298,7 +283,7 @@ fn a_strike_below_the_floor_waits_at_hard() {
     assert!(t.floor > 0);
     assert_eq!(tuning(AiDifficulty::Easy).floor, 0);
     assert_eq!(tuning(AiDifficulty::Normal).floor, 0);
-    let mut w = defended(base_up());
+    let mut w = base_up();
     let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
     // The count and room for the brain's own parts, worth less than the floor.
     let few = soldiers(&mut w, t.strike + 3);
@@ -319,51 +304,6 @@ fn a_strike_below_the_floor_waits_at_hard() {
     let got = play(&mut w, &mut s, level, 600);
     assert_eq!(s.strikes(), 1);
     assert!(!attack_moved(&got, &all).is_empty(), "the strike goes");
-}
-
-// design: own AI (#449): at hard, while no strike is out and no enemy building is seen, one idle unit at home goes to look at the enemy base with a plain move; once the house has seen the base with no armed building, the floor no longer holds the strike, and the cheap soldiers go
-#[test]
-fn hard_looks_at_the_enemy_base_and_strikes_an_open_one() {
-    let level = AiDifficulty::Hard;
-    let t = tuning(level);
-    let mut w = base_up();
-    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
-    // The count and room for the brain's own parts, worth less than the floor.
-    let few = soldiers(&mut w, t.strike + 3);
-    let worth: i64 = few.iter().map(|&id| siege::worth(&w, id)).sum();
-    assert!(worth < t.floor, "{worth} under the floor");
-    // nocite: test data of our own (time to walk there, look and come back)
-    let got = play(&mut w, &mut s, level, 4000);
-    let enemy = fixture::at(fixture::START_DX, 0);
-    let first_strike = got
-        .iter()
-        .find(|(_, o)| matches!(o, Order::Behaviour { actor, attack_move: true, .. } if few.contains(actor)))
-        .map(|&(tick, _)| tick);
-    let looks: Vec<(i32, ObjectId)> = got
-        .iter()
-        .filter_map(|(tick, o)| match o {
-            Order::Behaviour {
-                actor,
-                behaviour: Behaviour::Move,
-                attack_move: false,
-                dest: Some(Target::Cell(c)),
-                ..
-            } if few.contains(actor) && (c.x - enemy.x).abs() <= 12 => Some((*tick, *actor)),
-            _ => None,
-        })
-        .collect();
-    let (look_at, _) = *looks.first().expect("a unit goes to look at the enemy base");
-    let lookers: BTreeSet<ObjectId> = looks
-        .iter()
-        .filter(|&&(tick, _)| tick == look_at)
-        .map(|&(_, id)| id)
-        .collect();
-    assert_eq!(lookers.len(), 1, "one unit looks: {lookers:?}");
-    assert!(s.strikes() >= 1, "the strike goes on the open base");
-    assert!(
-        first_strike.is_some_and(|tick| tick > look_at),
-        "the strike goes after the look"
-    );
 }
 
 // design: own AI (#449): at hard a strike worth less than the level's share of the enemy army the house has seen is called home with plain move orders, and the army gathers again
