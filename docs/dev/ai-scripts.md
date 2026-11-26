@@ -609,6 +609,29 @@ left it: no code of AS6's is kept, and cert-0 (1914.9) stands. What the rounds s
   every round). On map 8 they come late, against an enemy army that outgrows hard's on the same
   income; on map 0 they come early, while the base is paid for.
 
+### Hard, script AS7
+
+Script AS7 took the siege's hard level further toward 2000 Elo, with the same rules of fair play
+and AS6's measurement. On its base (b289f95) cert-0 put `siege:hard` at 1914.9 (1894.8
+order-free), 211-8-21, and dev-0 scored 0.919 (418-16-46, 293 victories), both exactly as AS6's.
+AS6's levers had changed how hard spends; AS7 looks at what hard knows when it decides to strike.
+
+- **A look at the enemy base** (`Tuning::scout`, hard only). Two watches of dev-0 losses to
+  `siege:normal` with country 0 show hard striking blind. On map 0 (seed 7) hard stands with 11
+  soldiers worth 2 800 from tick 3 750, while normal's base holds 0 to 3 army units and no
+  defence until 5 250. Hard remembers no enemy army, so the floor (5 000) keeps the soldiers home,
+  and they die there at 8 250 when normal's 12 units arrive. On map 8 (seed 7) hard remembers an
+  enemy army worth 1 000 at tick 9 000 when normal has 20 units worth 8 000 at home. Its one
+  strike, 24 units worth 9 200, goes into them and is lost. A person sends a fast unit to look at
+  the enemy base while his army builds up. So at hard, while no strike is out and the house has
+  seen no enemy building for the level's `scout` ticks, the fastest idle army unit at home beyond
+  the guard goes to look (a plain move to the strike's goal), and is called home once the house
+  sees an enemy building, or when it stands idle. The enemy army it sees is remembered as any
+  other. While the house's last look at an enemy base, within the memory's time, showed no armed
+  enemy building, the floor does not hold a new strike: the edge alone decides, against the enemy
+  army the house remembers. The brain's own scout, which explores the house's side of the map, is
+  unchanged.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
