@@ -71,7 +71,7 @@ fn short_loop(w: &mut World) -> (ObjectId, Vec<u32>) {
     (b1, ps)
 }
 
-fn lp(w: &World, id: ObjectId) -> (Option<usize>, Option<usize>) {
+fn lp(w: &World, id: ObjectId) -> (Option<u32>, Option<u32>) {
     let r = &w.routes.routes[&id];
     (r.loop_from, r.loop_len)
 }

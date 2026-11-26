@@ -132,6 +132,19 @@ pub struct Shroud {
     pub houses: Vec<Option<HouseShroud>>,
 }
 
+impl Shroud {
+    /// Whether every present house shroud table matches `cells + 1` (dense
+    /// cells plus the shared off-map entry) and `houses` does not exceed the
+    /// world's house list.
+    pub fn is_consistent(&self, houses: usize, cells: usize) -> bool {
+        let expected = cells + 1;
+        self.houses.len() <= houses
+            && self.houses.iter().flatten().all(|hs| {
+                hs.k.len() == expected && hs.g.len() == expected && hs.marks.len() == expected
+            })
+    }
+}
+
 /// A sight an object holds (S-0409 Terms, *a sight*): the houses it counts
 /// for and the cells it covers, recorded when it was applied.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

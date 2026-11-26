@@ -34,7 +34,7 @@ pub struct Track {
     /// the track began (S-0207 claim 24).
     pub height: i32,
     /// Index of the next point to pass.
-    pub next: usize,
+    pub next: u32,
     /// The last point passed (for `quirks.drive_subpoint_compounding` off).
     pub last: (i32, i32),
     /// The cells of the step or steps (first, and second for a curve).
@@ -52,6 +52,11 @@ pub struct Track {
 }
 
 impl Track {
+    /// Whether `next` lies within this track's points.
+    pub(crate) fn is_consistent(&self) -> bool {
+        (self.next as usize) <= self.points().len()
+    }
+
     /// The points before the target, in driven order.
     fn points(&self) -> Vec<Point> {
         if let Some(b) = self.bunker {
@@ -1764,7 +1769,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
         return false;
     };
     let pts = tr.points();
-    let remaining = pts.len() - tr.next + 1; // the target included
+    let tr_next = tr.next as usize;
+    let remaining = pts.len() - tr_next + 1; // the target included
     let mut a = budget;
     // spec: S-0207 claim 3 (k = 0 when A ≤ 7, else the largest k with A − 7k ≥ 1, at most the points left)
     let k = if a <= 7 {
@@ -1773,7 +1779,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
         (((a - 1) / 7) as usize).min(remaining)
     };
     a -= 7 * k as i32; // spec: S-0207 claim 3 (7 of the budget per point)
-    let mut next = tr.next + k;
+    let mut next = tr_next + k;
     let mut last = tr.last;
     if k > 0 && between_steps && pos.cell() != tr.target_cell {
         // spec: S-0209 claim 1 (passing the first point of a track while between steps clears the flag of the cell it is leaving; a bunker track that ends in the cell it starts in leaves none, S-0606 tables T1 and T2)
@@ -1784,7 +1790,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
         }
     }
     if let Some(rp) = tr.e.and_then(|e| tracks::release_point(tr.d, e))
-        && tr.next <= rp
+        && tr_next <= rp
         && next > rp
         && let Some(&c) = tr.cells.first()
     {
@@ -1870,7 +1876,7 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
     if let Some(d2) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
         d2.budget = a;
         if let Some(t2) = d2.track.as_mut() {
-            t2.next = next;
+            t2.next = next as u32;
             t2.last = last;
         }
     }

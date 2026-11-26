@@ -328,13 +328,13 @@ fn facing_and_position_follow_curve_points() {
     let mut checked = 0;
     while let Some(t) = sn.track.clone() {
         if t.next > 0 {
-            let p = pts[t.next - 1];
+            let p = pts[t.next as usize - 1];
             assert_eq!(sn.facing, u16::from(p.2) * 256, "point {}", t.next - 1);
             checked += 1;
         } else {
             assert_eq!(sn.facing, 0, "no point passed yet");
         }
-        if t.next == pts.len() {
+        if t.next as usize == pts.len() {
             let p = pts[pts.len() - 1];
             assert_eq!((sn.pos.0, sn.pos.1), (t.target.0 + p.0, t.target.1 + p.1));
             at_last_point += 1;
@@ -361,7 +361,7 @@ fn height_follows_surface_at_points() {
     let mut on_last = 0;
     while let Some(t) = sn.track.clone() {
         let (pts, _) = tracks::track(t.d, t.e);
-        if t.next == pts.len() {
+        if t.next as usize == pts.len() {
             let p = pts[pts.len() - 1];
             let (x, y) = (t.target.0 + p.0, t.target.1 + p.1);
             assert_eq!((sn.pos.0, sn.pos.1), (x, y));

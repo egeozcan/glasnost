@@ -322,6 +322,14 @@ impl Game {
             )));
         }
         let world = save::load(&s.world, rules, catalogue)?;
+        for seat in &s.seats {
+            if usize::from(seat.house().0) >= world.houses.len() {
+                return Err(SaveError::Format(format!(
+                    "AI seat has house {} the game lacks",
+                    seat.house().0
+                )));
+            }
+        }
         Ok(Self {
             world,
             seats: s.seats,
@@ -407,5 +415,35 @@ mod tests {
         assert!(old == new, "the save's bytes changed");
         let back = Game::load(&new, fixture::rules(), fixture::catalogue()).expect("it loads");
         assert_eq!(back.state_hash(), g.state_hash());
+    }
+
+    #[test]
+    fn load_rejects_ai_seat_with_invalid_house() {
+        let g = Game::new(
+            fixture::rules(),
+            &fixture::map(),
+            "synthetic-skirmish",
+            fixture::catalogue(),
+            fixture::setup(5),
+        )
+        .expect("the synthetic skirmish loads");
+        let bad_house = HouseId(g.world.houses.len() as u8);
+        let bad_seat = Seat::start(
+            glasnost_sim::world::AiSeat::default(),
+            &g.world,
+            &fixture::map(),
+            bad_house,
+        );
+        let bad_bytes = postcard::to_allocvec(&OldRef {
+            version: GAME_FORMAT_VERSION,
+            world: save::save(&g.world),
+            seats: &[bad_seat],
+            replay: &g.replay,
+        })
+        .expect("the game serializes");
+        assert!(matches!(
+            Game::load(&bad_bytes, fixture::rules(), fixture::catalogue()),
+            Err(SaveError::Format(_))
+        ));
     }
 }
