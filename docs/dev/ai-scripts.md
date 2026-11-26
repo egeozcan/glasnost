@@ -663,6 +663,23 @@ AS6's levers had changed how hard spends; AS7 looks at what hard knows when it d
   guard, once there are as many as the level's join, count with it against the recall: while
   together they are worth the recall's share of the remembered enemy army, the strike is not
   called home, and they go out to join it as before.
+  Development round 3, stopped after three pairs: `siege:normal` 0.771 to 0.776 (40 victories
+  against 38), `default:hard` 0.943 and `default:normal` 0.906 as dev-0, one victory fewer and as
+  many. One more victory in all; with 5 non-wins left in the two easy pairs, a clear gain could no
+  longer be reached. The lever and its test are reverted.
+
+Three development rounds in a row brought no clear gain, so AS7 stopped with the hard level as AS5
+left it: no code of AS7's is kept, and cert-0 (1914.9) stands. What the rounds showed:
+
+- `default:hard` on map 2 still guards the score. The look at the enemy base sent cheap strikes
+  out and turned its wins into draws (0.870); calling the stragglers home cost it 0.026; feeding
+  an outmatched strike left it as it was.
+- The losses to `siege:normal` with country 0 (15 to 18 in every round) are not about what hard
+  knows of the enemy or about stragglers: hard's army trails normal's while its economy leads,
+  and every lever that changed how the army fights left them in place.
+- What is left between the strike's rules and 2000 is how much army hard's lead in income buys:
+  from tick 15 000 in the watches its money goes into buildings while its army stays level with
+  the enemy's.
 
 ## The tournament
 
