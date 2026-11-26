@@ -96,10 +96,6 @@ pub struct Tuning {
     /// A strike worth less than this many percent of the remembered enemy
     /// army is called home; 0: never.
     pub recall: i64,
-    /// Whether the units waiting at home to join an out strike (at least
-    /// [`Tuning::join`] beyond the guard) count with it against the recall,
-    /// so that a strike they would feed is not called home.
-    pub feed: bool,
     /// Whether the strike goes for the enemy's economy first: the seen
     /// enemy harvester or refinery nearest home before other buildings.
     pub economy: bool,
@@ -145,7 +141,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             hunts: false,
             edge: 0,
             recall: 0,
-            feed: false,
             economy: false,
             patience: 0,
             rich: 0,
@@ -166,7 +161,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             hunts: false,
             edge: 0,
             recall: 0,
-            feed: false,
             economy: false,
             patience: 0,
             rich: 0,
@@ -187,8 +181,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             hunts: true,
             edge: 120,
             recall: 50,
-            // nocite: design: own AI (#449): hard sends the new units after a strike that thins rather than call it home while they would bring it back to the recall's share, as a person feeds a winning attack
-            feed: true,
             economy: true,
             patience: 3000,
             // nocite: design: own AI (#449): three thousand credits in hand, money the two army lines leave unspent only while the income outruns them
@@ -635,30 +627,8 @@ impl Siege {
         let enemies = eyes.seen_enemies(w);
         let enemy_worth = self.army.remember(w, eyes.house, &enemies);
         let out_worth: i64 = self.army.out.iter().map(|&id| worth(w, id)).sum();
-        // Idle units at home, nearest home first: the guard is the first.
-        let mut waiting: Vec<(i64, ObjectId)> = army
-            .iter()
-            .copied()
-            .filter(|id| !self.army.out.contains(id) && idle(w, *id) && !busy.contains(id))
-            .filter_map(|id| w.obj(id).map(|o| (dist2(o.pos.cell(), home), id)))
-            .collect();
-        waiting.sort_unstable();
-        let guard = t.guard.min(waiting.len());
-        // The edge is judged on the units that would go, so that a strike
-        // that goes is not outmatched (and called home) at once.
-        let goers_worth: i64 = waiting
-            .iter()
-            .skip(guard)
-            .map(|&(_, id)| worth(w, id))
-            .sum();
-        let joins = waiting.len() > guard && waiting.len() - guard >= t.join;
-        // design: own AI (#449): the units that join the strike this think count with it against the recall (`Tuning::feed`)
-        let fed = if t.feed && joins { goers_worth } else { 0 };
         // nocite: design: own AI (#449): the level's recall is a percent of the remembered enemy army's worth
-        if self.army.striking
-            && t.recall > 0
-            && (out_worth + fed) * 100 < t.recall * enemy_worth
-        {
+        if self.army.striking && t.recall > 0 && out_worth * 100 < t.recall * enemy_worth {
             // The strike is outmatched: it comes home to fight beside the
             // base and the new units, and the army gathers again.
             for &id in &self.army.out {
@@ -678,6 +648,22 @@ impl Siege {
             self.army.ended = w.tick;
             return;
         }
+        // Idle units at home, nearest home first: the guard is the first.
+        let mut waiting: Vec<(i64, ObjectId)> = army
+            .iter()
+            .copied()
+            .filter(|id| !self.army.out.contains(id) && idle(w, *id) && !busy.contains(id))
+            .filter_map(|id| w.obj(id).map(|o| (dist2(o.pos.cell(), home), id)))
+            .collect();
+        waiting.sort_unstable();
+        let guard = t.guard.min(waiting.len());
+        // The edge is judged on the units that would go, so that a strike
+        // that goes is not outmatched (and called home) at once.
+        let goers_worth: i64 = waiting
+            .iter()
+            .skip(guard)
+            .map(|&(_, id)| worth(w, id))
+            .sum();
         let waited = t.patience > 0 && w.tick - self.army.ended >= t.patience;
         // nocite: design: own AI (#449): after the level's patience, goers worth 80 percent of the remembered enemy army are edge enough (with the guard and the base's defence behind them)
         let want = if waited { t.edge.min(80) } else { t.edge };
@@ -687,7 +673,7 @@ impl Siege {
         let edge = edge && goers_worth >= t.floor;
         let free_n = army.len().saturating_sub(self.army.out.len());
         let goes = if self.army.striking {
-            joins
+            waiting.len() > guard && waiting.len() - guard >= t.join
         } else {
             waiting.len() >= t.strike && free_n >= t.strike && edge
         };
