@@ -631,6 +631,23 @@ AS6's levers had changed how hard spends; AS7 looks at what hard knows when it d
   enemy building, the floor does not hold a new strike: the edge alone decides, against the enemy
   army the house remembers. The brain's own scout, which explores the house's side of the map, is
   unchanged.
+  Development round 1, stopped after two pairs: `siege:normal` 0.771 as dev-0 (map 0 worse, 8 to 13
+  losses, maps 2 and 8 better), `default:hard` 0.943 to 0.870 (draws 11 to 21 on maps 2 and 8),
+  past the limit of 0.06. The lever and its test are reverted: strikes of cheap soldiers on a
+  base seen open lose the army that wins `default:hard` at the cap.
+- **The recalled come home** (`Army::homing`, hard only). A watch of a dev-0 draw against
+  `default:hard` (map 2, seed 10, country 0, 52 200 against 39 200 at the cap) shows hard with 32 to
+  45 army units (10 800 to 16 200) from tick 21 000 to the cap against an enemy army remembered at
+  800 to 7 000, and no strike after its second recall. A local count of the army's think (not
+  kept in the code) shows why: of those units only 5 to 18 wait at home; 20 to 40 stand more than
+  30 cells from home, most of them fighting or moving, and the brain gives them no order. The
+  recall sends the strike home with plain moves and drops it from the strike; units fired on on
+  the way stop to fight, and from then on neither the strike nor the gathering at home counts
+  them. A person who calls his army home clicks the stragglers home again. So at hard the units a
+  recall calls home are kept as homing; at each think, one that is neither idle nor within the
+  recall's reach of home (the brain's 30 cells) and not under a move home is ordered home again
+  (unless the brain ordered it this think). It leaves the homing ones once idle or near home, and
+  then waits for the next strike as any other.
 
 ## The tournament
 
