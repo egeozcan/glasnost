@@ -2618,3 +2618,39 @@ Lanes compare base 8b43df9 with 03c9a8f.
 Seams left: Q-3401 is open. A vehicle factory that is also a repair depot reads `o.dest` in `econ::release::arrival` after the arrival; no synthetic or stock case of ours reaches it.
 
 The P3 census rule: the batch adds and removes no saved field, so it makes or moves no back-reference of `World::census`.
+
+## Batch S52: a full-health enter order on the own depot (S-0314 r121, the answer to Q-3401)
+
+Base b289f95, not rebased. S-0314 r121 answers Q-3401: a vehicle at full health that holds contact with a depot, approaching or docked, given an enter order on that same depot is released by the order itself, with no destination, no queued entry, no move and its current behaviour kept; a destination it still holds is removed as at a stop order.
+
+The work went in this order:
+1. Design (5ee4ea4), tests (93e5676), design correction (1812353).
+2. Fix (46ea0a3).
+3. Formats (3644359).
+
+The fix commit changes no test. The red was shown in a separate base worktree checked out at 93e5676 (`red.txt`): 77 of `claims_s0314_depot.rs` pass and the 3 r121 tests fail. Logs are in `local-lane/sim-issues/s52/`.
+
+| Issue | Finding | Status | Fix | Tests |
+|---|---|---|---|---|
+| S-0314 r121 claim 20, a full-health enter order on the own untethered depot (Q-3401) | The approaching vehicle lost its contact under the second bullet, then the order ran on a depot holding no contact and gave it the depot as destination and *enter* | fixed (46ea0a3; tests 93e5676) | `depot::order_applied`: an approaching vehicle at full health given an enter order on its own depot, not ignored under the first bullet, takes `released_at_full_health`, the docked vehicle's path: `release`, then `OrderEffect::Ends` | `claims_s0314_depot.rs`: `claim_20_full_health_enter_on_own_untethered_depot_in_every_phase` (waiting, settling, working: no destination, no queued entry, behaviour kept, not moved, contact ended, then 120 ticks with no move and no *enter*); `claim_20_same_depot_enter_while_docked` asserts no destination in both the tethered and untethered case, the Q-3401 citation replaced by r121 |
+| S-0314 r121 claim 20, a destination still held at the order (our engine's rule) | A hovering vehicle keeps the depot as destination until its settling step; the old full-health path kept it | fixed (46ea0a3; tests 93e5676) | `depot::lose_destination_as_at_stop`: the stop order's destination steps only (`hover::stop_order`, `drive::stop` unless the hover keeps its path, `dest = None` and the path, `jump::stop_ordered`); S-0502 claim 28's rejection is not asked | `claim_20_full_health_enter_removes_a_hover_destination_as_a_stop_does`: the destination goes, behaviour kept, and position, destination and hover height equal a stop order's world for 120 ticks |
+| S-0314 r121 claim 23, the added sentence | Says the full-health own-depot order does not take the no-contact path | built with the first row | as above | as above |
+| S-0314 r121, the state table's full-health row | Restates claim 20 for both tether states | built with the first two rows | as above | as above |
+| S-0314 r116 to r121, the other hunks | The Measurement intro (self-healing allowed to raise health), H18 a's full-health repeat and its untethered and hovering runs, the new Open question on the held destination, front matter | text only, no rule of our code | none | none |
+| `econ::release::arrival` seam from S51 | r121 has no hunk on S-0417 or factory release | seam kept | none | none |
+
+**Formats:** save 227 to 228 and AI game 208 to 209. Wire stays 13. No saved state is added or removed.
+
+**Goldens:** none move. The sim gate passes 17 on base and after.
+
+Lanes compare base b289f95 with 3644359.
+
+**Oracle arena** (`--record all`, two threads; `arena-base.txt` against `arena-after2.txt`): identical. M-0001 10 of 96 failing, M-0002 4 of 24, M-0003 3 of 35, M-0019 0 of 6, M-0021 9 of 50, M-0020 0 of 25. The first after run (`arena-after.txt`) died in a power cut and was not used.
+
+**Sweeps** (seeds 1 to 16; `m6c-base.txt` against `m6c-after.txt`, and so on): m6c, m7a and m7b identical apart from build lines and timings, all pass.
+
+**AI quick lane** (seeds 7 to 10, maps 0, 2 and 8, 36 games; `quick-base-<seed>.txt` against `quick-after-<seed>.txt`): identical winners and lengths, so nothing to trace. **AI suite** with ignored tests: 421 passed on base and on 3644359.
+
+Seams left: the `econ::release::arrival` seam of S51 (r121 does not speak to it). Whether the original removes a held destination at this order is the spec's open question; ours removes it.
+
+The P3 census rule: the batch adds and removes no saved field, so it makes or moves no back-reference of `World::census`.
