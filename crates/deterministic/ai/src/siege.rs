@@ -125,6 +125,12 @@ pub struct Tuning {
     /// the money in hand counts as rich ([`Siege::economy_stands`]); 0: from
     /// the start.
     pub rich_after: usize,
+    /// Ticks without a seen enemy building after which, while no strike is
+    /// out, one idle army unit at home goes to look at the enemy base; and
+    /// while the house's last look, within [`MEMORY`] ticks, saw no armed
+    /// enemy building, the floor does not hold a new strike
+    /// ([`Army::scout`]); 0: never.
+    pub scout: i32,
 }
 
 /// The tuning of level `level`.
@@ -149,6 +155,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
+            scout: 0,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -169,6 +176,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
+            scout: 0,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -195,6 +203,8 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             refineries: 4,
             // nocite: design: own AI (#449): the starting money is not income; hard counts as rich only on two refineries with its harvesters standing, as a person builds the second refinery before the second war factory
             rich_after: 2,
+            // nocite: design: own AI (#449): hard looks at the enemy base once it has seen no enemy building for 1500 ticks, as a person sends a fast unit to look while his army builds up, and strikes a base seen open without waiting for the floor
+            scout: 1500,
         },
     }
 }
@@ -240,6 +250,13 @@ pub struct Army {
     /// The tick the last strike ended at (called home or lost), 0 before
     /// the first; the army's patience ([`Tuning::patience`]) runs from it.
     ended: i32,
+    /// The unit sent to look at the enemy base ([`Tuning::scout`]), until
+    /// it is called home or gone.
+    scout: Option<ObjectId>,
+    /// The tick the house last saw an enemy building at, 0 before.
+    looked: i32,
+    /// Whether no armed enemy building was in sight then.
+    open: bool,
 }
 
 /// The factories of each army kind (infantry, vehicles) the siege adds up
@@ -657,6 +674,67 @@ impl Siege {
             .collect();
         waiting.sort_unstable();
         let guard = t.guard.min(waiting.len());
+        let mut goals = Goals::new(eyes, w, home, &enemies, t.hunts, t.economy);
+        if t.scout > 0 {
+            // The look at the enemy base: what the house sees of it now.
+            let buildings: Vec<ObjectId> = enemies
+                .iter()
+                .filter(|&&(e, _)| w.obj(e).is_some_and(|o| o.kind == Kind::Building))
+                .map(|&(e, _)| e)
+                .collect();
+            if !buildings.is_empty() {
+                self.army.looked = w.tick;
+                self.army.open = !buildings.iter().any(|&e| armed(w, e));
+            }
+            if let Some(s) = self.army.scout {
+                if !alive.contains(&s) {
+                    self.army.scout = None;
+                } else if !buildings.is_empty() || idle(w, s) {
+                    // It has seen the base, or found nothing there: home.
+                    if !busy.contains(&s) {
+                        out.push(Order::Behaviour {
+                            actor: s,
+                            behaviour: Behaviour::Move,
+                            attack_move: false,
+                            target: None,
+                            dest: Some(Target::Cell(home)),
+                        });
+                    }
+                    self.army.scout = None;
+                }
+            }
+            if self.army.scout.is_none()
+                && !self.army.striking
+                && w.tick - self.army.looked >= t.scout
+            {
+                let speed = |id: ObjectId| {
+                    w.obj(id)
+                        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+                        .map_or(0, |u| u.speed)
+                };
+                // The fastest beyond the guard, the cheapest of those.
+                let pick = waiting.iter().skip(guard).map(|&(_, id)| id).max_by_key(|&id| {
+                    (
+                        speed(id),
+                        std::cmp::Reverse(worth(w, id)),
+                        std::cmp::Reverse(id),
+                    )
+                });
+                if let Some(s) = pick
+                    && let Some(goal) = goals.for_unit(w, s)
+                {
+                    out.push(Order::Behaviour {
+                        actor: s,
+                        behaviour: Behaviour::Move,
+                        attack_move: false,
+                        target: None,
+                        dest: Some(Target::Cell(goal)),
+                    });
+                    self.army.scout = Some(s);
+                    waiting.retain(|&(_, id)| id != s);
+                }
+            }
+        }
         // The edge is judged on the units that would go, so that a strike
         // that goes is not outmatched (and called home) at once.
         let goers_worth: i64 = waiting
@@ -669,15 +747,15 @@ impl Siege {
         let want = if waited { t.edge.min(80) } else { t.edge };
         // nocite: design: own AI (#449): the edge is a percent of the remembered enemy army's worth
         let edge = want == 0 || goers_worth * 100 >= want * enemy_worth;
-        // design: own AI (#449): the level's floor holds a new strike whose units are worth less, whatever the edge
-        let edge = edge && goers_worth >= t.floor;
+        // design: own AI (#449): the level's floor holds a new strike whose units are worth less, whatever the edge, unless the house's last look at an enemy base, within the memory's time, saw no armed building (`Tuning::scout`)
+        let known = t.scout > 0 && self.army.open && w.tick - self.army.looked < MEMORY;
+        let edge = edge && (known || goers_worth >= t.floor);
         let free_n = army.len().saturating_sub(self.army.out.len());
         let goes = if self.army.striking {
             waiting.len() > guard && waiting.len() - guard >= t.join
         } else {
             waiting.len() >= t.strike && free_n >= t.strike && edge
         };
-        let mut goals = Goals::new(eyes, w, home, &enemies, t.hunts, t.economy);
         let mut send: Vec<ObjectId> = Vec::new();
         if goes {
             send.extend(waiting.iter().skip(guard).map(|&(_, id)| id));
@@ -768,6 +846,18 @@ fn base_ordered(w: &World, out: &[Order]) -> bool {
             scripted::role_of(w, *what),
             Some(Role::Yard | Role::Power | Role::Refinery | Role::Factory(_))
         ))
+    })
+}
+
+/// Whether object `id` is a building with a weapon in one of its type's
+/// slots (design: own AI, #449): a defence a look at a base counts.
+fn armed(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        o.kind == Kind::Building
+            && w.rules()
+                .buildings
+                .get(o.type_index as usize)
+                .is_some_and(|b| b.combat.slots.iter().any(Option::is_some))
     })
 }
 
