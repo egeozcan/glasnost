@@ -1098,7 +1098,11 @@ fn a_rejoin_after_the_grace_period_is_too_late() {
 
 /// A game of `persons` persons and a computer, begun, with nothing run.
 fn begun(persons: usize) -> (Net, String, Vec<(ConnId, Begin)>) {
-    let mut net = Net::new(Limits::default());
+    begun_with(persons, Limits::default())
+}
+
+fn begun_with(persons: usize, limits: Limits) -> (Net, String, Vec<(ConnId, Begin)>) {
+    let mut net = Net::new(limits);
     let mut rows = vec![SlotKind::Human; persons];
     rows.push(SlotKind::Ai);
     let (code, mut met) = meet(&mut net, &rows);
@@ -1632,4 +1636,149 @@ fn a_peer_that_played_alone_and_relinked_leaves_through_a_drop_round() {
     let stats = played.net.hub.stats();
     assert_eq!(stats.rounds, 2, "{stats:?}");
     assert_eq!((stats.held_refused, stats.unanswered), (0, 0), "{stats:?}");
+}
+
+#[test]
+fn forged_ran_cannot_block_a_dropped_slots_rejoin() {
+    let (mut net, code, met) = begun(3);
+    let (a, b, c) = (met[0].0, met[1].0, met[2].0);
+    for (conn, slot) in [(a, 0u8), (b, 1), (c, 2)] {
+        net.send(
+            conn,
+            &envelope(
+                slot,
+                Body::Frames(Frames {
+                    first: 0,
+                    frames: vec![Frame::default(); 5],
+                    ran: 2,
+                    ..Frames::default()
+                }),
+            ),
+        );
+    }
+    net.kill(c);
+    // Slot 0 tries to forge ran = u32::MAX right after slot 2 drops.
+    net.send(
+        a,
+        &envelope(
+            0,
+            Body::Frames(Frames {
+                first: 5,
+                frames: vec![],
+                ran: u32::MAX,
+                ..Frames::default()
+            }),
+        ),
+    );
+    // Slot 2 must still be allowed to rejoin (not marked Surrendered).
+    let r = net.connect();
+    net.lobby(r, &rejoin_msg(&code, 2, met[2].1.ticket, "build-1"));
+    assert_eq!(net.hub.rejoining(&code), Some(2));
+}
+
+#[test]
+fn hostile_frame_burst_cannot_inflate_kept_past_peer_window() {
+    let (mut net, code, met) = begun(2);
+    let (a, b) = (met[0].0, met[1].0);
+    // Peer B has only forwarded 3 frames so far.
+    net.send(
+        b,
+        &envelope(
+            1,
+            Body::Frames(Frames {
+                first: 0,
+                frames: vec![Frame::default(); 3],
+                ..Frames::default()
+            }),
+        ),
+    );
+    // Hostile peer A sends 500 empty frames in one message and immediately disconnects.
+    net.send(
+        a,
+        &envelope(
+            0,
+            Body::Frames(Frames {
+                first: 0,
+                frames: vec![Frame::default(); 500],
+                ..Frames::default()
+            }),
+        ),
+    );
+    let max_delay = u32::from(met[0].1.params.max_delay);
+    let kept = net.hub.kept(&code, 0).unwrap();
+    assert!(
+        kept <= 3 + max_delay + 1,
+        "kept ({kept}) must stay within peer B's frame window (<= {})",
+        3 + max_delay + 1
+    );
+    net.kill(a);
+    let drops: Vec<Body> = games(&mut net, b).into_iter().map(|e| e.body).collect();
+    assert!(
+        drops.contains(&Body::Dropped { slot: 0, kept }),
+        "drop must report bounded kept={kept}: {drops:?}"
+    );
+}
+
+#[test]
+fn stalled_rejoin_times_out_and_frees_slot_for_another_dropped_player() {
+    let lim = Limits {
+        rejoin_ms: 5_000,
+        silent_ms: 60_000,
+        ..Limits::default()
+    };
+    let (mut net, code, met) = begun_with(3, lim);
+    let (a, b, c) = (met[0].0, met[1].0, met[2].0);
+    for (conn, slot) in [(a, 0u8), (b, 1), (c, 2)] {
+        net.send(
+            conn,
+            &envelope(
+                slot,
+                Body::Frames(Frames {
+                    first: 0,
+                    frames: vec![Frame::default(); 5],
+                    ..Frames::default()
+                }),
+            ),
+        );
+    }
+    net.kill(b);
+    net.kill(c);
+    // Slot 1 starts rejoining and stays alive via Pings without ever sending CaughtUp.
+    let r1 = net.connect();
+    net.lobby(r1, &rejoin_msg(&code, 1, met[1].1.ticket, "build-1"));
+    assert_eq!(net.hub.rejoining(&code), Some(1));
+    let _ = answers(&mut net, r1);
+    let _ = games(&mut net, a);
+
+    // Slot 2 is initially refused while slot 1 holds the rejoin slot.
+    let r2 = net.connect();
+    net.lobby(r2, &rejoin_msg(&code, 2, met[2].1.ticket, "build-1"));
+    assert!(
+        answers(&mut net, r2)
+            .iter()
+            .any(|m| matches!(m, Incoming::Lobby(FromRelay::Refused(Refusal::Rejoining))))
+    );
+
+    // Advance clock past rejoin_ms while r1 keeps pinging: hub cancels r1's stalled rejoin.
+    net.t += 2_500;
+    net.lobby(r1, &ToRelay::Ping { stamp: 1 });
+    net.hub.tick(net.t);
+    net.route();
+    assert_eq!(net.hub.rejoining(&code), Some(1));
+
+    net.t += 2_600;
+    net.lobby(r1, &ToRelay::Ping { stamp: 2 });
+    net.hub.tick(net.t);
+    net.route();
+    assert_eq!(net.hub.rejoining(&code), None);
+    assert_eq!(closed(&mut net, r1).as_deref(), Some("rejoin timed out"));
+    assert!(
+        games(&mut net, a)
+            .iter()
+            .any(|e| e.body == Body::Serve { slot: 1, on: false })
+    );
+
+    // Slot 2 can now rejoin cleanly.
+    net.lobby(r2, &rejoin_msg(&code, 2, met[2].1.ticket, "build-1"));
+    assert_eq!(net.hub.rejoining(&code), Some(2));
 }
