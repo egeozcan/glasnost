@@ -775,13 +775,20 @@ fn claim_20_full_health_enter_on_own_untethered_depot_in_every_phase() {
         assert_eq!(o.beh.current, cur, "phase {phase}: behaviour kept");
         assert_eq!(o.pos, pos, "phase {phase}: not moved");
         assert_eq!(contact(&w, v), None, "phase {phase}: contact ended");
-        assert!(depot::link(&w, v).is_none(), "phase {phase}: the depot holds none");
+        assert!(
+            depot::link(&w, v).is_none(),
+            "phase {phase}: the depot holds none"
+        );
         for _ in 0..120 {
             if contact(&w, v).is_some() {
                 break;
             }
             let o = w.obj(v).unwrap();
-            assert_ne!(o.beh.current, Some(Behaviour::Enter), "phase {phase}: enter never current");
+            assert_ne!(
+                o.beh.current,
+                Some(Behaviour::Enter),
+                "phase {phase}: enter never current"
+            );
             assert_eq!(o.pos, pos, "phase {phase}: no leaving move");
             assert_eq!(o.dest, None, "phase {phase}: no destination later");
             tick::step(&mut w);
@@ -796,7 +803,8 @@ fn claim_20_full_health_enter_removes_a_hover_destination_as_a_stop_does() {
         let (mut w, v) = skimmer_sinking();
         let d = w.obj(v).unwrap().contact.expect("in contact");
         assert!(
-            run_until(&mut w, 60, |w| w.obj(v).unwrap().beh.current == Some(Behaviour::Sleep)),
+            run_until(&mut w, 60, |w| w.obj(v).unwrap().beh.current
+                == Some(Behaviour::Sleep)),
             "sleep current after the arrival"
         );
         assert_eq!(
