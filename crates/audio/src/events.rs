@@ -509,8 +509,12 @@ impl Audio {
         self.slots.clear();
         self.motion.clear();
         self.turrets.clear();
+        self.spins.clear();
+        self.pieces.clear();
+        self.bouncing.clear();
         self.ranks.clear();
         self.radar.clear();
+        self.started.clear();
         self.radar_map = minimap::grid(w).map(|g| (g, minimap::image(&g)));
         self.low_funds_after = None;
         self.low_power = false;

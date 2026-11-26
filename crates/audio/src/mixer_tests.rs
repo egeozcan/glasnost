@@ -686,3 +686,31 @@ fn held_sounds_resume_from_the_same_point() {
     };
     assert_eq!(run(true), run(false));
 }
+
+#[test]
+fn clear_sounds_drops_instances_and_speech_but_keeps_music() {
+    let mut m = mixer();
+    let id = m.request(prep(0, entry(), 1), Where::Screen, FULL).unwrap();
+    assert!(m.service(0));
+    assert!(m.is_playing(id));
+    m.speak(clip(100, 1000));
+    assert!(m.speaking());
+
+    let wav = glasnost_fmt::pcm::Pcm::synthetic_tone(RATE, 1, 200, 40, 8000, 1).to_wav();
+    let info = glasnost_fmt::wav::WavInfo::parse(&wav).expect("wav header");
+    m.set_music(Some(crate::music::MusicVoice::new(
+        info,
+        Arc::from(wav),
+        RATE,
+    )));
+    assert!(m.music.is_some());
+
+    m.clear_sounds();
+    assert_eq!(m.alive(), 0);
+    assert!(!m.speaking());
+    assert!(m.music.is_some(), "music survives clear_sounds");
+    assert!(nonzero_left(&render(&mut m, 64)) > 0);
+
+    m.clear();
+    assert!(m.music.is_none(), "full clear drops music");
+}
