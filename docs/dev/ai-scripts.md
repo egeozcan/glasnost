@@ -648,6 +648,21 @@ AS6's levers had changed how hard spends; AS7 looks at what hard knows when it d
   recall's reach of home (the brain's 30 cells) and not under a move home is ordered home again
   (unless the brain ordered it this think). It leaves the homing ones once idle or near home, and
   then waits for the next strike as any other.
+  Development round 2, stopped after four pairs: `siege:normal` 0.771 to 0.797, `default:normal`
+  0.906 to 0.932, `default:easy` 0.984 as before, but `default:hard` 0.943 to 0.917 (10 of its 16
+  draws on map 2). Combined +0.005 and 7 more victories; with `siege:easy` holding only 2
+  non-wins, 12 more could no longer be reached. The lever and its test are reverted.
+- **The strike is fed, not called home** (`Tuning::feed`, hard only). A watch of a dev-2 draw
+  against `default:hard` that dev-0 won (map 2, seed 8, hard as house 0: 46 600 against 37 600 at
+  the cap) shows hard's third strike, 21 to 24 units sent at tick 18 000, killing the enemy's
+  harvesters (7 to 0) and taking its total from 44 800 to 35 200. At 24 000 it is called home
+  with 15 left, below half of the enemy army it remembers, and hard does not strike again until
+  27 000. The recall is judged before the units waiting at home are sent to join the strike, so
+  a strike that would be fed is called home instead. A person whose winning attack thins sends
+  the new units after it. So at hard, while a strike is out, the units waiting at home beyond the
+  guard, once there are as many as the level's join, count with it against the recall: while
+  together they are worth the recall's share of the remembered enemy army, the strike is not
+  called home, and they go out to join it as before.
 
 ## The tournament
 
