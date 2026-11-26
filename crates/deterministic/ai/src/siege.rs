@@ -125,9 +125,6 @@ pub struct Tuning {
     /// the money in hand counts as rich ([`Siege::economy_stands`]); 0: from
     /// the start.
     pub rich_after: usize,
-    /// Whether the units a recall calls home are kept as homing and ordered
-    /// home again while they stop on the way ([`Army::homing`]).
-    pub homing: bool,
 }
 
 /// The tuning of level `level`.
@@ -152,7 +149,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
-            homing: false,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -173,7 +169,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
-            homing: false,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -200,8 +195,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             refineries: 4,
             // nocite: design: own AI (#449): the starting money is not income; hard counts as rich only on two refineries with its harvesters standing, as a person builds the second refinery before the second war factory
             rich_after: 2,
-            // nocite: design: own AI (#449): hard clicks the units it called home home again while they stop on the way to fight, as a person pulls back his stragglers, so that they wait for the next strike
-            homing: true,
         },
     }
 }
@@ -247,19 +240,11 @@ pub struct Army {
     /// The tick the last strike ended at (called home or lost), 0 before
     /// the first; the army's patience ([`Tuning::patience`]) runs from it.
     ended: i32,
-    /// The units a recall called home that are not home yet
-    /// ([`Tuning::homing`]): one that is neither idle nor within [`HOMED`]
-    /// cells of home, nor under a move home, is ordered home again.
-    homing: BTreeSet<ObjectId>,
 }
 
 /// The factories of each army kind (infantry, vehicles) the siege adds up
 /// to ([`Siege::more_factories`]).
 const MOST_FACTORIES: usize = 3; // nocite: design: own AI (#449)
-
-/// Cells of home within which a unit called home is home (the brain's
-/// reach of its base defence).
-const HOMED: i64 = 30; // nocite: design: own AI (#449)
 
 /// Ticks after which an enemy army unit not seen again is forgotten.
 const MEMORY: i32 = 4500; // nocite: design: own AI (#449)
@@ -639,36 +624,6 @@ impl Siege {
             self.army.striking = false;
             self.army.ended = w.tick;
         }
-        if t.homing {
-            // design: own AI (#449): the units called home that stop on the way are ordered home again (`Tuning::homing`)
-            let out_now = &self.army.out;
-            self.army
-                .homing
-                .retain(|id| alive.contains(id) && !out_now.contains(id));
-            let mut home_now = Vec::new();
-            for &id in &self.army.homing {
-                let Some(o) = w.obj(id) else { continue };
-                if idle(w, id) || dist2(o.pos.cell(), home) <= HOMED * HOMED {
-                    home_now.push(id);
-                    continue;
-                }
-                let going = o.beh.current == Some(Behaviour::Move)
-                    && o.dest == Some(Target::Cell(home));
-                if going || busy.contains(&id) {
-                    continue;
-                }
-                out.push(Order::Behaviour {
-                    actor: id,
-                    behaviour: Behaviour::Move,
-                    attack_move: false,
-                    target: None,
-                    dest: Some(Target::Cell(home)),
-                });
-            }
-            for id in home_now {
-                self.army.homing.remove(&id);
-            }
-        }
         let enemies = eyes.seen_enemies(w);
         let enemy_worth = self.army.remember(w, eyes.house, &enemies);
         let out_worth: i64 = self.army.out.iter().map(|&id| worth(w, id)).sum();
@@ -686,9 +641,6 @@ impl Siege {
                         dest: Some(Target::Cell(home)),
                     });
                 }
-            }
-            if t.homing {
-                self.army.homing.extend(self.army.out.iter().copied());
             }
             self.army.out.clear();
             self.army.striking = false;
