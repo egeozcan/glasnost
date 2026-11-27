@@ -125,6 +125,11 @@ pub struct Tuning {
     /// the money in hand counts as rich ([`Siege::economy_stands`]); 0: from
     /// the start.
     pub rich_after: usize,
+    /// Whether the infantry line runs while a refinery by a new field
+    /// waits for money and the house's army is worth less than the floor
+    /// ([`Siege::soldiers_while_paying`]); without, the brain holds it to
+    /// pay for that refinery first.
+    pub soldiers_while_paying: bool,
 }
 
 /// The tuning of level `level`.
@@ -149,6 +154,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
+            soldiers_while_paying: false,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -169,6 +175,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
+            soldiers_while_paying: false,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -195,6 +202,8 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             refineries: 4,
             // nocite: design: own AI (#449): the starting money is not income; hard counts as rich only on two refineries with its harvesters standing, as a person builds the second refinery before the second war factory
             rich_after: 2,
+            // nocite: design: own AI (#449, AS9): while its army is worth less than the floor, hard keeps the barracks busy while a refinery by a new field waits for money, as a person guarding a base he is still paying for trains cheap soldiers and lets the war factory's money go to the refinery
+            soldiers_while_paying: true,
         },
     }
 }
@@ -513,6 +522,57 @@ impl Siege {
         if !eyes.busy(w, t) {
             out.retain(|o| !matches!(o, Order::Build { what } if what.kind == Kind::Building));
             out.push(Order::Build { what: t });
+        }
+    }
+
+    /// Soldiers while a new refinery waits, while the army is weak (design:
+    /// own AI, #449, AS9): the brain pays for its economy first
+    /// (`Brain::paying`) when it lacks a refinery or its economy target, or
+    /// when a refinery by a new field owes more than the money in hand while
+    /// the house is safe, and holds every other item for it (S-0404 claim
+    /// 5). While the house owns a refinery, has lost none
+    /// (`Script::refinery_lost`) and keeps its economy target
+    /// (`Script::economy_kept`), that refinery is the only reason left; then,
+    /// while the house's army units are worth less than `floor`, the brain's
+    /// hold orders for infantry army items are dropped, and the infantry
+    /// army items it held are resumed with a build order for their type
+    /// (S-0404 claims 3 and 5), as the brain itself resumes them. The
+    /// vehicle line stays held for the refinery. Not while selling out, nor
+    /// for slave miners (their own refinery, S-0402 claim 14).
+    fn soldiers_while_paying(&self, w: &World, floor: i64, out: &mut Vec<Order>) {
+        let eyes = &self.eyes;
+        if eyes.selling()
+            || eyes.slave_miners(w)
+            || !eyes.has_refinery(w)
+            || eyes.refinery_lost(w).is_some()
+            || !eyes.economy_kept(w)
+        {
+            return;
+        }
+        let own: i64 = eyes
+            .of_role(w, Role::Army)
+            .into_iter()
+            .map(|id| worth(w, id))
+            .sum();
+        // design: own AI (#449, AS9): the infantry line runs only while the army is worth less than the level's floor for a strike
+        if own >= floor {
+            return;
+        }
+        let soldier =
+            |t: TypeRef| t.kind == Kind::Infantry && scripted::role_of(w, t) == Some(Role::Army);
+        out.retain(|o| !matches!(o, Order::Hold { what } if soldier(*what)));
+        let house = eyes.house;
+        for l in w.econ.lines.lines.iter().filter(|l| l.house == house) {
+            let Some(i) = &l.item else { continue };
+            let resume = Order::Build { what: i.t };
+            if !i.done()
+                && i.hold == production::Hold::Player
+                && soldier(i.t)
+                && eyes.buildable(w, i.t)
+                && !out.contains(&resume)
+            {
+                out.push(resume);
+            }
         }
     }
 
@@ -978,6 +1038,9 @@ impl AiScript for Siege {
         }
         if !t.navy {
             self.no_navy(w, &mut out);
+        }
+        if t.soldiers_while_paying {
+            self.soldiers_while_paying(w, t.floor, &mut out);
         }
         if t.refineries > 0 {
             self.more_refineries(w, t.refineries, &mut out);
