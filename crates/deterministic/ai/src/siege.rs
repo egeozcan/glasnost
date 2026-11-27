@@ -1283,15 +1283,6 @@ mod tests {
             .entry("infantry".into())
             .or_default()
             .push("ZAPPER".into());
-        // nocite: test data of our own (a rifleman of twice the walker's strength and price)
-        let mut brute = r.sim.infantry["WALKER"].clone();
-        brute.strength = Some(200);
-        brute.cost = Some(400);
-        r.sim.infantry.insert("BRUTE".into(), brute);
-        r.registries
-            .entry("infantry".into())
-            .or_default()
-            .push("BRUTE".into());
         if let Some(g) = r.sim.vehicles.get_mut("GUNR") {
             g.combat.armor = Some(ArmourClass::Heavy);
         }
@@ -1304,7 +1295,7 @@ mod tests {
         .expect("the matchup skirmish loads")
     }
 
-    // design: own AI (#449): at hard the army round's type on a line is the one of the line that best beats the remembered enemy army by what a credit spent on it deals before it dies (damage per tick by armour through the versus value, S-0302 claims 2 and 6, per the enemy's strength and weighted by its cost; times own strength over the damage taken; over the cost once); an unarmed type is worth nothing; with no enemy army remembered the brain's pick stays; the other levels keep the brain's pick
+    // design: own AI (#449): at hard the army round's type on a line is the one of the line that best beats the remembered enemy army by the square law (damage per tick by armour through the versus value, S-0302 claims 2 and 6, per the enemy's strength and weighted by its cost; times own strength over the damage taken; over cost squared); an unarmed type is worth nothing; with no enemy army remembered the brain's pick stays; the other levels keep the brain's pick
     #[test]
     fn matchup_picks_the_type_that_beats_the_remembered_army() {
         assert!(tuning(AiDifficulty::Hard).matchup);
@@ -1327,16 +1318,6 @@ mod tests {
         assert_eq!(best_against(&w, &both, &[gunr, gunr]), Some(zapper));
         assert_eq!(best_against(&w, &both, &[walker, walker]), Some(walker));
         assert!(matchup_value(&w, walker, &[walker]) > 0);
-        // The cost counts once: a type of twice the strength and twice the
-        // price is worth as much (within the integers' rounding).
-        let brute = of(&w, Kind::Infantry, "BRUTE");
-        for mix in [[walker, walker], [gunr, gunr]] {
-            let (a, b) = (
-                matchup_value(&w, walker, &mix),
-                matchup_value(&w, brute, &mix),
-            );
-            assert!(a > 0 && a.abs_diff(b) <= 1, "{a} {b}");
-        }
         // An unarmed type is worth nothing, and nothing is picked with no
         // enemy army.
         assert_eq!(matchup_value(&w, truk, &[gunr]), 0);
