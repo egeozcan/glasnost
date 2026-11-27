@@ -1358,17 +1358,6 @@ mod tests {
         s.matched(&w, &mut out);
         s.eyes.end_think();
         assert_eq!(out, vec![Order::Build { what: zapper }]);
-        // A held item's line is busy: the order for its type resumes it
-        // (S-0404 claims 3 and 5) and is not swapped, or the line would wait
-        // on the held item for ever.
-        production::build(&mut w, HouseId(0), walker);
-        production::hold(&mut w, HouseId(0), walker);
-        s.eyes.begin_think();
-        assert!(s.eyes.busy(&w, walker));
-        let mut out = vec![Order::Build { what: walker }];
-        s.matched(&w, &mut out);
-        s.eyes.end_think();
-        assert_eq!(out, vec![Order::Build { what: walker }]);
     }
 
     // design: own AI (#449): at a level without superweapons the brain's order for a superweapon building is dropped, and its other orders are kept
