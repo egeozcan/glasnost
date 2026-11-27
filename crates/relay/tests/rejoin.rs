@@ -1677,49 +1677,6 @@ fn forged_ran_cannot_block_a_dropped_slots_rejoin() {
 }
 
 #[test]
-fn hostile_frame_burst_cannot_inflate_kept_past_peer_window() {
-    let (mut net, code, met) = begun(2);
-    let (a, b) = (met[0].0, met[1].0);
-    // Peer B has only forwarded 3 frames so far.
-    net.send(
-        b,
-        &envelope(
-            1,
-            Body::Frames(Frames {
-                first: 0,
-                frames: vec![Frame::default(); 3],
-                ..Frames::default()
-            }),
-        ),
-    );
-    // Hostile peer A sends 500 empty frames in one message and immediately disconnects.
-    net.send(
-        a,
-        &envelope(
-            0,
-            Body::Frames(Frames {
-                first: 0,
-                frames: vec![Frame::default(); 500],
-                ..Frames::default()
-            }),
-        ),
-    );
-    let max_delay = u32::from(met[0].1.params.max_delay);
-    let kept = net.hub.kept(&code, 0).unwrap();
-    assert!(
-        kept <= 3 + max_delay + 1,
-        "kept ({kept}) must stay within peer B's frame window (<= {})",
-        3 + max_delay + 1
-    );
-    net.kill(a);
-    let drops: Vec<Body> = games(&mut net, b).into_iter().map(|e| e.body).collect();
-    assert!(
-        drops.contains(&Body::Dropped { slot: 0, kept }),
-        "drop must report bounded kept={kept}: {drops:?}"
-    );
-}
-
-#[test]
 fn stalled_rejoin_times_out_and_frees_slot_for_another_dropped_player() {
     let lim = Limits {
         rejoin_ms: 5_000,
@@ -1781,4 +1738,87 @@ fn stalled_rejoin_times_out_and_frees_slot_for_another_dropped_player() {
     // Slot 2 can now rejoin cleanly.
     net.lobby(r2, &rejoin_msg(&code, 2, met[2].1.ticket, "build-1"));
     assert_eq!(net.hub.rejoining(&code), Some(2));
+}
+
+#[test]
+fn a_slow_rejoin_nobody_else_waits_for_is_not_cancelled() {
+    let lim = Limits {
+        rejoin_ms: 5_000,
+        silent_ms: 60_000,
+        ..Limits::default()
+    };
+    let (mut net, code, met) = begun_with(2, lim);
+    let (a, b) = (met[0].0, met[1].0);
+    for (conn, slot) in [(a, 0u8), (b, 1)] {
+        net.send(
+            conn,
+            &envelope(
+                slot,
+                Body::Frames(Frames {
+                    first: 0,
+                    frames: vec![Frame::default(); 5],
+                    ..Frames::default()
+                }),
+            ),
+        );
+    }
+    net.kill(b);
+    let r1 = net.connect();
+    net.lobby(r1, &rejoin_msg(&code, 1, met[1].1.ticket, "build-1"));
+    assert_eq!(net.hub.rejoining(&code), Some(1));
+    let _ = answers(&mut net, r1);
+    // Long past `rejoin_ms`, still loading: no other slot is away, so the
+    // rejoin goes on until the house would surrender.
+    for stamp in 1..=4 {
+        net.t += 2_500;
+        net.lobby(r1, &ToRelay::Ping { stamp });
+        net.hub.tick(net.t);
+        net.route();
+    }
+    assert_eq!(net.hub.rejoining(&code), Some(1));
+    assert_eq!(closed(&mut net, r1), None);
+}
+
+#[test]
+fn a_drop_of_a_peer_ahead_on_a_direct_link_counts_every_frame_a_peer_ran() {
+    // Slot 1's messages take 1.5 s to the hub, so the victim, which hears
+    // slot 1 on a direct link, runs and makes frames well past slot 1's
+    // relay frontier. Those frames are forwarded to everyone; the drop must
+    // count every frame of the victim a peer ran (#459).
+    let victim = 2;
+    let played = play(&Plan {
+        rows: vec![
+            SlotKind::Human,
+            SlotKind::Human,
+            SlotKind::Human,
+            SlotKind::Ai,
+        ],
+        limits: limits(),
+        victim,
+        kill_at: 120,
+        back_after: None,
+        ticks: 400,
+        cut_back: false,
+        direct: vec![(0, 1), (0, 2), (1, 2)],
+        lag: vec![(1, 1500)],
+        gone: None,
+        leaves: None,
+        relink: false,
+    });
+    let (forwarded, ran) = played.at_cut;
+    assert!(
+        forwarded >= ran,
+        "the hub counts the victim's frames it forwarded: forwarded {forwarded}, ran {ran}"
+    );
+    let survivors = played.survivors(victim);
+    let k = kept(survivors[0], victim);
+    assert_eq!(k.len(), 1);
+    assert!(k[0] >= ran, "kept {} counts every frame run ({ran})", k[0]);
+    for p in &survivors {
+        clean(p);
+        one_story(p);
+        assert_eq!(kept(p, victim), k);
+        replays(p, &played.map);
+    }
+    assert_eq!(agree(survivors[0], survivors[1]), 400);
 }
