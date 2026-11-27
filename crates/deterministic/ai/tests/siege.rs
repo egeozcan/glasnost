@@ -7,6 +7,7 @@
 
 use std::collections::BTreeSet;
 
+use glasnost_ai::scripted::{Role, role_of};
 use glasnost_ai::scripts::{self, AiScript, REGISTRY, Schedule, Seat, View};
 use glasnost_ai::siege::{self, HELD, Siege, plan_for, tuning};
 use glasnost_ai::{fixture, game::Game};
@@ -567,6 +568,33 @@ fn refineries_standing(level: AiDifficulty, credits: i32, ticks: i32) -> usize {
                 && o.type_index == proc
         })
         .count()
+}
+
+/// The hold orders (S-0404 claim 5) for an army unit type of kind `kind`
+/// house 0 is given over `ticks` of play at `level` from [`economy_base`]
+/// with the plan's harvesters, `credits` in hand and no army.
+fn army_holds(level: AiDifficulty, kind: Kind, credits: i32, ticks: i32) -> usize {
+    // nocite: test data of our own (the plan's three harvesters standing)
+    let mut w = economy_base(credits, 3);
+    let mut s = Siege::start(&w, &fixture::map(), HouseId(0), level);
+    let got = play(&mut w, &mut s, level, ticks);
+    got.iter()
+        .filter(|(_, o)| {
+            matches!(o, Order::Hold { what }
+                if what.kind == kind && role_of(&w, *what) == Some(Role::Army))
+        })
+        .count()
+}
+
+// design: own AI (#449, AS9): at hard, while a refinery by a new field waits for money and the house's army is worth less than the level's floor, the infantry line runs: with little money in hand and no army the brain holds its infantry items to pay for that refinery first (normal), and the siege at hard gives no such hold
+#[test]
+fn hard_trains_soldiers_while_a_new_refinery_waits() {
+    // nocite: test data of our own (less money than a refinery; a few minutes of play)
+    let (credits, ticks) = (300, 3000);
+    let normal = army_holds(AiDifficulty::Normal, Kind::Infantry, credits, ticks);
+    assert!(normal > 0, "the brain holds its infantry for the refinery");
+    let hard = army_holds(AiDifficulty::Hard, Kind::Infantry, credits, ticks);
+    assert_eq!(hard, 0, "hard holds no infantry item (normal {normal})");
 }
 
 // design: own AI (#449): at hard, once the plan's harvesters stand, the siege orders more refineries on the free building line while the house owns fewer than the level's count, so its credits do not run out with fields unworked; normal leaves it to the brain's own rule (a new field once the near one runs low)
