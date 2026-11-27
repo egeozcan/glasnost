@@ -725,6 +725,34 @@ so what differs is the army the two countries' types make.
   on the type deals the remembered army (as weighted above), times how long the type lasts
   against it (its strength over the damage per tick the remembered units deal its armour). A type
   twice as strong and twice as dear is worth as much; under the square law it was worth half.
+  On the watched game it picks as before (the same conscripts and flak tracks, the same draw).
+  Development round 2, stopped after four pairs: `default:hard` 0.943 to 0.917 (map 2 26-0-6 to
+  21-1-10), `siege:normal` 0.771 to 0.792 (country 0 0.573 to 0.667), `default:normal` 0.906 to
+  0.964 (10 more victories), `default:easy` 0.984 to 0.974. Up 4 points and 8 victories; with
+  `siege:easy` holding 2 non-wins, 12 more could no longer be reached. The matchup, its fix and
+  its value are reverted. A watch of one of the new draws against `default:hard` (map 2, seed 8,
+  country 1, 34 700 against 31 800) shows the infantry line all riflemen (20 to 33 of them) beside
+  2 to 7 flak tracks, against a small remembered army that is partly aircraft.
+- **The matchup on the vehicle line only** (hard only). The matchup above with the infantry line
+  left to the brain's round robin: its gains came where the enemy fields tanks, its stalls where
+  the cheapest soldier replaced the barracks' mix. Development round 3, all five pairs:
+  `default:hard` 0.932 (map 2 22-0-10), `siege:normal` 0.792 (country 0 26-12-10),
+  `default:normal` 0.943, `default:easy` 0.990, `siege:easy` 0.990. In all 428-16-36, 0.929
+  against dev-0's 0.919, with 303 victories against 293: up 0.010 and 10 victories, no pair down
+  more than 0.011, short of a clear gain. The lever and its test are reverted.
+
+Three development rounds in a row brought no clear gain, so AS8 stopped with the hard level as AS5
+left it: no code of AS8's is kept, and cert-0 (1914.9) stands. What the rounds showed:
+
+- Picking the army by the enemy's types moves the pairs the earlier levers did not:
+  `default:normal` gained 9 to 10 victories in rounds 2 and 3 and `siege:normal` with country 0
+  rose from 0.573 to 0.646 to 0.667. But each form cost `default:hard` on map 2 (0.011 to 0.042),
+  and the gains stayed under 12 victories or 0.02.
+- A rule that swaps the brain's orders has to leave a resume order alone: the brain resumes a held
+  item by ordering its type again (S-0404 claims 3 and 5).
+- The early country-0 losses to `siege:normal` on map 0 are still AS5's: the army lines held from
+  tick 5 250 to 6 750 while the second refinery is paid (a watch of map 0, seed 8), against an
+  enemy that strikes at 7 000 with tanks.
 
 ## The tournament
 
