@@ -268,6 +268,14 @@ pub fn is_frames_from(bytes: &[u8], from: u8) -> bool {
         && bytes[HEADER_LEN] == FRAMES_TAG
 }
 
+/// The most orders a single lockstep frame may carry: above the
+/// simulation's pending-list limit ([`glasnost_sim::orders::PENDING_LIMIT`]),
+/// bounding hostile frame expansion before it reaches `Session` or desync
+/// evidence. A session puts any more orders into its next frames, so no
+/// frame of an honest peer is refused.
+// nocite: our own netcode (twice the pending-list limit, a round bound)
+pub const MAX_FRAME_ORDERS: usize = 256;
+
 /// Writes a message.
 pub fn encode(env: &Envelope) -> Vec<u8> {
     let mut out = Vec::with_capacity(HEADER_LEN + 64); // nocite: our own netcode (a first guess at a message's size)
@@ -297,5 +305,51 @@ pub fn decode(bytes: &[u8]) -> Result<Envelope, WireError> {
     if !rest.is_empty() {
         return Err(WireError::Body(format!("{} trailing bytes", rest.len())));
     }
+    let frames = match &body {
+        Body::Frames(f) => f.frames.as_slice(),
+        Body::Held { frames, .. } => frames.as_slice(),
+        _ => &[],
+    };
+    if let Some(bad) = frames.iter().find(|f| f.orders.len() > MAX_FRAME_ORDERS) {
+        return Err(WireError::Body(format!(
+            "frame carries {} orders, above limit {MAX_FRAME_ORDERS}",
+            bad.orders.len()
+        )));
+    }
     Ok(Envelope { from, body })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use glasnost_sim::orders::Order;
+
+    #[test]
+    fn rejects_frame_exceeding_max_orders() {
+        let too_many = Frame {
+            orders: vec![Order::Surrender; MAX_FRAME_ORDERS + 1],
+            ..Frame::default()
+        };
+        let bytes = encode(&Envelope {
+            from: 0,
+            body: Body::Frames(Frames {
+                frames: vec![too_many],
+                ..Frames::default()
+            }),
+        });
+        assert!(matches!(decode(&bytes), Err(WireError::Body(_))));
+
+        let at_limit = Frame {
+            orders: vec![Order::Surrender; MAX_FRAME_ORDERS],
+            ..Frame::default()
+        };
+        let ok_bytes = encode(&Envelope {
+            from: 0,
+            body: Body::Frames(Frames {
+                frames: vec![at_limit],
+                ..Frames::default()
+            }),
+        });
+        assert!(decode(&ok_bytes).is_ok());
+    }
 }

@@ -839,3 +839,59 @@ fn a_lone_person_with_computers_runs_without_a_network() {
     }
     assert_eq!(g.issued, vec![(2, HouseId(1), Order::Cheer)]);
 }
+
+#[test]
+fn orders_past_a_frames_limit_go_in_order_into_the_next_frames() {
+    // More orders than one frame may carry: the first frame takes as many
+    // as it may, the next frame the rest, none lost or reordered (#459).
+    let info = start(
+        &[SlotKind::Computer, SlotKind::Human, SlotKind::Computer],
+        fixed(2),
+    );
+    let mut s = Session::new(Config::new(TICK_MS), info, 1, 0).expect("slot");
+    let mut g = Toy::new(0);
+    let n = wire::MAX_FRAME_ORDERS + 10;
+    let stop = |a: usize| Order::Stop {
+        actor: ObjectId(a as u32),
+    };
+    for a in 0..n {
+        s.submit(stop(a));
+    }
+    for _ in 0..10 {
+        assert!(s.step(0, &mut g).is_some());
+    }
+    assert_eq!(g.issued.len(), n);
+    let first = g.issued[0].0;
+    for (i, (tick, house, order)) in g.issued.iter().enumerate() {
+        let want = if i < wire::MAX_FRAME_ORDERS {
+            first
+        } else {
+            first + 1
+        };
+        assert_eq!((*tick, *house, order), (want, HouseId(1), &stop(i)));
+    }
+}
+
+#[test]
+fn forged_ran_does_not_poison_ahead() {
+    let info = start(&[SlotKind::Human, SlotKind::Human], fixed(2));
+    let mut s = started(&info, 0);
+    let mut g = Toy::new(0);
+    // Peer 1 sends valid initial frames for ticks 0..2, plus a forged ran = u32::MAX.
+    let msg = wire::encode(&Envelope {
+        from: 1,
+        body: Body::Frames(Frames {
+            first: 0,
+            frames: vec![Frame::default(); 2],
+            ran: u32::MAX,
+            ..Frames::default()
+        }),
+    });
+    s.receive(10, &msg);
+    assert!(s.step(10, &mut g).is_some());
+    assert!(s.step(20, &mut g).is_some());
+    // Peer 0 is at tick 2; peer 1's clamped ran cannot exceed frame_limit() (~32).
+    // ahead() = my_ran - min_other_ran should be small (not saturated to i32::MIN or huge negative).
+    let ahead = s.ahead(30);
+    assert!(ahead.abs() <= 100, "forged ran poisoned ahead() to {ahead}");
+}

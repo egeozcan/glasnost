@@ -48,6 +48,12 @@ use matchbox_socket::{
 // nocite: our own netcode (16 KiB, the size every WebRTC stack passes unfragmented)
 pub const MAX_PACKET: usize = 16 * 1024;
 
+/// Packets that may wait in [`Pair`]'s inbox between calls to [`Pair::recv`];
+/// any more are dropped so a flooding peer cannot grow memory without bound
+/// (matching the browser link's cap).
+// nocite: our own netcode
+pub const MAX_INBOX: usize = 1024;
+
 /// The ICE servers of a link: STUN or TURN URLs (`stun:host:port`,
 /// `turn:host:port`), with the TURN server's user and password. None by
 /// default.
@@ -249,7 +255,7 @@ impl Pair {
         }
         if let Ok(ch) = socket.get_channel_mut(0) {
             for (_, p) in ch.receive() {
-                if p.len() <= MAX_PACKET {
+                if p.len() <= MAX_PACKET && self.inbox.len() < MAX_INBOX {
                     self.inbox.push_back(p.into_vec());
                 }
             }
