@@ -681,6 +681,79 @@ left it: no code of AS7's is kept, and cert-0 (1914.9) stands. What the rounds s
   from tick 15 000 in the watches its money goes into buildings while its army stays level with
   the enemy's.
 
+### Hard, script AS8
+
+Script AS8 took the siege's hard level further toward 2000 Elo, with the same rules of fair play
+and AS7's measurement. On its base (dceb638, with sim batch S52 merged) cert-0 put `siege:hard` at
+1914.9 (1894.8 order-free), 211-8-21, and dev-0 scored 0.919 (418-16-46, 293 victories), both
+exactly as AS7's. Of dev-0's 16 losses 15 are to `siege:normal` with hard on country 0, and that
+pair goes 22-15-11 on country 0 against 45-0-3 on country 1: the same script and the same money,
+so what differs is the army the two countries' types make.
+
+- **The army matched to the enemy's** (`Tuning::matchup`, hard only). A watch of a dev-0 loss
+  (map 8, seed 7, country 0, against `siege:normal`) shows hard's army mostly cheap infantry
+  (dogs, rifles, guardians and engineers, with a few tanks) against an enemy army whose worth is
+  mostly vehicles. Its strike of 24 units worth 9 200 is lost to 19 worth 7 900. The brain's
+  army round picks, on each free line, the type the house has fewest of on the map, whatever it
+  faces. A person builds what beats the army he has seen. So at hard, once the house remembers an
+  enemy army, the type the brain's army round ordered on each infantry and vehicle line is
+  replaced by the type of that line with the best value against the remembered enemy army. The
+  value is our own estimate, after the square law of attrition: a force's strength grows with its
+  units' damage, their strength and the square of their number, so per credit it is
+  - the damage per tick the type deals the remembered units (for each, the better of its first
+    two weapon slots: damage times burst times the versus value of the unit's armour, over the
+    rate of fire), each unit's share taken per point of its strength and weighted by its cost,
+  - times the type's strength over the damage per tick the remembered units deal its armour,
+  - over the type's cost squared.
+  Unarmed types (engineers) are worth nothing by it and are not picked. Types the house sends
+  alone and loses on use, lifters and naval types keep the brain's own rules. The brain's pick
+  stays while no enemy army is remembered, or when no type of the line is worth anything against
+  it. The brain's own army round, which the default script plays, is unchanged.
+  Development round 1, stopped after two pairs: `default:hard` 0.943 to 0.901 (country 0 better,
+  42-0-6 to 45-1-2; country 1 worse, 43-0-5 to 36-3-9), `siege:normal` 0.771 to 0.708 (country 0
+  0.573 to 0.615; country 1 45-0-3 to 35-6-7), past the limit of 0.06. A watch of a new country-1
+  loss (map 2, seed 8) showed a fault: both army lines stood on a player hold from tick 7 500 to
+  the end. The brain resumes a held item by ordering its type again (S-0404 claims 3 and 5), and
+  the swap changed that order to another type, so the held item waited for ever and the house
+  built no army while its credits rose to 23 000. The swap now takes only an order on a free
+  line, which is what the army round orders. With that fixed the same game is a draw (40 700
+  against 32 700) where dev-0 won at the cap (46 500 against 15 400): the infantry line builds
+  conscripts only, over 40 of them, the cheapest type. The square law's cost squared favours the
+  cheapest type beyond what it is worth in a fight of crowded units.
+- **The matchup by what a credit deals before it dies** (`matchup_value`, hard only). The value
+  of the matchup above with the cost taken once, not squared: the damage per tick a credit spent
+  on the type deals the remembered army (as weighted above), times how long the type lasts
+  against it (its strength over the damage per tick the remembered units deal its armour). A type
+  twice as strong and twice as dear is worth as much; under the square law it was worth half.
+  On the watched game it picks as before (the same conscripts and flak tracks, the same draw).
+  Development round 2, stopped after four pairs: `default:hard` 0.943 to 0.917 (map 2 26-0-6 to
+  21-1-10), `siege:normal` 0.771 to 0.792 (country 0 0.573 to 0.667), `default:normal` 0.906 to
+  0.964 (10 more victories), `default:easy` 0.984 to 0.974. Up 4 points and 8 victories; with
+  `siege:easy` holding 2 non-wins, 12 more could no longer be reached. The matchup, its fix and
+  its value are reverted. A watch of one of the new draws against `default:hard` (map 2, seed 8,
+  country 1, 34 700 against 31 800) shows the infantry line all riflemen (20 to 33 of them) beside
+  2 to 7 flak tracks, against a small remembered army that is partly aircraft.
+- **The matchup on the vehicle line only** (hard only). The matchup above with the infantry line
+  left to the brain's round robin: its gains came where the enemy fields tanks, its stalls where
+  the cheapest soldier replaced the barracks' mix. Development round 3, all five pairs:
+  `default:hard` 0.932 (map 2 22-0-10), `siege:normal` 0.792 (country 0 26-12-10),
+  `default:normal` 0.943, `default:easy` 0.990, `siege:easy` 0.990. In all 428-16-36, 0.929
+  against dev-0's 0.919, with 303 victories against 293: up 0.010 and 10 victories, no pair down
+  more than 0.011, short of a clear gain. The lever and its test are reverted.
+
+Three development rounds in a row brought no clear gain, so AS8 stopped with the hard level as AS5
+left it: no code of AS8's is kept, and cert-0 (1914.9) stands. What the rounds showed:
+
+- Picking the army by the enemy's types moves the pairs the earlier levers did not:
+  `default:normal` gained 9 to 10 victories in rounds 2 and 3 and `siege:normal` with country 0
+  rose from 0.573 to 0.646 to 0.667. But each form cost `default:hard` on map 2 (0.011 to 0.042),
+  and the gains stayed under 12 victories or 0.02.
+- A rule that swaps the brain's orders has to leave a resume order alone: the brain resumes a held
+  item by ordering its type again (S-0404 claims 3 and 5).
+- The early country-0 losses to `siege:normal` on map 0 are still AS5's: the army lines held from
+  tick 5 250 to 6 750 while the second refinery is paid (a watch of map 0, seed 8), against an
+  enemy that strikes at 7 000 with tanks.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
