@@ -256,6 +256,11 @@ pub struct Army {
 /// to ([`Siege::more_factories`]).
 const MOST_FACTORIES: usize = 3; // nocite: design: own AI (#449)
 
+/// The worth of remembered enemy ground army from which the vehicle
+/// matchup picks ([`Siege::matched`]): the hard level's floor for a strike
+/// ([`Tuning::floor`]), the only level that matches.
+const KNOWN_ARMY: i64 = 5000; // nocite: design: own AI (#449, AS9)
+
 /// Ticks after which an enemy army unit not seen again is forgotten.
 const MEMORY: i32 = 4500; // nocite: design: own AI (#449)
 
@@ -622,19 +627,24 @@ impl Siege {
     /// seen. Not for the types the house sends alone and loses on use
     /// (`scripted::spent_alone`), lifters or drainers, on either side of
     /// the swap; the brain's pick stays when no type of the line is worth
-    /// anything against the enemy army.
+    /// anything against the enemy army, and while the remembered ground
+    /// army is worth less than [`KNOWN_ARMY`] (AS9): a person picks his
+    /// tanks by the enemy army once he has seen enough of it to judge.
     fn matched(&self, w: &World, out: &mut [Order]) {
-        let mix: Vec<TypeRef> = self
+        let ground: Vec<(TypeRef, i64)> = self
             .army
             .seen
-            .keys()
-            .filter_map(|&e| w.obj(e))
-            .filter(|o| o.kind != Kind::Aircraft)
-            .map(tech::type_of)
+            .iter()
+            .filter_map(|(&e, &(v, _, _))| w.obj(e).map(|o| (o, v)))
+            .filter(|(o, _)| o.kind != Kind::Aircraft)
+            .map(|(o, v)| (tech::type_of(o), v))
             .collect();
-        if mix.is_empty() {
+        let known: i64 = ground.iter().map(|&(_, v)| v).sum();
+        // design: own AI (#449, AS9): the matchup waits until the remembered ground army is worth the hard level's floor
+        if ground.is_empty() || known < KNOWN_ARMY {
             return;
         }
+        let mix: Vec<TypeRef> = ground.into_iter().map(|(t, _)| t).collect();
         let eyes = &self.eyes;
         let kept = |t: TypeRef| {
             scripted::role_of(w, t) == Some(Role::Army)
