@@ -127,9 +127,9 @@ pub struct Tuning {
     /// the money in hand counts as rich ([`Siege::economy_stands`]); 0: from
     /// the start.
     pub rich_after: usize,
-    /// Whether the army round's type on each infantry and vehicle line is
-    /// the one of that line that best beats the enemy army the house
-    /// remembers ([`Siege::matched`]).
+    /// Whether the army round's type on each vehicle line is the one of
+    /// that line that best beats the enemy army the house remembers
+    /// ([`Siege::matched`]); the infantry line keeps the brain's pick.
     pub matchup: bool,
 }
 
@@ -203,7 +203,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             refineries: 4,
             // nocite: design: own AI (#449): the starting money is not income; hard counts as rich only on two refineries with its harvesters standing, as a person builds the second refinery before the second war factory
             rich_after: 2,
-            // nocite: design: own AI (#449): hard builds on each army line the type that best beats the enemy army it remembers, as a person answers the army he has seen
+            // nocite: design: own AI (#449): hard builds on each vehicle line the type that best beats the enemy army it remembers, as a person answers the army he has seen with his tanks; its barracks keep their mix
             matchup: true,
         },
     }
@@ -614,7 +614,8 @@ impl Siege {
     /// The army matched to the enemy's (design: own AI, #449): once the
     /// house remembers an enemy army ([`Army::seen`], aircraft left to the
     /// brain's anti-air rule), the first army order of this think on each
-    /// infantry and vehicle line (the brain's army round orders before its
+    /// vehicle line (the infantry line keeps the brain's round robin, whose
+    /// mix the cheapest soldier would replace; the brain's army round orders before its
     /// special rules), when that line is free, is replaced by the type of that line the house can
     /// build of best [`matchup_value`] against the remembered units' types
     /// ([`best_against`]), as a person builds what beats the army he has
@@ -637,7 +638,7 @@ impl Siege {
         let eyes = &self.eyes;
         let kept = |t: TypeRef| {
             scripted::role_of(w, t) == Some(Role::Army)
-                && matches!(t.kind, Kind::Infantry | Kind::Vehicle)
+                && t.kind == Kind::Vehicle
                 && !scripted::spent_alone(w, t)
                 && !crate::lifter::lifter_type(w, t)
                 && !crate::drain::drainer_type(w, t)
