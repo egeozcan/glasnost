@@ -268,10 +268,12 @@ pub fn is_frames_from(bytes: &[u8], from: u8) -> bool {
         && bytes[HEADER_LEN] == FRAMES_TAG
 }
 
-/// The most orders a single lockstep frame may carry: well above the
-/// simulation's per-tick pending-order limit (`128`), bounding hostile
-/// frame expansion before it reaches `Session` or desync evidence.
-// nocite: our own netcode
+/// The most orders a single lockstep frame may carry: above the
+/// simulation's pending-list limit ([`glasnost_sim::orders::PENDING_LIMIT`]),
+/// bounding hostile frame expansion before it reaches `Session` or desync
+/// evidence. A session puts any more orders into its next frames, so no
+/// frame of an honest peer is refused.
+// nocite: our own netcode (twice the pending-list limit, a round bound)
 pub const MAX_FRAME_ORDERS: usize = 256;
 
 /// Writes a message.

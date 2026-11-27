@@ -1645,13 +1645,16 @@ impl Session {
             self.cfg.calm_ticks,
             &self.params,
         );
-        let mut orders = std::mem::take(&mut self.queued);
         while self.next_frame < target {
+            // A frame carries at most `wire::MAX_FRAME_ORDERS` orders (a
+            // longer one is unreadable to every peer and the relay); the
+            // rest wait, in order, for the next frames (#459).
+            let n = self.queued.len().min(wire::MAX_FRAME_ORDERS);
             self.mine.insert(
                 self.next_frame,
                 Frame {
                     delay: proposal,
-                    orders: std::mem::take(&mut orders),
+                    orders: self.queued.drain(..n).collect(),
                     resume: self.pending_resume.take(),
                 },
             );
