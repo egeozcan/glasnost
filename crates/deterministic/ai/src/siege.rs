@@ -615,7 +615,7 @@ impl Siege {
     /// house remembers an enemy army ([`Army::seen`], aircraft left to the
     /// brain's anti-air rule), the first army order of this think on each
     /// infantry and vehicle line (the brain's army round orders before its
-    /// special rules), when that line is free, is replaced by the type of that line the house can
+    /// special rules) is replaced by the type of that line the house can
     /// build of best [`matchup_value`] against the remembered units' types
     /// ([`best_against`]), as a person builds what beats the army he has
     /// seen. Not for the types the house sends alone and loses on use
@@ -651,10 +651,7 @@ impl Siege {
         for o in out.iter_mut() {
             let Order::Build { what } = o else { continue };
             let t = *what;
-            // An order on a busy line resumes or queues behind its item
-            // (S-0404 claims 3 and 5): only an order on a free line is the
-            // army round's pick.
-            if !kept(t) || eyes.busy(w, t) {
+            if !kept(t) {
                 continue;
             }
             let line = production::line_kind(w, t);
