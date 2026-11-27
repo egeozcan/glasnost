@@ -771,6 +771,26 @@ order-free), 211-8-21, and dev-0 scored 0.919 (418-16-46, 293 victories), both e
   taken once, a held item's resume order left alone), and it swaps only while the ground army
   the house remembers is worth at least the level's floor for a strike (`Tuning::floor`, 5 000
   at hard). Below that the brain's round robin picks, as on the base.
+  Development round 1, stopped after four pairs: `default:hard` 0.943 as dev-0 (map 2 26-0-6 again),
+  `default:normal` 0.906 to 0.932, `default:easy` 0.984 as before, but `siege:normal` 0.771 to 0.740
+  (country 0 22-15-11 to 22-17-9). Four pairs 0.900 against 0.901 and 4 more victories; with
+  `siege:easy` holding 2 non-wins, neither bar could be reached. The gate kept `default:hard`, but
+  took away the matchup's gain against `siege:normal` with country 0 (AS8's 0.667 to 0.552): there
+  the matchup pays early, before much of the enemy army is known. The gate and its test are
+  reverted.
+- **The matchup and no economy while outmatched** (`Tuning::matchup` and `Tuning::wary`, hard
+  only). A watch of a dev-0 loss (map 8, seed 7, country 0, against `siege:normal`; the game
+  AS6 to AS8 watched) shows it again. By tick 15 000 hard has put 26 500 into its army against
+  normal's 28 600, but 10 000 into factories and 8 000 into refineries against 5 500 and 4 000.
+  From 12 750, remembering an enemy army worth 9 000 against its own 3 600, it adds two more
+  factories (7 500 to 10 000 by 14 250), and its army is mostly dogs, riflemen and guardians
+  against normal's tanks. The two nearest gains of the last batches answer those two things in
+  different pairs: AS8's vehicle-line matchup (its round 3, +0.010 and 10 victories, mostly
+  `default:normal` and `siege:normal` with country 0) and AS6's no more economy while outmatched
+  (its round 3, +0.003, `siege:normal` on map 8 and `default:normal`). So both come back
+  together: AS8's vehicle-line matchup without the gate above, and AS6's rule that, while the
+  enemy army the house remembers is worth at least the level's floor and more than its own army
+  units, the siege's more refineries and more factories wait. The brain's own plan is unchanged.
 
 ## The tournament
 
