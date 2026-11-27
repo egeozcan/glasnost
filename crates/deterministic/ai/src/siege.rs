@@ -125,10 +125,6 @@ pub struct Tuning {
     /// the money in hand counts as rich ([`Siege::economy_stands`]); 0: from
     /// the start.
     pub rich_after: usize,
-    /// Whether the army round's type on each infantry and vehicle line is
-    /// the one of that line that best beats the enemy army the house
-    /// remembers ([`Siege::matched`]).
-    pub matchup: bool,
 }
 
 /// The tuning of level `level`.
@@ -153,7 +149,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
-            matchup: false,
         },
         // nocite: design: own AI (#449): normal earns from three harvesters, puts no money into superweapons (saving for one starves its army), strikes on the count alone and joins its strike in large groups
         AiDifficulty::Normal => Tuning {
@@ -174,7 +169,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             navy: true,
             refineries: 0,
             rich_after: 0,
-            matchup: false,
         },
         // nocite: design: own AI (#449): hard earns from three harvesters, puts no money into superweapons, strikes once ten wait and they are worth a fifth more than the enemy army it remembers (four fifths of it after 3000 ticks without a strike), calls a strike worth less than half of it home, goes for the enemy's harvesters and refineries first, joins in small groups and hunts the last units
         AiDifficulty::Hard => Tuning {
@@ -201,7 +195,6 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             refineries: 4,
             // nocite: design: own AI (#449): the starting money is not income; hard counts as rich only on two refineries with its harvesters standing, as a person builds the second refinery before the second war factory
             rich_after: 2,
-            matchup: false,
         },
     }
 }
@@ -608,10 +601,6 @@ impl Siege {
         }
     }
 
-    /// The army matched to the enemy's (design: own AI, #449); see
-    /// [`matchup_value`].
-    fn matched(&self, _w: &World, _out: &mut [Order]) {}
-
     /// The army's orders for this think, for units the brain gave none.
     fn command(
         &mut self,
@@ -739,18 +728,6 @@ impl Siege {
             self.army.strikes += 1;
         }
     }
-}
-
-/// The value of army type `t` against an enemy army of the types `mix`
-/// (design: own AI, #449): a stand-in until the lever lands.
-pub fn matchup_value(_w: &World, _t: TypeRef, _mix: &[TypeRef]) -> i128 {
-    0
-}
-
-/// Of the types `offered`, the one of best [`matchup_value`] against
-/// `mix`; none while no type is worth anything against it.
-pub fn best_against(_w: &World, _offered: &[TypeRef], _mix: &[TypeRef]) -> Option<TypeRef> {
-    None
 }
 
 /// Whether `t` is a building that gives a superweapon (S-0512 Terms: a
@@ -1112,123 +1089,6 @@ mod tests {
                 .any(|o| matches!(o, Order::Build { what } if *what == gunr)),
             "{out:?}"
         );
-    }
-
-    /// The skirmish with GUNR in heavy armour and a second rifleman type,
-    /// ZAPPER, whose weapon is strong against heavy armour and weak against
-    /// none (test data of our own).
-    fn matchup_world() -> World {
-        use glasnost_rules::sim::{ArmourClass, Decimal, WarheadType, WeaponType};
-        let mut r = fixture::ruleset();
-        let d = |s: &str| Decimal(s.into());
-        // nocite: test data of our own (a warhead of 0.1 against every class but heavy, 1 against heavy)
-        let mut verses = vec![d("0.1"); 11];
-        verses[ArmourClass::Heavy as usize] = d("1");
-        r.sim.warheads.insert(
-            "AP".into(),
-            WarheadType {
-                verses: Some(verses),
-                ..Default::default()
-            },
-        );
-        r.sim.weapons.insert(
-            "Zap".into(),
-            WeaponType {
-                damage: Some(40),
-                rof: Some(40),
-                range: Some(d("4")),
-                speed: Some(100),
-                projectile: Some("Bullet".into()),
-                warhead: Some("AP".into()),
-                ..Default::default()
-            },
-        );
-        let mut zapper = r.sim.infantry["WALKER"].clone();
-        zapper.primary = Some("Zap".into());
-        zapper.cost = Some(300);
-        r.sim.infantry.insert("ZAPPER".into(), zapper);
-        r.registries
-            .entry("infantry".into())
-            .or_default()
-            .push("ZAPPER".into());
-        if let Some(g) = r.sim.vehicles.get_mut("GUNR") {
-            g.combat.armor = Some(ArmourClass::Heavy);
-        }
-        new_game(
-            std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-matchup")),
-            &fixture::map(),
-            fixture::catalogue(),
-            &fixture::setup(5),
-        )
-        .expect("the matchup skirmish loads")
-    }
-
-    // design: own AI (#449): at hard the army round's type on a line is the one of the line that best beats the remembered enemy army by the square law (damage per tick by armour through the versus value, S-0302 claims 2 and 6, per the enemy's strength and weighted by its cost; times own strength over the damage taken; over cost squared); an unarmed type is worth nothing; with no enemy army remembered the brain's pick stays; the other levels keep the brain's pick
-    #[test]
-    fn matchup_picks_the_type_that_beats_the_remembered_army() {
-        assert!(tuning(AiDifficulty::Hard).matchup);
-        assert!(!tuning(AiDifficulty::Easy).matchup && !tuning(AiDifficulty::Normal).matchup);
-        let mut w = matchup_world();
-        let of = |w: &World, kind: Kind, name: &str| TypeRef {
-            kind,
-            index: w.rules().index_of(kind, name).expect(name),
-        };
-        let walker = of(&w, Kind::Infantry, "WALKER");
-        let zapper = of(&w, Kind::Infantry, "ZAPPER");
-        let gunr = of(&w, Kind::Vehicle, "GUNR");
-        let truk = of(&w, Kind::Vehicle, "TRUK");
-        let both = [walker, zapper];
-        // Against tanks in heavy armour the anti-armour type is worth more,
-        // against riflemen the rifleman.
-        assert!(
-            matchup_value(&w, zapper, &[gunr, gunr]) > matchup_value(&w, walker, &[gunr, gunr])
-        );
-        assert_eq!(best_against(&w, &both, &[gunr, gunr]), Some(zapper));
-        assert_eq!(best_against(&w, &both, &[walker, walker]), Some(walker));
-        assert!(matchup_value(&w, walker, &[walker]) > 0);
-        // An unarmed type is worth nothing, and nothing is picked with no
-        // enemy army.
-        assert_eq!(matchup_value(&w, truk, &[gunr]), 0);
-        assert_eq!(best_against(&w, &[truk], &[gunr]), None);
-        assert_eq!(best_against(&w, &both, &[]), None);
-
-        // The lever: a barracks of house 0, two tanks of house 1 remembered.
-        // nocite: test data of our own (free cells by each start)
-        let free = |w: &World, dx: i32| {
-            (2..10)
-                .flat_map(|d| {
-                    [
-                        fixture::at(dx + d, 4),
-                        fixture::at(dx - d, 4),
-                        fixture::at(dx + d, -4),
-                    ]
-                })
-                .find(|&c| w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c))
-                .expect("a free cell")
-        };
-        let c = free(&w, 0);
-        testkit::spawn(&mut w, Kind::Building, "PILL", 0, c, 0);
-        let mut s = Siege::start(&w, &fixture::map(), HouseId(0), AiDifficulty::Hard);
-        s.eyes.begin_think();
-        let offered = s.eyes.candidates(&w, Role::Army);
-        assert!(
-            offered.contains(&walker) && offered.contains(&zapper),
-            "{offered:?}"
-        );
-        let mut out = vec![Order::Build { what: walker }];
-        // No enemy army remembered: the brain's pick stays.
-        s.matched(&w, &mut out);
-        assert_eq!(out, vec![Order::Build { what: walker }]);
-        let e: Vec<(ObjectId, CellXY)> = (0..2)
-            .map(|_| {
-                let c = free(&w, fixture::START_DX);
-                (testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, c, 0), c)
-            })
-            .collect();
-        assert!(s.army.remember(&w, HouseId(0), &e) > 0);
-        s.matched(&w, &mut out);
-        s.eyes.end_think();
-        assert_eq!(out, vec![Order::Build { what: zapper }]);
     }
 
     // design: own AI (#449): at a level without superweapons the brain's order for a superweapon building is dropped, and its other orders are kept
