@@ -754,6 +754,24 @@ left it: no code of AS8's is kept, and cert-0 (1914.9) stands. What the rounds s
   tick 5 250 to 6 750 while the second refinery is paid (a watch of map 0, seed 8), against an
   enemy that strikes at 7 000 with tanks.
 
+### Hard, script AS9
+
+Script AS9 took the siege's hard level further toward 2000 Elo, with the same rules of fair play
+and AS8's measurement. On its base (ed0dfd3) cert-0 put `siege:hard` at 1914.9 (1894.8
+order-free), 211-8-21, and dev-0 scored 0.919 (418-16-46, 293 victories), both exactly as AS8's.
+
+- **The vehicle matchup once the enemy army is known** (`Tuning::matchup`, hard only). AS8's
+  matchup on the vehicle line alone (its round 3) came nearest a clear gain of any lever since
+  AS5: +0.010 and 10 more victories, `siege:normal` with hard on country 0 from 0.573 to 0.667,
+  `default:normal` 9 more victories. What it cost was `default:hard` on map 2 (26-0-6 to
+  22-0-10), and AS8's watch of a new draw there showed the swap answering a small remembered
+  army, partly aircraft. A person picks his tanks by the enemy army once he has seen enough of
+  it to judge; a glimpse of a few units says little. So AS8's vehicle-line matchup comes back
+  (the type on a free vehicle line of best value against the remembered enemy army, the cost
+  taken once, a held item's resume order left alone), and it swaps only while the ground army
+  the house remembers is worth at least the level's floor for a strike (`Tuning::floor`, 5 000
+  at hard). Below that the brain's round robin picks, as on the base.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):

@@ -676,3 +676,19 @@ reverted. The stop rule is three rounds in a row with no clear gain.
 | the matchup on the vehicle line only | A watch of a new dev-2 draw (map 2 seed 8, country 1, against `default:hard`): the infantry line all riflemen beside a few flak tracks | the matchup above on vehicle lines only; the infantry line keeps the brain's pick. dev-3, all pairs: 428-16-36, 0.929 against 0.919, 303 victories against 293 (`default:hard` 0.932, `siege:normal` 0.792, `default:normal` 0.943, both easy pairs 0.990); no clear gain, reverted | the same test with a vehicle swap and the infantry order left, reverted |
 
 Three rounds in a row with no clear gain: AS8 stopped with no code kept, and cert-0 (1914.9) stands.
+
+## Script AS9
+
+Issue #449, the siege's ninth batch: its hard level further toward 2000 Elo, playing fair. Notes
+in [ai-scripts.md](../dev/ai-scripts.md#hard-script-as9). Base ed0dfd3 (save 228, AI game 209,
+wire 13).
+
+**Measurement:** AS8's, fixed before the first round. AS9's own baseline on its base: cert-0
+(seeds 15 to 18, 720 games) gave `siege:hard` 1914.9 (order-free 1894.8), and dev-0 (480 games)
+gave 0.919 (418-16-46, 293 victories), both the same as AS8's in every rating and game. A clear
+gain is the combined score up at least 0.02, or 12 more victories, with no pair down more than
+0.06; a lever without one is reverted. The stop rule is three rounds in a row with no clear gain.
+
+| part | confirmed | change | test |
+|---|---|---|---|
+| the vehicle matchup once the enemy army is known | AS8's round 3 (the vehicle-line matchup): +0.010, 10 more victories, `siege:normal` country 0 0.573 to 0.667, but `default:hard` map 2 26-0-6 to 22-0-10; AS8's watch of a new draw there: the swap answered a small remembered army, partly aircraft | AS8's vehicle-line matchup brought back (`git revert` of its reverts), swapping only while the remembered ground army is worth at least `Tuning::floor` | `matchup_picks_the_type_that_beats_the_remembered_army` (AS8's), and a gate test |
