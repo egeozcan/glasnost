@@ -609,6 +609,78 @@ left it: no code of AS6's is kept, and cert-0 (1914.9) stands. What the rounds s
   every round). On map 8 they come late, against an enemy army that outgrows hard's on the same
   income; on map 0 they come early, while the base is paid for.
 
+### Hard, script AS7
+
+Script AS7 took the siege's hard level further toward 2000 Elo, with the same rules of fair play
+and AS6's measurement. On its base (b289f95) cert-0 put `siege:hard` at 1914.9 (1894.8
+order-free), 211-8-21, and dev-0 scored 0.919 (418-16-46, 293 victories), both exactly as AS6's.
+AS6's levers had changed how hard spends; AS7 looks at what hard knows when it decides to strike.
+
+- **A look at the enemy base** (`Tuning::scout`, hard only). Two watches of dev-0 losses to
+  `siege:normal` with country 0 show hard striking blind. On map 0 (seed 7) hard stands with 11
+  soldiers worth 2 800 from tick 3 750, while normal's base holds 0 to 3 army units and no
+  defence until 5 250. Hard remembers no enemy army, so the floor (5 000) keeps the soldiers home,
+  and they die there at 8 250 when normal's 12 units arrive. On map 8 (seed 7) hard remembers an
+  enemy army worth 1 000 at tick 9 000 when normal has 20 units worth 8 000 at home. Its one
+  strike, 24 units worth 9 200, goes into them and is lost. A person sends a fast unit to look at
+  the enemy base while his army builds up. So at hard, while no strike is out and the house has
+  seen no enemy building for the level's `scout` ticks, the fastest idle army unit at home beyond
+  the guard goes to look (a plain move to the strike's goal), and is called home once the house
+  sees an enemy building, or when it stands idle. The enemy army it sees is remembered as any
+  other. While the house's last look at an enemy base, within the memory's time, showed no armed
+  enemy building, the floor does not hold a new strike: the edge alone decides, against the enemy
+  army the house remembers. The brain's own scout, which explores the house's side of the map, is
+  unchanged.
+  Development round 1, stopped after two pairs: `siege:normal` 0.771 as dev-0 (map 0 worse, 8 to 13
+  losses, maps 2 and 8 better), `default:hard` 0.943 to 0.870 (draws 11 to 21 on maps 2 and 8),
+  past the limit of 0.06. The lever and its test are reverted: strikes of cheap soldiers on a
+  base seen open lose the army that wins `default:hard` at the cap.
+- **The recalled come home** (`Army::homing`, hard only). A watch of a dev-0 draw against
+  `default:hard` (map 2, seed 10, country 0, 52 200 against 39 200 at the cap) shows hard with 32 to
+  45 army units (10 800 to 16 200) from tick 21 000 to the cap against an enemy army remembered at
+  800 to 7 000, and no strike after its second recall. A local count of the army's think (not
+  kept in the code) shows why: of those units only 5 to 18 wait at home; 20 to 40 stand more than
+  30 cells from home, most of them fighting or moving, and the brain gives them no order. The
+  recall sends the strike home with plain moves and drops it from the strike; units fired on on
+  the way stop to fight, and from then on neither the strike nor the gathering at home counts
+  them. A person who calls his army home clicks the stragglers home again. So at hard the units a
+  recall calls home are kept as homing; at each think, one that is neither idle nor within the
+  recall's reach of home (the brain's 30 cells) and not under a move home is ordered home again
+  (unless the brain ordered it this think). It leaves the homing ones once idle or near home, and
+  then waits for the next strike as any other.
+  Development round 2, stopped after four pairs: `siege:normal` 0.771 to 0.797, `default:normal`
+  0.906 to 0.932, `default:easy` 0.984 as before, but `default:hard` 0.943 to 0.917 (10 of its 16
+  draws on map 2). Combined +0.005 and 7 more victories; with `siege:easy` holding only 2
+  non-wins, 12 more could no longer be reached. The lever and its test are reverted.
+- **The strike is fed, not called home** (`Tuning::feed`, hard only). A watch of a dev-2 draw
+  against `default:hard` that dev-0 won (map 2, seed 8, hard as house 0: 46 600 against 37 600 at
+  the cap) shows hard's third strike, 21 to 24 units sent at tick 18 000, killing the enemy's
+  harvesters (7 to 0) and taking its total from 44 800 to 35 200. At 24 000 it is called home
+  with 15 left, below half of the enemy army it remembers, and hard does not strike again until
+  27 000. The recall is judged before the units waiting at home are sent to join the strike, so
+  a strike that would be fed is called home instead. A person whose winning attack thins sends
+  the new units after it. So at hard, while a strike is out, the units waiting at home beyond the
+  guard, once there are as many as the level's join, count with it against the recall: while
+  together they are worth the recall's share of the remembered enemy army, the strike is not
+  called home, and they go out to join it as before.
+  Development round 3, stopped after three pairs: `siege:normal` 0.771 to 0.776 (40 victories
+  against 38), `default:hard` 0.943 and `default:normal` 0.906 as dev-0, one victory fewer and as
+  many. One more victory in all; with 5 non-wins left in the two easy pairs, a clear gain could no
+  longer be reached. The lever and its test are reverted.
+
+Three development rounds in a row brought no clear gain, so AS7 stopped with the hard level as AS5
+left it: no code of AS7's is kept, and cert-0 (1914.9) stands. What the rounds showed:
+
+- `default:hard` on map 2 still guards the score. The look at the enemy base sent cheap strikes
+  out and turned its wins into draws (0.870); calling the stragglers home cost it 0.026; feeding
+  an outmatched strike left it as it was.
+- The losses to `siege:normal` with country 0 (15 to 18 in every round) are not about what hard
+  knows of the enemy or about stragglers: hard's army trails normal's while its economy leads,
+  and every lever that changed how the army fights left them in place.
+- What is left between the strike's rules and 2000 is how much army hard's lead in income buys:
+  from tick 15 000 in the watches its money goes into buildings while its army stays level with
+  the enemy's.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
