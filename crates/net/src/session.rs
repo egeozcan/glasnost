@@ -1251,7 +1251,7 @@ impl Session {
             return;
         }
         r.running_seen = true;
-        r.ran = r.ran.max(f.ran);
+        r.ran = r.ran.max(f.ran.min(limit));
         // Only a newer stamp is echoed, and only a newer echo is a sample:
         // a late duplicate or a message overtaken on the way would echo, or
         // be, an old stamp, and its round trip would be a stale one.

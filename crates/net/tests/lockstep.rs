@@ -839,3 +839,27 @@ fn a_lone_person_with_computers_runs_without_a_network() {
     }
     assert_eq!(g.issued, vec![(2, HouseId(1), Order::Cheer)]);
 }
+
+#[test]
+fn forged_ran_does_not_poison_ahead() {
+    let info = start(&[SlotKind::Human, SlotKind::Human], fixed(2));
+    let mut s = started(&info, 0);
+    let mut g = Toy::new(0);
+    // Peer 1 sends valid initial frames for ticks 0..2, plus a forged ran = u32::MAX.
+    let msg = wire::encode(&Envelope {
+        from: 1,
+        body: Body::Frames(Frames {
+            first: 0,
+            frames: vec![Frame::default(); 2],
+            ran: u32::MAX,
+            ..Frames::default()
+        }),
+    });
+    s.receive(10, &msg);
+    assert!(s.step(10, &mut g).is_some());
+    assert!(s.step(20, &mut g).is_some());
+    // Peer 0 is at tick 2; peer 1's clamped ran cannot exceed frame_limit() (~32).
+    // ahead() = my_ran - min_other_ran should be small (not saturated to i32::MIN or huge negative).
+    let ahead = s.ahead(30);
+    assert!(ahead.abs() <= 100, "forged ran poisoned ahead() to {ahead}");
+}

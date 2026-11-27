@@ -147,6 +147,10 @@ pub struct Limits {
     /// frames they hold, in milliseconds (N7); one that has not answered by
     /// then is closed.
     pub answer_ms: u64,
+    /// How long a rejoining connection has to finish catching up before its
+    /// rejoin is cancelled and the rejoin slot is freed for other dropped
+    /// players, in milliseconds.
+    pub rejoin_ms: u64,
 }
 
 impl Default for Limits {
@@ -169,6 +173,7 @@ impl Default for Limits {
             signal_every_ms: 50, // nocite: our own netcode (twenty a second on average)
             signal_burst: 64, // nocite: our own netcode (an offer, an answer and their candidates, several times over)
             answer_ms: 10_000, // nocite: our own netcode (well past a stalled path's few seconds, below silent_ms)
+            rejoin_ms: 45_000, // nocite: our own netcode (bounds a stalled rejoin without cutting off a full snapshot transfer)
         }
     }
 }
@@ -373,6 +378,9 @@ struct Rejoin {
     marker: Option<u32>,
     /// Bytes of game passed on.
     sent: usize,
+    /// When an unfinished rejoin is cancelled so it cannot starve other
+    /// dropped slots.
+    deadline: u64,
 }
 
 /// A marker the hub let through: it may come again in resent frames.
@@ -1027,12 +1035,37 @@ impl Hub {
                 // frame), and a rejoining peer has the frames below the
                 // serving peer's first in the game it is sent. Our own
                 // netcode (the M9 exit run).
-                let alone = game.live().all(|(s, _)| s == slot);
+                //
+                // With other live peers, bound `kept` to the slowest other
+                // live peer's frontier plus `max_delay + 1` so a peer cannot
+                // inflate `kept` past other peers' `frame_limit()` and
+                // deadlock the game on disconnect. Also bound `f.ran` so a
+                // forged `ran` cannot prematurely mark dropped slots
+                // surrendered.
+                let lead = u32::from(game.started.begin.params.max_delay).saturating_add(1);
+                let min_other_kept = game
+                    .live()
+                    .filter(|&(s, _)| s != slot)
+                    .map(|(s, _)| game.kept[usize::from(s)])
+                    .min();
+                let alone = min_other_kept.is_none();
                 let k = &mut game.kept[usize::from(slot)];
                 if f.first <= *k || alone {
-                    *k = (*k).max(f.first.saturating_add(f.frames.len() as u32));
+                    let end = f.first.saturating_add(f.frames.len() as u32);
+                    let capped = match min_other_kept {
+                        Some(m) => end.min(m.saturating_add(lead)),
+                        None => end,
+                    };
+                    *k = (*k).max(capped);
                 }
-                game.max_ran = game.max_ran.max(f.ran);
+                let has_direct = game.signalled.iter().any(|&(a, b)| a == slot || b == slot);
+                let slack = if has_direct { lead } else { 0 };
+                let self_cap = game.kept[usize::from(slot)].saturating_add(slack);
+                let ran_cap = match min_other_kept {
+                    Some(m) => self_cap.min(m.saturating_add(slack)),
+                    None => self_cap,
+                };
+                game.max_ran = game.max_ran.max(f.ran.min(ran_cap));
             }
             Body::Start(_) => {}
         }
@@ -1332,6 +1365,7 @@ impl Hub {
             asked: false,
             marker: None,
             sent: 0,
+            deadline: now_ms.saturating_add(self.limits.rejoin_ms),
         });
         let _ = e.room.rejoin(conn, row, &name);
         self.stats.rejoins += 1;
@@ -1588,6 +1622,33 @@ impl Hub {
             .collect();
         for code in late {
             self.finish_rounds(now_ms, &code, true);
+        }
+        let stalled_rejoins: Vec<(String, u8, ConnId, Option<ConnId>)> = self
+            .rooms
+            .iter()
+            .filter_map(|(code, e)| {
+                let r = e.game.as_ref()?.rejoin.as_ref()?;
+                (!r.asked && now_ms >= r.deadline)
+                    .then(|| (code.clone(), r.slot, r.donor_conn, r.conn))
+            })
+            .collect();
+        for (code, slot, donor_conn, rejoining_conn) in stalled_rejoins {
+            if let Some(c) = rejoining_conn {
+                // `close` -> `leave_room` removes `c` from the room, tells
+                // the donor to stop serving, and clears `g.rejoin`.
+                self.close(now_ms, c, "rejoin timed out");
+            } else if let Some(g) = self.rooms.get_mut(&code).and_then(|e| e.game.as_mut())
+                && g.rejoin
+                    .as_ref()
+                    .is_some_and(|r| !r.asked && r.slot == slot && now_ms >= r.deadline)
+            {
+                g.rejoin = None;
+                self.send(
+                    now_ms,
+                    donor_conn,
+                    relay_message(Body::Serve { slot, on: false }),
+                );
+            }
         }
     }
 }
