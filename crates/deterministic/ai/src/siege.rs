@@ -34,9 +34,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use glasnost_map::{CellXY, Map};
-use glasnost_num::F64;
 use glasnost_rules::sim::MovementZone;
-use glasnost_sim::combat::veterancy;
 use glasnost_sim::econ::{TypeRef, production, shroud, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::probe::Probe;
@@ -203,8 +201,7 @@ pub fn tuning(level: AiDifficulty) -> Tuning {
             refineries: 4,
             // nocite: design: own AI (#449): the starting money is not income; hard counts as rich only on two refineries with its harvesters standing, as a person builds the second refinery before the second war factory
             rich_after: 2,
-            // nocite: design: own AI (#449): hard builds on each army line the type that best beats the enemy army it remembers, as a person answers the army he has seen
-            matchup: true,
+            matchup: false,
         },
     }
 }
@@ -611,64 +608,9 @@ impl Siege {
         }
     }
 
-    /// The army matched to the enemy's (design: own AI, #449): once the
-    /// house remembers an enemy army ([`Army::seen`], aircraft left to the
-    /// brain's anti-air rule), the first army order of this think on each
-    /// infantry and vehicle line (the brain's army round orders before its
-    /// special rules) is replaced by the type of that line the house can
-    /// build of best [`matchup_value`] against the remembered units' types
-    /// ([`best_against`]), as a person builds what beats the army he has
-    /// seen. Not for the types the house sends alone and loses on use
-    /// (`scripted::spent_alone`), lifters or drainers, on either side of
-    /// the swap; the brain's pick stays when no type of the line is worth
-    /// anything against the enemy army.
-    fn matched(&self, w: &World, out: &mut [Order]) {
-        let mix: Vec<TypeRef> = self
-            .army
-            .seen
-            .keys()
-            .filter_map(|&e| w.obj(e))
-            .filter(|o| o.kind != Kind::Aircraft)
-            .map(tech::type_of)
-            .collect();
-        if mix.is_empty() {
-            return;
-        }
-        let eyes = &self.eyes;
-        let kept = |t: TypeRef| {
-            scripted::role_of(w, t) == Some(Role::Army)
-                && matches!(t.kind, Kind::Infantry | Kind::Vehicle)
-                && !scripted::spent_alone(w, t)
-                && !crate::lifter::lifter_type(w, t)
-                && !crate::drain::drainer_type(w, t)
-        };
-        let offered: Vec<TypeRef> = eyes
-            .candidates(w, Role::Army)
-            .into_iter()
-            .filter(|&t| kept(t))
-            .collect();
-        let mut done: Vec<Option<production::LineKind>> = Vec::new();
-        for o in out.iter_mut() {
-            let Order::Build { what } = o else { continue };
-            let t = *what;
-            if !kept(t) {
-                continue;
-            }
-            let line = production::line_kind(w, t);
-            if done.contains(&line) {
-                continue;
-            }
-            done.push(line);
-            let same: Vec<TypeRef> = offered
-                .iter()
-                .copied()
-                .filter(|&x| production::line_kind(w, x) == line)
-                .collect();
-            if let Some(b) = best_against(w, &same, &mix) {
-                *what = b;
-            }
-        }
-    }
+    /// The army matched to the enemy's (design: own AI, #449); see
+    /// [`matchup_value`].
+    fn matched(&self, _w: &World, _out: &mut [Order]) {}
 
     /// The army's orders for this think, for units the brain gave none.
     fn command(
@@ -799,84 +741,16 @@ impl Siege {
     }
 }
 
-/// The damage per tick a unit of type `t` deals an object of armour class
-/// `armour`, in thousandths of a health point (design: own AI, #449: our
-/// own estimate): of the type's first two weapon slots (S-0308 claim 1)
-/// the better, each the weapon's damage field times its burst count over
-/// its rate-of-fire field (S-0302 claim 2, S-0301 Terms), times the versus
-/// value of its warhead for the class (S-0302 claim 6); 0 for a type with
-/// no weapon, and for a negative damage (a healer).
-fn harm(w: &World, t: TypeRef, armour: usize) -> i128 {
-    let r = w.rules();
-    let Some(tc) = veterancy::type_combat_in(r, t.kind, t.index) else {
-        return 0;
-    };
-    // nocite: design: own AI (#449): thousandths of the versus value
-    let per_mille = F64::from_i64(1000, r.mode);
-    tc.slots
-        .iter()
-        .take(2)
-        .flatten()
-        .map(|&x| {
-            let wr = r.combat.weapon(x);
-            let versus = r.combat.warhead_of(x).map_or(0, |h| {
-                h.versus(armour)
-                    .mul(per_mille, r.mode)
-                    .trunc_i128()
-                    .unwrap_or(0)
-            });
-            i128::from(wr.damage.max(0)) * i128::from(wr.burst.max(1)) * versus.max(0)
-                / i128::from(wr.rof.max(1))
-        })
-        .max()
-        .unwrap_or(0)
-}
-
-/// A type's armour class (S-0305) and strength (S-0302 Import mapping).
-fn armour_strength(w: &World, t: TypeRef) -> (usize, i128) {
-    let r = w.rules();
-    let armour = veterancy::type_combat_in(r, t.kind, t.index).map_or(0, |tc| tc.armour);
-    let strength = r.unit(t.kind, t.index).map_or(0, |u| u.strength);
-    (armour, i128::from(strength.max(1)))
-}
-
 /// The value of army type `t` against an enemy army of the types `mix`
-/// (design: own AI, #449: our own estimate after the square law of
-/// attrition, under which a force's strength is its units' damage times
-/// their strength times the square of their number, so per credit spent
-/// it goes with damage times strength over the cost squared): the damage
-/// per tick `t` deals the mix ([`harm`]), each unit's share per point of
-/// its strength and weighted by its cost (S-0403 claim 2's cost field),
-/// times `t`'s strength over the damage per tick the mix deals `t`'s
-/// armour (at least 1), over `t`'s cost squared. 0 for a type that harms
-/// none of the mix, and with no mix.
-pub fn matchup_value(w: &World, t: TypeRef, mix: &[TypeRef]) -> i128 {
-    let (armour, strength) = armour_strength(w, t);
-    let mut dealt: i128 = 0;
-    let mut taken: i128 = 0;
-    for &u in mix {
-        let (u_armour, u_strength) = armour_strength(w, u);
-        let u_cost = i128::from(production::cost_field(w, u).max(1));
-        dealt += harm(w, t, u_armour) * u_cost / u_strength;
-        taken += harm(w, u, armour);
-    }
-    let cost = i128::from(production::cost_field(w, t).max(1));
-    // nocite: design: own AI (#449): a scale of a million keeps the ratio's digits in integers
-    dealt * strength * 1_000_000 / taken.max(1) / (cost * cost)
+/// (design: own AI, #449): a stand-in until the lever lands.
+pub fn matchup_value(_w: &World, _t: TypeRef, _mix: &[TypeRef]) -> i128 {
+    0
 }
 
 /// Of the types `offered`, the one of best [`matchup_value`] against
-/// `mix`, the first offered on a tie; none while no type is worth anything
-/// against it.
-pub fn best_against(w: &World, offered: &[TypeRef], mix: &[TypeRef]) -> Option<TypeRef> {
-    let mut best: Option<(i128, TypeRef)> = None;
-    for &t in offered {
-        let v = matchup_value(w, t, mix);
-        if v > 0 && best.is_none_or(|(b, _)| v > b) {
-            best = Some((v, t));
-        }
-    }
-    best.map(|(_, t)| t)
+/// `mix`; none while no type is worth anything against it.
+pub fn best_against(_w: &World, _offered: &[TypeRef], _mix: &[TypeRef]) -> Option<TypeRef> {
+    None
 }
 
 /// Whether `t` is a building that gives a superweapon (S-0512 Terms: a
@@ -1133,9 +1007,6 @@ impl AiScript for Siege {
         }
         if t.rich > 0 && self.economy_stands(w, t.rich_after) {
             self.more_factories(w, t.rich, &mut out);
-        }
-        if t.matchup {
-            self.matched(w, &mut out);
         }
         if t.beside {
             self.beside(w, &mut out);
