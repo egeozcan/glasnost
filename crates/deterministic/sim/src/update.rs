@@ -11,11 +11,11 @@ pub struct UpdateOrder {
     /// Objects in play, in the order of entering play (S-0203 claim 3).
     pub order: Vec<ObjectId>,
     /// Index of the current object during a turn pass.
-    cur: Option<usize>,
+    cur: Option<u32>,
     /// The current object left play during its turn.
     cur_gone: bool,
     /// Counting removals during the current turn (S-0203 claim 10).
-    skips: usize,
+    skips: u32,
     /// A turn pass is running.
     in_pass: bool,
 }
@@ -55,7 +55,7 @@ impl UpdateOrder {
         // The current object leaving in its own turn is the common case
         // (an ended animation): found without a search.
         let p = match self.cur {
-            Some(c) if self.order.get(c) == Some(&id) => c,
+            Some(c) if self.order.get(c as usize) == Some(&id) => c as usize,
             _ => {
                 let Some(p) = self.order.iter().position(|o| *o == id) else {
                     return;
@@ -69,9 +69,10 @@ impl UpdateOrder {
             return;
         }
         if let Some(cur) = self.cur {
+            let cur_idx = cur as usize;
             // spec: S-0203 claim 10 (a removal counts when the object is the current one or stands before it; once the current one has left, index `cur` holds the object that stood after it, whose removal costs nobody a turn)
-            let current = p == cur && !self.cur_gone;
-            if p < cur || current {
+            let current = p == cur_idx && !self.cur_gone;
+            if p < cur_idx || current {
                 if removal_skip {
                     self.skips += 1;
                 }
@@ -98,18 +99,18 @@ impl UpdateOrder {
     pub fn next_turn(&mut self) -> Option<ObjectId> {
         let mut i = match self.cur {
             None => 0,
-            Some(c) if self.cur_gone => c,
-            Some(c) => c + 1,
+            Some(c) if self.cur_gone => c as usize,
+            Some(c) => (c as usize) + 1,
         };
         // spec: S-0203 claim 10 (k counting removals make the k objects directly after miss their turns)
-        i += self.skips;
+        i += self.skips as usize;
         self.skips = 0;
         self.cur_gone = false;
         if i >= self.order.len() {
-            self.cur = Some(self.order.len());
+            self.cur = Some(self.order.len() as u32);
             return None;
         }
-        self.cur = Some(i);
+        self.cur = Some(i as u32);
         Some(self.order[i])
     }
 
@@ -124,6 +125,11 @@ impl UpdateOrder {
     /// Whether a turn pass is running.
     pub fn in_pass(&self) -> bool {
         self.in_pass
+    }
+
+    /// Whether the order is consistent between ticks (not mid-pass).
+    pub fn is_consistent(&self) -> bool {
+        !self.in_pass && self.cur.is_none() && !self.cur_gone && self.skips == 0
     }
 }
 
