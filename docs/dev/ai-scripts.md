@@ -754,6 +754,86 @@ left it: no code of AS8's is kept, and cert-0 (1914.9) stands. What the rounds s
   tick 5 250 to 6 750 while the second refinery is paid (a watch of map 0, seed 8), against an
   enemy that strikes at 7 000 with tanks.
 
+### Hard, script AS9
+
+Script AS9 took the siege's hard level further toward 2000 Elo, with the same rules of fair play
+and AS8's measurement. On its base (ed0dfd3) cert-0 put `siege:hard` at 1914.9 (1894.8
+order-free), 211-8-21, and dev-0 scored 0.919 (418-16-46, 293 victories), both exactly as AS8's.
+
+- **The vehicle matchup once the enemy army is known** (`Tuning::matchup`, hard only). AS8's
+  matchup on the vehicle line alone (its round 3) came nearest a clear gain of any lever since
+  AS5: +0.010 and 10 more victories, `siege:normal` with hard on country 0 from 0.573 to 0.667,
+  `default:normal` 9 more victories. What it cost was `default:hard` on map 2 (26-0-6 to
+  22-0-10), and AS8's watch of a new draw there showed the swap answering a small remembered
+  army, partly aircraft. A person picks his tanks by the enemy army once he has seen enough of
+  it to judge; a glimpse of a few units says little. So AS8's vehicle-line matchup comes back
+  (the type on a free vehicle line of best value against the remembered enemy army, the cost
+  taken once, a held item's resume order left alone), and it swaps only while the ground army
+  the house remembers is worth at least the level's floor for a strike (`Tuning::floor`, 5 000
+  at hard). Below that the brain's round robin picks, as on the base.
+  Development round 1, stopped after four pairs: `default:hard` 0.943 as dev-0 (map 2 26-0-6 again),
+  `default:normal` 0.906 to 0.932, `default:easy` 0.984 as before, but `siege:normal` 0.771 to 0.740
+  (country 0 22-15-11 to 22-17-9). Four pairs 0.900 against 0.901 and 4 more victories; with
+  `siege:easy` holding 2 non-wins, neither bar could be reached. The gate kept `default:hard`, but
+  took away the matchup's gain against `siege:normal` with country 0 (AS8's 0.667 to 0.552): there
+  the matchup pays early, before much of the enemy army is known. The gate and its test are
+  reverted.
+- **The matchup and no economy while outmatched** (`Tuning::matchup` and `Tuning::wary`, hard
+  only). A watch of a dev-0 loss (map 8, seed 7, country 0, against `siege:normal`; the game
+  AS6 to AS8 watched) shows it again. By tick 15 000 hard has put 26 500 into its army against
+  normal's 28 600, but 10 000 into factories and 8 000 into refineries against 5 500 and 4 000.
+  From 12 750, remembering an enemy army worth 9 000 against its own 3 600, it adds two more
+  factories (7 500 to 10 000 by 14 250), and its army is mostly dogs, riflemen and guardians
+  against normal's tanks. The two nearest gains of the last batches answer those two things in
+  different pairs: AS8's vehicle-line matchup (its round 3, +0.010 and 10 victories, mostly
+  `default:normal` and `siege:normal` with country 0) and AS6's no more economy while outmatched
+  (its round 3, +0.003, `siege:normal` on map 8 and `default:normal`). So both come back
+  together: AS8's vehicle-line matchup without the gate above, and AS6's rule that, while the
+  enemy army the house remembers is worth at least the level's floor and more than its own army
+  units, the siege's more refineries and more factories wait. The brain's own plan is unchanged.
+  Development round 2, stopped after three pairs: `default:hard` 0.943 to 0.927 (victories 57 to
+  68, but 3 losses on map 2), `siege:normal` 0.771 as dev-0 (victories 38 to 28, country 0 22-15-11
+  to 25-11-12), `default:normal` 0.906 to 0.953. Three pairs up 3 points and 4 victories; with the
+  two easy pairs left, 305 victories needed 137 from them (dev-0 129), out of reach. The lever and
+  its test are reverted. The early losses on map 0 did not move: dev-0's loss at tick 9 965 (seed
+  7) has the same hash in this round.
+- **Soldiers while a new refinery waits, while the army is weak** (`Tuning::soldiers_while_paying`,
+  hard only). A watch of that early loss (map 0, seed 7, country 0, against `siege:normal`) shows
+  AS5's and AS6's watches once more: from tick 4 125 hard stands with 11 soldiers worth 2 800
+  while normal has no army unit until 5 250. At 5 250 the siege orders the next refinery with 528
+  credits in hand (it owes 1 741), and the brain holds the infantry line on it until 6 750 and then
+  the vehicle line too. Normal strikes at 7 125 with 9 of its 13 units (5 200, with tanks), hard's
+  soldiers are gone by 7 875 and its base by 9 964, with 2 800 credits unspent. AS6's round 1 let
+  every army line run while such a refinery waits, and the refinery came so late that
+  `default:hard` fell 0.058; AS5's round 5 held the refinery itself until the army was worth the
+  floor, and `default:hard` fell 0.032. A person whose small army guards a base he is still paying
+  for keeps the barracks busy, soldiers being cheap, and lets the war factory's money go to the
+  refinery. So at hard, while the only reason the brain pays for its economy first is a refinery
+  by a new field (the house owns a refinery, has lost none and keeps its economy target, as in
+  AS6's form) and the house's own army units are worth less than the level's floor for a strike
+  (5 000 at hard), the siege drops the brain's hold orders for infantry army items and resumes the
+  infantry army items it held (S-0404 claims 3 and 5). The vehicle line stays held for the
+  refinery, and once the army is worth the floor every hold is the brain's again.
+  Development round 3, stopped after two pairs: `default:hard` 0.943 to 0.896 (victories 57 to 53,
+  maps 2 and 8 both weaker), `siege:normal` 0.771 to 0.740 (map 0 23-8-1 to 20-12-0, country 0
+  22-15-11 to 18-16-14). Two pairs down 7.5 points and 6 victories; neither bar could be reached
+  with three pairs left. The lever and its test are reverted: the soldiers trained through the
+  wait did not hold the base on map 0, and the refinery they delayed cost the long games.
+
+Three development rounds in a row brought no clear gain, so AS9 stopped with the hard level as AS5
+left it: no code of AS9's is kept, and cert-0 (1914.9) stands. What the rounds showed:
+
+- Gating the vehicle matchup on a known enemy army kept `default:hard` level but took away the
+  matchup's gain against `siege:normal` with country 0: the matchup pays early, before much of
+  the enemy army has been seen.
+- The vehicle matchup with no economy while outmatched moved victories from `siege:normal` (38 to
+  28) to `default:hard` (57 to 68), and lifted `default:normal` (0.906 to 0.953), but in all made
+  only 4 more victories over three pairs.
+- The early map-0 losses to `siege:normal` with country 0 (dev-0's game at tick 9 965 played the
+  same under lever 2) come from an army of 11 cheap soldiers, dogs among them, that meets
+  normal's first strike of tanks. Training more of them through the refinery's wait made those
+  losses worse (8 to 12), so what that army is made of matters more than its size.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
