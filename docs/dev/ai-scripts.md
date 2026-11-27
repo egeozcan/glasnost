@@ -709,6 +709,22 @@ so what differs is the army the two countries' types make.
   alone and loses on use, lifters and naval types keep the brain's own rules. The brain's pick
   stays while no enemy army is remembered, or when no type of the line is worth anything against
   it. The brain's own army round, which the default script plays, is unchanged.
+  Development round 1, stopped after two pairs: `default:hard` 0.943 to 0.901 (country 0 better,
+  42-0-6 to 45-1-2; country 1 worse, 43-0-5 to 36-3-9), `siege:normal` 0.771 to 0.708 (country 0
+  0.573 to 0.615; country 1 45-0-3 to 35-6-7), past the limit of 0.06. A watch of a new country-1
+  loss (map 2, seed 8) showed a fault: both army lines stood on a player hold from tick 7 500 to
+  the end. The brain resumes a held item by ordering its type again (S-0404 claims 3 and 5), and
+  the swap changed that order to another type, so the held item waited for ever and the house
+  built no army while its credits rose to 23 000. The swap now takes only an order on a free
+  line, which is what the army round orders. With that fixed the same game is a draw (40 700
+  against 32 700) where dev-0 won at the cap (46 500 against 15 400): the infantry line builds
+  conscripts only, over 40 of them, the cheapest type. The square law's cost squared favours the
+  cheapest type beyond what it is worth in a fight of crowded units.
+- **The matchup by what a credit deals before it dies** (`matchup_value`, hard only). The value
+  of the matchup above with the cost taken once, not squared: the damage per tick a credit spent
+  on the type deals the remembered army (as weighted above), times how long the type lasts
+  against it (its strength over the damage per tick the remembered units deal its armour). A type
+  twice as strong and twice as dear is worth as much; under the square law it was worth half.
 
 ## The tournament
 
