@@ -35,6 +35,10 @@ pub const GAP: i32 = 9;
 // nocite: our own tooling
 pub const REORDER: i32 = 15;
 
+/// The rings around an anchor searched for free cells.
+// nocite: our own tooling
+const RINGS: i32 = 40;
+
 /// The two groups.
 #[derive(Clone, Debug)]
 pub struct Brawl {
@@ -83,7 +87,7 @@ fn free(w: &World, c: CellXY) -> bool {
 /// The free cells nearest to `anchor`, ring by ring, `n` of them at most.
 fn cells_near(w: &World, anchor: CellXY, n: usize) -> Vec<CellXY> {
     let mut out = Vec::new();
-    for r in 0..40i32 {
+    for r in 0..RINGS {
         for dx in -r..=r {
             for dy in -r..=r {
                 if dx.abs().max(dy.abs()) != r {
