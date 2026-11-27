@@ -1294,6 +1294,14 @@ mod tests {
         if let Some(g) = r.sim.vehicles.get_mut("GUNR") {
             g.combat.armor = Some(ArmourClass::Heavy);
         }
+        // nocite: test data of our own (a gun vehicle on the anti-armour weapon)
+        let mut zaptank = r.sim.vehicles["GUNR"].clone();
+        zaptank.primary = Some("Zap".into());
+        r.sim.vehicles.insert("ZAPTANK".into(), zaptank);
+        r.registries
+            .entry("vehicles".into())
+            .or_default()
+            .push("ZAPTANK".into());
         new_game(
             std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-matchup")),
             &fixture::map(),
@@ -1303,7 +1311,7 @@ mod tests {
         .expect("the matchup skirmish loads")
     }
 
-    // design: own AI (#449): at hard the army round's type on a line is the one of the line that best beats the remembered enemy army by what a credit spent on it deals before it dies (damage per tick by armour through the versus value, S-0302 claims 2 and 6, per the enemy's strength and weighted by its cost; times own strength over the damage taken; over the cost once); an unarmed type is worth nothing; with no enemy army remembered the brain's pick stays; the other levels keep the brain's pick
+    // design: own AI (#449): at hard the army round's type on a vehicle line (the infantry line keeps the brain's pick) is the one of the line that best beats the remembered enemy army by what a credit spent on it deals before it dies (damage per tick by armour through the versus value, S-0302 claims 2 and 6, per the enemy's strength and weighted by its cost; times own strength over the damage taken; over the cost once); an unarmed type is worth nothing; with no enemy army remembered the brain's pick stays; the other levels keep the brain's pick
     #[test]
     fn matchup_picks_the_type_that_beats_the_remembered_army() {
         assert!(tuning(AiDifficulty::Hard).matchup);
@@ -1342,7 +1350,14 @@ mod tests {
         assert_eq!(best_against(&w, &[truk], &[gunr]), None);
         assert_eq!(best_against(&w, &both, &[]), None);
 
-        // The lever: a barracks of house 0, two tanks of house 1 remembered.
+        let zaptank = of(&w, Kind::Vehicle, "ZAPTANK");
+        assert_eq!(
+            best_against(&w, &[gunr, zaptank], &[gunr, gunr]),
+            Some(zaptank)
+        );
+
+        // The lever: a barracks and a war factory of house 0, two tanks of
+        // house 1 remembered.
         // nocite: test data of our own (free cells by each start)
         let free = |w: &World, dx: i32| {
             (2..10)
@@ -1358,17 +1373,23 @@ mod tests {
         };
         let c = free(&w, 0);
         testkit::spawn(&mut w, Kind::Building, "PILL", 0, c, 0);
+        let c = free(&w, 0);
+        testkit::spawn(&mut w, Kind::Building, "FACT", 0, c, 0);
         let mut s = Siege::start(&w, &fixture::map(), HouseId(0), AiDifficulty::Hard);
         s.eyes.begin_think();
         let offered = s.eyes.candidates(&w, Role::Army);
         assert!(
-            offered.contains(&walker) && offered.contains(&zapper),
+            offered.contains(&walker)
+                && offered.contains(&zapper)
+                && offered.contains(&gunr)
+                && offered.contains(&zaptank),
             "{offered:?}"
         );
-        let mut out = vec![Order::Build { what: walker }];
+        let brains = vec![Order::Build { what: walker }, Order::Build { what: gunr }];
+        let mut out = brains.clone();
         // No enemy army remembered: the brain's pick stays.
         s.matched(&w, &mut out);
-        assert_eq!(out, vec![Order::Build { what: walker }]);
+        assert_eq!(out, brains);
         let e: Vec<(ObjectId, CellXY)> = (0..2)
             .map(|_| {
                 let c = free(&w, fixture::START_DX);
@@ -1378,18 +1399,26 @@ mod tests {
         assert!(s.army.remember(&w, HouseId(0), &e) > 0);
         s.matched(&w, &mut out);
         s.eyes.end_think();
-        assert_eq!(out, vec![Order::Build { what: zapper }]);
+        // The vehicle line's pick is swapped; the infantry line keeps the
+        // brain's pick.
+        assert_eq!(
+            out,
+            vec![
+                Order::Build { what: walker },
+                Order::Build { what: zaptank }
+            ]
+        );
         // A held item's line is busy: the order for its type resumes it
         // (S-0404 claims 3 and 5) and is not swapped, or the line would wait
         // on the held item for ever.
-        production::build(&mut w, HouseId(0), walker);
-        production::hold(&mut w, HouseId(0), walker);
+        production::build(&mut w, HouseId(0), gunr);
+        production::hold(&mut w, HouseId(0), gunr);
         s.eyes.begin_think();
-        assert!(s.eyes.busy(&w, walker));
-        let mut out = vec![Order::Build { what: walker }];
+        assert!(s.eyes.busy(&w, gunr));
+        let mut out = vec![Order::Build { what: gunr }];
         s.matched(&w, &mut out);
         s.eyes.end_think();
-        assert_eq!(out, vec![Order::Build { what: walker }]);
+        assert_eq!(out, vec![Order::Build { what: gunr }]);
     }
 
     // design: own AI (#449): at a level without superweapons the brain's order for a superweapon building is dropped, and its other orders are kept
