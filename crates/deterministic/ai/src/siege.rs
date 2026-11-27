@@ -1312,7 +1312,7 @@ mod tests {
         .expect("the matchup skirmish loads")
     }
 
-    // design: own AI (#449): at hard the army round's type on a vehicle line (the infantry line keeps the brain's pick) is the one of the line that best beats the remembered enemy army by what a credit spent on it deals before it dies (damage per tick by armour through the versus value, S-0302 claims 2 and 6, per the enemy's strength and weighted by its cost; times own strength over the damage taken; over the cost once); an unarmed type is worth nothing; with no enemy army remembered the brain's pick stays; the other levels keep the brain's pick
+    // design: own AI (#449): at hard the army round's type on a vehicle line (the infantry line keeps the brain's pick) is the one of the line that best beats the remembered enemy army by what a credit spent on it deals before it dies (damage per tick by armour through the versus value, S-0302 claims 2 and 6, per the enemy's strength and weighted by its cost; times own strength over the damage taken; over the cost once); an unarmed type is worth nothing; with no enemy army remembered, or a remembered ground army worth less than the level's floor (AS9), the brain's pick stays; the other levels keep the brain's pick
     #[test]
     fn matchup_picks_the_type_that_beats_the_remembered_army() {
         assert!(tuning(AiDifficulty::Hard).matchup);
@@ -1391,13 +1391,28 @@ mod tests {
         // No enemy army remembered: the brain's pick stays.
         s.matched(&w, &mut out);
         assert_eq!(out, brains);
-        let e: Vec<(ObjectId, CellXY)> = (0..2)
+        let mut e: Vec<(ObjectId, CellXY)> = (0..2)
             .map(|_| {
                 let c = free(&w, fixture::START_DX);
                 (testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, c, 0), c)
             })
             .collect();
-        assert!(s.army.remember(&w, HouseId(0), &e) > 0);
+        let floor = tuning(AiDifficulty::Hard).floor;
+        let known = s.army.remember(&w, HouseId(0), &e);
+        assert!(known > 0 && known < floor, "{known}");
+        // Two tanks remembered, worth less than the level's floor: too little
+        // seen to judge the enemy army by, so the brain's pick stays.
+        s.matched(&w, &mut out);
+        assert_eq!(out, brains);
+        // More tanks seen, until the remembered ground army is worth the
+        // floor: the swap.
+        let one = worth(&w, e[0].0);
+        let more = usize::try_from((floor - known) / one + 1).expect("a count");
+        for _ in 0..more {
+            let c = free(&w, fixture::START_DX);
+            e.push((testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 1, c, 0), c));
+        }
+        assert!(s.army.remember(&w, HouseId(0), &e) >= floor);
         s.matched(&w, &mut out);
         s.eyes.end_think();
         // The vehicle line's pick is swapped; the infantry line keeps the
