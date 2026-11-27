@@ -679,8 +679,11 @@ impl Bench {
             if self.opts.brawl > 0 {
                 self.brawl = super::brawl::stage(&mut s.play.game.world, self.opts.brawl as usize);
                 // The watched house sees the whole map, so the fight is not
-                // under the shroud.
-                glasnost_sim::econ::shroud::crate_reveal(&mut s.play.game.world, s.play.local);
+                // under the shroud. A spectating host has no house and
+                // needs no reveal.
+                if let Some(h) = s.play.local {
+                    glasnost_sim::econ::shroud::crate_reveal(&mut s.play.game.world, h);
+                }
                 match &self.brawl {
                     Some(b) => {
                         let note = format!(
@@ -746,9 +749,13 @@ impl Bench {
             }
             _ => self.centre,
         };
-        let centre = match (&mut self.brawl, kind) {
+        // The brawl's groups are kept fighting in every view; only the
+        // battle view's camera follows them.
+        if let Some(b) = &mut self.brawl {
+            b.tick(&mut s.play.game.world);
+        }
+        let centre = match (&self.brawl, kind) {
             (Some(b), ViewKind::Battle) => {
-                b.tick(&mut s.play.game.world);
                 if let Some(p) = b.focus(&s.play.game.world) {
                     let f = project_lifted(p.x, p.y, p.z);
                     if self.in_view == 0 {
