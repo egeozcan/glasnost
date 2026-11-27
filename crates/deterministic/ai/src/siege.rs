@@ -844,13 +844,14 @@ fn armour_strength(w: &World, t: TypeRef) -> (usize, i128) {
 }
 
 /// The value of army type `t` against an enemy army of the types `mix`
-/// (design: own AI, #449: our own estimate of what a credit spent on `t`
-/// deals before `t` dies; the square law's cost squared favoured the
-/// cheapest type beyond its worth among crowded units): the damage
+/// (design: own AI, #449: our own estimate after the square law of
+/// attrition, under which a force's strength is its units' damage times
+/// their strength times the square of their number, so per credit spent
+/// it goes with damage times strength over the cost squared): the damage
 /// per tick `t` deals the mix ([`harm`]), each unit's share per point of
 /// its strength and weighted by its cost (S-0403 claim 2's cost field),
 /// times `t`'s strength over the damage per tick the mix deals `t`'s
-/// armour (at least 1), over `t`'s cost. 0 for a type that harms
+/// armour (at least 1), over `t`'s cost squared. 0 for a type that harms
 /// none of the mix, and with no mix.
 pub fn matchup_value(w: &World, t: TypeRef, mix: &[TypeRef]) -> i128 {
     let (armour, strength) = armour_strength(w, t);
@@ -864,7 +865,7 @@ pub fn matchup_value(w: &World, t: TypeRef, mix: &[TypeRef]) -> i128 {
     }
     let cost = i128::from(production::cost_field(w, t).max(1));
     // nocite: design: own AI (#449): a scale of a million keeps the ratio's digits in integers
-    dealt * strength * 1_000_000 / taken.max(1) / cost
+    dealt * strength * 1_000_000 / taken.max(1) / (cost * cost)
 }
 
 /// Of the types `offered`, the one of best [`matchup_value`] against
