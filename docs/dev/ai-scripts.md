@@ -681,6 +681,35 @@ left it: no code of AS7's is kept, and cert-0 (1914.9) stands. What the rounds s
   from tick 15 000 in the watches its money goes into buildings while its army stays level with
   the enemy's.
 
+### Hard, script AS8
+
+Script AS8 took the siege's hard level further toward 2000 Elo, with the same rules of fair play
+and AS7's measurement. On its base (dceb638, with sim batch S52 merged) cert-0 put `siege:hard` at
+1914.9 (1894.8 order-free), 211-8-21, and dev-0 scored 0.919 (418-16-46, 293 victories), both
+exactly as AS7's. Of dev-0's 16 losses 15 are to `siege:normal` with hard on country 0, and that
+pair goes 22-15-11 on country 0 against 45-0-3 on country 1: the same script and the same money,
+so what differs is the army the two countries' types make.
+
+- **The army matched to the enemy's** (`Tuning::matchup`, hard only). A watch of a dev-0 loss
+  (map 8, seed 7, country 0, against `siege:normal`) shows hard's army mostly cheap infantry
+  (dogs, rifles, guardians and engineers, with a few tanks) against an enemy army whose worth is
+  mostly vehicles. Its strike of 24 units worth 9 200 is lost to 19 worth 7 900. The brain's
+  army round picks, on each free line, the type the house has fewest of on the map, whatever it
+  faces. A person builds what beats the army he has seen. So at hard, once the house remembers an
+  enemy army, the type the brain's army round ordered on each infantry and vehicle line is
+  replaced by the type of that line with the best value against the remembered enemy army. The
+  value is our own estimate, after the square law of attrition: a force's strength grows with its
+  units' damage, their strength and the square of their number, so per credit it is
+  - the damage per tick the type deals the remembered units (for each, the better of its first
+    two weapon slots: damage times burst times the versus value of the unit's armour, over the
+    rate of fire), each unit's share taken per point of its strength and weighted by its cost,
+  - times the type's strength over the damage per tick the remembered units deal its armour,
+  - over the type's cost squared.
+  Unarmed types (engineers) are worth nothing by it and are not picked. Types the house sends
+  alone and loses on use, lifters and naval types keep the brain's own rules. The brain's pick
+  stays while no enemy army is remembered, or when no type of the line is worth anything against
+  it. The brain's own army round, which the default script plays, is unchanged.
+
 ## The tournament
 
 `glasnost-headless ai-tournament [key=value …]` (`glasnost_tools::ai_tournament`):
