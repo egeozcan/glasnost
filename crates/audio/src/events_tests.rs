@@ -2371,3 +2371,25 @@ fn dominator_sounds() {
     a.tick(&w, &fx, &mut Rng::new(1));
     assert_eq!(heard(&mut a, 0), ["Psi"]);
 }
+
+#[test]
+fn start_clears_per_game_tracking_and_pending_captions() {
+    let mut w = world();
+    let tank = spawn(&mut w, Kind::Vehicle, "BUGGY", 0, 0, 0);
+    let mut a = audio(&w, &["Spin0"]);
+    a.spins.insert(tank, (true, None));
+    a.pieces.insert(ObjectId(1));
+    a.bouncing.insert(ObjectId(2));
+    a.started.push("Old caption".into());
+
+    let w2 = world();
+    a.start(&w2, Some(ME));
+
+    assert!(a.spins.is_empty(), "spins cleared on new game");
+    assert!(a.pieces.is_empty(), "pieces cleared on new game");
+    assert!(a.bouncing.is_empty(), "bouncing cleared on new game");
+    assert!(
+        a.take_started().is_empty(),
+        "stale captions cleared on new game"
+    );
+}
