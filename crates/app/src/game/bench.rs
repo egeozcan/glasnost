@@ -466,7 +466,9 @@ impl Bench {
     }
 
     /// The picture to take of the frame just drawn, if any: each view's
-    /// last warmup frame, when shots are on.
+    /// last warmup frame, when shots are on, and with `record=N` every
+    /// `N`-th frame of the view, numbered (a recorded frame takes the
+    /// place of the warmup shot when they fall together).
     pub fn shot(&self) -> Option<String> {
         let last_warmup = self.in_view + 1 == self.opts.warmup;
         if self.stage != Stage::Run {
@@ -1759,6 +1761,40 @@ mod tests {
         assert_eq!(missed_frames(&totals, false).0, 3);
         assert_eq!(missed_frames(&totals, true).0, 1);
         assert_eq!(missed_frames(&[], true), (0, None));
+    }
+
+    #[test]
+    fn record_numbers_every_nth_frame_and_keeps_the_warmup_shot() {
+        let mut b = running(4, 4);
+        b.opts.record = 3;
+        let names: Vec<Option<String>> = (0..8)
+            .map(|i| {
+                b.in_view = i;
+                b.shot()
+            })
+            .collect();
+        let n = |s: &str| Some(s.to_owned());
+        assert_eq!(
+            names,
+            vec![
+                n("native-window-base-00000.png"),
+                None,
+                None,
+                n("native-window-base-00001.png"),
+                None,
+                None,
+                n("native-window-base-00002.png"),
+                None,
+            ]
+        );
+        // The last warmup frame's shot stays when it is no recorded frame.
+        b.opts.record = 2;
+        b.in_view = 3;
+        assert_eq!(b.shot(), n("native-window-base.png"));
+        b.opts.record = 0;
+        assert_eq!(b.shot(), n("native-window-base.png"));
+        b.in_view = 0;
+        assert_eq!(b.shot(), None);
     }
 
     #[test]
