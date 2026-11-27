@@ -31,6 +31,13 @@
 //! the web, whose totals are whole display refresh intervals, the frames
 //! that missed a refresh instead (#91).
 //!
+//! Two options serve pictures rather than timing. `record=N` makes the
+//! offscreen host write every `N`-th frame of each view as a numbered
+//! picture, for stitching into a video. `brawl=N` stages a battle after the
+//! late ticks ([`super::brawl`]): it creates units, reveals the map to the
+//! watched house and gives orders straight to the game, which a timing run
+//! never does, so its numbers are not comparable with a plain run's.
+//!
 //! Hosts: [`run_offscreen`] (native, no window), the game window with
 //! `--bench` (native) or `?bench=` (web). Our own tooling: nothing here is
 //! game behaviour, so no spec applies; the numbers are ours.
@@ -154,6 +161,12 @@ pub struct BenchOptions {
     /// game's own. design: render (#112): a slower index leaves frames with
     /// no tick, whose battlefield the drawer keeps.
     pub speed: Option<u8>,
+    /// The offscreen host also writes every `record`-th frame of each
+    /// view (warmup and timed) as a numbered picture; 0: none.
+    pub record: u32,
+    /// Stage a battle ([`super::brawl`]) after the late ticks, this many
+    /// units of each type per side; 0: none.
+    pub brawl: u32,
 }
 
 impl Default for BenchOptions {
@@ -180,6 +193,8 @@ impl Default for BenchOptions {
             shots: true,
             digest: 0,
             speed: None,
+            record: 0,
+            brawl: 0,
         }
     }
 }
@@ -238,6 +253,8 @@ impl BenchOptions {
                 "digest" => o.digest = num(v)? as u32,
                 // design: render (#112): the indices the game offers, 0 to 6 (S-0201 claim 4)
                 "speed" => o.speed = Some(num(v)?.min(6) as u8),
+                "record" => o.record = num(v)? as u32,
+                "brawl" => o.brawl = num(v)? as u32,
                 _ => return Err(format!("unknown bench option {k:?}")),
             }
         }
@@ -331,6 +348,7 @@ pub struct Bench {
     in_view: u32,
     /// Frames the host could not draw while timing (#92).
     undrawn: u32,
+    brawl: Option<super::brawl::Brawl>,
     centre: (i32, i32),
     pan: Option<(i32, i32)>,
     excluded: f64,
@@ -372,6 +390,7 @@ impl Bench {
             view: 0,
             in_view: 0,
             undrawn: 0,
+            brawl: None,
             centre: (0, 0),
             pan: None,
             excluded: 0.0,
@@ -450,8 +469,18 @@ impl Bench {
     /// last warmup frame, when shots are on.
     pub fn shot(&self) -> Option<String> {
         let last_warmup = self.in_view + 1 == self.opts.warmup;
-        (self.opts.shots && self.stage == Stage::Run && last_warmup)
-            .then(|| format!("{}-{}.png", self.label(), self.opts.views[self.view].name()))
+        if self.stage != Stage::Run {
+            return None;
+        }
+        let view = self.opts.views[self.view].name();
+        if self.opts.record > 0 && self.in_view.is_multiple_of(self.opts.record) {
+            return Some(format!(
+                "{}-{view}-{:05}.png",
+                self.label(),
+                self.in_view / self.opts.record
+            ));
+        }
+        (self.opts.shots && last_warmup).then(|| format!("{}-{view}.png", self.label()))
     }
 
     /// Whether the frame just drawn goes into the frame digest
@@ -647,6 +676,29 @@ impl Bench {
         }
         if ended || self.forward_ticks >= self.opts.late {
             self.forward_ms = now() - self.forward_start.unwrap_or(t0);
+            if self.opts.brawl > 0 {
+                self.brawl = super::brawl::stage(&mut s.play.game.world, self.opts.brawl as usize);
+                // The watched house sees the whole map, so the fight is not
+                // under the shroud.
+                glasnost_sim::econ::shroud::crate_reveal(&mut s.play.game.world, s.play.local);
+                match &self.brawl {
+                    Some(b) => {
+                        let note = format!(
+                            "brawl at {:?}: {} vs {} units; types {:?} vs {:?}",
+                            b.middle,
+                            b.units[0].len(),
+                            b.units[1].len(),
+                            b.types[0],
+                            b.types[1]
+                        );
+                        log::info!("benchmark: {note}");
+                        self.notes.push(note);
+                    }
+                    None => self
+                        .notes
+                        .push("brawl: no two player houses with bases".into()),
+                }
+            }
             s.catch_up();
             let w = &s.play.game.world;
             self.start_tick = w.tick;
@@ -693,6 +745,24 @@ impl Bench {
                 (x as i32, self.centre.1)
             }
             _ => self.centre,
+        };
+        let centre = match (&mut self.brawl, kind) {
+            (Some(b), ViewKind::Battle) => {
+                b.tick(&mut s.play.game.world);
+                if let Some(p) = b.focus(&s.play.game.world) {
+                    let f = project_lifted(p.x, p.y, p.z);
+                    if self.in_view == 0 {
+                        self.centre = f;
+                    } else {
+                        // Eases a tenth of the way to the fight each frame.
+                        // nocite: our own tooling
+                        self.centre.0 += (f.0 - self.centre.0) / 10;
+                        self.centre.1 += (f.1 - self.centre.1) / 10;
+                    }
+                }
+                self.centre
+            }
+            _ => centre,
         };
         s.set_centre(centre);
         let before = s.play.game.world.tick;
@@ -1699,6 +1769,10 @@ mod tests {
         // design: render (#112): the timed frames' pacing index, at most 6
         assert_eq!(BenchOptions::parse("speed=4").unwrap().speed, Some(4));
         assert_eq!(BenchOptions::parse("speed=9").unwrap().speed, Some(6));
+        let o = BenchOptions::parse("record=2,brawl=5").unwrap();
+        assert_eq!((o.record, o.brawl), (2, 5));
+        assert_eq!(BenchOptions::default().record, 0);
+        assert_eq!(BenchOptions::default().brawl, 0);
         assert!(BenchOptions::parse("views=").is_err());
         assert!(BenchOptions::parse("zoom=2").is_err());
         assert!(BenchOptions::parse("tick=sometimes").is_err());
