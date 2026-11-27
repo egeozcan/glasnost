@@ -70,7 +70,7 @@ fn bare_map() -> Map {
     m
 }
 
-fn plan(harvesters: usize) -> Plan {
+fn plan(harvesters: u32) -> Plan {
     Plan {
         harvesters,
         ..fixture::plan()

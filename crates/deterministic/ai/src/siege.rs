@@ -52,7 +52,7 @@ pub const ID: u8 = 2; // nocite: design: own AI (#449): the registry's next id
 
 /// The brain's wave size: more idle units than a house ever has, so that
 /// the brain sends no wave of its own and the army is the siege's.
-pub const HELD: usize = 1 << 20; // nocite: design: own AI (#449)
+pub const HELD: u32 = 1 << 20; // nocite: design: own AI (#449)
 
 /// Cells within which a unit counts as at its goal (the default script's
 /// `ARRIVED`).
@@ -73,7 +73,7 @@ const SEARCH_STEP: i32 = 6; // nocite: design: own AI (#449)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Tuning {
     /// Harvesters the brain's plan keeps.
-    pub harvesters: usize,
+    pub harvesters: u32,
     /// Whether the house builds superweapon buildings (the brain's own
     /// choice); without, the brain's orders for them are dropped.
     pub superweapons: bool,

@@ -87,9 +87,9 @@ pub struct Plan {
     /// leaves that role to the rules.
     pub names: Names,
     /// Harvesters to keep.
-    pub harvesters: usize,
+    pub harvesters: u32,
     /// Idle army units that make a wave.
-    pub wave: usize,
+    pub wave: u32,
 }
 
 /// Type names of a plan, by role.
@@ -764,13 +764,13 @@ pub struct Script {
     /// army (vehicle, infantry, aircraft): a counter shared by the kinds
     /// would step past the same types every round and leave some never
     /// built.
-    next_army: [usize; ARMY_KINDS.len()],
+    next_army: [u32; ARMY_KINDS.len()],
     /// The tick since which idle army units have been waiting for a wave.
     waiting_since: Option<i32>,
     /// The waves the house has sent (each asks for [`WAVE_GROWTH`] more
     /// units than the last, M8 step A4 round 8).
     #[serde(default)]
-    waves: usize,
+    waves: u32,
     /// The army unit sent to explore the house's own side of the map
     /// ([`Script::scout_cell`], M8 step A4 round 8).
     #[serde(default)]
@@ -1932,7 +1932,7 @@ impl Script {
                 }
             }
         }
-        let n = self.plan.harvesters;
+        let n = self.plan.harvesters as usize;
         if cells.is_empty() && self.field_spent(w) {
             return 0;
         }
@@ -2095,7 +2095,7 @@ impl Script {
         if self.slave_miners(w) {
             self.harvesters_wanted(w)
         } else {
-            self.plan.harvesters
+            self.plan.harvesters as usize
         }
     }
 
@@ -2105,7 +2105,7 @@ impl Script {
     /// sensors, defences of the brain's own).
     pub(crate) fn harvesters_kept(&self, w: &World) -> bool {
         self.of_role(w, Role::Harvester).len() + self.slave_buildings(w).len()
-            >= self.plan.harvesters
+            >= self.plan.harvesters as usize
             || self.field_spent(w)
     }
 
@@ -2506,7 +2506,7 @@ impl Script {
             credits.saturating_sub(owed)
                 >= production::cost_field(w, t).saturating_add(self.cheapest_army(w))
         });
-        let short = economy < self.plan.harvesters.min(wanted)
+        let short = economy < (self.plan.harvesters as usize).min(wanted)
             || (economy < self.economy_target(w).min(wanted) && !rich);
         let economy_first = !selling
             && short
@@ -2587,11 +2587,15 @@ impl Script {
                 .min_by_key(|&i| {
                     let t = of_kind[i];
                     let built = tech::ever_built(w, self.house, t);
-                    (living(t), built, (i + n - self.next_army[k] % n) % n)
+                    (
+                        living(t),
+                        built,
+                        (i + n - (self.next_army[k] as usize) % n) % n,
+                    )
                 });
             if let Some(i) = pick {
                 out.push(Order::Build { what: of_kind[i] });
-                self.next_army[k] = i + 1;
+                self.next_army[k] = (i + 1) as u32;
             }
         }
 
@@ -2740,11 +2744,12 @@ impl Script {
                 .collect();
             waiting.retain(|id| !guard.contains(id));
         }
+        let plan_wave = self.plan.wave as usize;
         let size = match winning {
             Some(false) => 1,
-            Some(true) => self.plan.wave.max(1),
-            None => (self.plan.wave + WAVE_GROWTH * self.waves)
-                .min(WAVE_MAX.max(self.plan.wave))
+            Some(true) => plan_wave.max(1),
+            None => (plan_wave + WAVE_GROWTH * (self.waves as usize))
+                .min(WAVE_MAX.max(plan_wave))
                 .max(1),
         };
         let goes = |n: usize| {

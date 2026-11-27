@@ -99,31 +99,37 @@ pub struct Route {
     /// The loop's first step, when the route has a loop: once the steps
     /// before it have been issued, every step from it to the route's end
     /// repeats (claim 16c, *A loop that ends early*).
-    pub loop_from: Option<usize>,
+    pub loop_from: Option<u32>,
     /// The number of points the loop was given, when the route has a loop
     /// (claim 16c): the route's steps from the loop's first, unless the
     /// loop ends early (claim 16b), when it is fewer. It plays no part in
     /// the order of issue; it counts for a point delete (claim 16e) and a
     /// join's copy (claim 16b, *Joins*).
     #[serde(default)]
-    pub loop_len: Option<usize>,
+    pub loop_len: Option<u32>,
 }
 
 impl Route {
+    /// Whether `loop_from`, if set, lies within `steps`.
+    pub(crate) fn is_consistent(&self) -> bool {
+        self.loop_from
+            .is_none_or(|l| (l as usize) <= self.steps.len())
+    }
+
     /// Whether the route's loop ends before the route's last point (S-0213
     /// claim 16c, *A loop that ends early*): its number of points is less
     /// than the route's steps from its first.
     pub fn loop_ends_early(&self) -> bool {
         match (self.loop_from, self.loop_len) {
-            (Some(l), Some(n)) => n < self.steps.len().saturating_sub(l),
+            (Some(l), Some(n)) => (n as usize) < self.steps.len().saturating_sub(l as usize),
             _ => false,
         }
     }
 
     /// Sets the route's loop: its first step and its number of points.
     fn set_loop(&mut self, lp: Option<LoopSpan>) {
-        self.loop_from = lp.map(|(f, _)| f);
-        self.loop_len = lp.map(|(_, n)| n);
+        self.loop_from = lp.map(|(f, _)| f as u32);
+        self.loop_len = lp.map(|(_, n)| n as u32);
     }
 
     /// The point's first place in the route (S-0213 claim 16b, *A point
@@ -827,11 +833,11 @@ fn join_copy(
     let mut steps: Vec<Step> = src.steps[i..].to_vec();
     let lp = match (src.loop_from, src.loop_len) {
         // spec: S-0213 claim 16b, Joins (its loop's first point is the joined point or a later one: the copy has the same loop, from the same first point) and revision 84 (Q-2191: the copy's loop is given as many points as that route's loop has, also when that loop ends early, so when the joined point comes before the loop's first point the copy's loop begins at that point's place in the copy and ends early as the source loop does)
-        (Some(l), Some(n)) if l >= i => Some((l - i, n)),
+        (Some(l), Some(n)) if (l as usize) >= i => Some(((l as usize) - i, n as usize)),
         // spec: S-0213 claim 16b, Joins (revision 84, Q-2191: its loop's first point comes before the joined point: the copy goes on, after that route's last point, with that route's points from its loop's first point up to the one before the joined point; the copy's loop begins at the joined point and is given the source loop's number of points, so it is the whole copy unless the source loop ends early, when it ends early too)
         (Some(l), Some(n)) => {
-            steps.extend_from_slice(&src.steps[l..i]);
-            Some((0, n))
+            steps.extend_from_slice(&src.steps[l as usize..i]);
+            Some((0, n as usize))
         }
         // spec: S-0213 claim 16b (that route has no loop: the copy has none)
         _ => None,
@@ -930,7 +936,9 @@ fn loop_attack_moves(w: &mut World, house: HouseId, actor: ObjectId) {
     let Some(r) = w.routes.routes.get(&actor) else {
         return;
     };
-    let Some(l) = r.loop_from else { return };
+    let Some(l) = r.loop_from.map(|l| l as usize) else {
+        return;
+    };
     let Some(first) = r.steps.get(l).map(|s| s.point) else {
         return;
     };
@@ -1015,8 +1023,11 @@ pub fn apply_delete(w: &mut World, house: HouseId, point: u32) {
     let next = next_after(w, house, point);
     for r in w.routes.routes.values_mut() {
         let mut kept = Vec::with_capacity(r.steps.len());
-        let (mut from, mut n) = (r.loop_from, r.loop_len);
-        let l0 = r.loop_from;
+        let (mut from, mut n) = (
+            r.loop_from.map(|l| l as usize),
+            r.loop_len.map(|n| n as usize),
+        );
+        let l0 = from;
         let mut inside = false;
         // spec: S-0213 claim 16b, A point that a route holds twice (a point delete removes the point from every place in every route that holds it)
         for (i, s) in r.steps.drain(..).enumerate() {
@@ -1061,8 +1072,9 @@ fn next_after(w: &World, house: HouseId, point: u32) -> Option<u32> {
     let j = match (r.loop_from, r.loop_len) {
         // spec: S-0213 claim 16e (revision 89, Q-2226 question 1: when the deleted point is the route's last point, the count goes on round the loop's points only: with n the points from the loop's first to the route's last, both included, and C the loop's number of points, the selected point is the one n mod C places after the loop's first point; on a loop that runs to the route's end n = C, so it is the loop's first point)
         (Some(l), c) if last => {
+            let l = l as usize;
             let n = r.steps.len() - l;
-            l + n % c.unwrap_or(n).max(1)
+            l + n % c.map_or(n, |c| c as usize).max(1)
         }
         // spec: S-0213 claim 16e (revision 89: a route without a loop gives no point when its last point is deleted; otherwise the point after the deleted one)
         _ => i + 1,

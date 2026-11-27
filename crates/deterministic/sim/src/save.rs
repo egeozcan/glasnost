@@ -164,6 +164,16 @@ fn holds_together(w: &World, rules: &SimRules) -> Result<(), String> {
     if !w.rng.is_consistent() || w.map_rng.as_ref().is_some_and(|r| !r.is_consistent()) {
         return Err("a random stream is broken".into());
     }
+    if !w.update.is_consistent() {
+        return Err("the update order is mid-pass or broken".into());
+    }
+    if !w
+        .econ
+        .shroud
+        .is_consistent(w.houses.len(), w.cells.grid.len())
+    {
+        return Err("the shroud tables do not agree with the grid or houses".into());
+    }
     for (&id, o) in &w.objects {
         if o.id != id {
             return Err(format!("object {} is filed as {}", o.id.0, id.0));
@@ -181,6 +191,40 @@ fn holds_together(w: &World, rules: &SimRules) -> Result<(), String> {
         if usize::try_from(o.type_index).map_or(true, |t| t >= types) {
             return Err(format!("object {} has a type the rules do not have", id.0));
         }
+        if o.drive
+            .as_ref()
+            .and_then(|d| d.track.as_ref())
+            .is_some_and(|t| !t.is_consistent())
+        {
+            return Err(format!("object {} has a track past its end", id.0));
+        }
+    }
+    for r in w.routes.routes.values() {
+        if !r.is_consistent() {
+            return Err("a route's loop starts past its steps".into());
+        }
+    }
+    let max_id = w
+        .objects
+        .keys()
+        .chain(w.projectiles.keys())
+        .chain(w.waves.keys())
+        .chain(w.pieces.keys())
+        .chain(w.walkers.keys())
+        .chain(w.leftovers.keys())
+        .chain(w.anims.anims.keys())
+        .chain(w.anims.ended.keys())
+        .chain(w.depot_anims.anims.keys())
+        .chain(w.domination.anims.keys())
+        .chain(w.mutation.makers.keys())
+        .chain(w.mutation.refused.keys())
+        .chain(w.gas.systems.keys())
+        .chain(w.gas.anims.keys())
+        .chain(w.update.order.iter())
+        .map(|id| id.0)
+        .max();
+    if max_id.is_some_and(|m| w.next_id <= m) {
+        return Err("next_id does not exceed every object id in the save".into());
     }
     for h in &w.houses {
         if !h.pending.iter().all(crate::orders::in_window) {
@@ -340,5 +384,68 @@ mod tests {
         let l = load(&bytes, testkit::combat_rules(), testkit::catalogue()).unwrap();
         assert_eq!(save(&l), bytes);
         assert_eq!(state_hash(&l), digest(&w));
+    }
+
+    #[test]
+    fn load_rejects_inconsistent_update_order_shroud_next_id_and_track() {
+        let base = testkit::combat_replay(17, 40)
+            .run(
+                testkit::combat_rules(),
+                &testkit::map(),
+                testkit::catalogue(),
+                |_| {},
+            )
+            .unwrap();
+        let rules = testkit::combat_rules();
+        let cat = testkit::catalogue();
+
+        // Mid-pass UpdateOrder is rejected.
+        let mut w = base.clone();
+        w.update.begin_pass();
+        assert!(matches!(
+            load(&save(&w), rules.clone(), cat.clone()),
+            Err(SaveError::Format(_))
+        ));
+
+        // Truncated shroud table is rejected.
+        let mut w = base.clone();
+        if let Some(Some(hs)) = w.econ.shroud.houses.iter_mut().find(|h| h.is_some()) {
+            hs.marks.pop();
+        }
+        assert!(matches!(
+            load(&save(&w), rules.clone(), cat.clone()),
+            Err(SaveError::Format(_))
+        ));
+
+        // Stale next_id that would collide with a live object is rejected.
+        let mut w = base.clone();
+        w.next_id = w.objects.keys().map(|id| id.0).max().unwrap_or(1);
+        assert!(matches!(
+            load(&save(&w), rules.clone(), cat.clone()),
+            Err(SaveError::Format(_))
+        ));
+
+        // Out-of-range Track::next is rejected.
+        let mut w = base;
+        if let Some(o) = w.objects.values_mut().find(|o| o.drive.is_some()) {
+            let d = o.drive.as_mut().unwrap();
+            d.track = Some(crate::drive::Track {
+                d: 0,
+                e: None,
+                target: (0, 0),
+                target_cell: glasnost_map::CellXY::new(0, 0),
+                height: 0,
+                next: 999,
+                last: (0, 0),
+                cells: Vec::new(),
+                crush: false,
+                exit: false,
+                bunker: None,
+            });
+            assert!(matches!(
+                load(&save(&w), rules, cat),
+                Err(SaveError::Format(_))
+            ));
+        }
     }
 }

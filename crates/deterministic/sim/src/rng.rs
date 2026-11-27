@@ -29,7 +29,7 @@ pub struct Rng {
     /// The 250 most recent values x_{N−250} … x_{N−1}, as a ring.
     state: Vec<u32>,
     /// Position of x_{N−250} in the ring.
-    next: usize,
+    next: u32,
     /// Raw values taken since seeding (diagnostics; not used by the rules).
     taken: u64,
 }
@@ -83,16 +83,17 @@ impl Rng {
     /// stream decoded from bytes may not (#157).
     pub fn is_consistent(&self) -> bool {
         // spec: S-0202 claim 2 (250 words of state)
-        self.state.len() == STATE && self.next < STATE
+        self.state.len() == STATE && (self.next as usize) < STATE
     }
 
     /// The next raw value (S-0202 claims 1 and 2).
     pub fn raw(&mut self) -> u32 {
         // spec: S-0202 claim 2 (x_n = x_{n−250} ⊕ x_{n−147})
-        let other = (self.next + (STATE - SHORT_LAG)) % STATE;
-        let x = self.state[self.next] ^ self.state[other];
-        self.state[self.next] = x;
-        self.next = (self.next + 1) % STATE;
+        let next = self.next as usize;
+        let other = (next + (STATE - SHORT_LAG)) % STATE;
+        let x = self.state[next] ^ self.state[other];
+        self.state[next] = x;
+        self.next = ((next + 1) % STATE) as u32;
         self.taken += 1;
         x
     }
