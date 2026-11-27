@@ -814,6 +814,25 @@ order-free), 211-8-21, and dev-0 scored 0.919 (418-16-46, 293 victories), both e
   (5 000 at hard), the siege drops the brain's hold orders for infantry army items and resumes the
   infantry army items it held (S-0404 claims 3 and 5). The vehicle line stays held for the
   refinery, and once the army is worth the floor every hold is the brain's again.
+  Development round 3, stopped after two pairs: `default:hard` 0.943 to 0.896 (victories 57 to 53,
+  maps 2 and 8 both weaker), `siege:normal` 0.771 to 0.740 (map 0 23-8-1 to 20-12-0, country 0
+  22-15-11 to 18-16-14). Two pairs down 7.5 points and 6 victories; neither bar could be reached
+  with three pairs left. The lever and its test are reverted: the soldiers trained through the
+  wait did not hold the base on map 0, and the refinery they delayed cost the long games.
+
+Three development rounds in a row brought no clear gain, so AS9 stopped with the hard level as AS5
+left it: no code of AS9's is kept, and cert-0 (1914.9) stands. What the rounds showed:
+
+- Gating the vehicle matchup on a known enemy army kept `default:hard` level but took away the
+  matchup's gain against `siege:normal` with country 0: the matchup pays early, before much of
+  the enemy army has been seen.
+- The vehicle matchup with no economy while outmatched moved victories from `siege:normal` (38 to
+  28) to `default:hard` (57 to 68), and lifted `default:normal` (0.906 to 0.953), but in all made
+  only 4 more victories over three pairs.
+- The early map-0 losses to `siege:normal` with country 0 (dev-0's game at tick 9 965 played the
+  same under lever 2) come from an army of 11 cheap soldiers, dogs among them, that meets
+  normal's first strike of tanks. Training more of them through the refinery's wait made those
+  losses worse (8 to 12), so what that army is made of matters more than its size.
 
 ## The tournament
 
