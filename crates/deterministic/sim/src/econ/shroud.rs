@@ -137,7 +137,9 @@ impl Shroud {
     /// cells plus the shared off-map entry) and `houses` does not exceed the
     /// world's house list.
     pub fn is_consistent(&self, houses: usize, cells: usize) -> bool {
+        // spec: S-0409 claim 14 (the cells that are not legal share one state: the tables hold one entry per dense cell and one more, as `HouseShroud::new` builds them)
         let expected = cells + 1;
+        // spec: S-0409 claim 1 (the states are kept by house, so no more tables than the houses)
         self.houses.len() <= houses
             && self.houses.iter().flatten().all(|hs| {
                 hs.k.len() == expected && hs.g.len() == expected && hs.marks.len() == expected

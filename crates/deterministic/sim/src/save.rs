@@ -348,6 +348,7 @@ impl Replay {
 mod tests {
     use super::*;
     use crate::testkit;
+    use crate::world::ObjectId;
 
     /// The save and the state hash are those of the owned bytes: a save is
     /// the postcard bytes of [`Save`] holding a copy of the world, and the
@@ -398,54 +399,84 @@ mod tests {
             .unwrap();
         let rules = testkit::combat_rules();
         let cat = testkit::catalogue();
+        let rejected = |w: &World| {
+            matches!(
+                load(&save(w), rules.clone(), cat.clone()),
+                Err(SaveError::Format(_))
+            )
+        };
+        // The untouched world loads: each case below is refused for its
+        // own change alone.
+        assert!(load(&save(&base), rules.clone(), cat.clone()).is_ok());
 
         // Mid-pass UpdateOrder is rejected.
         let mut w = base.clone();
         w.update.begin_pass();
-        assert!(matches!(
-            load(&save(&w), rules.clone(), cat.clone()),
-            Err(SaveError::Format(_))
-        ));
+        assert!(rejected(&w), "mid-pass update order");
 
         // Truncated shroud table is rejected.
         let mut w = base.clone();
-        if let Some(Some(hs)) = w.econ.shroud.houses.iter_mut().find(|h| h.is_some()) {
-            hs.marks.pop();
-        }
-        assert!(matches!(
-            load(&save(&w), rules.clone(), cat.clone()),
-            Err(SaveError::Format(_))
-        ));
+        let hs = w
+            .econ
+            .shroud
+            .houses
+            .iter_mut()
+            .flatten()
+            .next()
+            .expect("a player house keeps shroud states");
+        hs.marks.pop();
+        assert!(rejected(&w), "truncated shroud table");
+
+        // More shroud tables than houses is rejected.
+        let mut w = base.clone();
+        w.econ.shroud.houses.push(None);
+        assert!(rejected(&w), "shroud tables past the houses");
 
         // Stale next_id that would collide with a live object is rejected.
         let mut w = base.clone();
-        w.next_id = w.objects.keys().map(|id| id.0).max().unwrap_or(1);
-        assert!(matches!(
-            load(&save(&w), rules.clone(), cat.clone()),
-            Err(SaveError::Format(_))
-        ));
+        w.next_id = w.objects.keys().map(|id| id.0).max().expect("objects");
+        assert!(rejected(&w), "next_id at a live object");
+
+        // An id in the update order counts too, not only the objects.
+        let mut w = base.clone();
+        let past = ObjectId(w.next_id);
+        w.update.order.push(past);
+        assert!(rejected(&w), "next_id at an id in the update order");
+
+        // A route's loop past its steps is rejected.
+        let mut w = base.clone();
+        let id = *w.objects.keys().next().expect("objects");
+        w.routes.routes.insert(
+            id,
+            crate::routes::Route {
+                house: HouseId(0),
+                steps: Vec::new(),
+                loop_from: Some(1),
+                loop_len: None,
+            },
+        );
+        assert!(rejected(&w), "route loop past its steps");
 
         // Out-of-range Track::next is rejected.
         let mut w = base;
-        if let Some(o) = w.objects.values_mut().find(|o| o.drive.is_some()) {
-            let d = o.drive.as_mut().unwrap();
-            d.track = Some(crate::drive::Track {
-                d: 0,
-                e: None,
-                target: (0, 0),
-                target_cell: glasnost_map::CellXY::new(0, 0),
-                height: 0,
-                next: 999,
-                last: (0, 0),
-                cells: Vec::new(),
-                crush: false,
-                exit: false,
-                bunker: None,
-            });
-            assert!(matches!(
-                load(&save(&w), rules, cat),
-                Err(SaveError::Format(_))
-            ));
-        }
+        let o = w
+            .objects
+            .values_mut()
+            .find(|o| o.drive.is_some())
+            .expect("a driving vehicle");
+        o.drive.as_mut().unwrap().track = Some(crate::drive::Track {
+            d: 0,
+            e: None,
+            target: (0, 0),
+            target_cell: glasnost_map::CellXY::new(0, 0),
+            height: 0,
+            next: 999,
+            last: (0, 0),
+            cells: Vec::new(),
+            crush: false,
+            exit: false,
+            bunker: None,
+        });
+        assert!(rejected(&w), "track past its end");
     }
 }
