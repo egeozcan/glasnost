@@ -1216,10 +1216,9 @@ pub fn order_applied(
         && l.tethered
     {
         if target_depot == Some(l.depot) {
-            // spec: S-0314 claim 20 (an enter order on the same depot ends the docking: a full-health vehicle loses its contact at once)
+            // spec: S-0314 claim 20 (r121: an enter order on the same depot ends the docking; a full-health vehicle is released by the order itself, with no destination, no queued entry and no move)
             if full {
-                release(w, id);
-                return OrderEffect::Ends;
+                return released_at_full_health(w, id);
             }
             if let Some(ob) = w.obj_mut(id) {
                 // spec: S-0314 claim 20 (revision 28, Q-1158 answered: a damaged vehicle takes claim 23's queued entry in full although the depot holds its own contact: enter queued without an immediate start, the depot remembered, no destination given; the tether keeps the contact, S-0213 table T3 (b))
@@ -1249,6 +1248,13 @@ pub fn order_applied(
         // spec: S-0314 claim 20 (an enter order on the same depot while approaching in enter is ignored entirely)
         return OrderEffect::Ends;
     }
+    if let Some(l) = l
+        && target_depot == Some(l.depot)
+        && full
+    {
+        // spec: S-0314 claim 20 (r121, Q-3401 answered: an approaching vehicle at full health given an enter order on its own depot takes the full-health release, which replaces the second bullet's path) and claim 23 (r121: it does not take the path of an enter order on a depot that holds no contact)
+        return released_at_full_health(w, id);
+    }
     if l.is_some() {
         // spec: S-0314 claim 20 (an approaching vehicle given any other order loses its contact at once; its queued entry is cleared too)
         release(w, id);
@@ -1260,6 +1266,42 @@ pub fn order_applied(
         return held_depot_entry(w, id, k, full);
     }
     OrderEffect::Ordinary
+}
+
+/// The release of a vehicle at full health by an enter order on the depot
+/// it holds contact with, approaching or docked (S-0314 claim 20, r121):
+/// the contact ends when the order is executed, a destination it still
+/// holds is removed as at a stop order, and the order ends there.
+fn released_at_full_health(w: &mut World, id: ObjectId) -> OrderEffect {
+    release(w, id);
+    lose_destination_as_at_stop(w, id);
+    // spec: S-0314 claim 20 (r121: claim 23's full-health case: no destination, no queued entry, enter does not become current, the current behaviour is kept and the order moves nothing; unlike claim 6's release, no leaving move)
+    OrderEffect::Ends
+}
+
+/// Removes the order-level destination vehicle `id` still holds, as a
+/// person's stop order does (S-0213 claim 8), with only the destination
+/// part of that order: target, queued destinations and behaviour stay.
+fn lose_destination_as_at_stop(w: &mut World, id: ObjectId) {
+    if w.obj(id).is_none_or(|o| o.dest.is_none()) {
+        return;
+    }
+    // spec: S-0314 claim 20 (r121: a vehicle that still holds an order-level destination at the order, a hovering vehicle or ship before its settling step, loses it to the order as at a stop order; its movement then follows its locomotion's rules for that loss) and S-0503 claim 16 (for a hovering vehicle: heading point, throttle and speed kept, D kept only when it equals the heading point; not a forced halt)
+    crate::hover::stop_order(w, id);
+    let keeps = crate::hover::keeps_path(w, id);
+    if !keeps {
+        // spec: S-0213 claim 8 and S-0207 claim 11 (as at a stop order, a driver finishes the track it is on)
+        crate::drive::stop(w, id);
+    }
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0213 claim 8 (the destination becomes nothing; the stored path goes with it unless a hover keeps it, S-0503 claim 16)
+        ob.dest = None;
+        if !keeps {
+            ob.path.steps.clear();
+        }
+    }
+    // spec: S-0213 claim 8 and S-0502 claim 24 (a jumpjet with a movement commitment is rerouted after the clear; S-0314 claim 20 r121 says the destination is lost, so S-0502 claim 28's rejection is not asked)
+    crate::jump::stop_ordered(w, id);
 }
 
 /// Claim 23 of S-0314 for vehicle `id` given an enter order on depot `k`
