@@ -791,6 +791,29 @@ order-free), 211-8-21, and dev-0 scored 0.919 (418-16-46, 293 victories), both e
   together: AS8's vehicle-line matchup without the gate above, and AS6's rule that, while the
   enemy army the house remembers is worth at least the level's floor and more than its own army
   units, the siege's more refineries and more factories wait. The brain's own plan is unchanged.
+  Development round 2, stopped after three pairs: `default:hard` 0.943 to 0.927 (victories 57 to
+  68, but 3 losses on map 2), `siege:normal` 0.771 as dev-0 (victories 38 to 28, country 0 22-15-11
+  to 25-11-12), `default:normal` 0.906 to 0.953. Three pairs up 3 points and 4 victories; with the
+  two easy pairs left, 305 victories needed 137 from them (dev-0 129), out of reach. The lever and
+  its test are reverted. The early losses on map 0 did not move: dev-0's loss at tick 9 965 (seed
+  7) has the same hash in this round.
+- **Soldiers while a new refinery waits, while the army is weak** (`Tuning::soldiers_while_paying`,
+  hard only). A watch of that early loss (map 0, seed 7, country 0, against `siege:normal`) shows
+  AS5's and AS6's watches once more: from tick 4 125 hard stands with 11 soldiers worth 2 800
+  while normal has no army unit until 5 250. At 5 250 the siege orders the next refinery with 528
+  credits in hand (it owes 1 741), and the brain holds the infantry line on it until 6 750 and then
+  the vehicle line too. Normal strikes at 7 125 with 9 of its 13 units (5 200, with tanks), hard's
+  soldiers are gone by 7 875 and its base by 9 964, with 2 800 credits unspent. AS6's round 1 let
+  every army line run while such a refinery waits, and the refinery came so late that
+  `default:hard` fell 0.058; AS5's round 5 held the refinery itself until the army was worth the
+  floor, and `default:hard` fell 0.032. A person whose small army guards a base he is still paying
+  for keeps the barracks busy, soldiers being cheap, and lets the war factory's money go to the
+  refinery. So at hard, while the only reason the brain pays for its economy first is a refinery
+  by a new field (the house owns a refinery, has lost none and keeps its economy target, as in
+  AS6's form) and the house's own army units are worth less than the level's floor for a strike
+  (5 000 at hard), the siege drops the brain's hold orders for infantry army items and resumes the
+  infantry army items it held (S-0404 claims 3 and 5). The vehicle line stays held for the
+  refinery, and once the army is worth the floor every hold is the brain's again.
 
 ## The tournament
 
