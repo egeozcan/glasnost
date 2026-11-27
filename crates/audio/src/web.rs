@@ -6,8 +6,9 @@
 //! [`WebOutput::new`] installs one-shot `pointerdown`, `keydown` and
 //! `touchend` listeners on the window that resume it, and
 //! [`Output::resume`] does the same for a caller's own input handler. While
-//! the context is not running, pumps drop the voices so that nothing plays
-//! late.
+//! the context is suspended, pumps drop sound instances and announcements so
+//! that nothing plays late while keeping the active music voice ready for the
+//! gesture.
 
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
@@ -22,6 +23,11 @@ const CHUNK: usize = 1024;
 /// design).
 const LEAD: f64 = 0.1;
 
+struct GestureListener {
+    event: &'static str,
+    callback: Closure<dyn FnMut()>,
+}
+
 /// The WebAudio output.
 pub struct WebOutput {
     ctx: AudioContext,
@@ -30,7 +36,20 @@ pub struct WebOutput {
     buf: Vec<i16>,
     left: Vec<f32>,
     right: Vec<f32>,
-    _gesture: Vec<Closure<dyn FnMut()>>,
+    gesture: Vec<GestureListener>,
+}
+
+impl Drop for WebOutput {
+    fn drop(&mut self) {
+        if let Some(window) = web_sys::window() {
+            for listener in &self.gesture {
+                let _ = window.remove_event_listener_with_callback(
+                    listener.event,
+                    listener.callback.as_ref().unchecked_ref(),
+                );
+            }
+        }
+    }
 }
 
 impl WebOutput {
@@ -42,19 +61,19 @@ impl WebOutput {
         let rate = ctx.sample_rate() as u32;
         let mut gesture = Vec::new();
         if let Some(window) = web_sys::window() {
-            for ev in ["pointerdown", "keydown", "touchend"] {
+            for event in ["pointerdown", "keydown", "touchend"] {
                 let c = ctx.clone();
-                let cb = Closure::<dyn FnMut()>::new(move || {
+                let callback = Closure::<dyn FnMut()>::new(move || {
                     let _ = c.resume();
                 });
                 let opts = web_sys::AddEventListenerOptions::new();
                 opts.set_once(true);
                 let _ = window.add_event_listener_with_callback_and_add_event_listener_options(
-                    ev,
-                    cb.as_ref().unchecked_ref(),
+                    event,
+                    callback.as_ref().unchecked_ref(),
                     &opts,
                 );
-                gesture.push(cb);
+                gesture.push(GestureListener { event, callback });
             }
         }
         Ok(Self {
@@ -64,7 +83,7 @@ impl WebOutput {
             buf: Vec::new(),
             left: Vec::new(),
             right: Vec::new(),
-            _gesture: gesture,
+            gesture,
         })
     }
 
@@ -96,9 +115,16 @@ impl Output for WebOutput {
     }
 
     fn pump(&mut self, mixer: &mut Mixer) {
-        if self.ctx.state() != AudioContextState::Running {
-            mixer.clear();
-            return;
+        match self.ctx.state() {
+            AudioContextState::Running => {}
+            AudioContextState::Suspended => {
+                mixer.clear_sounds();
+                return;
+            }
+            _ => {
+                mixer.clear();
+                return;
+            }
         }
         let now = self.ctx.current_time();
         if self.until < now {

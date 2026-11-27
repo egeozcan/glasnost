@@ -707,11 +707,17 @@ impl Mixer {
         }
     }
 
-    /// Stops every instance, the announcement and the music.
-    pub fn clear(&mut self) {
+    /// Stops every instance and the announcement, leaving the music voice in
+    /// place (used while a suspended browser output waits for a user gesture).
+    pub fn clear_sounds(&mut self) {
         self.instances.clear();
         self.channels = [None; CHANNELS];
         self.speech = None;
+    }
+
+    /// Stops every instance, the announcement and the music.
+    pub fn clear(&mut self) {
+        self.clear_sounds();
         self.music = None;
     }
 
