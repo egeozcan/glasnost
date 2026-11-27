@@ -10,7 +10,7 @@ measured-on: 2026-11-18
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-11-18
+approved-on: 2026-11-27
 ---
 
 # M-0027: A placed building's build-up runs once, and when its construction starts and hands over (S-0406 PL11)
@@ -111,21 +111,32 @@ stage count, as read from the type.
 | Quantity | Unit | n | Mean / value | Spread | Tolerance for tests |
 |---|---|---|---|---|---|
 | Placed, after the logic of *T* + 1: current behaviour | | 12 runs | none, *construction* queued | none | exact |
-| Placed, after the logic of *T* + 1: body state, stage, and whether it advances | | 12 runs | *idle*, 0, not advancing | none | exact |
+| Placed, after the logic of *T* + 1: body state, stage, and whether it advances | | 12 runs | below the table | none | exact |
 | Placed, after the logic of *T* + 1: construction-completed | | 12 runs | no | none | exact |
-| Placed: *C* − *T* | ticks | 12 runs | 2 | none | exact |
-| Placed: stage on *C*, and the tick of its first advance against *C* + interval | | 12 runs | 0, equal | none | exact |
+| Placed: *C* − *T* | ticks | 12 runs | below the table | none | exact |
+| Placed: stage on *C*, and the tick of its first advance against *C* + interval | | 12 runs | below the table | none | exact |
 | Deployed: behaviour current at the end of *U* | | 3 runs | *construction* | none | exact |
-| Deployed: stage on *C* | | 3 runs | 0 | none | exact |
-| Deployed: *C* − *U* | ticks | 3 runs | 1 | none | exact |
+| Deployed: stage on *C* | | 3 runs | below the table | none | exact |
+| Deployed: *C* − *U* | ticks | 3 runs | below the table | none | exact |
 | *H* − *C* against (stages − 1) × interval | ticks | 14 runs | equal | none | exact |
 | *H* − *C* against (stages − 1) × interval, refinery seed 2 | ticks | 1 run | one more | | |
-| Rows with the stage lower than in the row before (step 4) | rows | 15 runs | 0 | none | exact |
+| Rows with the stage lower than in the row before (step 4) | rows | 15 runs | below the table | none | exact |
 | Highest stage after any tick's logic before *H*, against stages − 2 | | 15 runs | equal | none | exact |
 | On *H*: *guard* current, idle body, construction-completed | | 15 runs | all three | none | exact |
-| Ticks between *C* and *H* on which the processing timer did not restart: *A*, *B*, gate, deploy | ticks | 12 runs | 0 | none | exact |
-| The same, refinery | ticks | 3 runs | 1 or 2 per run | | |
+| Ticks between *C* and *H* on which the processing timer did not restart: *A*, *B*, gate, deploy | ticks | 12 runs | below the table | none | exact |
+| The same, refinery | ticks | 3 runs | below the table | | |
 | Refinery: the free harvester's first tick against *H* | ticks | 3 runs | equal | none | exact |
+
+Relations for the table above:
+
+- Placed, after the logic of *T* + 1: body state, stage, and whether it advances: *idle*, 0, not advancing.
+- Placed: *C* − *T*: 2.
+- Placed: stage on *C*, and the tick of its first advance against *C* + interval: 0, equal.
+- Deployed: stage on *C*: 0.
+- Deployed: *C* − *U*: 1.
+- Rows with the stage lower than in the row before (step 4): 0.
+- Ticks between *C* and *H* on which the processing timer did not restart: *A*, *B*, gate, deploy: 0.
+- The same, refinery: 1 or 2 per run.
 
 The range's last stage is never seen after a tick's logic: the row after the logic of *H*
 already shows the *idle* body.
