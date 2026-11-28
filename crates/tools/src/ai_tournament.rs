@@ -26,8 +26,12 @@
 //!
 //! Output: the report (`report.txt`) and each game's replay
 //! (`replays/game-NNN.replay`, `glasnost_sim::save::Replay`: the setup with
-//! the houses' choices, so `glasnost-headless replay` or
-//! `Game::run_replay` plays it again).
+//! the houses' AI seats, not their orders, so the AI has to play again).
+//! [`REPLAY_COMMAND`] (`glasnost-headless ai-replay FILE`, [`replay`])
+//! plays one again: it takes the ground from the replay's map name (a
+//! fixture ground's name, or `install map N` for the install's map of
+//! listing index N, read from `GLASNOST_GAME_DIR`), checks the rules hash,
+//! and reruns the saved seats through `Game::run_replay` (#466).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -46,6 +50,13 @@ use glasnost_sim::world::{AiDifficulty, AiSeat, HouseId, World};
 
 /// The usage line.
 pub const USAGE: &str = "ai-tournament [game=fixture|install] [entrants=default:easy,default:normal,default:hard] [seeds=1-2] [maps=0] [sides=A,B] [ticks=30000] [threads=2] [out=DIR]";
+
+/// The command that plays a tournament replay again ([`replay`]).
+pub const REPLAY_COMMAND: &str = "glasnost-headless ai-replay";
+
+/// The replay command's usage line.
+pub const REPLAY_USAGE: &str =
+    "ai-replay FILE (a tournament replay; GLASNOST_GAME_DIR set for an install ground)";
 
 /// The rating every entrant starts at.
 // nocite: our own tooling (the usual Elo start)
@@ -339,6 +350,31 @@ pub fn play(o: &Options, g: &Ground, job: Job) -> Result<Played, String> {
         game.step();
         game.world.effects.clear();
     }
+    let end = end_of(&game);
+    Ok(Played {
+        job,
+        result: end.result,
+        over: end.over,
+        ticks: end.ticks,
+        worth: end.worth,
+        hash: end.hash[..16].to_owned(),
+        replay: game.replay().to_bytes(),
+    })
+}
+
+/// How a played game stands at its end.
+struct End {
+    result: GameResult,
+    over: bool,
+    ticks: i32,
+    worth: [i64; 2],
+    /// The full state hash.
+    hash: String,
+}
+
+/// The end of a game: its result (the victory rules', else by worth), the
+/// ticks run, the worths and the state hash.
+fn end_of(game: &Game) -> End {
     let worth = [
         worth(&game.world, HouseId(0)),
         worth(&game.world, HouseId(1)),
@@ -359,16 +395,73 @@ pub fn play(o: &Options, g: &Ground, job: Job) -> Result<Played, String> {
         }
         None => (by_worth(worth), false),
     };
-    let hash = game.state_hash();
-    Ok(Played {
-        job,
+    End {
         result,
         over,
         ticks: glasnost_sim::tick::ticks_run(&game.world),
         worth,
-        hash: hash[..16].to_owned(),
-        replay: game.replay().to_bytes(),
-    })
+        hash: game.state_hash(),
+    }
+}
+
+/// The ground a tournament replay was played on, from its map name: a
+/// fixture ground by its name ([`fixture_grounds`]), or `install map N`,
+/// the install's map of listing index N (`dir`, the game dir, needed).
+pub fn replay_ground(map: &str, dir: Option<&str>) -> Result<Ground, String> {
+    if let Some(m) = map.strip_prefix("install map ") {
+        let m: usize = m
+            .parse()
+            .map_err(|_| format!("not a tournament ground: {map:?}"))?;
+        let dir = dir.ok_or_else(|| {
+            format!("the replay was played on {map:?}: set GLASNOST_GAME_DIR to the install")
+        })?;
+        return install_grounds(std::path::Path::new(dir), &[m], None)?
+            .pop()
+            .ok_or_else(|| format!("no map {m}"));
+    }
+    fixture_grounds()
+        .into_iter()
+        .find(|g| g.name == map)
+        .ok_or_else(|| format!("not a tournament ground: {map:?}"))
+}
+
+/// Plays a tournament replay (its bytes) again (#466): the ground from its
+/// map name ([`replay_ground`]), the saved AI seats rerun through
+/// `Game::run_replay`. Returns a line in the report's form, ending on the
+/// first 16 digits of the state hash, and the full hash on a second line.
+pub fn replay(bytes: &[u8], dir: Option<&str>) -> Result<String, String> {
+    let rep = glasnost_sim::save::Replay::from_bytes(bytes).map_err(|e| e.to_string())?;
+    if !rep.setup.houses.iter().any(|h| h.ai) {
+        return Err("the replay has no AI house: play it with glasnost-headless replay".into());
+    }
+    let g = replay_ground(&rep.map, dir)?;
+    let game = Game::run_replay(&rep, g.rules.clone(), &g.map, g.tiles.clone(), |_| {}).map_err(
+        |e| match e {
+            glasnost_sim::save::SaveError::RulesMismatch { .. } if dir.is_some() => format!(
+                "{e} (an install ground's rules depend on GLASNOST_PLAY_FIXES: set it as the tournament had it)"
+            ),
+            e => e.to_string(),
+        },
+    )?;
+    let end = end_of(&game);
+    let res = match end.result {
+        GameResult::A => "house 0",
+        GameResult::B => "house 1",
+        GameResult::Draw => "draw",
+    };
+    Ok(format!(
+        "{} seed {} {} v {}: {res} {} at tick {}, worth {} v {}, hash {}\nstate hash {}\n",
+        rep.map,
+        rep.setup.seed,
+        entrant_name(rep.setup.ai_seat(0)),
+        entrant_name(rep.setup.ai_seat(1)),
+        if end.over { "(over)" } else { "(cap)" },
+        end.ticks,
+        end.worth[0],
+        end.worth[1],
+        &end.hash[..16],
+        end.hash
+    ))
 }
 
 /// Plays every job on `o.threads` worker threads; the results in job
@@ -580,6 +673,10 @@ pub fn report(o: &Options, grounds: &[Ground], results: &[Result<Played, String>
             .map(|&i| format!("{} {:.1}", entrant_name(o.entrants[i]), free[i]))
             .collect::<Vec<_>>()
             .join(", ")
+    );
+    let _ = writeln!(
+        s,
+        "\nreplays: replays/game-NNN.replay for each game below that did not fail; play one again with `{REPLAY_COMMAND} FILE` (with GLASNOST_GAME_DIR set for an install ground)"
     );
     let _ = writeln!(
         s,

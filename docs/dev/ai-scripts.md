@@ -861,3 +861,19 @@ left it: no code of AS9's is kept, and cert-0 (1914.9) stands. What the rounds s
   `threads=` is; `tests/ai_tournament.rs` checks it on the fixture) and one replay per game,
   `replays/game-NNN.replay`, to `out=` (default `local-lane/ai-issues/b9/tournament/`).
   The worker threads are in the tool only; each game is its own world.
+- **Playing a replay again** (#466): `glasnost-headless ai-replay FILE`
+  (`ai_tournament::replay`). A tournament replay holds the setup with each house's AI seat
+  (script and difficulty), not the houses' orders, so the AI plays the game again through
+  `Game::run_replay`. The command prints the game's line in the report's form, ending on the
+  first 16 digits of the state hash (and the full hash on a second line), so it can be checked
+  against `report.txt`; `tests/ai_tournament.rs` does that through the binary on the fixture.
+  The plain `glasnost-headless replay` plays only sim-only replays of the testkit scenario and
+  refuses a replay with AI houses, naming `ai-replay`.
+- **How the replay's ground is chosen:** from the map name the replay records. A fixture
+  ground's name (`synthetic`, `synthetic-diagonal`) picks that fixture ground with the fixture's
+  rules. `install map N` loads the map of listing index N from the install named by
+  `GLASNOST_GAME_DIR` (the same listing `maps=` indexes), with its rules built under the
+  `GLASNOST_PLAY_FIXES` layers of the replaying shell; the replay's rules hash must match, so
+  replay under the same game dir and `GLASNOST_PLAY_FIXES` the tournament ran with, or the
+  command stops on the rules mismatch. The countries come from the saved setup, so `sides=`
+  is not needed. Any other map name is refused.
