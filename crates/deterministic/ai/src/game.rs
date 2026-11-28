@@ -344,7 +344,11 @@ impl Game {
     }
 
     /// Replays a game from its replay up to its last tick, calling `each`
-    /// after every tick: the person's orders as recorded, the AI anew.
+    /// after every tick: the person's orders as recorded, the AI anew. A
+    /// rerun that ends sooner than the replay's recorded length (S-0414)
+    /// stops at its final tick, so `each` is called once per tick run; the
+    /// caller tells the two apart by the returned game's
+    /// [`Replay::ticks`] or its hash.
     pub fn run_replay(
         replay: &Replay,
         rules: Arc<SimRules>,
@@ -360,8 +364,8 @@ impl Game {
         }
         let mut g = Self::new(rules, map, &replay.map, catalogue, replay.setup.clone())
             .map_err(SaveError::Load)?;
-        // spec: S-0201 claim 1 (the final tick leaves the tick number at itself: count the ticks run)
-        while tick::ticks_run(&g.world) < replay.ticks {
+        // spec: S-0201 claim 1 and S-0414 claim 8 (the final tick leaves the tick number at itself: count the ticks run; no tick runs after it, #463)
+        while tick::ticks_run(&g.world) < replay.ticks && g.outcome().is_none() {
             g.issue_recorded(replay);
             g.step();
             each(&g);
