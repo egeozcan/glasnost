@@ -84,6 +84,11 @@
 //!   `GLASNOST_GAME_DIR` set on the install's maps. Writes `report.txt` and
 //!   each game's replay to the git-ignored
 //!   `local-lane/ai-issues/b9/tournament/` (or `out=`).
+//! - `glasnost-headless ai-replay FILE`: one tournament replay played again
+//!   (#466, `glasnost_tools::ai_tournament::replay`): the ground from the
+//!   replay's map name (a fixture ground, or `install map N` on the
+//!   install of `GLASNOST_GAME_DIR`), the saved AI seats rerun; prints the
+//!   game's line in the report's form, ending on its hash.
 //! - `glasnost-headless path-report FILE [--out DIR] [--unit ID]… [--tick
 //!   T] [--names] [--any-build]`: a pathing report the client saved (M8
 //!   A4, `glasnost_tools::path_report`) replayed with the movement trace
@@ -445,6 +450,26 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("ai-replay") => {
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: glasnost-headless {}", ai_tournament::REPLAY_USAGE);
+                return ExitCode::from(2);
+            };
+            let dir = std::env::var_os(GAME_DIR_VAR).map(|d| d.to_string_lossy().into_owned());
+            let played = std::fs::read(path)
+                .map_err(|e| e.to_string())
+                .and_then(|b| ai_tournament::replay(&b, dir.as_deref()));
+            match played {
+                Ok(end) => {
+                    print!("{end}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("glasnost-headless ai-replay: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("siege-watch") => {
             let o = match siege_watch::Options::parse(&args[1..]) {
                 Ok(o) => o,
@@ -596,9 +621,10 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!(
-                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | desync <bundle A> <bundle B> | {} | {} | {} | {} | {} | {}",
+                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | desync <bundle A> <bundle B> | {} | {} | {} | {} | {} | {} | {}",
                 ai_bench::USAGE,
                 ai_tournament::USAGE,
+                ai_tournament::REPLAY_USAGE,
                 path_report::USAGE,
                 arena::USAGE,
                 net_client::USAGE,

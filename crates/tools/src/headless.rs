@@ -26,8 +26,16 @@ pub fn run_synthetic(seed: u32, ticks: i32) -> Vec<String> {
     replay(&rep).unwrap_or_default()
 }
 
-/// Per-tick state hashes of a replay over the synthetic scenario.
+/// Per-tick state hashes of a replay over the synthetic scenario. A replay
+/// with AI houses (an AI tournament's) is refused with the command that
+/// plays it (#466): its AI has to play again.
 pub fn replay(rep: &Replay) -> Result<Vec<String>, String> {
+    if rep.setup.houses.iter().any(|h| h.ai) {
+        return Err(format!(
+            "the replay has AI houses: play it with {} FILE",
+            crate::ai_tournament::REPLAY_COMMAND
+        ));
+    }
     let mut out = Vec::new();
     rep.run(
         testkit::rules(),
