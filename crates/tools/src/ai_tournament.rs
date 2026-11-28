@@ -714,8 +714,28 @@ pub fn report(o: &Options, grounds: &[Ground], results: &[Result<Played, String>
     s
 }
 
+/// The replay file name of game `n`.
+fn replay_name(n: usize) -> String {
+    format!("game-{n:03}.replay")
+}
+
+/// Whether `name` is one of the tournament's own replay names
+/// (`game-` and three or more digits, `.replay`), which a run manages.
+pub fn is_managed_replay(name: &str) -> bool {
+    name.strip_prefix("game-")
+        .and_then(|r| r.strip_suffix(".replay"))
+        // nocite: our own tooling (`replay_name` writes at least three digits)
+        .is_some_and(|d| d.len() >= 3 && d.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// Runs the tournament on `grounds`; writes the report and the replays to
 /// `o.out` and returns the report.
+///
+/// The output folder may be reused (#470): the old report is removed
+/// first, then every managed replay ([`is_managed_replay`]) that is not
+/// a successful game of this run, so afterwards the managed replays are
+/// exactly this report's successful games. Other files in the folder are
+/// left alone.
 pub fn run_on(o: &Options, grounds: &[Ground]) -> Result<String, String> {
     let jobs = jobs(o, grounds.len());
     let results = play_all(o, grounds, &jobs);
@@ -723,13 +743,40 @@ pub fn run_on(o: &Options, grounds: &[Ground]) -> Result<String, String> {
     let out = std::path::Path::new(&o.out);
     let replays = out.join("replays");
     std::fs::create_dir_all(&replays).map_err(|e| e.to_string())?;
-    for (n, r) in results.iter().enumerate() {
-        if let Ok(g) = r {
-            std::fs::write(replays.join(format!("game-{n:03}.replay")), &g.replay)
-                .map_err(|e| e.to_string())?;
+    let report_file = out.join("report.txt");
+    if let Err(e) = std::fs::remove_file(&report_file)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        return Err(e.to_string());
+    }
+    let current: std::collections::BTreeSet<String> = results
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.is_ok())
+        .map(|(n, _)| replay_name(n))
+        .collect();
+    let mut stale = Vec::new();
+    for entry in std::fs::read_dir(&replays).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let kind = entry.file_type().map_err(|e| e.to_string())?;
+        if (kind.is_file() || kind.is_symlink())
+            && is_managed_replay(&name)
+            && !current.contains(&name)
+        {
+            stale.push(entry.path());
         }
     }
-    std::fs::write(out.join("report.txt"), &text).map_err(|e| e.to_string())?;
+    stale.sort();
+    for path in stale {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    for (n, r) in results.iter().enumerate() {
+        if let Ok(g) = r {
+            std::fs::write(replays.join(replay_name(n)), &g.replay).map_err(|e| e.to_string())?;
+        }
+    }
+    std::fs::write(report_file, &text).map_err(|e| e.to_string())?;
     Ok(text)
 }
 

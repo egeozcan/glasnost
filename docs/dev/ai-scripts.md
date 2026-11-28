@@ -861,6 +861,12 @@ left it: no code of AS9's is kept, and cert-0 (1914.9) stands. What the rounds s
   `threads=` is; `tests/ai_tournament.rs` checks it on the fixture) and one replay per game,
   `replays/game-NNN.replay`, to `out=` (default `local-lane/ai-issues/b9/tournament/`).
   The worker threads are in the tool only; each game is its own world.
+- **A reused `out=` folder** (#470): before writing, a run removes the old `report.txt` and every
+  managed replay in `replays/` (a file named `game-` plus three or more digits plus `.replay`)
+  that is not a successful game of this run, then writes this run's replays and report. So the
+  managed replays are exactly the successful games of the current report: none left past a
+  shorter run's last game, and none at the number of a game that failed this time. Any other
+  file in the folder (another name, a folder) is left alone.
 - **Playing a replay again** (#466): `glasnost-headless ai-replay FILE`
   (`ai_tournament::replay`). A tournament replay holds the setup with each house's AI seat
   (script and difficulty), not the houses' orders, so the AI plays the game again through
