@@ -343,3 +343,32 @@ fn every_seat_has_its_diagnostic_rows() {
         assert_eq!(g.economy_probes().len(), houses.len(), "{ai:?}");
     }
 }
+
+// design: own AI (#465): a siege seat's diagnostic rows are those of the brain that runs its base, and a default seat's those of its own brain.
+#[test]
+fn a_siege_seats_rows_come_from_its_base_brain() {
+    let mut g = start_with(vec![siege_hard(), AiSeat::DEFAULT]);
+    // nocite: test data of our own (a few think periods into the game)
+    for _ in 0..3 * scripted::THINK_PERIOD {
+        g.step();
+    }
+    let base = g.seats()[0]
+        .script()
+        .siege()
+        .expect("house 0 plays the siege")
+        .base();
+    let own = g.seats()[1]
+        .script()
+        .brain()
+        .expect("house 1 plays the default");
+    let rows = g.diagnose();
+    assert_eq!(rows[0], (HouseId(0), base.diagnose(&g.world)));
+    assert_eq!(rows[1], (HouseId(1), own.diagnose(&g.world)));
+    let uses = g.special_uses();
+    assert_eq!(uses[0], (HouseId(0), base.special_uses()));
+    assert_eq!(uses[1], (HouseId(1), own.special_uses()));
+    assert_eq!(
+        g.economy_probes(),
+        vec![base.economy_probe(&g.world), own.economy_probe(&g.world)]
+    );
+}
