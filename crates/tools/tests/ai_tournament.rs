@@ -115,6 +115,89 @@ fn the_named_replay_command_plays_a_tournament_replay_to_the_reported_hash() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The file names in `dir`, sorted.
+fn names_in(dir: &std::path::Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir)
+        .expect("a folder")
+        .map(|e| {
+            e.expect("an entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    v.sort();
+    v
+}
+
+/// The user's own files in a reused replays folder: none is a managed
+/// `game-NNN.replay`.
+const USER_FILES: [&str; 3] = ["notes.txt", "game-best.replay", "my-game-001.replay"];
+
+/// `game-000.replay` … for these game numbers, then the user's files,
+/// sorted.
+fn expected(games: &[usize]) -> Vec<String> {
+    let mut v: Vec<String> = games
+        .iter()
+        .map(|n| format!("game-{n:03}.replay"))
+        .chain(USER_FILES.iter().map(|s| (*s).to_owned()))
+        .collect();
+    v.sort();
+    v
+}
+
+// design: own AI (#470): a reused output folder holds exactly the replays of the current report's successful games; the user's other files stay
+#[test]
+fn a_reused_output_folder_keeps_only_this_runs_replays() {
+    let dir = std::env::temp_dir().join(format!(
+        "glasnost-ai-tournament-470a-{}",
+        std::process::id()
+    ));
+    let replays = dir.join("replays");
+    std::fs::create_dir_all(&replays).expect("a folder");
+    for f in USER_FILES {
+        std::fs::write(replays.join(f), b"mine").expect("a user file");
+    }
+    let mut o = options(2, &dir);
+    // Two seeds: 8 games.
+    o.seeds = vec![3, 4];
+    let first = ai_tournament::run(&o, None).expect("runs");
+    assert_eq!(report_hashes(&first).len(), 8, "{first}");
+    assert_eq!(names_in(&replays), expected(&[0, 1, 2, 3, 4, 5, 6, 7]));
+    // One seed into the same folder: 4 games.
+    o.seeds = vec![3];
+    let second = ai_tournament::run(&o, None).expect("runs");
+    assert_eq!(report_hashes(&second).len(), 4, "{second}");
+    assert_eq!(names_in(&replays), expected(&[0, 1, 2, 3]));
+    for f in USER_FILES {
+        assert_eq!(std::fs::read(replays.join(f)).expect("kept"), b"mine");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// design: own AI (#470): a game that fails in a rerun leaves no replay at its number, even where an earlier run's game of that number succeeded
+#[test]
+fn a_failed_game_leaves_no_replay_at_an_earlier_successful_number() {
+    let dir = std::env::temp_dir().join(format!(
+        "glasnost-ai-tournament-470b-{}",
+        std::process::id()
+    ));
+    let replays = dir.join("replays");
+    let o = options(2, &dir);
+    let mut grounds = ai_tournament::fixture_grounds();
+    let first = ai_tournament::run_on(&o, &grounds).expect("runs");
+    assert_eq!(report_hashes(&first).len(), 8, "{first}");
+    let all: Vec<String> = (0..8).map(|n| format!("game-{n:03}.replay")).collect();
+    assert_eq!(names_in(&replays), all);
+    // The second ground's games now fail: its countries are unknown.
+    grounds[1].countries = ["Nowhere".into(), "Nowhere".into()];
+    let second = ai_tournament::run_on(&o, &grounds).expect("runs");
+    assert_eq!(second.matches("failed:").count(), 4, "{second}");
+    assert_eq!(report_hashes(&second).len(), 4, "{second}");
+    assert_eq!(names_in(&replays), all[..4]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn the_ratings_follow_the_games_in_order() {
     // Nothing played: everyone at the start.
