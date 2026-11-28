@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::brain::Brain;
-use crate::scripts::Seat;
+use crate::scripts::{ScriptState, Seat};
 
 /// Format version of a game save (the world's own save inside it carries
 /// the simulation's version).
@@ -191,55 +191,56 @@ impl Game {
         victory::outcome(&self.world)
     }
 
-    /// The special-ability orders each AI house has given (M6c), in house
-    /// order of the brains.
+    /// The special-ability orders each AI house has given (M6c), one per
+    /// seat in house order ([`Game::base_brains`]).
     pub fn special_uses(&self) -> Vec<(HouseId, crate::special::Uses)> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| (b.house(), b.special_uses()))
             .collect()
     }
 
-    /// A counts-only diagnostic line per AI house (local-lane reports).
+    /// A counts-only diagnostic line per AI house, one per seat in house
+    /// order ([`Game::base_brains`]; local-lane reports).
     pub fn diagnose(&self) -> Vec<(HouseId, String)> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| (b.house(), b.diagnose(&self.world)))
             .collect()
     }
 
-    /// What each brain's anti-air step sees now, in the order of the
-    /// brains (local-lane reports).
+    /// What each house's anti-air step sees now, one per seat in house
+    /// order ([`Game::base_brains`]; local-lane reports).
     pub fn antiair_probes(&self) -> Vec<(HouseId, crate::antiair::Probe)> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| (b.house(), b.antiair_probe(&self.world)))
             .collect()
     }
 
-    /// What each brain's expansion step sees now, in the order of the
-    /// brains (local-lane reports).
+    /// What each house's expansion step sees now, one per seat in house
+    /// order ([`Game::base_brains`]; local-lane reports).
     pub fn expansion_probes(&self) -> Vec<(HouseId, crate::brain::ExpansionProbe)> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| (b.house(), b.expansion_probe(&self.world)))
             .collect()
     }
 
-    /// What each brain's economy sees now (`Brain::economy_probe`), in the
-    /// order of the brains (local-lane reports).
+    /// What each house's economy sees now (`Brain::economy_probe`), one per
+    /// seat in house order ([`Game::base_brains`]; local-lane reports).
     pub fn economy_probes(&self) -> Vec<String> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| b.economy_probe(&self.world))
             .collect()
     }
 
-    /// What each brain's broke house waits behind now
-    /// (`Brain::broke_probe`, M8 step B10), in the order of the brains
-    /// (local-lane reports).
+    /// What each broke house waits behind now (`Brain::broke_probe`, M8
+    /// step B10), one per seat in house order ([`Game::base_brains`];
+    /// local-lane reports).
     pub fn broke_probes(&self) -> Vec<(HouseId, crate::brain::BrokeProbe)> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| (b.house(), b.broke_probe(&self.world)))
             .collect()
@@ -263,6 +264,22 @@ impl Game {
         self.seats
             .iter()
             .filter_map(|s| s.script().brain())
+            .collect()
+    }
+
+    /// The brain that runs each AI house's base, one per seat in house
+    /// order: the default script's brain, or the siege's base brain (read
+    /// only: the per-house diagnostics).
+    pub fn base_brains(&self) -> Vec<&Brain> {
+        // design: own AI (#465): every seat's row, so that a siege house is
+        // not missing from the lane's diagnostics; a new script decides here
+        // which brain answers for it
+        self.seats
+            .iter()
+            .map(|s| match s.script() {
+                ScriptState::Default(b) => b,
+                ScriptState::Siege(s) => s.base(),
+            })
             .collect()
     }
 
