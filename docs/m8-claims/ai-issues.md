@@ -696,3 +696,24 @@ gain is the combined score up at least 0.02, or 12 more victories, with no pair 
 | soldiers while a new refinery waits, while the army is weak | a watch of dev-0's early loss on map 0 (seed 7, country 0, against `siege:normal`): 11 soldiers worth 2 800 from tick 4 125; the infantry line held for a refinery by a new field (528 credits, 1 741 owed) from 5 250 to 6 750; normal strikes at 7 125 with tanks; base gone at 9 964 with 2 800 credits | `Tuning::soldiers_while_paying`: while a refinery by a new field is the only reason the brain pays for its economy first and the house's army is worth less than `Tuning::floor`, the brain's holds of infantry army items are dropped and held ones resumed; the vehicle line stays held. Dev-3, stopped after two pairs: `default:hard` 0.896, `siege:normal` 0.740 (map 0 8 to 12 losses); no clear gain, reverted | `hard_trains_soldiers_while_a_new_refinery_waits` (reverted) |
 
 Three rounds in a row with no clear gain: AS9 stopped with no code kept, and cert-0 (1914.9) stands.
+
+## Batch 13
+
+The lead's review of ce9ef6d, the AI game wrapper (`crates/deterministic/ai/src/game.rs`): #462 to
+#465. Base ce9ef6d (save 228, AI game 209, wire 13). No format moves: AI game stays 209 and no
+golden moves (a faithful replay records exactly the ticks it ran and no order after its end, so
+every existing replay plays as before; the effects and the diagnostics are neither saved nor
+hashed). The failing tests went in first (7756981), one commit for all four issues since they share
+the fixture game.
+
+**Lanes**, base then after: the AI quick lane (seeds 7 to 14, maps 0, 2 and 8, sides 0,2 and 1,2,
+48 games, with `GLASNOST_AI_HASH=1000`) matches game for game: the same winner and end tick, the
+same world hash at every thousandth tick, and the same report apart from timings.
+`glasnost-sim-gate` with its ignored tests passes 17 of 17 on both.
+
+| issue | confirmed | change | test |
+|---|---|---|---|
+| #462 a finished game takes an order | yes: the issue's case (seed 5, both seats siege at hard, house 1 surrenders at tick 500) is over at 528 ticks run, and `Game::issue` then took a surrender for house 0 | `Game::issue` returns false once the game is over (S-0414 claim 8: no tick runs after the final one), so the pending orders, the replay and the hash stay as they were; orders in the end delay are still taken (31489b2) | `a_finished_game_refuses_input` |
+| #463 a replay runs past the end | yes: with a recorded length past the end, `Game::run_replay` never returned (a step after the end does nothing, #51); the test stops it at the recorded length | the loop also stops once the game is over, as `Replay::run_on`; the callback is called once per tick run, and the caller tells a shorter rerun by the returned game's replay ticks or hash. Signature unchanged (0db1474) | `a_replay_stops_at_the_final_tick` |
+| #464 a replay keeps old effects | yes: the callbacks' effect lists grew over the replay instead of matching the live game's per-tick lists | the effects are cleared after each callback, as `Replay::run_on` (#398); signature unchanged (1fab8b3) | `a_replay_hands_each_ticks_effects_once` |
+| #465 the diagnostics skip siege seats | yes: with a siege seat, `diagnose` and the other per-house diagnostics had no row for it | new `Game::base_brains`, one brain per seat in house order (the default's brain, or the siege's base brain through the new read-only `Siege::base`); `diagnose`, `special_uses`, `antiair_probes`, `expansion_probes`, `economy_probes` and `broke_probes` use it. `Game::brains` is unchanged (the all-default AI hash uses it). The lane's field-spell observer in `crates/tools` still reads `Game::brains` (batch 16's file) (365544a) | `every_seat_has_its_diagnostic_rows` (siege and default either way round, and all siege), `a_siege_seats_rows_come_from_its_base_brain` (de39e18) |
