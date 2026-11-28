@@ -69,6 +69,7 @@ pub mod skirmish;
 pub mod special;
 pub mod tech_buildings;
 pub mod terror;
+pub mod vanguard;
 
 /// Whether house `house` sees object `id` where it stands, as a person in
 /// its seat does: on the map, and either the house's own or an ally's, or

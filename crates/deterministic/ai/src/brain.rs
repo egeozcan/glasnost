@@ -323,6 +323,91 @@ impl Brain {
         self.think_from(w, p, None, thinks, AiDifficulty::Normal)
     }
 
+    /// Applies the brain's unit-safety filters to `out` without changing
+    /// internal use counters (design: own AI, #449): berserk units, aircraft
+    /// out of ammunition, engaged gattling spin, same-tick deploys, lifters,
+    /// drainers, air-attack escapes, bomber rounds, and mind-controller
+    /// overload/swap guards. Pluggable scripts that append or modify unit
+    /// orders after [`AiScript::think`] call this so they keep every engine
+    /// invariant of the brain.
+    pub(crate) fn filter_orders(&self, w: &World, out: &mut Vec<Order>) {
+        // spec: S-0214 claim 15 and S-0610 claim 6 (a berserk unit takes no orders: a person cannot give it one, so neither does the brain)
+        out.retain(|o| {
+            o.actor()
+                .is_none_or(|a| !glasnost_sim::psychic::berserk(w, a))
+        });
+        // design: no attack order and no attack move to an aircraft with no ammunition left (S-0501 T1)
+        out.retain(|o| match o {
+            Order::Behaviour {
+                actor,
+                behaviour,
+                attack_move,
+                ..
+            } if *behaviour == Behaviour::Attack || *attack_move => {
+                w.obj(*actor).is_none_or(|x| x.kind != Kind::Aircraft)
+                    || glasnost_sim::air::ammo_left(w, *actor)
+            }
+            _ => true,
+        });
+        // S-0609 claims 5 and 11: no attack order at another object to a gattling unit firing at its target
+        out.retain(|o| match o {
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Attack,
+                target,
+                ..
+            } => {
+                !crate::gattling::engaged(w, *actor)
+                    || w.obj(*actor).is_some_and(|x| x.target == *target)
+            }
+            _ => true,
+        });
+        // S-0213 claims 3 and 10: a unit given the deploy order takes no behaviour order in the same think
+        let deploying: std::collections::BTreeSet<ObjectId> = out
+            .iter()
+            .filter_map(|o| match o {
+                Order::Deploy { actor } => Some(*actor),
+                _ => None,
+            })
+            .collect();
+        if !deploying.is_empty() {
+            out.retain(
+                |o| !matches!(o, Order::Behaviour { actor, .. } if deploying.contains(actor)),
+            );
+        }
+        // S-0607 claims 9 and 12: lifter guard
+        out.retain(|o| crate::lifter::keeps_order(w, o));
+        // S-0608 claims 3 b and 12: drainer guard
+        crate::drain::filter_orders(w, out);
+        // design: own AI (#434): air-attack escape guard
+        out.retain(|o| self.special.air.keeps_order(w, o));
+        // design: own AI (#445): bomber approach/retreat guard
+        self.special.bomber.filter_orders(w, out);
+        // S-0601 claim 16: unlimited mind controller overload guard
+        out.retain(|o| match o {
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Attack,
+                target: Some(Target::Object(_)),
+                ..
+            } => {
+                glasnost_sim::mind::controller(w, *actor).is_none()
+                    || crate::mind::safe_more(w, *actor)
+            }
+            _ => true,
+        });
+        // S-0601 claims 2, 7 and 9: capacity-1 mind controller swap guard
+        out.retain(|o| match o {
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Attack,
+                target: Some(t @ Target::Object(_)),
+                ..
+            } => !crate::mind::swaps_victim(w, *actor, *t),
+            _ => true,
+        });
+    }
+
     /// The think as the default script of the registry
     /// ([`crate::scripts`]): on the given schedule (`thinks`: one of the
     /// house's think ticks) and at difficulty `level`, from the house's own
