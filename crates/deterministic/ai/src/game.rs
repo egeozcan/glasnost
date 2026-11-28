@@ -119,8 +119,14 @@ impl Game {
     }
 
     /// Issues a person's order in the current tick; it is recorded in the
-    /// replay when the simulation takes it.
+    /// replay when the simulation takes it. A game that is over (S-0414)
+    /// takes none.
     pub fn issue(&mut self, house: HouseId, order: Order) -> bool {
+        // spec: S-0414 claim 8 (no tick runs after the final one, so an order given then would never apply)
+        // design: own AI (#462): refused, so the pending orders, the replay and the hash stay those the replay ends on
+        if self.outcome().is_some() {
+            return false;
+        }
         let taken = orders::issue(&mut self.world, house, order.clone());
         if taken {
             self.replay.record(self.world.tick, house, order);
