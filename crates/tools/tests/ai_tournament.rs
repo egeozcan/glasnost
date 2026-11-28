@@ -59,6 +59,62 @@ fn the_same_options_give_the_same_report() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The per-game hashes of a report, by game number (failed games have
+/// none).
+fn report_hashes(report: &str) -> std::collections::BTreeMap<usize, String> {
+    report
+        .lines()
+        .filter_map(|l| {
+            let (n, rest) = l.trim_start().split_once(' ')?;
+            let n: usize = n.parse().ok()?;
+            let (_, hash) = rest.rsplit_once(", hash ")?;
+            Some((n, hash.trim().to_owned()))
+        })
+        .collect()
+}
+
+/// `glasnost-headless ai-replay FILE`, without a game dir: its exit code
+/// and its standard output.
+fn ai_replay(file: &std::path::Path) -> (Option<i32>, String) {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_glasnost-headless"))
+        .arg("ai-replay")
+        .arg(file)
+        .env_remove("GLASNOST_GAME_DIR")
+        .output()
+        .expect("glasnost-headless runs");
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
+}
+
+// design: own AI (#466): the tournament names a command that plays its replays: `glasnost-headless ai-replay FILE` picks the fixture ground from the replay, reruns the saved AI seats and reaches the report's final hash
+#[test]
+fn the_named_replay_command_plays_a_tournament_replay_to_the_reported_hash() {
+    let dir =
+        std::env::temp_dir().join(format!("glasnost-ai-tournament-466-{}", std::process::id()));
+    let mut o = options(2, &dir);
+    // Both fixture grounds, so the command has to pick the right one.
+    o.maps = vec![1, 0];
+    let report = ai_tournament::run(&o, None).expect("runs");
+    assert!(
+        report.contains("glasnost-headless ai-replay"),
+        "the report names the replay command:\n{report}"
+    );
+    let hashes = report_hashes(&report);
+    assert_eq!(hashes.len(), 8, "{report}");
+    for (n, hash) in &hashes {
+        let file = dir.join("replays").join(format!("game-{n:03}.replay"));
+        let (code, out) = ai_replay(&file);
+        assert_eq!(code, Some(0), "game {n}: {out}");
+        assert!(
+            out.contains(&format!("hash {hash}")),
+            "game {n}: the replay ends on the report's hash {hash}:\n{out}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn the_ratings_follow_the_games_in_order() {
     // Nothing played: everyone at the start.
