@@ -45,6 +45,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::brain::{self, Brain};
 use crate::siege::{self, Siege};
+use crate::vanguard::{self, Vanguard};
 
 /// What a script is given of the world: the house's seat. See the module's
 /// contract.
@@ -180,6 +181,12 @@ pub const REGISTRY: &[Entry] = &[
         name: "Siege",
         about: "glasnost_ai::siege: the default's base without superweapons, one army gathered and sent as a strike at the enemy's economy and base when it has the edge, called home when outmatched, then a hunt for the last units",
     },
+    Entry {
+        id: vanguard::ID,
+        key: "vanguard",
+        name: "Vanguard",
+        about: "glasnost_ai::vanguard: rules-adaptive economy and vehicle scoring, active scouting, smart air sniping, forward staging, and sim-safe focus-fire, pullback and standoff micro",
+    },
 ];
 
 /// The registry entry of id `id`.
@@ -211,6 +218,8 @@ pub enum ScriptState {
     Default(Brain),
     /// Script 2, the siege: [`Siege`].
     Siege(Box<Siege>),
+    /// Script 3, the vanguard: [`Vanguard`].
+    Vanguard(Box<Vanguard>),
 }
 
 impl ScriptState {
@@ -222,6 +231,9 @@ impl ScriptState {
         debug_assert!(entry(known(seat).script).is_some());
         match known(seat).script {
             siege::ID => Self::Siege(Box::new(Siege::start(w, map, house, seat.difficulty))),
+            vanguard::ID => {
+                Self::Vanguard(Box::new(Vanguard::start(w, map, house, seat.difficulty)))
+            }
             _ => Self::Default(Brain::with_plan(
                 w,
                 map,
@@ -236,6 +248,7 @@ impl ScriptState {
         match self {
             Self::Default(_) => AiSeat::DEFAULT_SCRIPT,
             Self::Siege(_) => siege::ID,
+            Self::Vanguard(_) => vanguard::ID,
         }
     }
 
@@ -243,7 +256,7 @@ impl ScriptState {
     pub fn brain(&self) -> Option<&Brain> {
         match self {
             Self::Default(b) => Some(b),
-            Self::Siege(_) => None,
+            Self::Siege(_) | Self::Vanguard(_) => None,
         }
     }
 
@@ -251,7 +264,15 @@ impl ScriptState {
     pub fn siege(&self) -> Option<&Siege> {
         match self {
             Self::Siege(s) => Some(s),
-            Self::Default(_) => None,
+            Self::Default(_) | Self::Vanguard(_) => None,
+        }
+    }
+
+    /// The vanguard script's state, when this is it.
+    pub fn vanguard(&self) -> Option<&Vanguard> {
+        match self {
+            Self::Vanguard(v) => Some(v),
+            Self::Default(_) | Self::Siege(_) => None,
         }
     }
 }
@@ -261,6 +282,7 @@ impl AiScript for ScriptState {
         match self {
             Self::Default(b) => AiScript::house(b),
             Self::Siege(s) => AiScript::house(&**s),
+            Self::Vanguard(v) => AiScript::house(&**v),
         }
     }
 
@@ -275,6 +297,7 @@ impl AiScript for ScriptState {
         match self {
             Self::Default(b) => AiScript::think(b, view, schedule, level, own, p),
             Self::Siege(s) => AiScript::think(&mut **s, view, schedule, level, own, p),
+            Self::Vanguard(v) => AiScript::think(&mut **v, view, schedule, level, own, p),
         }
     }
 }
