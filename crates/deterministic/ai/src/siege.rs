@@ -305,6 +305,12 @@ impl Siege {
         &self.army.out
     }
 
+    /// The brain that runs the base (read only: the game's per-house
+    /// diagnostics, #465).
+    pub fn base(&self) -> &Brain {
+        &self.brain
+    }
+
     /// Drops the brain's orders for buildings that give a superweapon
     /// ([`gives_superweapon`]), so that the level's money goes to the army
     /// and the brain never holds the army lines to save for one. The brain

@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::brain::Brain;
-use crate::scripts::Seat;
+use crate::scripts::{ScriptState, Seat};
 
 /// Format version of a game save (the world's own save inside it carries
 /// the simulation's version).
@@ -119,8 +119,14 @@ impl Game {
     }
 
     /// Issues a person's order in the current tick; it is recorded in the
-    /// replay when the simulation takes it.
+    /// replay when the simulation takes it. A game that is over (S-0414)
+    /// takes none.
     pub fn issue(&mut self, house: HouseId, order: Order) -> bool {
+        // spec: S-0414 claim 8 (no tick runs after the final one, so an order given then would never apply)
+        // design: own AI (#462): refused, so the pending orders, the replay and the hash stay those the replay ends on
+        if self.outcome().is_some() {
+            return false;
+        }
         let taken = orders::issue(&mut self.world, house, order.clone());
         if taken {
             self.replay.record(self.world.tick, house, order);
@@ -185,55 +191,56 @@ impl Game {
         victory::outcome(&self.world)
     }
 
-    /// The special-ability orders each AI house has given (M6c), in house
-    /// order of the brains.
+    /// The special-ability orders each AI house has given (M6c), one per
+    /// seat in house order ([`Game::base_brains`]).
     pub fn special_uses(&self) -> Vec<(HouseId, crate::special::Uses)> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| (b.house(), b.special_uses()))
             .collect()
     }
 
-    /// A counts-only diagnostic line per AI house (local-lane reports).
+    /// A counts-only diagnostic line per AI house, one per seat in house
+    /// order ([`Game::base_brains`]; local-lane reports).
     pub fn diagnose(&self) -> Vec<(HouseId, String)> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| (b.house(), b.diagnose(&self.world)))
             .collect()
     }
 
-    /// What each brain's anti-air step sees now, in the order of the
-    /// brains (local-lane reports).
+    /// What each house's anti-air step sees now, one per seat in house
+    /// order ([`Game::base_brains`]; local-lane reports).
     pub fn antiair_probes(&self) -> Vec<(HouseId, crate::antiair::Probe)> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| (b.house(), b.antiair_probe(&self.world)))
             .collect()
     }
 
-    /// What each brain's expansion step sees now, in the order of the
-    /// brains (local-lane reports).
+    /// What each house's expansion step sees now, one per seat in house
+    /// order ([`Game::base_brains`]; local-lane reports).
     pub fn expansion_probes(&self) -> Vec<(HouseId, crate::brain::ExpansionProbe)> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| (b.house(), b.expansion_probe(&self.world)))
             .collect()
     }
 
-    /// What each brain's economy sees now (`Brain::economy_probe`), in the
-    /// order of the brains (local-lane reports).
+    /// What each house's economy sees now (`Brain::economy_probe`), one per
+    /// seat in house order ([`Game::base_brains`]; local-lane reports).
     pub fn economy_probes(&self) -> Vec<String> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| b.economy_probe(&self.world))
             .collect()
     }
 
-    /// What each brain's broke house waits behind now
-    /// (`Brain::broke_probe`, M8 step B10), in the order of the brains
-    /// (local-lane reports).
+    /// What each broke house waits behind now (`Brain::broke_probe`, M8
+    /// step B10), one per seat in house order ([`Game::base_brains`];
+    /// local-lane reports).
     pub fn broke_probes(&self) -> Vec<(HouseId, crate::brain::BrokeProbe)> {
-        self.brains()
+        self.base_brains()
             .into_iter()
             .map(|b| (b.house(), b.broke_probe(&self.world)))
             .collect()
@@ -257,6 +264,22 @@ impl Game {
         self.seats
             .iter()
             .filter_map(|s| s.script().brain())
+            .collect()
+    }
+
+    /// The brain that runs each AI house's base, one per seat in house
+    /// order: the default script's brain, or the siege's base brain (read
+    /// only: the per-house diagnostics).
+    pub fn base_brains(&self) -> Vec<&Brain> {
+        // design: own AI (#465): every seat's row, so that a siege house is
+        // not missing from the lane's diagnostics; a new script decides here
+        // which brain answers for it
+        self.seats
+            .iter()
+            .map(|s| match s.script() {
+                ScriptState::Default(b) => b,
+                ScriptState::Siege(s) => s.base(),
+            })
             .collect()
     }
 
@@ -338,7 +361,12 @@ impl Game {
     }
 
     /// Replays a game from its replay up to its last tick, calling `each`
-    /// after every tick: the person's orders as recorded, the AI anew.
+    /// after every tick: the person's orders as recorded, the AI anew. A
+    /// rerun that ends sooner than the replay's recorded length (S-0414)
+    /// stops at its final tick, so `each` is called once per tick run; the
+    /// caller tells the two apart by the returned game's
+    /// [`Replay::ticks`] or its hash. `each` sees the effects of the tick
+    /// just run (`World::effects`), which are cleared after it.
     pub fn run_replay(
         replay: &Replay,
         rules: Arc<SimRules>,
@@ -354,11 +382,15 @@ impl Game {
         }
         let mut g = Self::new(rules, map, &replay.map, catalogue, replay.setup.clone())
             .map_err(SaveError::Load)?;
-        // spec: S-0201 claim 1 (the final tick leaves the tick number at itself: count the ticks run)
-        while tick::ticks_run(&g.world) < replay.ticks {
+        // spec: S-0201 claim 1 and S-0414 claim 8 (the final tick leaves the tick number at itself: count the ticks run; no tick runs after it, #463)
+        while tick::ticks_run(&g.world) < replay.ticks && g.outcome().is_none() {
             g.issue_recorded(replay);
             g.step();
             each(&g);
+            // design: own AI (#464), as `Replay::run_on` (#398): the tick's
+            // effects (presentation only, neither saved nor hashed) reach
+            // `each` once and are then dropped
+            g.world.effects.clear();
         }
         Ok(g)
     }

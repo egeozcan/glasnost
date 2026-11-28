@@ -2,23 +2,68 @@
 //! a save in mid-game, loaded and continued, plays on alike, and a replay
 //! (setup and the person's orders only) runs the AI again to the same state.
 
-use glasnost_ai::{fixture, game::Game, scripted};
+use glasnost_ai::{fixture, game::Game, scripted, siege};
+use glasnost_sim::orders::Order;
 use glasnost_sim::probe::{Phase, Probe};
 use glasnost_sim::rules::{Behaviour, Kind};
-use glasnost_sim::world::{HouseId, Target};
+use glasnost_sim::tick;
+use glasnost_sim::world::{AiDifficulty, AiSeat, HouseId, Target};
 
 const FIRST: i32 = 400;
 const MORE: i32 = 200;
 
 fn start() -> Game {
+    start_with(fixture::setup(5).ai)
+}
+
+/// The synthetic skirmish (seed 5) with the AI seats `ai`.
+fn start_with(ai: Vec<AiSeat>) -> Game {
+    let mut setup = fixture::setup(5);
+    setup.ai = ai;
     Game::new(
         fixture::rules(),
         &fixture::map(),
         "synthetic-skirmish",
         fixture::catalogue(),
-        fixture::setup(5),
+        setup,
     )
     .expect("the synthetic skirmish loads")
+}
+
+/// The siege script at hard.
+fn siege_hard() -> AiSeat {
+    AiSeat {
+        script: siege::ID,
+        difficulty: AiDifficulty::Hard,
+    }
+}
+
+/// The tick house 1 surrenders at in [`surrendered`] (#462's case).
+// nocite: test data of our own (the issue's regression case)
+const SURRENDER_AT: i32 = 500;
+
+/// #462's case: both seats siege at hard, house 1 surrenders at
+/// [`SURRENDER_AT`] through [`Game::issue`], and the game is stepped until
+/// it is over (S-0414 claim 11, then the end delay of claim 8). `each` is
+/// called after every tick.
+fn surrendered(mut each: impl FnMut(&mut Game)) -> Game {
+    let mut g = start_with(vec![siege_hard(); 2]);
+    // nocite: test data of our own (a bound on the end delay's ticks)
+    for _ in 0..SURRENDER_AT + 2000 {
+        if g.outcome().is_some() {
+            break;
+        }
+        if g.world.tick == SURRENDER_AT {
+            assert!(
+                g.issue(HouseId(1), Order::Surrender),
+                "the surrender is taken"
+            );
+        }
+        g.step();
+        each(&mut g);
+    }
+    assert!(g.outcome().is_some(), "the game is over");
+    g
 }
 
 #[test]
@@ -169,4 +214,161 @@ fn a_save_between_the_houses_thinks_plays_on_alike() {
         loaded.step();
         assert_eq!(loaded.state_hash(), g.state_hash(), "tick {}", g.world.tick);
     }
+}
+
+// design: own AI (#462); spec: S-0414 claim 8 (no tick runs after the final one, so an order given to a finished game would never apply): a finished game refuses a person's order, and its pending orders, its replay and its hash stay as they were, so the replay still ends on the live state.
+#[test]
+fn a_finished_game_refuses_input() {
+    let mut g = surrendered(|_| {});
+    let pending: Vec<String> = g
+        .world
+        .houses
+        .iter()
+        .map(|h| format!("{:?}", h.pending))
+        .collect();
+    let replay = postcard::to_allocvec(g.replay()).expect("the replay serializes");
+    let hash = g.state_hash();
+    assert!(
+        !g.issue(HouseId(0), Order::Surrender),
+        "a finished game takes no order"
+    );
+    let after: Vec<String> = g
+        .world
+        .houses
+        .iter()
+        .map(|h| format!("{:?}", h.pending))
+        .collect();
+    assert_eq!(after, pending, "no order is left pending");
+    assert!(
+        postcard::to_allocvec(g.replay()).expect("the replay serializes") == replay,
+        "the replay is unchanged"
+    );
+    assert_eq!(g.state_hash(), hash, "the state is unchanged");
+    let again = Game::run_replay(
+        g.replay(),
+        fixture::rules(),
+        &fixture::map(),
+        fixture::catalogue(),
+        |_| {},
+    )
+    .expect("replays");
+    assert_eq!(
+        again.state_hash(),
+        hash,
+        "the replay ends on the live state"
+    );
+}
+
+// spec: S-0414 claim 8 and S-0201 claim 1 (#463: no tick runs after the final one, which leaves the tick number at itself): a replay whose recorded length runs past the game's end stops at the final tick, and its callback is called once per tick actually run.
+#[test]
+fn a_replay_stops_at_the_final_tick() {
+    let g = surrendered(|_| {});
+    let ran = tick::ticks_run(&g.world);
+    let mut longer = g.replay().clone();
+    // nocite: test data of our own (a recorded length past the game's end, as a rerun that ends sooner)
+    longer.ticks = ran + 100;
+    let mut seen = Vec::new();
+    let again = Game::run_replay(
+        &longer,
+        fixture::rules(),
+        &fixture::map(),
+        fixture::catalogue(),
+        |r| {
+            seen.push(tick::ticks_run(&r.world));
+            // Before #463 the loop never ends: stop it here.
+            assert!(seen.len() <= longer.ticks as usize, "calls past the end");
+        },
+    )
+    .expect("replays");
+    assert_eq!(seen, (1..=ran).collect::<Vec<_>>(), "one call per tick run");
+    assert!(again.outcome().is_some(), "the replayed game is over");
+    assert_eq!(again.state_hash(), g.state_hash());
+}
+
+// design: own AI (#464), as `Replay::run_on` (#398): each tick's effects (presentation only, neither saved nor hashed) reach the replay's callback once, in the tick that made them, and are cleared after it; the final hash is the live game's.
+#[test]
+fn a_replay_hands_each_ticks_effects_once() {
+    let mut live = Vec::new();
+    let g = surrendered(|g| live.push(std::mem::take(&mut g.world.effects)));
+    assert!(
+        live.iter().filter(|e| !e.is_empty()).count() > 1,
+        "several ticks make effects"
+    );
+    let mut replayed = Vec::new();
+    let again = Game::run_replay(
+        g.replay(),
+        fixture::rules(),
+        &fixture::map(),
+        fixture::catalogue(),
+        |r| replayed.push(r.world.effects.clone()),
+    )
+    .expect("replays");
+    assert_eq!(replayed.len(), live.len(), "one call per tick");
+    for (i, (r, l)) in replayed.iter().zip(&live).enumerate() {
+        assert_eq!(r, l, "call {i}: that tick's effects only");
+    }
+    assert!(again.world.effects.is_empty(), "none kept after the last");
+    assert_eq!(again.state_hash(), g.state_hash());
+}
+
+/// The houses of each per-house diagnostic of `g`, in its order.
+fn diagnostic_houses(g: &Game) -> Vec<Vec<HouseId>> {
+    vec![
+        g.diagnose().into_iter().map(|(h, _)| h).collect(),
+        g.special_uses().into_iter().map(|(h, _)| h).collect(),
+        g.antiair_probes().into_iter().map(|(h, _)| h).collect(),
+        g.expansion_probes().into_iter().map(|(h, _)| h).collect(),
+        g.broke_probes().into_iter().map(|(h, _)| h).collect(),
+    ]
+}
+
+// design: own AI (#465): every AI seat has its row in each per-house diagnostic, the siege's from the brain that runs its base, with the house numbers in seat order; in a mixed game and in an all-siege game.
+#[test]
+fn every_seat_has_its_diagnostic_rows() {
+    for ai in [
+        vec![siege_hard(), AiSeat::DEFAULT],
+        vec![AiSeat::DEFAULT, siege_hard()],
+        vec![siege_hard(); 2],
+    ] {
+        let mut g = start_with(ai.clone());
+        // nocite: test data of our own (a few think periods into the game)
+        for _ in 0..3 * scripted::THINK_PERIOD {
+            g.step();
+        }
+        let houses = g.ai_houses();
+        assert_eq!(houses, vec![HouseId(0), HouseId(1)], "{ai:?}");
+        for (i, rows) in diagnostic_houses(&g).into_iter().enumerate() {
+            assert_eq!(rows, houses, "{ai:?}: diagnostic {i}");
+        }
+        assert_eq!(g.economy_probes().len(), houses.len(), "{ai:?}");
+    }
+}
+
+// design: own AI (#465): a siege seat's diagnostic rows are those of the brain that runs its base, and a default seat's those of its own brain.
+#[test]
+fn a_siege_seats_rows_come_from_its_base_brain() {
+    let mut g = start_with(vec![siege_hard(), AiSeat::DEFAULT]);
+    // nocite: test data of our own (a few think periods into the game)
+    for _ in 0..3 * scripted::THINK_PERIOD {
+        g.step();
+    }
+    let base = g.seats()[0]
+        .script()
+        .siege()
+        .expect("house 0 plays the siege")
+        .base();
+    let own = g.seats()[1]
+        .script()
+        .brain()
+        .expect("house 1 plays the default");
+    let rows = g.diagnose();
+    assert_eq!(rows[0], (HouseId(0), base.diagnose(&g.world)));
+    assert_eq!(rows[1], (HouseId(1), own.diagnose(&g.world)));
+    let uses = g.special_uses();
+    assert_eq!(uses[0], (HouseId(0), base.special_uses()));
+    assert_eq!(uses[1], (HouseId(1), own.special_uses()));
+    assert_eq!(
+        g.economy_probes(),
+        vec![base.economy_probe(&g.world), own.economy_probe(&g.world)]
+    );
 }
