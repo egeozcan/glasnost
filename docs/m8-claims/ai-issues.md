@@ -696,3 +696,20 @@ gain is the combined score up at least 0.02, or 12 more victories, with no pair 
 | soldiers while a new refinery waits, while the army is weak | a watch of dev-0's early loss on map 0 (seed 7, country 0, against `siege:normal`): 11 soldiers worth 2 800 from tick 4 125; the infantry line held for a refinery by a new field (528 credits, 1 741 owed) from 5 250 to 6 750; normal strikes at 7 125 with tanks; base gone at 9 964 with 2 800 credits | `Tuning::soldiers_while_paying`: while a refinery by a new field is the only reason the brain pays for its economy first and the house's army is worth less than `Tuning::floor`, the brain's holds of infantry army items are dropped and held ones resumed; the vehicle line stays held. Dev-3, stopped after two pairs: `default:hard` 0.896, `siege:normal` 0.740 (map 0 8 to 12 losses); no clear gain, reverted | `hard_trains_soldiers_while_a_new_refinery_waits` (reverted) |
 
 Three rounds in a row with no clear gain: AS9 stopped with no code kept, and cert-0 (1914.9) stands.
+
+## Batch 16
+
+The lead's review of ce9ef6d: the AI tournament's replays (#466, #470). Tooling only
+(`crates/tools`), notes in [ai-scripts.md](../dev/ai-scripts.md) (*The tournament*). No game,
+AI or save change: save 228, AI game 209 and wire 13 unchanged, no golden moves. Base ce9ef6d.
+Each failing test went in before its fix: 6819db2 before 1cef2b5, 75d2e74 before 9687911.
+
+**Lanes**, base then after: a fixture tournament (three default entrants, both fixture grounds,
+seed 1, 24 games) and a small install one (easy against hard, map 0, seed 7, cap 9 000, 4 games).
+Each report is byte-equal apart from the new line naming the replay command. `ai-replay` of
+fixture game 13 and install game 2 ends on the report's hash. Sim gate 17 of 17 with ignored tests.
+
+| issue | confirmed | change | test |
+|---|---|---|---|
+| #466 the tournament's replays cannot be played by the command it names | yes: on the base, `glasnost-headless replay` of a fixture tournament's `game-000.replay` stops with "saved under rules synthetic-skirmish, but the rules given are synthetic" (the testkit's sim-only replay); and the replay holds the AI seats, not orders | fixed (1cef2b5): `glasnost-headless ai-replay FILE` (`ai_tournament::replay`) takes the ground from the replay's map name (a fixture ground's name, or `install map N`: listing index N of `GLASNOST_GAME_DIR`'s install under the shell's `GLASNOST_PLAY_FIXES`; the rules hash is checked) and reruns the saved seats through `Game::run_replay`, printing the report's line form ending on the hash. The report and the module doc name it; the plain `replay` refuses a replay with AI houses and names it | `tests/ai_tournament.rs`: `the_named_replay_command_plays_a_tournament_replay_to_the_reported_hash` (through the binary, both fixture grounds, 8 games; failed on the base) |
+| #470 a reused output folder keeps old or failed games' replays | yes: on the base, 8 games then 4 into one folder leave `game-004` to `game-007.replay` | fixed (9687911): `run_on` removes the old report, then each managed replay (`game-` plus three or more digits plus `.replay`) that is not a successful game of this run, then writes the replays and the report; other files stay | `a_reused_output_folder_keeps_only_this_runs_replays` (8 then 4 games, with three user files kept), `a_failed_game_leaves_no_replay_at_an_earlier_successful_number` (the second ground's 4 games fail on a rerun); both failed on the base |
