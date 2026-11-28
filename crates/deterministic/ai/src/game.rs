@@ -348,7 +348,8 @@ impl Game {
     /// rerun that ends sooner than the replay's recorded length (S-0414)
     /// stops at its final tick, so `each` is called once per tick run; the
     /// caller tells the two apart by the returned game's
-    /// [`Replay::ticks`] or its hash.
+    /// [`Replay::ticks`] or its hash. `each` sees the effects of the tick
+    /// just run (`World::effects`), which are cleared after it.
     pub fn run_replay(
         replay: &Replay,
         rules: Arc<SimRules>,
@@ -369,6 +370,10 @@ impl Game {
             g.issue_recorded(replay);
             g.step();
             each(&g);
+            // design: own AI (#464), as `Replay::run_on` (#398): the tick's
+            // effects (presentation only, neither saved nor hashed) reach
+            // `each` once and are then dropped
+            g.world.effects.clear();
         }
         Ok(g)
     }
